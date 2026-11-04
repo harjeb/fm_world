@@ -22,6 +22,31 @@ export const onlineState: {
   lastSync: 0,
 }
 
+export type RegistrationMode = 'open' | 'invite' | 'closed'
+
+export type PublicConfig = {
+  /** unknown 表示拿不到服务器配置（纯静态部署 / 离线）。 */
+  registration: RegistrationMode | 'unknown'
+  turnstileSiteKey: string
+}
+
+export const publicConfig: PublicConfig = { registration: 'unknown', turnstileSiteKey: '' }
+
+/** 拉取注册入口配置。静态部署或服务器不可达时返回 unknown。 */
+export async function loadPublicConfig(): Promise<PublicConfig> {
+  try {
+    const response = await fetch('/api/public-config', { headers: { Accept: 'application/json' } })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const data = (await response.json()) as { registration?: string; turnstileSiteKey?: string }
+    publicConfig.registration = data.registration === 'invite' || data.registration === 'closed' ? data.registration : 'open'
+    publicConfig.turnstileSiteKey = typeof data.turnstileSiteKey === 'string' ? data.turnstileSiteKey : ''
+  } catch {
+    publicConfig.registration = 'unknown'
+    publicConfig.turnstileSiteKey = ''
+  }
+  return publicConfig
+}
+
 type AuthResponse = { token: string; user: OnlineUser; revision: number; game: GameState }
 type StateResponse = { type: 'state'; revision: number; game: GameState; source?: string }
 
@@ -69,11 +94,20 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T
 }
 
-export async function registerOnline(username: string, password: string): Promise<AuthResponse> {
+export async function registerOnline(
+  username: string,
+  password: string,
+  extra: { inviteCode?: string; turnstileToken?: string } = {},
+): Promise<AuthResponse> {
   const data = await requestJson<AuthResponse>('/api/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({
+      username,
+      password,
+      ...(extra.inviteCode ? { inviteCode: extra.inviteCode } : {}),
+      ...(extra.turnstileToken ? { turnstileToken: extra.turnstileToken } : {}),
+    }),
   })
   acceptSession(data)
   return data

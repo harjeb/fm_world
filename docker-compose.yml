@@ -1,0 +1,44 @@
+name: fm-world
+
+services:
+  fm:
+    build: .
+    image: fm-world:latest
+    container_name: fm_world
+    restart: unless-stopped
+    environment:
+      PORT: "8787"
+      FM_DATA_DIR: /app/data
+      FM_STATIC_DIR: /app/dist
+      FM_TICK_MS: "${FM_TICK_MS:-30000}"
+      FM_REGISTRATION: "${FM_REGISTRATION:-open}"
+      FM_INVITE_CODE: "${FM_INVITE_CODE:-}"
+      FM_TURNSTILE_SITEKEY: "${FM_TURNSTILE_SITEKEY:-}"
+      FM_TURNSTILE_SECRET: "${FM_TURNSTILE_SECRET:-}"
+      FM_REGISTER_LIMIT_PER_HOUR: "${FM_REGISTER_LIMIT_PER_HOUR:-5}"
+      TZ: "${TZ:-Asia/Shanghai}"
+    volumes:
+      # 存档目录：账号、共享世界、会话。必须挂宿主机目录，否则重建容器会清档。
+      - ./data:/app/data
+    ports:
+      # 宿主机 18787 → 容器 8787，方便局域网直接访问 http://NAS-IP:18787
+      - "18787:8787"
+    networks:
+      - fmnet
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: fm_tunnel
+    restart: unless-stopped
+    # 用 Zero Trust 后台创建的命名隧道令牌，填在 .env 的 CLOUDFLARE_TUNNEL_TOKEN
+    command: tunnel --no-autoupdate --loglevel info run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    environment:
+      TZ: "${TZ:-Asia/Shanghai}"
+    depends_on:
+      - fm
+    networks:
+      - fmnet
+
+networks:
+  fmnet:
+    driver: bridge

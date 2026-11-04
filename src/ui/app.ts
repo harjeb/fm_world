@@ -54,7 +54,7 @@ import { PLAYER_TEAM_ID, catchUpSeason, currentRoundFixtures, matchdayCountdown,
 import { buildReview } from '../game/review.ts'
 import { advanceLeagueRealtime, leagueDisplayClock, leagueElapsed } from '../game/realtime.ts'
 import { displayClock, MATCH_DISPLAY_SECONDS } from '../game/match/time.ts'
-import { createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loginOnline, logoutOnline, onlineState, registerOnline, revokeAgentTokenOnline, setRemoteGameHandler, subscribeOnline } from '../online.ts'
+import { createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, onlineState, publicConfig, registerOnline, revokeAgentTokenOnline, setRemoteGameHandler, subscribeOnline } from '../online.ts'
 import { MatchEngine } from '../game/match/engine.ts'
 import { PITCH_LENGTH, PITCH_WIDTH } from '../game/match/team.ts'
 import { shotPositionText } from '../game/match/shooting.ts'
@@ -113,6 +113,7 @@ type UIState = {
   completing: boolean
   accountOpen: boolean
   authMode: 'login' | 'register'
+  turnstileToken: string
 }
 
 let replay = { id: '', index: 0, playing: false, speed: 1, timer: null as number | null }
@@ -155,6 +156,7 @@ let ui: UIState = {
   completing: false,
   accountOpen: false,
   authMode: 'login',
+  turnstileToken: '',
 }
 
 const initialScreen = game.ui?.screen as Screen | undefined
@@ -252,6 +254,7 @@ function render(): void {
   }
   if (ui.screen === 'review') scheduleReplay()
   else stopReplay()
+  mountTurnstile()
 }
 
 function renderHeader(): string {
@@ -316,7 +319,7 @@ function renderClub(): string {
     <div class="page-head"><div><div class="eyebrow">俱乐部</div><h1>设施与转会市场</h1><p>余额：<b>${economy.balance.toLocaleString()}</b></p></div></div>
     <div class="panel"><div class="panel-head"><h2>俱乐部设施</h2></div>
       <p class="muted small">每完成一轮获得基础收入；球场、商店和赞助商提供额外收入。青训设施提升训练效果，医疗设施缩短新伤病的恢复时间。</p>
-      <p class="muted small">设施提供额外成长，主属性最高 1500。球场对各属性生效；医疗对应身体，青训对应技术，商店对应决断、团队合作和镇定，赞助商对应视野、预判、无球跑动和防守站位。每次行动或事件中，仅对基础成长为正的属性加成：球场每级 +2，对应设施每级 +5；例如医疗 3 级为每项符合条件的身体主属性额外 +15，球场另计。隐藏属性加成按 20/1500 缩放；休息、位置训练及无成长不加成，上限截断成长但不降低现有属性。设施等级在开始培养时锁定，升级从下一次培养生效；旧培养若无设施快照则没有建筑加成。</p>
+      <p class="muted small">设施提供额外成长，每项主属性各有自己的上限（由球员画像决定，通常不到 1500）。球场对各属性生效；医疗对应身体，青训对应技术，商店对应决断、团队合作和镇定，赞助商对应视野、预判、无球跑动和防守站位。每次行动或事件中，仅对基础成长为正的属性加成：球场每级 +2，对应设施每级 +5；例如医疗 3 级为每项符合条件的身体主属性额外 +15，球场另计。隐藏属性加成按 20/1500 缩放；休息、位置训练及无成长不加成，上限截断成长但不降低现有属性。设施等级在开始培养时锁定，升级从下一次培养生效；旧培养若无设施快照则没有建筑加成。</p>
       <p class="muted small">培养免费，仅消耗 30 精力；联赛获胜在本轮额外收入 ${LEAGUE_WIN_BONUS.toLocaleString()}，友谊赛没有胜场奖金。</p>
       ${(Object.keys(FACILITIES) as FacilityId[]).map((id) => {
         const cost = facilityUpgradeCost(id, economy[id])
@@ -497,12 +500,20 @@ function renderPlayerCard(player: Player): string {
 function renderAccountOverlay(): string {
   if (!ui.accountOpen) return ''
   const online = onlineState.status === 'online'
+  const mode = publicConfig.registration
+  const canRegister = mode === 'open' || mode === 'invite'
+  const registering = ui.authMode === 'register' && canRegister
+  const registrationHint = mode === 'closed'
+    ? '<p class="muted small">本服务器已关闭注册，仅限已有账号登录。</p>'
+    : mode === 'unknown'
+      ? '<p class="muted small">当前离线或服务器不可达，无法注册新账号；本地存档仍可正常游玩。</p>'
+      : ''
   return `
     <div class="overlay" data-action="account-close">
       <div class="modal account-modal" data-stop="true">
         <button class="modal-close" data-action="account-close">×</button>
         <div class="eyebrow">联机账号</div>
-        <h1>${online ? '已连接服务器' : ui.authMode === 'register' ? '注册账号' : '登录账号'}</h1>
+        <h1>${online ? '已连接服务器' : registering ? '注册账号' : '登录账号'}</h1>
         ${online ? `
           <p>当前账号：<b>${esc(onlineState.user?.username ?? '')}</b> · 第 ${onlineState.revision} 版存档${onlineState.connected ? ' · SSE 已连接' : ' · SSE 重连中'}</p>
           <p class="muted small">另一台设备保存后会自动同步到这里。冲突时服务器版本优先。</p>
@@ -512,16 +523,59 @@ function renderAccountOverlay(): string {
         ` : `
           <p class="muted">登录后存档保存到服务器，并用 SSE 在多个页面/设备间同步。离线时仍可玩本地存档。</p>
           <div class="form-row"><label>用户名</label><input id="account-username" autocomplete="username" placeholder="2-24 位" /></div>
-          <div class="form-row"><label>密码</label><input id="account-password" type="password" autocomplete="current-password" placeholder="至少 6 位" /></div>
+          <div class="form-row"><label>密码</label><input id="account-password" type="password" autocomplete="${registering ? 'new-password' : 'current-password'}" placeholder="至少 6 位" /></div>
+          ${registering && mode === 'invite' ? '<div class="form-row"><label>邀请码</label><input id="account-invite" autocomplete="off" placeholder="向管理员索取" /></div>' : ''}
+          ${registering && publicConfig.turnstileSiteKey ? '<div class="turnstile-slot" id="turnstile-slot"></div>' : ''}
+          ${registrationHint}
           ${onlineState.error ? `<p class="warn-text">${esc(onlineState.error)}</p>` : ''}
           <div class="btn-row">
-            <button class="btn primary" data-action="account-submit">${ui.authMode === 'register' ? '注册并进入' : '登录'}</button>
-            <button class="btn" data-action="account-mode">${ui.authMode === 'register' ? '已有账号，去登录' : '没有账号，去注册'}</button>
+            <button class="btn primary" data-action="account-submit">${registering ? '注册并进入' : '登录'}</button>
+            ${canRegister ? `<button class="btn" data-action="account-mode">${registering ? '已有账号，去登录' : '没有账号，去注册'}</button>` : ''}
           </div>
         `}
       </div>
     </div>
   `
+}
+
+type TurnstileApi = {
+  render: (container: HTMLElement, options: Record<string, unknown>) => string
+  reset: (widgetId?: string) => void
+}
+
+let turnstileLoader: Promise<TurnstileApi | null> | null = null
+
+function loadTurnstile(): Promise<TurnstileApi | null> {
+  const loaded = (window as unknown as { turnstile?: TurnstileApi }).turnstile
+  if (loaded) return Promise.resolve(loaded)
+  if (turnstileLoader) return turnstileLoader
+  turnstileLoader = new Promise((resolve) => {
+    const script = document.createElement('script')
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+    script.async = true
+    script.onload = () => resolve((window as unknown as { turnstile?: TurnstileApi }).turnstile ?? null)
+    script.onerror = () => resolve(null)
+    document.head.appendChild(script)
+  })
+  return turnstileLoader
+}
+
+/** render() 会重建 DOM，验证码控件在每次重建后重新挂载。 */
+function mountTurnstile(): void {
+  if (!ui.accountOpen || ui.authMode !== 'register') return
+  if (!publicConfig.turnstileSiteKey) return
+  const slot = document.getElementById('turnstile-slot')
+  if (!slot || slot.childElementCount > 0) return
+  void loadTurnstile().then((api) => {
+    if (!api || slot.childElementCount > 0) return
+    api.render(slot, {
+      sitekey: publicConfig.turnstileSiteKey,
+      theme: 'dark',
+      callback: (token: string) => { ui.turnstileToken = token },
+      'expired-callback': () => { ui.turnstileToken = '' },
+      'error-callback': () => { ui.turnstileToken = '' },
+    })
+  })
 }
 
 function openFinishedLeague(previous: NonNullable<GameState['activeMatch']>): void {
@@ -556,10 +610,41 @@ async function submitAccount(): Promise<void> {
     return
   }
   try {
-    const data = ui.authMode === 'register' ? await registerOnline(username, password) : await loginOnline(username, password)
+    if (ui.authMode === 'register') {
+      const mode = publicConfig.registration
+      if (mode === 'closed') {
+        ui.notice = '本服务器已关闭注册。'
+        render()
+        return
+      }
+      if (mode === 'unknown') {
+        ui.notice = '服务器不可达，无法注册新账号。'
+        render()
+        return
+      }
+      const inviteCode = (document.getElementById('account-invite') as HTMLInputElement | null)?.value.trim() ?? ''
+      if (mode === 'invite' && !inviteCode) {
+        ui.notice = '请填写邀请码。'
+        render()
+        return
+      }
+      if (publicConfig.turnstileSiteKey && !ui.turnstileToken) {
+        ui.notice = '请先完成人机验证。'
+        render()
+        return
+      }
+      const data = await registerOnline(username, password, { inviteCode, turnstileToken: ui.turnstileToken })
+      ui.accountOpen = false
+      ui.turnstileToken = ''
+      applyOnlineGame(data.game, `已注册并登录 ${data.user.username}，存档已同步。`)
+      return
+    }
+    const data = await loginOnline(username, password)
     ui.accountOpen = false
     applyOnlineGame(data.game, `已登录 ${data.user.username}，存档已同步。`)
   } catch (error) {
+    /* Turnstile token 一次性有效，失败后 render() 会重新挂载控件取新 token。 */
+    ui.turnstileToken = ''
     ui.notice = error instanceof Error ? error.message : '登录失败'
     render()
   }
@@ -568,6 +653,7 @@ async function submitAccount(): Promise<void> {
 function bootOnline(): void {
   setRemoteGameHandler((next) => applyOnlineGame(next))
   subscribeOnline(() => render())
+  void loadPublicConfig().then(() => render())
   void initOnline().then((remote) => {
     if (remote) applyOnlineGame(remote, '已从服务器载入最新存档。')
   })
@@ -716,7 +802,7 @@ function renderTrainingHeader(current: Player, session: TrainingSession, cand: P
         <div class="eyebrow">${session.scheduleVersion === 1 ? (() => { const date = trainingDate(Math.min(total, session.action + 1)); return `第 ${date.week} 周 · ${date.dayLabel} ${date.slot}` })() : `第 ${weekOfAction(Math.max(1, session.action))} 周`} · 行动 ${session.action}/${total}</div>
         <h1>${esc(current.name)} <small>${esc(current.enName)}</small></h1>
         <p>${esc(traitName(current.traitId))} · ${route} · ${session.candidate.skills.map((skill) => skillName(skill)).join('、') || '尚无学习技能'}</p>
-        <p class="muted small">设施加成按本轮开始时的快照计算；升级从下一次培养生效；已有快照的课程下一行动使用新规则，旧培养若无设施快照则没有建筑加成。主属性最高 1500。CA 是综合能力参考值（0–1500），不是培养上限；比赛使用各项属性。</p>
+        <p class="muted small">设施加成按本轮开始时的快照计算；升级从下一次培养生效；已有快照的课程下一行动使用新规则，旧培养若无设施快照则没有建筑加成。每项主属性有各自上限，练到该属性的上限即停。CA 是综合能力参考值（0–1500），不是培养上限；比赛使用各项属性。</p>
       </div>
       <div class="stat-strip">
         <div><span>当前 CA</span><b>${playerCA(current).toFixed(1)}</b></div>
@@ -1608,10 +1694,17 @@ document.addEventListener('click', async (event) => {
       ui.accountOpen = false
       render()
       break
-    case 'account-mode':
+    case 'account-mode': {
+      const mode = publicConfig.registration
+      if (mode !== 'open' && mode !== 'invite') {
+        showNotice(mode === 'closed' ? '本服务器已关闭注册。' : '服务器不可达，无法注册。')
+        break
+      }
       ui.authMode = ui.authMode === 'login' ? 'register' : 'login'
+      ui.turnstileToken = ''
       render()
       break
+    }
     case 'account-submit':
       void submitAccount()
       break

@@ -208,6 +208,8 @@ input:focus, select:focus { border-color: var(--green); box-shadow: 0 0 0 3px rg
 .preview-grid b { font-size: 0.83rem; }
 .form-row { display: grid; grid-template-columns: 100px 1fr; gap: 10px; align-items: center; margin: 8px 0; }
 .form-row label { color: var(--muted); font-size: 0.8rem; }
+.turnstile-slot { min-height: 65px; margin: 10px 0 4px; }
+.turnstile-slot:empty::after { content: '人机验证加载中…'; color: var(--muted); font-size: 0.75rem; }
 .event-panel { border-color: rgba(251,191,36,0.35); box-shadow: 0 0 0 1px rgba(251,191,36,0.08) inset; margin-bottom: 18px; }
 .event-text { color: #d6e9dd; }
 .options { display: grid; gap: 8px; margin: 14px 0; }

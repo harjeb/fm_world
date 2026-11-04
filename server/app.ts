@@ -37,11 +37,23 @@ type SharedWorld = {
   reserveStars: Player[]
 }
 
+export type RegistrationMode = 'open' | 'invite' | 'closed'
+
 export type AppServerOptions = {
   dataDir?: string
   staticDir?: string
   tickMs?: number
   now?: () => number
+  /** 注册入口：open 谁都能注册；invite 需要邀请码；closed 只能登录。默认 open。 */
+  registration?: RegistrationMode
+  /** registration 为 invite 时的邀请码。 */
+  inviteCode?: string
+  /** 配置后注册必须通过 Cloudflare Turnstile 校验。 */
+  turnstileSecret?: string
+  /** 下发给前端的 Turnstile sitekey。 */
+  turnstileSiteKey?: string
+  /** 单 IP 每小时注册次数上限；0 或不填表示不限。 */
+  registerLimitPerHour?: number
 }
 
 type SessionMap = Record<string, string>
@@ -60,6 +72,13 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   const dataDir = path.resolve(options.dataDir ?? 'data')
   const staticDir = path.resolve(options.staticDir ?? 'dist')
   const now = options.now ?? Date.now
+  const registrationMode: RegistrationMode = options.registration ?? 'open'
+  const inviteCode = options.inviteCode?.trim() ?? ''
+  const turnstileSecret = options.turnstileSecret?.trim() ?? ''
+  const turnstileSiteKey = options.turnstileSiteKey?.trim() ?? ''
+  const registerLimitPerHour = Math.max(0, Math.trunc(options.registerLimitPerHour ?? 0))
+  /* 邀请码模式没配邀请码会锁死注册，直接报错，避免部署后没人能注册。 */
+  if (registrationMode === 'invite' && !inviteCode) throw new Error('registration=invite 需要配置 inviteCode')
   fs.mkdirSync(dataDir, { recursive: true })
 
   const dbPath = path.join(dataDir, DB_FILE)
@@ -89,6 +108,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   for (const account of db.accounts) account.lastUserRevision ??= account.revision
   const sessions: SessionMap = readJson<SessionMap>(sessionPath, {})
   const clients = new Map<string, Set<ServerResponse>>()
+  const registerAttempts = new Map<string, number[]>()
 
   const persistDb = () => writeJson(dbPath, db)
   const persistSessions = () => writeJson(sessionPath, sessions)
@@ -147,6 +167,62 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     return url.searchParams.get('token') ?? undefined
   }
 
+  /** Cloudflare 隧道会写入 cf-connecting-ip；直连时退回 socket 地址。 */
+  function clientIp(req: IncomingMessage): string {
+    const cf = req.headers['cf-connecting-ip']
+    if (typeof cf === 'string' && cf.trim()) return cf.trim()
+    const forwarded = req.headers['x-forwarded-for']
+    const first = Array.isArray(forwarded) ? forwarded[0] : forwarded
+    if (first) {
+      const candidate = first.split(',')[0].trim()
+      if (candidate) return candidate
+    }
+    return req.socket.remoteAddress ?? 'unknown'
+  }
+
+  function takeRegisterSlot(ip: string): boolean {
+    if (!registerLimitPerHour) return true
+    const at = now()
+    const windowMs = 60 * 60 * 1000
+    const recent = (registerAttempts.get(ip) ?? []).filter((stamp) => at - stamp < windowMs)
+    if (recent.length >= registerLimitPerHour) {
+      registerAttempts.set(ip, recent)
+      return false
+    }
+    recent.push(at)
+    registerAttempts.set(ip, recent)
+    if (registerAttempts.size > 4096) {
+      for (const [key, list] of registerAttempts) if (!list.some((stamp) => at - stamp < windowMs)) registerAttempts.delete(key)
+    }
+    return true
+  }
+
+  function inviteMatches(given: string): boolean {
+    if (!inviteCode) return false
+    const a = Buffer.from(given, 'utf8')
+    const b = Buffer.from(inviteCode, 'utf8')
+    if (a.length !== b.length) return false
+    return crypto.timingSafeEqual(a, b)
+  }
+
+  async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
+    if (!turnstileSecret) return true
+    if (!token) return false
+    try {
+      const body = new URLSearchParams({ secret: turnstileSecret, response: token })
+      if (ip && ip !== 'unknown') body.set('remoteip', ip)
+      const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+        method: 'POST',
+        body,
+        signal: AbortSignal.timeout(5000),
+      })
+      const data = (await response.json()) as { success?: boolean }
+      return data.success === true
+    } catch {
+      return false
+    }
+  }
+
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     try {
       const url = new URL(req.url ?? '/', 'http://localhost')
@@ -182,8 +258,23 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return
     }
 
+    if (url.pathname === '/api/public-config' && req.method === 'GET') {
+      /* 只暴露注册模式与 sitekey，邀请码与 secret 永不下发。 */
+      json(res, 200, { registration: registrationMode, turnstileSiteKey, accounts: db.accounts.length })
+      return
+    }
+
     if (url.pathname === '/api/register' && req.method === 'POST') {
+      if (registrationMode === 'closed') return json(res, 403, { error: '本服务器已关闭注册' })
+      const ip = clientIp(req)
+      if (!takeRegisterSlot(ip)) return json(res, 429, { error: '注册过于频繁，请稍后再试' })
       const body = await readJsonBody(req)
+      if (registrationMode === 'invite' && !inviteMatches(String(body.inviteCode ?? '').trim())) {
+        return json(res, 403, { error: '邀请码不正确' })
+      }
+      if (turnstileSecret && !(await verifyTurnstile(String(body.turnstileToken ?? ''), ip))) {
+        return json(res, 400, { error: '人机验证未通过，请刷新后重试' })
+      }
       const username = String(body.username ?? '').trim()
       const password = String(body.password ?? '')
       if (!/^[\p{L}\p{N}_-]{2,24}$/u.test(username)) return json(res, 400, { error: '用户名需为 2-24 位字母、数字、中文、_ 或 -' })
