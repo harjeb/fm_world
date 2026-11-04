@@ -8,7 +8,7 @@ import { MatchEngine } from '../src/game/match/engine.ts'
 
 describe('injury model', () => {
   it('uses researched ratings and a stable randomized fallback', () => {
-    expect(Object.keys(INJURY_PROFILES)).toHaveLength(185)
+    expect(Object.keys(INJURY_PROFILES)).toHaveLength(481)
     expect(injuryProneness('p014')).toBe(14)
     const values = new Set(Array.from({ length: 100 }, (_, index) => injuryProneness(`gen-${index}`)))
     expect(values.size).toBeGreaterThan(5)
