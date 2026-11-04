@@ -7,11 +7,17 @@ import { teamInputFromLineup } from '../src/game/match/setup.ts'
 import { MatchEngine } from '../src/game/match/engine.ts'
 
 describe('injury model', () => {
-  it('uses researched ratings and neutral fallback', () => {
+  it('uses researched ratings and a stable randomized fallback', () => {
     expect(Object.keys(INJURY_PROFILES)).toHaveLength(185)
     expect(injuryProneness('p014')).toBe(14)
-    expect(injuryProneness('fictional')).toBe(10)
-    expect(injuryProneness('toString')).toBe(10)
+    const values = new Set(Array.from({ length: 100 }, (_, index) => injuryProneness(`gen-${index}`)))
+    expect(values.size).toBeGreaterThan(5)
+    for (const value of values) {
+      expect(value).toBeGreaterThanOrEqual(5)
+      expect(value).toBeLessThanOrEqual(17)
+    }
+    expect(injuryProneness('fictional')).toBe(injuryProneness('fictional'))
+    expect(injuryProneness('toString')).toBeGreaterThanOrEqual(5)
   })
 
   it('prevention reduces risk independently of recovery', () => {

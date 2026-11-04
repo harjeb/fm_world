@@ -1,7 +1,7 @@
 import type { GameState, Player } from './types.ts'
 import type { MatchState } from './match/types.ts'
 import { INJURY_PROFILES } from './data/injury-profiles.ts'
-import type { PCG32 } from './rng.ts'
+import { derivedRng, type PCG32 } from './rng.ts'
 import { economyOf } from './economy.ts'
 import { matchRealSeconds } from './match/time.ts'
 
@@ -10,7 +10,9 @@ export function personKey(player: Pick<Player, 'id' | 'seedId'>): string {
 }
 
 export function injuryProneness(personId: string): number {
-  return Object.hasOwn(INJURY_PROFILES, personId) ? INJURY_PROFILES[personId] : 10
+  if (Object.hasOwn(INJURY_PROFILES, personId)) return INJURY_PROFILES[personId]
+  // 未收录的人物（虚构球员、档案缺失的真实球员）按人物键稳定散列，同一人物始终一致。
+  return 5 + derivedRng(0, 'injury-proneness', personId).int(13)
 }
 
 export function injuryRisk(prone: number, fatigue: number, prevention: boolean): number {

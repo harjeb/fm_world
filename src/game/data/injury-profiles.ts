@@ -3,7 +3,8 @@
 // Count records of 1+ missed days in seasons with 5+ appearances, filtering common
 // non-injury reasons; rating = clamp(round(10 + 1.3 * (100 * count / max(100, career appearances) - 2)), 4, 18).
 // The source is incomplete, especially for older players, and is not medical advice.
-// Missing players, including fictional players, use 10. Severity is not estimated.
+// Missing players, including fictional players, get a stable pseudo-random 5–17.
+// Severity is not estimated.
 export const INJURY_PROFILES: Readonly<Record<string, number>> = {
   p001: 10,
   p002: 8,
