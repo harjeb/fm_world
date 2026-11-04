@@ -177,14 +177,14 @@ describe('赛季与存档', () => {
     expect(loadGame()!.roster.find((item) => item.id === player.id)!.signatureSkill).toBe(originalSignature)
   })
 
-  it('旧进行中培养取消个人上限，新培养快照在存取后保持', () => {
+  it('旧进行中培养保留个人上限，新培养快照在存取后保持', () => {
     const game = createInitialGame(68)
     const [first, second] = game.roster.filter(player => player.positions.GK === 0)
     const legacy = createTrainingSession(first, 1)
     delete legacy.scheduleVersion
     delete legacy.stadiumLevel
     delete legacy.facilityLevels
-    legacy.candidate.ceilings.passing = 1
+    legacy.candidate.ceilings.passing = 900
     legacy.candidate.attrs.passing = 899
     legacy.candidate.pa = 1
     game.training[first.id] = legacy
@@ -193,7 +193,7 @@ describe('赛季与存档', () => {
     const loaded = loadGame()!
     expect(loaded.training[first.id].stadiumLevel).toBeUndefined()
     expect(loaded.training[first.id].facilityLevels).toBeUndefined()
-    expect(planTraining(loaded.training[first.id], { kind: 'drill', attr: 'passing' }).gains.passing!).toBeGreaterThan(1)
+    expect(planTraining(loaded.training[first.id], { kind: 'drill', attr: 'passing' }).gains.passing!).toBeCloseTo(1)
     expect(loaded.training[second.id].stadiumLevel).toBe(3)
   })
 

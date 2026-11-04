@@ -1,7 +1,10 @@
 import type { AttrKey, Attributes, Foot, Position, PositionTable, Player, SkillId, StyleId, TraitId } from '../types.ts'
 import { ALL_ATTRIBUTES, GK_ATTRIBUTES, POSITIONS } from '../types.ts'
 import { caCeilingOf, caOf } from '../ca.ts'
-import { attrStorage } from '../scale.ts'
+import { attrLimit, attrMax, attrStorage } from '../scale.ts'
+import { CEILING_JITTER, ceilingRoom, normalizeCeilings, profileFromWeights } from './attr-profile.ts'
+import { fmProfileFor } from './fm-profiles.generated.ts'
+import { curatedProfileFor } from './profiles-curated.ts'
 import { canLearnSkill, TRAITS } from './skills.ts'
 import { EXTRA_SEEDS } from './extra-stars.ts'
 
@@ -388,6 +391,14 @@ function makeAttributes(seed: PlayerSeed, rng: () => number): { attrs: Attribute
   const isGk = seed.pos === 'GK'
   const attrs = {} as Attributes
   const ceilings = {} as Attributes
+  // 画像只依赖风格与位置，不消耗随机源，因此先一次性算好再归一化。
+  const weights: Partial<Record<AttrKey, number>> = {}
+  for (const key of ALL_ATTRIBUTES) {
+    weights[key] = !isGk && (GK_ATTRIBUTES as readonly string[]).includes(key) ? 0 : styleWeight(seed.style, key, isGk)
+  }
+  // 有 FM 导入的画像就用真实的强弱分布；其次是用手工画像（导出表里查无此人的老将/漏掉的人）；
+  // 都没有才由风格推导。三者都不消耗随机源。
+  const profile = fmProfileFor(seed.enName) ?? curatedProfileFor(seed.enName) ?? profileFromWeights(weights)
   for (const key of ALL_ATTRIBUTES) {
     if (!isGk && (GK_ATTRIBUTES as readonly string[]).includes(key)) {
       attrs[key] = 0
@@ -404,7 +415,8 @@ function makeAttributes(seed: PlayerSeed, rng: () => number): { attrs: Attribute
     if (key === 'composure') value += (seed.tier - 3) * 1.5
     const rating = clampRating(value)
     attrs[key] = storeAttr(key, rating, isGk)
-    const room = (weight > 0.8 ? 9 : 12) + seed.tier * 1.6 + rng() * 4
+    // 上限：招牌维度更高、弱点维度更低。随机源消耗顺序与旧实现一致（先 noise 后一次 rng）。
+    const room = ceilingRoom(profile[key], seed.tier) + rng() * CEILING_JITTER
     ceilings[key] = storeAttr(key, clampRating(rating + room), isGk)
   }
   return { attrs, ceilings }
@@ -462,6 +474,8 @@ export function createPlayerFromSeed(seed: PlayerSeed): Player {
   const startingCa = Math.max(203, Math.min(297, 85 + initialCa * 0.3))
   const startScale = Math.sqrt(startingCa / initialCa)
   for (const key of ALL_ATTRIBUTES) attrs[key] = Math.round(attrs[key] * startScale * 10) / 10
+  // 缩放后重新对齐上限，保证「上限不低于当前属性」这个不变量始终成立。
+  const finalCeilings = normalizeCeilings(attrs, ceilings, (key) => attrLimit(key, isGk))
   const skillChance = seed.tier >= 5 ? 0.68 : seed.tier === 4 ? 0.42 : 0.2
   const rolledSkill = rng() < skillChance
   const signatureSkill = seed.era === 'random' ? undefined : STYLE_SKILL[seed.style]
@@ -477,7 +491,7 @@ export function createPlayerFromSeed(seed: PlayerSeed): Player {
     foot: seed.foot,
     height: seed.height,
     attrs,
-    ceilings,
+    ceilings: finalCeilings,
     pa,
     positions,
     personality,

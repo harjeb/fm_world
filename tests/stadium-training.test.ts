@@ -68,18 +68,18 @@ describe('facility training growth', () => {
     expect(session.candidate.attrs.teamwork).toBeCloseTo(plan.gains.teamwork!)
   })
 
-  it('ignores stadium, personal ceiling and PA gates; preview matches execution up to 1500', () => {
+  it('按个人属性上限截断，PA 不参与；预览与实际执行一致', () => {
     const player = createInitialGame(4).roster.find(p => !p.positions.GK)!
     const session = createTrainingSession(player, 8)
     delete session.scheduleVersion
     session.candidate.pa = 1
-    session.candidate.ceilings.passing = 1
     session.candidate.attrs.passing = 1499
+    session.candidate.ceilings.passing = 1500
     const request = { kind: 'drill', attr: 'passing' } as const
     const preview = planTraining(session, request)
     expect(preview.note).toContain('上限')
+    expect(preview.gains.passing).toBeCloseTo(1)
     expect(performTrainingAction(session, request).ok).toBe(true)
-    expect(session.candidate.attrs.passing).toBeCloseTo(1499 + preview.gains.passing!)
     expect(session.candidate.attrs.passing).toBe(1500)
   })
 
@@ -90,7 +90,8 @@ describe('facility training growth', () => {
     const old = structuredClone(session)
     delete old.facilityLevels
     expect(facilityGrowthBonus(old, 'passing')).toBe(0)
-    for (const s of [session, old]) { s.pendingEventId = 'main_intake'; s.candidate.pa = 1; s.candidate.ceilings.passing = 1 }
+    // 把个人上限顶格，单独验证设施加成只生效一次。
+    for (const s of [session, old]) { s.pendingEventId = 'main_intake'; s.candidate.pa = 1; s.candidate.ceilings.passing = 1500; s.candidate.ceilings.decisions = 20 }
     const enhanced = resolveTrainingEvent(session, 'passing')
     const legacy = resolveTrainingEvent(old, 'passing')
     expect(enhanced.ok && legacy.ok).toBe(true)

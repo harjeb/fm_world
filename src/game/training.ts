@@ -12,13 +12,14 @@ import type {
   SkillId,
 } from './types.ts'
 import { ATTR_META, RELATED_ATTRS, attrLabel } from './data/attributes.ts'
+import { normalizeCeilings } from './data/attr-profile.ts'
 import { EVENTS, ROUTE_LABELS, ROUTE_SKILL, eventById } from './data/events.ts'
 import { SKILLS, canLearnSkill } from './data/skills.ts'
 import { applyGains, attrText, caOf, isGoalkeeper } from './ca.ts'
 import { derivedRng } from './rng.ts'
 import { PLAYER_COUNT } from './data/players.ts'
 import { repairLineup } from './squad.ts'
-import { attrMax, attrRating, MAIN_ATTR_MAX, displayGain, isMainAttr, scaleAuthoredGains } from './rating.ts'
+import { attrLimit, attrMax, attrRating, MAIN_ATTR_MAX, displayGain, isMainAttr, scaleAuthoredGains } from './rating.ts'
 import { inheritanceChances, mentorSkill, validateInheritance } from './inheritance.ts'
 import { trainingDate, trainingLowMood, trainingOptions, type TrainingActivityId } from './training-calendar.ts'
 
@@ -185,7 +186,9 @@ export function facilityGrowthBonus(session: TrainingSession, key: AttrKey): num
 
 function trainingCeilings(session: TrainingSession): Player['ceilings'] {
   const gk = candidateIsGk(session)
-  return Object.fromEntries(ALL_ATTRIBUTES.map(key => [key, attrMax(key, gk)])) as Player['ceilings']
+  // 每个属性只练到球员自己的上限（由画像与星级决定），不再统一到 1500。
+  // 旧存档候选若缺少 ceilings，回退到该属性的绝对上限。
+  return normalizeCeilings(session.candidate.attrs, session.candidate.ceilings, (key) => attrLimit(key, gk))
 }
 
 // Authored gains are already in storage units. The facility bonus replaces the

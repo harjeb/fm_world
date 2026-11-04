@@ -57,13 +57,13 @@ describe('培养', () => {
     expect(validateLineup(game.roster, game.lineup).valid).toBe(true)
   })
 
-  it('低初始能力跨课程累积到 1500，不受旧 PA 或个人上限限制', () => {
+  it('培养累积到个人上限后停止：上限因人而异，PA 不参与', () => {
     const game = createInitialGame(4)
     let player = game.roster.find(item => item.positions.GK === 0)!
     const id = player.id
     player.pa = 1
-    player.ceilings.passing = 1
     player.attrs.passing = 450
+    player.ceilings.passing = 470
     let previous = 450
     for (let course = 0; course < 2; course++) {
       const current = structuredClone(player)
@@ -85,12 +85,13 @@ describe('培养', () => {
       expect(confirmTraining(game, id).ok).toBe(true)
       player = game.roster.find(item => item.id === id)!
       const passing = player.attrs.passing
-      expect(passing).toBeGreaterThan(previous)
+      expect(passing).toBeGreaterThanOrEqual(previous)
       previous = passing
     }
-    expect(previous).toBeCloseTo(1500)
+    // 到上限即停：上限来自球员自己的 ceilings，而不是统一的 1500。
+    expect(previous).toBe(470)
     expect(player.pa).toBe(1)
-    expect(player.ceilings.passing).toBe(1)
+    expect(player.ceilings.passing).toBe(470)
   })
 
   it('确认或放弃候选时保留期间比赛更新的体力和恢复的精力', () => {

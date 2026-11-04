@@ -205,6 +205,7 @@ describe('expanded training courses', () => {
   it('respects the attribute cap and reports the actual previewed gain', () => {
     const { game, players, sessions } = setup()
     sessions[0].candidate.attrs.speed = 1499
+    sessions[0].candidate.ceilings.speed = 1500
     const plan = preview(game, players[0].id, drill).plan!
     expect(plan.gains.speed).toBeCloseTo(1)
     expect(act(game, players[0].id, drill).ok).toBe(true)

@@ -15,7 +15,8 @@
     "start": "tsx server/index.ts",
     "smoke": "node scripts/browser-smoke.mjs",
     "balance": "tsx scripts/balance.ts",
-    "mcp": "tsx mcp/index.ts"
+    "mcp": "tsx mcp/index.ts",
+    "fm:import": "tsx scripts/import-fm.ts"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
