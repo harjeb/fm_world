@@ -32,7 +32,7 @@ describe('next season', () => {
     const game = createInitialGame(43)
     const p = game.roster[0]
     game.season.round = 38
-    expect(listPlayer(game, p.id, playerMarketValue(p) * 2 + 1).ok).toBe(true)
+    expect(listPlayer(game, p.id, playerMarketValue(p)).ok).toBe(true)
     finish(game)
     const economy = economyOf(game)
     economy.lastIncomeRound = 38
@@ -72,7 +72,7 @@ describe('next season', () => {
     const game = createInitialGame(49)
     game.season.round = 38
     const player = game.roster[0]
-    const price = playerMarketValue(player)
+    const price = Math.round(playerMarketValue(player) * 0.9)
     expect(listPlayer(game, player.id, price).ok).toBe(true)
     const fixture = game.season.fixtures.find(f => f.round === 38 && f.isPlayer)!
     fixture.score = fixture.homeId === 'player' ? { home: 2, away: 0 } : { home: 0, away: 2 }

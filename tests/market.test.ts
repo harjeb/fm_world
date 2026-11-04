@@ -38,9 +38,10 @@ describe('local market', () => {
   })
   it('settles once per increasing round and leaves overpriced listings', () => {
     const g = game(), p = g.roster[0], q = g.roster[1], e = economyOf(g)
-    const price = playerMarketValue(p)
+    // 按估值九折挂牌 = 买家一口价，必定成交；按估值挂就没人接
+    const price = Math.round(playerMarketValue(p) * 0.9)
     expect(listPlayer(g, p.id, price).ok).toBe(true)
-    expect(listPlayer(g, q.id, playerMarketValue(q) * 2 + 1).ok).toBe(true)
+    expect(listPlayer(g, q.id, playerMarketValue(q)).ok).toBe(true)
     const balance = e.balance
     expect(settleMarket(g, 1)).toBe(price)
     expect(e.balance).toBe(balance + price)
@@ -80,7 +81,7 @@ describe('local market', () => {
     const g = game(), p = g.roster[0], e = economyOf(g)
     g.market = { listings: [], lastSettledRound: 1 }
     g.season.round = 3
-    const price = playerMarketValue(p), balance = e.balance
+    const price = Math.round(playerMarketValue(p) * 0.9), balance = e.balance
     expect(listPlayer(g, p.id, price).ok).toBe(true)
     expect(settleMarket(g, 2)).toBe(0)
     expect(e.balance).toBe(balance)
@@ -89,7 +90,7 @@ describe('local market', () => {
   })
   it('rejects overflow without partial settlement', () => {
     const g = game(), e = economyOf(g), p = g.roster[0]
-    expect(listPlayer(g, p.id, playerMarketValue(p)).ok).toBe(true)
+    expect(listPlayer(g, p.id, Math.round(playerMarketValue(p) * 0.9)).ok).toBe(true)
     e.balance = Number.MAX_SAFE_INTEGER
     const before = structuredClone(g)
     expect(settleMarket(g, 1)).toBe(0)

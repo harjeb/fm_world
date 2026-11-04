@@ -3,6 +3,7 @@ import { economyOf } from './economy.ts'
 import { attrMax, attrRating } from './scale.ts'
 import { autoFillLineup, repairLineup, validateLineup } from './squad.ts'
 import { wageForPlayer } from './world.ts'
+import { derivedRng } from './rng.ts'
 
 type Market = NonNullable<GameState['market']>
 type Listing = Market['listings'][number]
@@ -15,6 +16,36 @@ export function playerMarketValue(player: Player): number {
   if (ALL_ATTRIBUTES.some(key => !Number.isFinite(player.attrs[key]) || player.attrs[key] < 0 || player.attrs[key] > attrMax(key, gk))) return 0
   const values = ALL_ATTRIBUTES.map(key => attrRating(key, player.attrs[key], gk))
   return Math.max(1, Math.round(values.reduce((a, b) => a + b, 0) / values.length * 1000))
+}
+
+/** 本地 NPC 买家的预算上限：一轮最多花这么多，避免无脑倒卖把游戏刷成印钞机。 */
+export const NPC_ROUND_BUDGET = 120_000
+/** 一轮最多成交几笔（再多也没人接盘）。 */
+export const NPC_MAX_DEALS = 3
+/** 买家一口价最高出到估值的九成：卖人就是折价，倒卖不产生利润。 */
+export const NPC_BID_RATIO = 0.9
+/** 挂牌价上限 = 估值。高于估值的要价直接拒收，没有等待成交的可能。 */
+export const MAX_LISTING_RATIO = 1
+
+/** 建议挂牌价：按这个价挂等于买家一口价，必定成交。 */
+export function suggestedPrice(player: Player): number {
+  return Math.max(1, Math.round(playerMarketValue(player) * NPC_BID_RATIO))
+}
+
+/**
+ * 挂牌成交概率。
+ *
+ * 买方只按估值折价收购：要价不高于 `NPC_BID_RATIO`（九成）必定成交；
+ * 越接近估值越难卖（0.95 倍约五成）；挂到估值或更高就没人要。
+ * 因为成交价永远不高于估值，而买入自由球员正是按估值付钱，
+ * 「买入 → 加价挂牌 → NPC 接盘 → 回自由市场 → 再买回」的套利环被从根上堵死。
+ */
+export function saleChance(price: number, value: number): number {
+  if (!positive(value) || !positive(price)) return 0
+  const ratio = price / value
+  if (ratio <= NPC_BID_RATIO) return 1
+  if (ratio >= MAX_LISTING_RATIO) return 0
+  return (MAX_LISTING_RATIO - ratio) / (MAX_LISTING_RATIO - NPC_BID_RATIO)
 }
 
 const fail = (error: string): MarketOutcome => ({ ok: false, error })
@@ -87,7 +118,11 @@ export function listPlayer(game: GameState, playerId: string, price: number): Ma
   if (market?.listings.some(l => l.player.id === playerId)) return fail('球员已挂牌')
   const player = game.roster.find(p => p.id === playerId)
   if (!player) return fail('球员不存在')
-  if (!positive(playerMarketValue(player))) return fail('球员数据无效')
+  const value = playerMarketValue(player)
+  if (!positive(value)) return fail('球员数据无效')
+  if (price > value * MAX_LISTING_RATIO) {
+    return fail(`要价不能高于估值 ${value.toLocaleString()}：买家只按估值折价收购，倒卖不会赚钱`)
+  }
   const round = game.season?.round ?? 1
   if (!positive(round)) return fail('赛季轮次无效')
   const roster = game.roster.filter(p => p.id !== playerId)
@@ -121,19 +156,30 @@ export function settleMarket(game: GameState, round: number): number {
   const economy = economyOf(game)
   if (!economy || !validBalance(economy.balance)) return 0
   let proceeds = 0
-  const remaining: Listing[] = [], sold: Listing[] = []
+  let spent = 0
+  let deals = 0
+  const sold: Listing[] = []
+  const soldIds = new Set<string>()
   for (const listing of market.listings) {
+    if ((listing.listedRound ?? 1) > round) continue
+    if (deals >= NPC_MAX_DEALS) break
     const value = playerMarketValue(listing.player)
-    if ((listing.listedRound ?? 1) <= round && listing.price <= 2 * value) {
-      if (!Number.isSafeInteger(proceeds + listing.price) || !Number.isSafeInteger(economy.balance + proceeds + listing.price)) return 0
-      proceeds += listing.price
-      sold.push(listing)
-    } else remaining.push(listing)
+    const chance = saleChance(listing.price, value)
+    if (chance <= 0) continue
+    // 预算按轮共享；第一笔不受预算限制，免得贵球员永远卖不掉。
+    if (deals > 0 && spent + listing.price > NPC_ROUND_BUDGET) continue
+    if (chance < 1 && !derivedRng(game.seed, 'market', round, listing.player.id).chance(chance)) continue
+    if (!Number.isSafeInteger(proceeds + listing.price) || !Number.isSafeInteger(economy.balance + proceeds + listing.price)) return 0
+    proceeds += listing.price
+    spent += listing.price
+    deals += 1
+    sold.push(listing)
+    soldIds.add(listing.player.id)
   }
   economy.balance += proceeds
   for (const listing of sold) listing.player.contract = undefined
   game.freeStars.push(...sold.map(l => l.player))
-  market.listings = remaining
+  market.listings = market.listings.filter(l => !soldIds.has(l.player.id))
   market.lastSettledRound = round
   return proceeds
 }
