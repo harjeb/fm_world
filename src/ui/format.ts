@@ -1,0 +1,114 @@
+import type { AttrKey, Player, Position, SkillId, Tactics, TraitId, TrainingLogEntry } from '../game/types.ts'
+import { ATTR_META } from '../game/data/attributes.ts'
+import { ALL_ATTRIBUTES } from '../game/types.ts'
+import { SKILLS, TRAITS } from '../game/data/skills.ts'
+import { caOf } from '../game/ca.ts'
+import { authoredGain, displayAttr, displayCA, displayGain, displayPA, isMainAttr } from '../game/rating.ts'
+import { formatGains } from '../game/training.ts'
+
+export function esc(value: unknown): string {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+export function pct(value: number, digits = 0): string {
+  return `${(value * 100).toFixed(digits)}%`
+}
+
+export function attrLabel(key: AttrKey): string {
+  return ATTR_META[key].label
+}
+
+const attrLabels = ALL_ATTRIBUTES.map((key) => [ATTR_META[key].label, key] as const).sort((a, b) => b[0].length - a[0].length)
+const attrHintPattern = new RegExp(`(${attrLabels.map(([label]) => label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\s*\\+(\\d+(?:\\.\\d+)?)`, 'g')
+
+export function displayEventHint(hint: string, gk: boolean, scale = 1): string {
+  return hint.replace(attrHintPattern, (_match, label: string, value: string) => {
+    const key = attrLabels.find(([text]) => text === label)![1]
+    return `${label} +${displayGain(key, authoredGain(key, Number(value) * scale, gk), gk)}`
+  }).replace(/疲劳\s*([+-])(\d+(?:\.\d+)?)/g, (_match, sign: string, value: string) => `训练体力 ${sign === '+' ? '-' : '+'}${value}`)
+}
+
+export function trainingLogText(entry: TrainingLogEntry, gk: boolean): string {
+  let text = entry.text.replace('所有属性最高为 100', '主属性最高为 1500')
+  if (entry.gains) {
+    text = text.replace('部分属性已达 100 上限', '部分属性已达各自上限')
+    const summary = formatGains(entry.gains, gk)
+    text = text.replace(/（[^（）]*\+\d+(?:\.\d+)?[^（）]*）$/, summary ? `（${summary}）` : '')
+  }
+  return text
+}
+
+export function skillName(id: SkillId): string {
+  return SKILLS[id]?.name ?? id
+}
+
+export function traitName(id: TraitId): string {
+  return TRAITS[id]?.name ?? id
+}
+
+export function positionLabel(pos: Position): string {
+  return { GK: '门将', CB: '中卫', W: '边路', CM: '中场', ST: '前锋' }[pos]
+}
+
+export function positionClass(pos: Position): string {
+  return `pos-${pos.toLowerCase()}`
+}
+
+export function playerCA(player: Player): number {
+  return displayCA(caOf(player.attrs, player.positions.GK > 0))
+}
+
+export function playerPA(player: Player): number {
+  return displayPA(player.pa)
+}
+
+export function attrValue(player: Player, key: AttrKey): number {
+  return displayAttr(key, player.attrs[key], player.positions.GK > 0)
+}
+
+export function attrCeiling(player: Player, key: AttrKey): number {
+  return displayAttr(key, player.ceilings[key], player.positions.GK > 0)
+}
+
+export function isVisibleAttr(player: Player, key: AttrKey): boolean {
+  return isMainAttr(key, player.positions.GK > 0)
+}
+
+export function caDelta(a: Player, b: Player): string {
+  const diff = playerCA(b) - playerCA(a)
+  return `${diff >= 0 ? '+' : ''}${diff.toFixed(1)}`
+}
+
+export function tacticText(tactics: Tactics): string {
+  const attack = { middle: '中路', wing: '边路', balanced: '均衡' }[tactics.attack]
+  const passing = { short: '短传', mixed: '混合', direct: '直传' }[tactics.passing]
+  const tempo = { slow: '稳健', normal: '正常', fast: '快速' }[tactics.tempo]
+  const line = { low: '低', mid: '中', high: '高' }[tactics.line]
+  const press = { low: '低', mid: '中', high: '高' }[tactics.press]
+  return `${attack} / ${passing} / ${tempo} / 防线${line} / 压迫${press}`
+}
+
+export function clockText(seconds: number): string {
+  const clamped = Math.max(0, Math.min(5400, seconds))
+  const minute = Math.floor(clamped / 60)
+  const second = Math.floor(clamped % 60)
+  return `${minute}:${String(second).padStart(2, '0')}`
+}
+
+export function gainText(gains: Partial<Record<AttrKey, number>> | undefined, gk = false): string {
+  if (!gains) return ''
+  return (Object.entries(gains) as [AttrKey, number][])
+    .filter(([, value]) => value > 0.01)
+    .map(([key, value]) => `${attrLabel(key)} +${displayGain(key, value, gk).toFixed(1)}`)
+    .join(' · ')
+}
+
+export function attrsOf(player: Player, gk: boolean): AttrKey[] {
+  const field: AttrKey[] = ['passing', 'firstTouch', 'dribbling', 'shooting', 'tackling', 'heading', 'vision', 'decisions', 'offBall', 'defPos', 'anticipation', 'composure', 'teamwork', 'acceleration', 'speed', 'agility', 'strength', 'endurance']
+  return gk ? [...field, 'reflexes', 'handling', 'rushing', 'oneOnOne'] : field
+}

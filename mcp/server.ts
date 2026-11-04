@@ -1,0 +1,200 @@
+import { readFileSync } from 'node:fs'
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { z } from 'zod'
+
+export type FmMcpConfig = {
+  server: string
+  token: string
+}
+
+type Json = Record<string, unknown>
+
+async function callJson(config: FmMcpConfig, path: string, init: RequestInit = {}): Promise<Json> {
+  const response = await fetch(`${config.server}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${config.token}`,
+      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      ...init.headers,
+    },
+  })
+  const payload = await response.json().catch(() => null) as Json | null
+  if (!response.ok) {
+    const message = typeof payload?.error === 'string' ? payload.error : `HTTP ${response.status}`
+    throw new Error(message)
+  }
+  return payload ?? {}
+}
+
+async function callText(config: FmMcpConfig, path: string): Promise<string> {
+  const response = await fetch(`${config.server}${path}`, { headers: { Authorization: `Bearer ${config.token}` } })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.text()
+}
+
+function toolResult(value: unknown, isError = false) {
+  const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2)
+  return { content: [{ type: 'text' as const, text }], isError }
+}
+
+const tacticsSchema = z.object({
+  attack: z.enum(['middle', 'wing', 'balanced']),
+  passing: z.enum(['short', 'mixed', 'direct']),
+  tempo: z.enum(['slow', 'normal', 'fast']),
+  line: z.enum(['low', 'mid', 'high']),
+  press: z.enum(['low', 'mid', 'high']),
+})
+
+const autoSubsSchema = z.object({
+  timed: z.array(z.object({ atMinute: z.number().gt(0).lt(90), outId: z.string(), inId: z.string() })).max(3)
+    .describe('指定首发换下和替补换上的比赛分钟数（0-90），达到后在事件边界执行'),
+  staminaBelow: z.number().min(1).max(99).nullable().describe('体力百分比低于此值时换人；null 为关闭'),
+  onInjury: z.boolean().describe('发生比赛内伤病时自动换人'),
+})
+
+const trainingRequestSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('activity'), activityId: z.string().min(1), teammateIds: z.array(z.string().min(1)).optional(), position: z.enum(['GK', 'CB', 'W', 'CM', 'ST']).optional(), mentorId: z.string().min(1).optional(), skill: z.string().min(1).optional() }).strict(),
+  z.object({ kind: z.literal('drill'), attr: z.string().describe('主属性英文名，如 passing / shooting / tackling / speed'), teammateIds: z.array(z.string().min(1)).optional() }).strict(),
+  z.object({ kind: z.literal('combo'), focus: z.enum(['attack', 'defense']), teammateIds: z.array(z.string().min(1)).optional() }).strict(),
+  z.object({ kind: z.literal('match'), teammateIds: z.array(z.string().min(1)).optional() }).strict(),
+  z.object({ kind: z.literal('position'), position: z.enum(['GK', 'CB', 'W', 'CM', 'ST']) }),
+  z.object({ kind: z.literal('rest') }),
+  z.object({ kind: z.literal('mentor') }),
+  z.object({ kind: z.literal('protection'), focus: z.enum(['prevention', 'resilience']) }),
+  z.object({ kind: z.literal('inherit'), mentorId: z.string().min(1), skill: z.string().min(1) }),
+])
+
+export function createFmMcpServer(config: FmMcpConfig): McpServer {
+  const server = new McpServer({ name: 'fm-mcp', version: '0.1.0' })
+
+  const read = (path: string) => callJson(config, path)
+  const action = async (name: string, args: Json = {}) => callJson(config, '/api/agent/action', {
+    method: 'POST',
+    body: JSON.stringify({ action: name, ...args }),
+  })
+
+  const register = (
+    name: string,
+    title: string,
+    description: string,
+    inputSchema: z.ZodRawShape,
+    run: (args: Record<string, unknown>) => Promise<unknown>,
+  ) => {
+    server.registerTool(name, { title, description, inputSchema }, async (args) => {
+      try {
+        return toolResult(await run((args ?? {}) as Record<string, unknown>))
+      } catch (error) {
+        return toolResult(error instanceof Error ? error.message : String(error), true)
+      }
+    })
+  }
+
+  register('get_state', '读取游戏状态', '读取当前俱乐部、阵容、球员属性、训练进度、赛程、积分榜与进行中比赛。每次决策前先调用。', {}, () => read('/api/agent/state'))
+
+  register('get_player', '查看球员详情', '按 playerId 读取一名球员的可见属性、位置、培养历史、体力与精力。隐藏属性不会返回。', {
+    playerId: z.string().describe('球员 ID，来自 get_state 的 roster'),
+  }, (args) => action('get_player', args))
+
+  register('upgrade_facility', '升级设施', '使用俱乐部余额升级设施。', {
+    facilityId: z.enum(['stadium', 'academy', 'medical', 'shop', 'sponsor']),
+  }, (args) => action('upgrade_facility', args))
+
+  register('buy_free_agent', '签下自由球员', '从本地 NPC 市场购买自由球员，不涉及跨账号交易。', {
+    playerId: z.string().min(1),
+  }, (args) => action('buy_free_agent', args))
+
+  register('list_player', '挂牌球员', '在本地 NPC 市场挂牌，价格为正整数。', {
+    playerId: z.string().min(1), price: z.number().int().positive().safe(),
+  }, (args) => action('list_player', args))
+
+  register('cancel_listing', '取消挂牌', '取消本地挂牌并将球员放回阵容。', {
+    playerId: z.string().min(1),
+  }, (args) => action('cancel_listing', args))
+
+  register('auto_lineup', '自动排阵容', '按指定阵型自动选择首发、替补和默认战术。', {
+    formationId: z.enum(['1-2-3-1', '1-3-2-1', '1-2-2-2']).optional().describe('不填则沿用当前阵型'),
+  }, (args) => action('auto_lineup', args))
+
+  register('set_lineup', '提交阵容', '提交完整首发、替补和战术。首发必须 7 人且含 1 名门将，替补最多 3 人。', {
+    lineup: z.object({
+      formationId: z.enum(['1-2-3-1', '1-3-2-1', '1-2-2-2']),
+      starters: z.array(z.object({ slotId: z.string(), playerId: z.string(), role: z.string().optional() })).describe('7 名首发；role 可省略，服务器会选该位置默认职责'),
+      bench: z.array(z.string()).max(3),
+      tactics: tacticsSchema.optional(),
+    }),
+    autoSubs: autoSubsSchema.optional().describe('可同时提交与新阵容匹配的自动换人计划'),
+  }, (args) => action('set_lineup', args))
+
+  register('set_auto_subs', '设置赛前自动换人', '设置比赛分钟、体力阈值和受伤自动换人；新计划从下一场比赛生效，自动和手动共用 3 次额度。', {
+    plan: autoSubsSchema,
+  }, (args) => action('set_auto_subs', args))
+
+  register('start_training', '开始培养', '开始 30 时段、15 天的培养，消耗 30 精力；无 scheduleVersion 的旧 18/30 次培养保留旧规则。', {
+    playerId: z.string(),
+  }, (args) => action('start_training', args))
+
+  register('preview_training', '预览训练行动', '验证训练并预览成长等信息，不写入存档；交流赛结果在执行时产生，预览不保证比赛结果。', {
+    playerId: z.string(),
+    request: trainingRequestSchema,
+  }, (args) => action('preview_training', args))
+
+  register('training_action', '执行训练', '新日历从 get_state 的 options 选择 activityId（按选项提供参数）；周一上午交流赛、周五上午队内赛及下午恢复为强制时段。旧培养使用旧请求。遇到 pendingEvent 时先处理事件。', {
+    playerId: z.string(),
+    request: trainingRequestSchema,
+  }, (args) => action('training_action', args))
+
+  register('training_event_choice', '处理训练事件', '选择一个训练事件选项。optionId 来自 get_state 的 pendingEvent.options。', {
+    playerId: z.string(),
+    optionId: z.string(),
+  }, (args) => action('training_event_choice', args))
+
+  register('confirm_training', '确认培养成品', '用培养成品替换当前球员；会保留旧成品直到确认。', {
+    playerId: z.string(),
+  }, (args) => action('confirm_training', args))
+
+  register('discard_training', '放弃培养成品', '放弃候选成品，保留当前球员。', {
+    playerId: z.string(),
+  }, (args) => action('discard_training', args))
+
+  register('start_next_season', '开始新赛季', '赛季结束后开始下一赛季，保留球员和俱乐部数据。', {}, () => action('start_next_season'))
+
+  register('start_league', '开始联赛比赛', '开始本轮联赛；比赛显示 90 分钟，服务器按现实时间推进约 10 分钟，不能暂停、加速或跳过。', {}, () => action('start_league'))
+
+  register('start_friendly', '开始友谊赛', '与指定 AI 球队开始一场友谊赛。', {
+    teamId: z.string().describe('来自 get_state 的 teams[].id'),
+  }, (args) => action('start_friendly', args))
+
+  register('get_match', '查看比赛', '不传 matchId 时读取当前进行中比赛的比分、时钟、统计、场上球员、替补、战术和最近事件；传 matchId 时读取完整比赛记录和复盘建议。', {
+    matchId: z.string().optional().describe('比赛记录 ID；不填则读取当前比赛'),
+  }, (args) => action('get_match', args))
+
+  register('advance_match', '推进友谊赛', '仅限友谊赛：按步推进，默认 1 步；联赛只能等待现实时间。返回当前比赛或终场记录。', {
+    steps: z.number().int().min(1).max(20000).optional(),
+  }, (args) => action('advance_match', args))
+
+  register('set_match_tactics', '比赛中调整战术', '比赛中可选择全体进攻、均衡或全体防守；赛前仍可设置完整战术。', {
+    mentality: z.enum(['attack', 'balanced', 'defend']).describe('attack=全体进攻，balanced=均衡，defend=全体防守'),
+  }, (args) => action('set_match_tactics', args))
+
+  register('substitute', '比赛中换人', '在比赛进行中换人；被换下球员不能再次上场，自动和手动换人共用最多 3 次。', {
+    outId: z.string().describe('场上球员 ID，来自 get_match 的 onPitch'),
+    inId: z.string().describe('可用替补 ID，来自 get_match 的 availableBench'),
+  }, (args) => action('substitute', args))
+
+  register('coach_pause', '教练暂停', '仅限友谊赛：使用一次教练暂停（最多 3 次）。联赛不停表，可以直接调整战术或换人。', {}, () => action('coach_pause'))
+
+  register('play_match', '结束友谊赛', '将已开始的友谊赛模拟至终场并结算；联赛不能跳过。返回比分、球员数据与复盘建议。', {}, () => action('play_match'))
+
+  register('simulate_round', '模拟本轮 AI 比赛', '只模拟本轮其他 AI 球队的比赛；玩家本轮比赛未完成时会报错。', {}, () => action('simulate_round'))
+
+  register('get_docs', '读取 Agent 规则', '读取完整 Agent API 文档与推荐流程。', {}, () => callText(config, '/api/agent/docs'))
+
+  server.registerResource('agent-api', 'fm://agent-api.md', {
+    mimeType: 'text/markdown',
+    description: '七人制足球经理 Agent API：令牌、HTTP 动作、训练/阵容/比赛流程与 MCP 配置。',
+  }, async (uri) => ({
+    contents: [{ uri: uri.href, text: readFileSync(new URL('../docs/agent-api.md', import.meta.url), 'utf8'), mimeType: 'text/markdown' }],
+  }))
+
+  return server
+}
