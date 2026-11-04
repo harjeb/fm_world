@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
+import { ROUND_MS } from '../src/game/calendar.ts'
 
 const servers: AppServer[] = []
 afterEach(() => {
@@ -42,6 +43,9 @@ describe('服务器共享世界', () => {
     const world = await (await fetch(`${base}/api/world`)).json() as any
     expect(world.clubs).toHaveLength(80)
     expect(Object.keys(world.owners)).toHaveLength(2)
+    // 席位统计：80 支球队，2 人已占，且两人拿到的是不同球队
+    expect(world.slots).toEqual({ total: 80, taken: 2, free: 78 })
+    expect(new Set(Object.keys(world.owners)).size).toBe(2)
     expect(world.round).toBeGreaterThanOrEqual(1)
   })
 
@@ -50,7 +54,7 @@ describe('服务器共享世界', () => {
     const { base } = await start(() => now)
     const first = await register(base, 'world_early')
     expect(first.game.season.round).toBe(1)
-    now += 20 * 60 * 60 * 1000
+    now += ROUND_MS + 2 * 60 * 60 * 1000 // 一轮（现实 24 小时）多一点
     const late = await register(base, 'world_late')
     expect(late.game.season.round).toBeGreaterThanOrEqual(2)
     expect(late.game.season.fixtures.some((fixture: any) => fixture.played)).toBe(true)

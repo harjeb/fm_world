@@ -21,8 +21,7 @@ import { caOf } from './ca.ts'
 import { derivedRng, splitSeed, hashString } from './rng.ts'
 import { simulateAIvsAIState } from './match/setup.ts'
 import { economyOf } from './economy.ts'
-const GAME_DAY_MS = 6 * 60 * 60 * 1000
-const ROUND_GAME_DAYS = 3
+import { GAME_DAY_MS, ROUND_GAME_DAYS, ROUND_MS, gameDayOfRound, kickoffAtForRound } from './calendar.ts'
 
 export const WORLD_ROUNDS = 38
 const START_YEAR = 2026
@@ -140,15 +139,14 @@ function buildFixtures(teamIds: string[], startedAt: number, playerId = 'player'
   }
   const second = matches.map((match) => ({ round: match.round + ids.length - 1, a: match.b, b: match.a }))
   for (const match of [...matches, ...second]) {
-    const gameDay = (match.round - 1) * ROUND_GAME_DAYS
     fixtures.push({
       round: match.round,
       homeId: match.a,
       awayId: match.b,
       isPlayer: match.a === playerId || match.b === playerId,
       played: false,
-      gameDay,
-      kickoffAt: startedAt + gameDay * GAME_DAY_MS,
+      gameDay: gameDayOfRound(match.round),
+      kickoffAt: kickoffAtForRound(startedAt, match.round),
     })
   }
   return fixtures
@@ -393,6 +391,49 @@ export function createOwnerlessWorld(seed: number, startedAt = Date.now()): { wo
   return { world: setup.world, freeStars: setup.freeStars, reserveStars: setup.reserveStars }
 }
 
+/** 新账号接手球队的优先顺序：先低级别，再高级别。 */
+const NEW_ACCOUNT_TIERS: TierId[] = ['division2', 'division1', 'champions']
+
+/**
+ * 给新账号挑一支没人执教的球队。
+ *
+ * `aliveAccountIds` 用来剔除「owner 指向已删除账号」的僵尸归属：这类球队视为空位。
+ * 全部满员时返回 undefined —— 调用方必须拒绝注册，**不要**回退去覆盖已有归属。
+ */
+export function pickFreeClubForNewAccount(
+  world: WorldState,
+  owners: Record<string, string>,
+  aliveAccountIds?: Iterable<string>,
+): WorldClub | undefined {
+  const alive = aliveAccountIds ? new Set(aliveAccountIds) : undefined
+  const taken = new Set(
+    Object.entries(owners)
+      .filter(([, accountId]) => !alive || alive.has(accountId))
+      .map(([clubId]) => clubId),
+  )
+  for (const tier of NEW_ACCOUNT_TIERS) {
+    const free = world.clubs.find((club) => club.tier === tier && !taken.has(club.id))
+    if (free) return free
+  }
+  return undefined
+}
+
+/** 球队席位统计，用于给前端提示「还有几个空位」。 */
+export function worldSlots(
+  world: WorldState,
+  owners: Record<string, string>,
+  aliveAccountIds?: Iterable<string>,
+): { total: number; taken: number; free: number } {
+  const total = world.clubs.length
+  const alive = aliveAccountIds ? new Set(aliveAccountIds) : undefined
+  const taken = new Set(
+    Object.entries(owners)
+      .filter(([, accountId]) => !alive || alive.has(accountId))
+      .map(([clubId]) => clubId),
+  ).size
+  return { total, taken, free: total - taken }
+}
+
 /** 由共享世界快照接管一支二级球队；保留已赛场次与当前赛季进度。 */
 export function createWorldGameFromWorld(
   base: WorldState,
@@ -429,11 +470,9 @@ export function createWorldGameFromWorld(
   }, seed, startedAt, clubName)
 }
 
-const OWNERLESS_ROUND_MS = GAME_DAY_MS * ROUND_GAME_DAYS
-
 /** 服务器共享世界按现实时间抽象推进；返回是否有变化。 */
 export function advanceOwnerlessWorld(world: WorldState, now = Date.now()): boolean {
-  const completed = Math.min(38, Math.floor(Math.max(0, now - world.seasonStartedAt) / OWNERLESS_ROUND_MS))
+  const completed = Math.min(38, Math.floor(Math.max(0, now - world.seasonStartedAt) / ROUND_MS))
   let changed = false
   const clubs = new Map(world.clubs.map((club) => [club.id, club]))
   for (const division of world.divisions) {

@@ -3,6 +3,7 @@ import { splitSeed } from './rng.ts'
 import { buildMatchEngineForGame, createMatchRecord, simulateAIvsAIState } from './match/setup.ts'
 import { MatchEngine } from './match/engine.ts'
 import { ENERGY_RECOVERY_PER_GAME_DAY } from './training.ts'
+import { GAME_DAY_MS, ROUND_GAME_DAYS, ROUND_MS, elapsedGameDays, gameDayOfRound, kickoffAtForRound } from './calendar.ts'
 import { recordMatchInjuries } from './injury.ts'
 import { awardRoundIncome, economyOf } from './economy.ts'
 import { playerMarketValue, settleMarket } from './market.ts'
@@ -12,9 +13,7 @@ import { recordMatchDiscipline, serveSuspensions, suspendedPlayerIds } from './d
 
 export const PLAYER_TEAM_ID = 'player'
 export const ROUNDS = 38
-export const GAME_DAY_MS = 6 * 60 * 60 * 1000
-export const ROUND_GAME_DAYS = 3
-export const ROUND_MS = GAME_DAY_MS * ROUND_GAME_DAYS
+export { GAME_DAY_MS, ROUND_GAME_DAYS, ROUND_MS } from './calendar.ts'
 export { LEAGUE_REALTIME_SECONDS } from './match/time.ts'
 export const LEAGUE_MATCH_SECONDS = LOGIC_MATCH_SECONDS
 
@@ -87,7 +86,7 @@ export function startNextSeason(game: GameState, now = Date.now()): { ok: boolea
   return { ok: true }
 }
 
-/** 20 队双循环：19 轮首循环 + 19 轮次循环，每 3 个游戏日一轮。 */
+/** 20 队双循环：19 轮首循环 + 19 轮次循环，每 4 个游戏日一轮（现实 24 小时）。 */
 function buildFixtures(teamIds: string[], startedAt: number): Fixture[] {
   const ids = [...teamIds]
   const fixtures: Fixture[] = []
@@ -107,15 +106,14 @@ function buildFixtures(teamIds: string[], startedAt: number): Fixture[] {
   // 次循环主客场对调。
   const second = matches.map((match) => ({ round: match.round + ids.length - 1, a: match.b, b: match.a }))
   for (const match of [...matches, ...second]) {
-    const gameDay = (match.round - 1) * ROUND_GAME_DAYS
     fixtures.push({
       round: match.round,
       homeId: match.a,
       awayId: match.b,
       isPlayer: match.a === PLAYER_TEAM_ID || match.b === PLAYER_TEAM_ID,
       played: false,
-      gameDay,
-      kickoffAt: startedAt + gameDay * GAME_DAY_MS,
+      gameDay: gameDayOfRound(match.round),
+      kickoffAt: kickoffAtForRound(startedAt, match.round),
     })
   }
   return fixtures
@@ -203,11 +201,11 @@ export function dueRound(game: GameState, now = Date.now()): number {
 }
 
 export function seasonDay(game: GameState, now = Date.now()): number {
-  return Math.max(1, Math.floor(Math.max(0, now - game.season.startedAt) / GAME_DAY_MS) + 1)
+  return elapsedGameDays(game.season.startedAt, now) + 1
 }
 
 export function roundKickoffAt(game: GameState, round = game.season.round): number {
-  return game.season.startedAt + (round - 1) * ROUND_MS
+  return kickoffAtForRound(game.season.startedAt, round)
 }
 
 export function nextMatchdayAt(game: GameState): number {

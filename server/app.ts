@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { createInitialGame, GAME_VERSION, upgradeLegacySignatures } from '../src/game/state.ts'
-import { createOwnerlessWorld, createWorldGameFromWorld, advanceOwnerlessWorld } from '../src/game/world.ts'
+import { createOwnerlessWorld, createWorldGameFromWorld, advanceOwnerlessWorld, pickFreeClubForNewAccount, worldSlots } from '../src/game/world.ts'
 import type { Player, WorldState } from '../src/game/types.ts'
 import { catchUpSeason, ROUND_MS } from '../src/game/season.ts'
 import { economyOf } from '../src/game/economy.ts'
@@ -238,6 +238,12 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
   }
 
+  const aliveAccountIds = () => db.accounts.map((account) => account.id)
+  /** 空位统计（owners 里指向已删除账号的条目视为空位）。 */
+  function slotInfo() {
+    return worldSlots(sharedWorld.world, sharedWorld.owners, aliveAccountIds())
+  }
+
   async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
     if (url.pathname === '/api/health') {
       json(res, 200, { ok: true, accounts: db.accounts.length, version: GAME_VERSION, worldSeasonStartedAt: sharedWorld.startedAt })
@@ -250,6 +256,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         seed: sharedWorld.seed,
         startedAt: sharedWorld.startedAt,
         owners: sharedWorld.owners,
+        slots: slotInfo(),
         round: sharedWorld.world.divisions[0]?.round ?? 1,
         seasonIndex: sharedWorld.world.seasonIndex,
         divisions: sharedWorld.world.divisions.map((division) => ({ id: division.divisionId, tier: division.tier, conference: division.conference, round: division.round, finished: division.finished, table: division.table })),
@@ -260,7 +267,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
     if (url.pathname === '/api/public-config' && req.method === 'GET') {
       /* 只暴露注册模式与 sitekey，邀请码与 secret 永不下发。 */
-      json(res, 200, { registration: registrationMode, turnstileSiteKey, accounts: db.accounts.length })
+      json(res, 200, { registration: registrationMode, turnstileSiteKey, accounts: db.accounts.length, slots: slotInfo() })
       return
     }
 
@@ -282,8 +289,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (db.accounts.some((account) => account.username.toLowerCase() === username.toLowerCase())) return json(res, 409, { error: '用户名已存在' })
       const salt = crypto.randomBytes(16).toString('hex')
       advanceSharedWorld()
-      const choices = sharedWorld.world.clubs.filter((item) => item.tier === 'division2')
-      const club = choices.find((item) => !sharedWorld.owners[item.id]) ?? choices[db.accounts.length % choices.length]
+      // 找不到空位就拒绝，绝不回退去覆盖别人已经在带的球队。
+      const club = pickFreeClubForNewAccount(sharedWorld.world, sharedWorld.owners, aliveAccountIds())
+      if (!club) return json(res, 503, { error: '服务器席位已满：所有球队都有教练了，等我们开新分区' })
       const accountId = crypto.randomUUID()
       sharedWorld.owners[club.id] = accountId
       persistWorld()

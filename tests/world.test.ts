@@ -68,7 +68,7 @@ describe('三级共享世界', () => {
   })
 
   it('共享世界快照可按当前轮次接管球队，并保留已赛结果', () => {
-    const startedAt = Date.now() - 20 * 60 * 60 * 1000
+    const startedAt = Date.now() - ROUND_MS - 2 * 60 * 60 * 1000 // 刚过一轮
     const ownerless = createOwnerlessWorld(1, startedAt)
     expect(ownerless.world.clubs.some((club) => club.id === 'player')).toBe(false)
     expect(advanceOwnerlessWorld(ownerless.world, Date.now())).toBe(true)
