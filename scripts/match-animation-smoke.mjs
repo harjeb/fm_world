@@ -93,25 +93,47 @@ try {
     return true;
   })()`)
   await click('[data-nav="challenge"]')
-  await click('[data-action="start-challenge"]')
+  await click('[data-action="start-world-challenge"]')
   await waitFor(`!!document.querySelector('#pitch')`)
   await evaluate(`window.__pitch = document.querySelector('#pitch'); true`)
   await waitFor(`(async () => { const {ui} = await import('/src/ui/state.ts'); return ui.matchPlaying })()`)
   await sleep(5000)
   const motion = await evaluate(`(async () => {
     const {ui} = await import('/src/ui/state.ts');
-    return { steps: ui.matchEngine.state.step, draws: window.__motion.length, uniqueBall: new Set(window.__motion.map(p => p.x.toFixed(2) + ':' + p.y.toFixed(2))).size, sameCanvas: window.__pitch === document.querySelector('#pitch') };
+    const {pitchMotionTicks} = await import('/src/ui/pitch-canvas.ts');
+    return { steps: ui.matchEngine.state.step, draws: window.__motion.length, uniqueBall: new Set(window.__motion.map(p => p.x.toFixed(2) + ':' + p.y.toFixed(2))).size, sameCanvas: window.__pitch === document.querySelector('#pitch'), ticks: pitchMotionTicks() };
   })()`)
   assert(motion.steps >= 5, `not enough engine steps: ${JSON.stringify(motion)}`)
   assert(motion.draws > motion.steps * 5, `animation still tied to engine steps: ${JSON.stringify(motion)}`)
   assert(motion.uniqueBall > 20, `ball is not moving continuously: ${JSON.stringify(motion)}`)
   assert(motion.sameCanvas, 'DOM render replaced the canvas')
+  const speeds = await evaluate(`(async () => {
+    const {pitchMotionSnapshot} = await import('/src/ui/pitch-canvas.ts');
+    let top = 0;
+    let still = 0;
+    let points = 0;
+    // 单帧可能正好停在一个定位球上：连采 1 秒再看最大值。
+    for (let i = 0; i < 10; i++) {
+      const snapshot = pitchMotionSnapshot();
+      points = Math.max(points, snapshot.length);
+      top = Math.max(top, ...snapshot.map((p) => p.speed));
+      still = Math.max(still, snapshot.filter((p) => p.speed < 0.4).length);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return { points, top, still };
+  })()`)
+  assert(speeds.points >= 14, `motion layer is not tracking all players: ${JSON.stringify(speeds)}`)
+  assert(speeds.top > 0.8, `players are not moving: ${JSON.stringify(speeds)}`)
+  assert(speeds.still >= 1, `everyone moves at the same time, no shape: ${JSON.stringify(speeds)}`)
+  // 10 Hz 运动层：5 秒正常播放应推进约 50 个 tick（允许首帧和暂停前后有少量误差）。
+  assert(motion.ticks >= 30 && motion.ticks <= 70, `motion layer did not tick at 10 Hz: ${JSON.stringify(motion)}`)
 
   await click('[data-action="match-toggle"]')
-  const paused = await evaluate(`(async () => { const {ui} = await import('/src/ui/state.ts'); return {step:ui.matchEngine.state.step, point:window.__motion.at(-1)} })()`)
+  const paused = await evaluate(`(async () => { const {ui} = await import('/src/ui/state.ts'); const {pitchMotionTicks} = await import('/src/ui/pitch-canvas.ts'); return {step:ui.matchEngine.state.step, point:window.__motion.at(-1), ticks: pitchMotionTicks()} })()`)
   await sleep(600)
-  const later = await evaluate(`(async () => { const {ui} = await import('/src/ui/state.ts'); return {step:ui.matchEngine.state.step, point:window.__motion.at(-1)} })()`)
+  const later = await evaluate(`(async () => { const {ui} = await import('/src/ui/state.ts'); const {pitchMotionTicks} = await import('/src/ui/pitch-canvas.ts'); return {step:ui.matchEngine.state.step, point:window.__motion.at(-1), ticks: pitchMotionTicks()} })()`)
   assert.equal(later.step, paused.step, 'pause did not freeze the engine')
+  assert.equal(later.ticks, paused.ticks, 'pause did not freeze the motion layer')
   assert.deepEqual({ x: later.point.x, y: later.point.y }, { x: paused.point.x, y: paused.point.y }, 'pause did not freeze playback')
   await click('[data-pitch-view="match"]')
   assert(await evaluate(`window.__pitch === document.querySelector('#pitch')`), 'view switch replaced the canvas')
@@ -148,7 +170,7 @@ try {
   await waitFor(`(async () => { const {game,ui} = await import('/src/ui/state.ts'); return ui.screen === 'review' && !game.activeMatch })()`, 6000)
   assert(await evaluate(`(async () => { const {game} = await import('/src/ui/state.ts'); return JSON.stringify(game.challengeHistory[0].score) === JSON.stringify(window.__expectedScore) })()`), 'playback changed the result')
   assert.deepEqual(errors, [], 'browser exceptions')
-  console.log(JSON.stringify({ ok: true, ...motion, pause: true, coach: true, terminalPlayback: true, resultUnchanged: true, screenshot }, null, 2))
+  console.log(JSON.stringify({ ok: true, ...motion, speeds, pause: true, coach: true, terminalPlayback: true, resultUnchanged: true, screenshot }, null, 2))
 } finally {
   ws?.close()
   chrome.kill()

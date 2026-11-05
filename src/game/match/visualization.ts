@@ -8,6 +8,8 @@ export type PlaybackSample = {
   players: PlaybackPlayer[]
   ball: PitchPoint & { ownerId: string | null; height: number }
   airborne: boolean
+  /** 这一步是定位球/开球/进球后的重置：画面可以直接对齐，不用从旧位置跑过去。 */
+  restart?: string
 }
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value))
@@ -110,7 +112,7 @@ export function samplePlaybackFrame(frame: MatchPlaybackFrame, progress: number,
       airborne = true
     }
   }
-  return { step: frame.step, progress: t, clock: frame.from.clock + (frame.to.clock - frame.from.clock) * t, players, ball, airborne }
+  return { step: frame.step, progress: t, clock: frame.from.clock + (frame.to.clock - frame.from.clock) * t, players, ball, airborne, restart: frame.restart }
 }
 
 function stationary(pose: MatchPlaybackPose, step: number): PlaybackSample {

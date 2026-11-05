@@ -361,6 +361,9 @@ export class MatchEngine {
 
   private recordPlaybackFrame(from: MatchPlaybackPose | undefined, restart: MatchPlaybackFrame['restart'], goal: boolean): void {
     if (!from) return
+    // 进球后全队被拉回中圈：下一步不是一次 30 米的冲刺，而是一次重置。
+    // 只影响回放元数据，比分/随机数/事件都不变。
+    if (!restart && this.state.playbackFrames?.at(-1)?.goal) restart = 'kickoff'
     const to = this.playbackBeforeReset ?? capturePlaybackPose(this.state)
     to.clock = this.state.clock
     const motion = this.state.ballMotion ? structuredClone(this.state.ballMotion) : undefined

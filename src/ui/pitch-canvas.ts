@@ -8,6 +8,7 @@ import { capturePlaybackPose } from '../game/match/playback.ts'
 import { planMatchReplay } from '../game/match/replay.ts'
 import type { MatchPlaybackPose, MatchPlayerState } from '../game/match/types.ts'
 import { convexHull, MatchPlayback, type PlaybackSample } from '../game/match/visualization.ts'
+import { MOTION_TICK_SECONDS, MotionField, motionProfileOf, type MotionProfile } from '../game/match/motion.ts'
 import { drawFootball2dBase } from './football2d-field.ts'
 import { matchKits } from './screens/match.ts'
 
@@ -25,6 +26,11 @@ const view = {
   step: -1,
   frame: null as number | null,
   ground: null as HTMLCanvasElement | null,
+  /** 10 Hz 连续运动层：圆点按各自的速度/加速度/转向速率追引擎给的位置。 */
+  motion: null as MotionField | null,
+  motionAt: 0,
+  motionAcc: 0,
+  motionRestart: '',
 }
 
 function reducedMotion(): boolean {
@@ -35,6 +41,20 @@ function reducedMotion(): boolean {
 function isLive(engine: MatchEngine): boolean {
   if (reducedMotion()) return false
   return !!game.activeMatch?.context.isLeague || ui.matchPlaying
+}
+
+/** 属性评分 + 当前体能 → 这名球员这一帧的运动能力。 */
+function motionProfiles(roster: Map<string, MatchPlayerState>): Map<string, MotionProfile> {
+  const profiles = new Map<string, MotionProfile>()
+  for (const [id, player] of roster) {
+    profiles.set(id, motionProfileOf({
+      speed: player.attrs.speed,
+      acceleration: player.attrs.acceleration,
+      agility: player.attrs.agility,
+      stamina: player.stamina / Math.max(1, player.maxStamina),
+    }))
+  }
+  return profiles
 }
 
 function drawGround(ctx: CanvasRenderingContext2D, w: number, h: number, pad: number, x: (value: number) => number, y: (value: number) => number, sx: number, sy: number): void {
@@ -196,12 +216,67 @@ function drawFrame(canvas: HTMLCanvasElement, engine: MatchEngine, sample: Playb
   ctx.stroke()
 }
 
+/**
+ * 把“已判好的位置”交给 10 Hz 运动层：每 0.1 秒推进一次，两次 tick 之间插值给屏幕刷新率。
+ * 圆点的速度上限、加速度、转向速率都来自球员属性；这里仍然不判定任何比赛结果。
+ */
+function advanceMotion(sample: PlaybackSample, now: number, first: boolean): PlaybackSample {
+  const profiles = motionProfiles(view.roster)
+  if (!view.motion || first) {
+    view.motion = new MotionField(profiles, sample.players)
+    view.motionAt = now
+    view.motionAcc = 0
+    return sample
+  }
+  view.motion.setProfiles(profiles)
+  for (const player of sample.players) view.motion.ensure(profiles, player)
+  // 定位球/开球/进球后的重置：这一步直接对齐，别让全队从球门跑回中圈。
+  const restartKey = sample.restart ? `${sample.step}:${sample.restart}` : ''
+  if (restartKey && restartKey !== view.motionRestart) {
+    view.motionRestart = restartKey
+    view.motion.reset(sample.players)
+    view.motionAcc = 0
+    return { ...sample, players: sample.players }
+  }
+  if (!sample.restart) view.motionRestart = ''
+  // 断线补帧或换人后位置可能整体跳变：差距太大就地对齐，别让圆点横穿球场追过去。
+  const current = new Map(view.motion.sample(1).map((player) => [player.id, player]))
+  const drift = sample.players.reduce((max, player) => {
+    const point = current.get(player.id)
+    return point ? Math.max(max, Math.hypot(point.x - player.x, point.y - player.y)) : max
+  }, 0)
+  if (drift > 12) {
+    view.motion.reset(sample.players)
+    view.motionAcc = 0
+    return { ...sample, players: sample.players }
+  }
+  const dt = Math.max(0, Math.min(0.5, (now - view.motionAt) / 1000))
+  view.motionAt = now
+  const live = ui.matchEngine ? isLive(ui.matchEngine) : false
+  if (live) view.motionAcc += dt
+  const targets = new Map(sample.players.map((player) => [player.id, player]))
+  let guard = 0
+  while (view.motionAcc >= MOTION_TICK_SECONDS && guard++ < 8) {
+    view.motion.tick(targets)
+    view.motionAcc -= MOTION_TICK_SECONDS
+  }
+  const alpha = Math.max(0, Math.min(1, view.motionAcc / MOTION_TICK_SECONDS))
+  const moved = new Map(view.motion.sample(alpha).map((player) => [player.id, player]))
+  return {
+    ...sample,
+    players: sample.players.map((player) => {
+      const point = moved.get(player.id)
+      return point ? { ...player, x: point.x, y: point.y } : player
+    }),
+  }
+}
+
 function loop(): void {
   view.frame = null
   const canvas = document.getElementById('pitch') as HTMLCanvasElement | null
   const engine = ui.matchEngine
   if (!canvas || !engine || !view.playback) return
-  drawFrame(canvas, engine, view.playback.sample(performance.now()))
+  drawFrame(canvas, engine, advanceMotion(view.playback.sample(performance.now()), performance.now(), false))
   if (isLive(engine) && view.playback.pending) view.frame = window.requestAnimationFrame(loop)
 }
 
@@ -249,8 +324,19 @@ export function drawPitch(): void {
   }
   view.step = state.step
   view.pose = capturePlaybackPose(state)
-  drawFrame(canvas, engine, view.playback!.sample(now))
+  const sample = view.playback!.sample(now)
+  drawFrame(canvas, engine, advanceMotion(sample, now, first))
   if (view.frame === null && isLive(engine) && view.playback!.pending) view.frame = window.requestAnimationFrame(loop)
+}
+
+/** 当前运动层的画面状态（位置与速度），给冒烟测试和排查用。 */
+export function pitchMotionSnapshot(): { id: string; x: number; y: number; speed: number }[] {
+  return view.motion?.sample(1) ?? []
+}
+
+/** 已经推进了多少个 10 Hz 运动 tick；给冒烟测试和性能检查用。 */
+export function pitchMotionTicks(): number {
+  return view.motion?.ticks ?? 0
 }
 
 /** 最后一次射门/终场动作播完后再进入赛后页。 */
@@ -267,5 +353,9 @@ export function resetPitchView(): void {
   view.key = ''
   view.planKey = ''
   view.step = -1
+  view.motion = null
+  view.motionAt = 0
+  view.motionAcc = 0
+  view.motionRestart = ''
   view.roster.clear()
 }
