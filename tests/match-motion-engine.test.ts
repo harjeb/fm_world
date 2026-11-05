@@ -230,6 +230,40 @@ describe('运动层不改变比赛结果', () => {
     expect(field.ticks).toBe(frames.length)
   })
 
+  it('位移探针：引擎每一步都不会让人以超过展示上限 1.6 倍的速度滑过去', () => {
+    const game = createInitialGame(41)
+    const input = teamInputFromLineup(game.roster, game.lineup, { id: 'player', name: game.clubName, color: '#34d399', accent: '#052e1b' })
+    const engine = new MatchEngine({ seed: 41, home: input, away: structuredClone(input), knockout: false, durationSeconds: LOGIC_MATCH_SECONDS })
+    const frames = planMatchReplay(engine).frames
+    const profiles = new Map(engine.state.teams.flatMap((team) => team.players.map((player) => [player.id, motionProfileOf({
+      speed: player.attrs.speed,
+      acceleration: player.attrs.acceleration,
+      agility: player.attrs.agility,
+      stamina: player.stamina / Math.max(1, player.maxStamina),
+    })] as const)))
+    let worst = 0
+    let worstStep = 0
+    for (const frame of frames) {
+      // 定位球/开球/进球后的重置是剪辑点：那里本来就会切镜头。
+      if (frame.restart) continue
+      const seconds = Math.max(0.2, frame.to.clock - frame.from.clock)
+      const before = new Map(frame.from.players.map((player) => [player.id, player]))
+      for (const player of frame.to.players) {
+        const start = before.get(player.id)
+        const cap = profiles.get(player.id)?.maxSpeed
+        if (!start || !cap) continue
+        const ratio = Math.hypot(player.x - start.x, player.y - start.y) / seconds / cap
+        if (ratio > worst) {
+          worst = ratio
+          worstStep = frame.step
+        }
+      }
+    }
+    expect(worstStep).toBeGreaterThan(0)
+    // 引擎的跑动上限已和展示层对齐（5.4–8.9 m/s）；留 1.6 倍余量吸收冲刺和带球修正。
+    expect(worst).toBeLessThan(1.6)
+  })
+
   it('整场跟跑：画面位置贴近引擎目标，只有引擎瞬移时才对齐', () => {
     const game = createInitialGame(41)
     const input = teamInputFromLineup(game.roster, game.lineup, { id: 'player', name: game.clubName, color: '#34d399', accent: '#052e1b' })

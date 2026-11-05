@@ -1087,10 +1087,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         body.game.activeMatch = account.game.activeMatch
         body.game.season = account.game.season
         body.game.matchHistory = account.game.matchHistory
-        body.game.injuries = account.game.injuries
       } else if (body.game.activeMatch?.context.isLeague) {
         return json(res, 400, { error: '联赛必须由服务器开始' })
       }
+      // 伤病是服务器记录的：旧客户端根本不知道这个字段，保存时清空也不能把已知伤病抹掉。
+      body.game.injuries = { ...(body.game.injuries ?? {}), ...(account.game.injuries ?? {}) }
       upgradeLegacySignatures(body.game)
       ensureCards(body.game)
       upgradeNames(body.game)

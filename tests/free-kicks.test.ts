@@ -120,7 +120,9 @@ describe('任意球的数量', () => {
     expect(total.directGoals / total.direct).toBeGreaterThan(0.03)
     expect(total.directGoals / total.direct).toBeLessThan(0.2)
     expect(perMatch(total.goals)).toBeGreaterThan(2)
-    expect(perMatch(total.goals)).toBeLessThan(3.3)
+    // 进攻模型改成更垂直的战术后，这份阵容的场均进球从 ~3.0 升到 ~3.7；
+    // 上限放宽到 4.6，仍然能拦住“进球爆炸”，同时和 balance.test 的 <5 保持一致。
+    expect(perMatch(total.goals)).toBeLessThan(4.6)
     expect(perMatch(total.shots)).toBeGreaterThan(17)
     expect(perMatch(total.fouls)).toBeGreaterThan(3.5)
     expect(perMatch(total.fouls)).toBeLessThan(7)

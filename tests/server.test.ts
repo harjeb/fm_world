@@ -5,6 +5,7 @@ import path from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
 import { ROUND_MS } from '../src/game/season.ts'
+import { personKey } from '../src/game/injury.ts'
 import { GAME_DAY_MS, SEASON_GAME_DAYS } from '../src/game/calendar.ts'
 import { FORMATIONS } from '../src/game/data/formations.ts'
 import { createInitialGame } from '../src/game/state.ts'
@@ -311,20 +312,23 @@ describe('联机服务器 / 账号 / SSE', () => {
     const { app, base, dir } = await start(() => now)
     const account = await register(base, 'injuryguard')
     const headers = { Authorization: `Bearer ${account.token}`, 'Content-Type': 'application/json' }
-    const prepared = createInitialGame(49) // 当前规则下首场在 590 秒前有受伤事件
+    // 伤病本身是低概率事件（约 1/40 场），这里直接把一条恢复记录写进存档，
+    // 专门验证“服务器持久化 / 跨旧客户端保存 / 重启 / Agent 隐藏易伤属性”这条链路；
+    // 由比赛产生伤病的那条路径在 tests/injury.test.ts 里单独覆盖。
+    const prepared = createInitialGame(49)
+    const injured = prepared.roster[0]
+    const personId = personKey(injured)
+    const recoverAt = now + 2 * 6 * 3600_000
+    prepared.injuries = { [personId]: recoverAt }
     const init = await fetch(`${base}/api/game`, { method: 'PUT', headers, body: JSON.stringify({ game: prepared, baseRevision: account.revision }) })
     expect(init.status).toBe(200)
     const token = await (await fetch(`${base}/api/agent/token`, { method: 'POST', headers })).json() as { token: string }
-    const started = await (await fetch(`${base}/api/match/action`, { method: 'POST', headers, body: JSON.stringify({ action: 'start_league' }) })).json() as { revision: number; game: Record<string, any> }
-    now += 590_000
-    const current = await (await fetch(`${base}/api/game`, { headers })).json() as { game: Record<string, any> }
-    const event = current.game.activeMatch.engineState.log.find((entry: any) => entry.injury)
-    expect(event).toBeDefined()
-    const { personId, recoverAt } = event.injury
+    const current = await (await fetch(`${base}/api/game`, { headers })).json() as { revision: number; game: Record<string, any> }
     expect(current.game.injuries[personId]).toBe(recoverAt)
-    const player = current.game.roster.find((p: any) => p.seedId === personId)
+    const player = current.game.roster.find((p: any) => p.id === injured.id)
     expect(player).toBeDefined()
-
+    const started = { game: current.game, revision: current.revision }
+    // 旧客户端保存时把 injuries 清空，也不能把服务器已知的伤病抹掉。
     started.game.injuries = {}
     const put = await fetch(`${base}/api/game`, { method: 'PUT', headers, body: JSON.stringify({ game: started.game, baseRevision: started.revision }) })
     expect(put.status).toBe(200)

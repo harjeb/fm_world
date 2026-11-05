@@ -6,7 +6,7 @@ import { teamInputFromLineup } from '../src/game/match/setup.ts'
 import { startTraining, trainingAction, trainingEventChoice, confirmTraining, startLeague, startSingleChallenge, restoreActiveEngine, finishMatch } from '../src/game/actions.ts'
 import { eventById } from '../src/game/data/events.ts'
 import { advanceLeagueRealtime } from '../src/game/realtime.ts'
-import { catchUpSeason, ROUND_MS } from '../src/game/season.ts'
+import { catchUpSeason, ROUND_MS, simulateFixture } from '../src/game/season.ts'
 import { matchRealSeconds } from '../src/game/match/time.ts'
 
 function setup() {
@@ -129,19 +129,31 @@ describe('人物伤病', () => {
   })
 
   it('补赛按实际赛程记录伤病，一次或分批补算结果相同', () => {
-    // 伤病很少见，这个种子的第一轮确实有人受伤。姓名池变了要重新找。
-    const one = createInitialGame(40)
+    // 伤病是低概率事件，不写死某个种子：只模拟玩家自己的第一场，找一个真有人受伤的种子。
+    const seed = (() => {
+      for (let candidate = 1; candidate <= 80; candidate++) {
+        const probe = createInitialGame(candidate)
+        const fixture = probe.season.fixtures.find((item) => item.isPlayer)!
+        fixture.kickoffAt = probe.season.startedAt
+        const record = simulateFixture(probe, fixture, true, probe.season.startedAt)
+        if (record?.keyEvents.some((entry) => entry.injury)) return candidate
+      }
+      throw new Error('前 80 个种子的第一轮都没有伤病，伤病概率可能被改坏了')
+    })()
+    const one = createInitialGame(seed)
     const batches = structuredClone(one)
     const start = one.season.startedAt
     catchUpSeason(one, start + 3 * ROUND_MS)
     for (let round = 1; round <= 3; round++) catchUpSeason(batches, start + round * ROUND_MS)
     expect(one.injuries).toEqual(batches.injuries)
     expect(one.season.fixtures.map(f => f.score)).toEqual(batches.season.fixtures.map(f => f.score))
-    const record = one.matchHistory.find(r => r.round === 1)!
-    const event = record.keyEvents.find(e => e.injury)!
+    // 伤病是低概率事件，不绑定某一年某一轮：在前三轮里找第一场有伤病的比赛。
+    const record = one.matchHistory.find((item) => item.keyEvents.some((entry) => entry.injury))!
+    expect(record).toBeDefined()
+    const event = record.keyEvents.find((entry) => entry.injury)!
     expect(event).toBeDefined()
     expect(event.injury!.recoverAt).toBe(start + matchRealSeconds(event.clock, record.durationSeconds ?? 900) * 1000 + event.injury!.recoveryDays * one.season.gameDayMs)
-  })
+  }, 20_000)
 
   it('当场跨队跨卡生效，旧比赛兼容且快照隐藏倾向', () => {
     const { engine } = setup()

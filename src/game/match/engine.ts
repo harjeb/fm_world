@@ -651,7 +651,7 @@ export class MatchEngine {
       const vision = this.eff(carrier, 'vision', { passing: true, finalThird: progressOf(carrier.side, carrier.x) > 0.65 })
       const difficulty = Math.max(0, forward) * 0.32 + lineRisk * 5 + (type === 'through' ? 4 : 0) + (receiverDist > 30 ? 5 : 0)
       const recognitionScore = vision * 0.7 + this.eff(carrier, 'teamwork') * 0.1 + 24 - difficulty
-      const canSee = safe || recognitionScore > 34
+      const canSee = safe || recognitionScore > 30
       if (!canSee) {
         if (type === 'through' || (type === 'long' && forward > 6) || type === 'cross') missed++
         continue
@@ -743,7 +743,9 @@ export class MatchEngine {
         estimatedTime: 3,
         chanceType: model.chance.type,
       }
-      choice.q = p * 1 + (1 - p) * -0.03 + chanceValue * 0.3 - 3 * 0.0012 - 0.2 * 0.0005 + tactical
+      // 远距离的低质量起脚不再和禁区里的机会等价：距离越远，越倾向再传一脚。
+      const distancePenalty = Math.max(0, carrierGoalDistance - 22) * 0.0012
+      choice.q = p * 1 + (1 - p) * -0.03 + chanceValue * 0.26 - distancePenalty - 3 * 0.0012 - 0.2 * 0.0005 + tactical
       candidates.push(choice)
     }
 
@@ -871,9 +873,10 @@ export class MatchEngine {
       const ratio = player.stamina / Math.max(1, player.maxStamina)
       const speed = this.eff(player, 'speed')
       const accel = this.eff(player, 'acceleration', { wide: wideZone(player) })
-      // 速度决定长距离，爆发决定启动和短距离：一个动作只有几秒，两者差不多重要。
-      let maxSpeed = 0.06 * speed + 0.05 * accel + 1.2
-      if (player.role === 'st_runner' || player.role === 'w_winger') maxSpeed += 0.4
+      // 和展示层的物理上限对齐（5.4–8.6 m/s）：引擎里一脚长传不该让球员
+      // 以 12 m/s 滑过去，否则动画层只能靠瞬移追。速度决定续航，爆发补一点启动。
+      let maxSpeed = 5.4 + 3.2 * (speed / 100) + 0.3 * (accel / 100)
+      if (player.role === 'st_runner' || player.role === 'w_winger') maxSpeed += 0.3
       const moveCap = maxSpeed * time * (0.75 + 0.25 * ratio)
       const dx = target.x - player.x
       const dy = target.y - player.y
@@ -907,6 +910,30 @@ export class MatchEngine {
         if (stat && stat.conditions === 0) this.markSkill(player, 'iron_lung', true, true)
       }
     }
+  }
+
+  /**
+   * 反引力式站位修正：两名最近的队友离目标点太近时把人推开，
+   * 避免整条线挤成一团。对应 GFootball 的“队友排斥 0.4”。
+   */
+  private spacingAdjust(player: MatchPlayerState, target: { x: number; y: number }, team: MatchTeamState): { x: number; y: number } {
+    let x = target.x
+    let y = target.y
+    const mates = team.players
+      .filter((mate) => mate.id !== player.id && mate.onPitch)
+      .map((mate) => ({ mate, distance: Math.hypot(mate.x - x, mate.y - y) }))
+      .filter((item) => item.distance < 8)
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 2)
+    for (const { mate, distance } of mates) {
+      const push = (8 - distance) * 0.45
+      const dx = x - mate.x
+      const dy = y - mate.y
+      const length = Math.hypot(dx, dy) || 1
+      x += (dx / length) * push
+      y += (dy / length) * push
+    }
+    return { x, y }
   }
 
   private desiredTarget(
@@ -961,26 +988,30 @@ export class MatchEngine {
       let x: number
       let y: number
       if (progress < 0.42) {
-        x = anchorX + dir * (2 + progress * 8)
+        // 后场组织时也要给纵深：整条线跟着球往前挪，而不是钉在原地。
+        x = anchorX + dir * (3 + progress * 11)
         y = anchorY + (ball.y - anchorY) * 0.18
       } else {
-        const push = 8 + progress * 15
+        const push = 10 + progress * 20
         x = anchorX + dir * push
         y = anchorY + (ball.y - anchorY) * (0.16 + role.widthBias * 0.12)
       }
       if (player.position === 'ST' || player.position === 'W') {
         const run = role.forwardRun
-        if (run > 0.45) {
-          const targetX = ball.x + dir * (5 + run * 11 + this.eff(player, 'offBall') / 25)
-          if (progress > 0.5) x = targetX
-          if (player.position === 'W') y = anchorY * 0.55 + ball.y * 0.45 + (anchorY - GOAL_Y) * 0.25
-          else y = GOAL_Y + (anchorY - GOAL_Y) * 0.4
+        // 前锋更早开始跑：球一过中线就压向对方防线身后，而不是等球到 60% 才动。
+        if (run > 0.45 && progress > 0.35) {
+          x = ball.x + dir * (7 + run * 14 + this.eff(player, 'offBall') / 20)
+          if (player.position === 'W') y = anchorY * 0.5 + ball.y * 0.5 + (anchorY - GOAL_Y) * 0.3
+          else y = GOAL_Y + (anchorY - GOAL_Y) * 0.35
         }
       } else if (player.position === 'CM') {
         const support = role.supportBias
-        x = ball.x - dir * (4 + support * 7)
+        // 中场不再永远躲在球后面：盒到盒/边中场在进攻时插到球前，给持球人一个向前的出口。
+        const advanced = player.role === 'cm_box2box' || player.role === 'cm_organizer'
+        x = advanced && progress > 0.45
+          ? ball.x + dir * (4 + support * 3)
+          : ball.x - dir * (3 + support * 6)
         y = ball.y * 0.45 + anchorY * 0.55 + (player.role === 'cm_destroyer' ? (GOAL_Y - ball.y) * 0.15 : 0)
-        if (player.role === 'cm_box2box' && progress > 0.62) x = ball.x + dir * 6
       } else if (player.position === 'CB') {
         if (role.holdBack) x = player.side === 'home' ? Math.min(x, 53) : Math.max(x, 47)
         else x = player.side === 'home' ? Math.min(x, 42) : Math.max(x, 58)
@@ -989,7 +1020,8 @@ export class MatchEngine {
       if (player.position === 'CB' && role.holdBack && progress < 0.55) {
         x = player.side === 'home' ? Math.min(x, 45) : Math.max(x, 55)
       }
-      return { x: clamp(x + dir * mentalityShift, 4, PITCH_LENGTH - 4), y: clamp(y, 3, PITCH_WIDTH - 3) }
+      const spaced = this.spacingAdjust(player, { x: x + dir * mentalityShift, y }, team)
+      return { x: clamp(spaced.x, 4, PITCH_LENGTH - 4), y: clamp(spaced.y, 3, PITCH_WIDTH - 3) }
     }
 
     if (player.id === presser) {
@@ -1161,11 +1193,15 @@ export class MatchEngine {
     // 无压回传不能与向前接应近似等价；受到逼抢时保留回做的价值。
     const pressure = this.nearestOpponent(this.getOpponent(carrier.side), carrier)
     const escape = pressure ? clamp((12 - distance(pressure, carrier)) / 12, 0, 1) : 0
-    let value = 0.005 + Math.max(0, advance) * 0.35 + Math.min(0, advance) * 0.32 * (1 - escape * 0.7)
-    if (type === 'through') value += 0.04
-    if (type === 'cross') value += 0.02
+    let value = 0.005 + Math.max(0, advance) * 0.46 + Math.min(0, advance) * 0.34 * (1 - escape * 0.6)
+    // 已经在对方半场还往回倒，比“后场组织”更伤：逼出向前的选择，而不是安全回传。
+    if (advance < -0.02 && fromProgress > 0.45) value -= 0.025 + fromProgress * 0.06
+    // 回传门将只有在被逼抢、确实没线路时才合理。
+    if (receiver.position === 'GK' && escape < 0.6) value -= 0.05
+    if (type === 'through') value += 0.05
+    if (type === 'cross') value += 0.03
     if (inBox(carrier.side, receiver)) value += 0.1
-    if (progress > 0.72) value += 0.02
+    if (progress > 0.72) value += 0.03
     return value
   }
 
@@ -1182,9 +1218,9 @@ export class MatchEngine {
     const receiver = this.playerById(choice.targetId ?? null)
     if (!receiver || !receiver.onPitch) return this.resolveLooseBall()
     const from = { x: carrier.x, y: carrier.y }
-    const to = !this.legacyRules && (choice.type === 'through' || choice.type === 'cross')
-      ? { x: choice.point.x, y: choice.point.y }
-      : { x: receiver.x, y: receiver.y }
+    // 不再把接球人直接挪到落点：moveAll 已经让他朝那个点跑了一段，球就落在他脚下。
+    // 这样直塞不会出现“人凭空出现在 20 米外”，代价是极端情况下传球会略微短一点。
+    const to = { x: receiver.x, y: receiver.y }
     const model = this.passModel(carrier, receiver, choice.type, opp, from, to, true)
     const deviation = choice.type === 'cross' ? 0 : distance(receiver, to)
     const p = clamp(model.p - Math.min(0.12, Math.max(0, deviation - 4) * 0.015), 0.05, 0.97)
@@ -1215,10 +1251,6 @@ export class MatchEngine {
       this.recordAssist = { id: carrier.id, name: carrier.name, side: carrier.side, step: this.state.step }
       carrier.stats.passesCompleted++
       this.statsOf(team).passesCompleted++
-      if (!this.legacyRules && (choice.type === 'through' || choice.type === 'cross')) {
-        receiver.x = to.x
-        receiver.y = to.y
-      }
       this.state.ball = { x: receiver.x, y: receiver.y, ownerId: receiver.id, justReceived: true }
       this.state.possession = carrier.side
       const runner = STAR_TRAITS[receiver.traitId]

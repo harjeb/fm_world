@@ -132,10 +132,11 @@ export class MotionAgent {
     const current = this.speed
     // 距离近但目标在移动时不能收油：用目标速度做前馈，再补上距离修正。
     const chase = targetSpeed > 0.05 ? Math.max(targetSpeed, distance / 0.45) : distance / 0.25
-    // 只有目标自己被“挪”走（引擎改写接球点、定位球站位）才允许冲刺追赶，
-    // 上限 1.5 倍；普通跑位永远不超过属性对应的最高速度。
+    // 追赶余量：引擎允许瞬时转身，展示层不行，所以急转后会有 1–4 米落后。
+    // 落后越多，允许的冲刺倍率越高（最多 1.35 倍）；不落后时严格按属性上限跑。
     const jumpy = targetSpeed > this.profile.maxSpeed * 1.2
-    const catchUp = jumpy && distance > 3 ? 1 + Math.min(0.5, (distance - 3) / 10) : 1
+    const lagging = targetSpeed > 0.5 ? 1 + Math.min(0.35, Math.max(0, distance - 0.8) * 0.06) : 1
+    const catchUp = jumpy && distance > 3 ? Math.max(lagging, 1 + Math.min(0.5, (distance - 3) / 10)) : lagging
     const wantedSpeed = distance < 0.04 && targetSpeed < 0.05 ? 0 : Math.min(this.profile.maxSpeed * catchUp, chase)
     const nextSpeed = wantedSpeed > current
       ? Math.min(wantedSpeed, current + this.profile.acceleration * dt)
