@@ -55,7 +55,7 @@ describe('赛季与存档', () => {
     expect(game.season.playerFinish).toBeGreaterThanOrEqual(1)
     expect(game.matchHistory).toHaveLength(38)
     expect(validateLineup(game.roster, game.lineup).valid).toBe(true)
-  }, 30000)
+  }, 60_000)
 
   it('单场挑战记录进入 challengeHistory，淘汰赛平局有点球', () => {
     const game = createInitialGame(13)

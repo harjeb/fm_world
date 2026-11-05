@@ -590,9 +590,10 @@ export class MatchEngine {
   }
 
   private openPlay(): MatchLogEntry | null {
-    let carrier = this.carrier()
+    const carrier = this.carrier()
     if (!carrier) {
-      return this.resolveLooseBall()
+      // 球没人控制：两队最近的球员真的跑过去抢，而不是把球瞬移到某个人脚下。
+      return this.chaseLooseBall()
     }
     const team = this.getTeam(carrier.side)
     const opp = this.getOpponent(carrier.side)
@@ -1960,6 +1961,74 @@ export class MatchEngine {
     })
   }
 
+  /** 谁能在这个位置把球停下：和 resolveLooseBall 用同一套判定。 */
+  private reachOf(player: MatchPlayerState): number {
+    return 4.5 + this.eff(player, 'anticipation') * 0.035 + this.eff(player, 'speed') * 0.01 + this.eff(player, 'acceleration') * 0.01
+  }
+
+  /** 没有持球人时，按属性速度把最近的球员往球的位置带一段。 */
+  private moveRunnerToward(player: MatchPlayerState, x: number, y: number, time: number): number {
+    const ratio = player.stamina / Math.max(1, player.maxStamina)
+    const speed = this.eff(player, 'speed')
+    const accel = this.eff(player, 'acceleration')
+    let maxSpeed = 5.4 + 3.2 * (speed / 100) + 0.3 * (accel / 100)
+    if (player.role === 'st_runner' || player.role === 'w_winger') maxSpeed += 0.3
+    const cap = maxSpeed * time * (0.75 + 0.25 * ratio)
+    const dx = x - player.x
+    const dy = y - player.y
+    const dist = Math.hypot(dx, dy)
+    const move = Math.min(dist, Math.max(0, cap))
+    if (move <= 0.05) return 0
+    player.x = clamp(player.x + (dx / dist) * move, 2, PITCH_LENGTH - 2)
+    player.y = clamp(player.y + (dy / dist) * move, 2, PITCH_WIDTH - 2)
+    player.stats.distance += move
+    this.state.stats[player.side].distance += move
+    player.stamina = Math.max(0, player.stamina - move * 0.03 * this.staminaFactor(player))
+    player.stats.staminaLeft = Math.round(player.stamina / Math.max(1, player.maxStamina) * 100)
+    return move
+  }
+
+  /**
+   * 二点球/落点争抢：两队各派最近的两个人冲向球，跑一段真实时间后按距离判定球权。
+   * 球留在落点不动，谁先到谁拿——不再出现“球瞬移到最近的球员脚下”。
+   */
+  private chaseLooseBall(): MatchLogEntry | null {
+    const ball = this.state.ball
+    const chasers: { player: MatchPlayerState; dist: number }[] = []
+    for (const team of this.state.teams) {
+      const candidates = team.players
+        .filter((player) => player.onPitch && (player.position !== 'GK' || inBox(player.side, ball)))
+        .map((player) => ({ player, dist: distance(player, ball) }))
+        .sort((a, b) => a.dist - b.dist)
+        .slice(0, 2)
+      chasers.push(...candidates)
+    }
+    if (!chasers.length) {
+      // 理论上不会发生（门将也可以捡球），留个兜底避免卡死。
+      this.state.ball = { ...this.state.ball, ownerId: null, justReceived: false }
+      this.advanceClock(2)
+      return this.log('info', 'none', '球停在无人区，比赛继续。', {})
+    }
+    chasers.sort((a, b) => a.dist - b.dist)
+    const closest = chasers[0]
+    const pace = Math.max(3.4, 5.4 + 3.2 * (this.eff(closest.player, 'speed') / 100) + 0.3 * (this.eff(closest.player, 'acceleration') / 100))
+    const time = clamp(closest.dist / pace, 1, 3.2)
+    for (const { player } of chasers) this.moveRunnerToward(player, ball.x, ball.y, time)
+    this.advanceClock(time)
+    this.advancePlayerMinutes(time)
+    const winner = chasers
+      .map(({ player }) => ({ player, dist: distance(player, ball) }))
+      .filter(({ player, dist }) => dist <= this.reachOf(player))
+      .sort((a, b) => a.dist - b.dist)[0]
+    if (!winner) {
+      const names = chasers.slice(0, 2).map(({ player }) => player.name).join('、')
+      return this.log('contest', 'none', `球落在无人区，${names} 正在追。`, {})
+    }
+    this.state.ball = { x: winner.player.x, y: winner.player.y, ownerId: winner.player.id, justReceived: true }
+    this.state.possession = winner.player.side
+    return this.log('contest', winner.player.side, `${winner.player.name} 抢在对手之前拿到落点。`, { playerId: winner.player.id })
+  }
+
   private resolveLooseBall(): MatchLogEntry {
     const ball = this.state.ball
     const candidates: { player: MatchPlayerState; weight: number }[] = []
@@ -1995,14 +2064,9 @@ export class MatchEngine {
           }
         }
       }
-      if (nearest) {
-        this.state.ball = { x: nearest.x, y: nearest.y, ownerId: nearest.id, justReceived: true }
-        this.state.possession = nearest.side
-        return this.log('info', nearest.side, `${nearest.name} 跑过来捡起了球。`, { playerId: nearest.id })
-      }
-      this.state.ball = { x: PITCH_LENGTH / 2, y: GOAL_Y, ownerId: null, justReceived: false }
-      const entry = this.log('info', 'none', '球停在无人区，比赛继续。', {})
-      this.advanceClock(2)
+      // 没人够得着：球就留在落点，下一步由两队最近的球员跑过去抢（chaseLooseBall）。
+      const entry = this.log('info', 'none', '球落在无人区，双方开始追抢。', {})
+      this.advanceClock(1.2)
       return entry
     }
     const total = candidates.reduce((sum, item) => sum + item.weight, 0)

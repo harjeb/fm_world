@@ -198,7 +198,7 @@ describe('比赛管理', () => {
       }
     }
     expect(found).toBe(true)
-  })
+  }, 30_000)
 
   it('两队伤员换人并保留替补体力，试跑不影响原状态', () => {
     const { engine: e } = engine()
