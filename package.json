@@ -1,9 +1,9 @@
 {
-  "name": "seven-a-side-manager",
+  "name": "fm-world",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "七人·青训经理 — 阵容培养与七人制足球比赛原型",
+  "description": "FM 世界 — 阵容培养与七人制足球比赛原型",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
@@ -11,12 +11,16 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "sim": "tsx scripts/simulate.ts",
+    "match:profile": "tsx scripts/count-steps.ts",
+    "match:tracking": "tsx scripts/export-match-tracking.ts",
+    "smoke:animation": "node scripts/match-animation-smoke.mjs",
     "server": "tsx server/index.ts",
     "start": "tsx server/index.ts",
     "smoke": "node scripts/browser-smoke.mjs",
     "balance": "tsx scripts/balance.ts",
     "mcp": "tsx mcp/index.ts",
-    "fm:import": "tsx scripts/import-fm.ts"
+    "fm:import": "tsx scripts/import-fm.ts",
+    "traits:gen": "tsx scripts/generate-star-traits.ts"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

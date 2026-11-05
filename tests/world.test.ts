@@ -42,22 +42,24 @@ describe('三级共享世界', () => {
 
   it('接管指定二级球队，保留名称和赛区', () => {
     const game = createWorldGame(2, 'd2s_05')
-    expect(game.clubName).toBe('金滩')
+    expect(game.clubName).toBe('埃尔库莱斯')
     expect(game.world!.playerDivisionId).toBe('d2-south')
     expect(game.season.divisionId).toBe('d2-south')
     expect(game.season.table.filter((row) => row.teamId === 'player')).toHaveLength(1)
   })
 
-  it('赛季结束运行二级 8 队升级附加赛并完成升降级', () => {
+  it('赛季结束运行新的升级杯（各区前 3、轮空、小组循环）并完成升降级', () => {
     const game = createWorldGame(1)
     for (const player of game.roster) for (const key of Object.keys(player.attrs) as (keyof typeof player.attrs)[]) player.attrs[key] = 1500
     finishSeason(game)
     expect(next(game).ok).toBe(true)
     const playoff = game.world!.lastPromotionPlayoff!
-    expect(playoff.teams).toHaveLength(8)
-    expect(playoff.matches).toHaveLength(8)
+    // 两个赛区各出 3 队：每区 2 场加赛，两个小组各 1 场，再加 1 场第二名决战。
+    expect(playoff.teams).toHaveLength(6)
+    expect(playoff.matches.filter((match) => match.stage === 'qualifier')).toHaveLength(2)
+    expect(playoff.matches.filter((match) => match.stage === 'group')).toHaveLength(3)
     expect(playoff.promoted).toHaveLength(3)
-    expect(playoff.matches.filter((match) => match.stage === 'final')).toHaveLength(1)
+    expect(playoff.groups).toHaveLength(2)
     expect(game.world!.clubs.filter((club) => club.tier === 'champions')).toHaveLength(20)
     expect(game.world!.clubs.filter((club) => club.tier === 'division1')).toHaveLength(20)
     expect(game.world!.clubs.filter((club) => club.tier === 'division2' && club.conference === 'north')).toHaveLength(20)
@@ -73,10 +75,21 @@ describe('三级共享世界', () => {
     expect(ownerless.world.clubs.some((club) => club.id === 'player')).toBe(false)
     expect(advanceOwnerlessWorld(ownerless.world, Date.now())).toBe(true)
     const game = createWorldGameFromWorld(ownerless.world, 'd2n_05', 1, startedAt, ownerless.freeStars, ownerless.reserveStars)
-    expect(game.clubName).toBe('冰河')
+    expect(game.clubName).toBe('莫克姆')
     expect(game.season.round).toBe(2)
     expect(game.season.fixtures.filter((fixture) => fixture.played).length).toBeGreaterThan(0)
     expect(game.season.fixtures.filter((fixture) => fixture.isPlayer).every((fixture) => fixture.round !== 1 || fixture.played)).toBe(true)
+  })
+
+  it('二级席位满员后仍可接管一级或冠军联赛的空位', () => {
+    const setup = createOwnerlessWorld(7)
+    for (const tier of ['division1', 'champions'] as const) {
+      const club = setup.world.clubs.find((item) => item.tier === tier)!
+      const game = createWorldGameFromWorld(setup.world, club.id, 7, setup.world.seasonStartedAt, setup.freeStars, setup.reserveStars)
+      expect(game.world?.clubs.find((item) => item.id === 'player')?.tier).toBe(tier)
+      expect(game.season.divisionId).toBe(tier)
+      expect(game.aiTeams).toHaveLength(19)
+    }
   })
 
   it('球员老化、退役，并在自由市场生成同名 16 岁重生', () => {

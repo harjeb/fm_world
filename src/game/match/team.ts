@@ -1,8 +1,10 @@
+import { STAR_TRAITS } from '../data/star-traits.generated.ts'
 import type { MatchTeamInput, MatchTeamState, MatchPlayerState, MatchSide } from './types.ts'
 import type { Attributes, Player, PlayerMatchStats } from '../types.ts'
 import { ALL_ATTRIBUTES } from '../types.ts'
 import { attrRating } from '../scale.ts'
 import { personKey } from '../injury.ts'
+import { customSpotFor } from '../squad.ts'
 import { FORMATIONS } from '../data/formations.ts'
 
 export const PITCH_LENGTH = 100
@@ -21,6 +23,7 @@ export function emptyPlayerStats(player: Player, side: MatchSide): PlayerMatchSt
     passesCompleted: 0,
     shots: 0,
     goals: 0,
+    assists: 0,
     tackles: 0,
     interceptions: 0,
     distance: 0,
@@ -70,9 +73,13 @@ export function buildMatchTeam(input: MatchTeamInput, side: MatchSide): MatchTea
     const position = slot?.position ?? 'CM'
     const mp = toMatchPlayer(starter.player, side, starter.role, starter.slotId, position)
     mp.stats.staminaLeft = Math.round((mp.stamina / Math.max(1, mp.maxStamina)) * 100)
-    if (slot) {
-      const baseX = 8 + slot.x * 42
-      const baseY = slot.y * PITCH_WIDTH
+    // 玩家自己摆的位置优先（见 squad.rememberLineupPositions）；没摆过就用阵型默认坐标。
+    const spot = customSpotFor(starter.player) ?? slot
+    if (spot) {
+      const depth = Math.min(1, Math.max(0, spot.x))
+      const width = Math.min(1, Math.max(0, spot.y))
+      const baseX = 8 + depth * 42
+      const baseY = width * PITCH_WIDTH
       mp.x = side === 'home' ? baseX : PITCH_LENGTH - baseX
       mp.y = side === 'home' ? baseY : PITCH_WIDTH - baseY
     } else {
@@ -112,5 +119,7 @@ export function opponentSide(side: MatchSide): MatchSide {
 
 /** Missing tiers on legacy players and match states retain the silver effect. */
 export function skillTierMultiplier(player: MatchPlayerState, skill: import('../types.ts').SkillId): number {
-  return player.skillTiers?.[skill] === 'rainbow' ? 1.4 : player.skillTiers?.[skill] === 'gold' ? 1.2 : 1
+  const tier = player.skillTiers?.[skill] === 'rainbow' ? 1.4 : player.skillTiers?.[skill] === 'gold' ? 1.2 : 1
+  const star = STAR_TRAITS[player.traitId]
+  return star?.kind === 'skillBoost' ? tier * (1 + star.pct / 100) : tier
 }

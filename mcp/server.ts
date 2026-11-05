@@ -96,12 +96,12 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
   }, (args) => action('get_player', args))
 
   register('upgrade_facility', '升级设施', '使用俱乐部余额升级设施。', {
-    facilityId: z.enum(['stadium', 'academy', 'medical', 'shop', 'sponsor']),
+    facilityId: z.enum(['stadium', 'academy', 'medical', 'shop', 'sponsor', 'psychology', 'tactics']),
   }, (args) => action('upgrade_facility', args))
 
-  register('buy_free_agent', '签下自由球员', '从本地 NPC 市场购买自由球员，不涉及跨账号交易。', {
-    playerId: z.string().min(1),
-  }, (args) => action('buy_free_agent', args))
+  register('bid_free_agent', '竞拍自由球员', '自由市场全服共用：第一个出价开始倒计时，其他玩家可以加价（每次至少 5%），时间到时最高价者得。amount 是出价总额。', {
+    playerId: z.string().min(1), amount: z.number().int().positive().safe(),
+  }, (args) => action('bid_free_agent', args))
 
   register('list_player', '挂牌球员', '在本地 NPC 市场挂牌，价格为正整数。', {
     playerId: z.string().min(1), price: z.number().int().positive().safe(),
@@ -115,11 +115,11 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     formationId: z.enum(['1-2-3-1', '1-3-2-1', '1-2-2-2']).optional().describe('不填则沿用当前阵型'),
   }, (args) => action('auto_lineup', args))
 
-  register('set_lineup', '提交阵容', '提交完整首发、替补和战术。首发必须 7 人且含 1 名门将，替补最多 3 人。', {
+  register('set_lineup', '提交阵容', '提交完整首发、替补和战术。首发必须 7 人并占满阵型的位置，替补最多 5 人；任何球员都能踢任何位置，没学过的位置属性按 60% 发挥。', {
     lineup: z.object({
       formationId: z.enum(['1-2-3-1', '1-3-2-1', '1-2-2-2']),
       starters: z.array(z.object({ slotId: z.string(), playerId: z.string(), role: z.string().optional() })).describe('7 名首发；role 可省略，服务器会选该位置默认职责'),
-      bench: z.array(z.string()).max(3),
+      bench: z.array(z.string()).max(5),
       tactics: tacticsSchema.optional(),
     }),
     autoSubs: autoSubsSchema.optional().describe('可同时提交与新阵容匹配的自动换人计划'),
@@ -129,7 +129,7 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     plan: autoSubsSchema,
   }, (args) => action('set_auto_subs', args))
 
-  register('start_training', '开始培养', '开始 30 时段、15 天的培养，消耗 30 精力；无 scheduleVersion 的旧 18/30 次培养保留旧规则。', {
+  register('start_training', '开始培养', '每轮都从原始属性开始，结束后产出一张新球员卡进入库存。开始 30 时段、15 天的培养，消耗 30 精力；无 scheduleVersion 的旧 18/30 次培养保留旧规则。', {
     playerId: z.string(),
   }, (args) => action('start_training', args))
 
@@ -148,13 +148,26 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     optionId: z.string(),
   }, (args) => action('training_event_choice', args))
 
-  register('confirm_training', '确认培养成品', '用培养成品替换当前球员；会保留旧成品直到确认。', {
+  register('confirm_training', '装备刚练出的卡', '培养结束后新卡已自动进入库存；这个操作把它装备到球员身上并收起培养结果。', {
     playerId: z.string(),
   }, (args) => action('confirm_training', args))
 
-  register('discard_training', '放弃培养成品', '放弃候选成品，保留当前球员。', {
+  register('keep_training', '新卡留在库存', '培养结束后不换卡，新卡留在库存，球员继续用原来的卡。', {
+    playerId: z.string(),
+  }, (args) => action('keep_training', args))
+
+  register('discard_training', '丢弃刚练出的卡', '从库存删除刚练出的新卡，球员继续用原来的卡。', {
     playerId: z.string(),
   }, (args) => action('discard_training', args))
+
+  register('equip_card', '给球员换卡', '把球员自己的一张球员卡装备到他身上；cardId 为 null 换回原始属性。比赛进行中不能换；体能、精力、伤病和停赛不受换卡影响。', {
+    playerId: z.string(),
+    cardId: z.string().nullable().describe('来自 get_state 的 cards[].id；null 表示原始属性'),
+  }, (args) => action('equip_card', args))
+
+  register('delete_card', '删除球员卡', '从库存删除一张没有装备的球员卡。', {
+    cardId: z.string(),
+  }, (args) => action('delete_card', args))
 
   register('start_next_season', '开始新赛季', '赛季结束后开始下一赛季，保留球员和俱乐部数据。', {}, () => action('start_next_season'))
 
@@ -191,7 +204,7 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
 
   server.registerResource('agent-api', 'fm://agent-api.md', {
     mimeType: 'text/markdown',
-    description: '七人制足球经理 Agent API：令牌、HTTP 动作、训练/阵容/比赛流程与 MCP 配置。',
+    description: 'FM 世界（七人制足球经理）Agent API：令牌、HTTP 动作、训练/阵容/比赛流程与 MCP 配置。',
   }, async (uri) => ({
     contents: [{ uri: uri.href, text: readFileSync(new URL('../docs/agent-api.md', import.meta.url), 'utf8'), mimeType: 'text/markdown' }],
   }))

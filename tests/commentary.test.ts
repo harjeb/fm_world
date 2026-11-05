@@ -32,7 +32,7 @@ describe('文字直播与进球', () => {
     }
     const entries = engine.state.commentary!
     expect(entries.length).toBeGreaterThanOrEqual(150)
-    expect(entries.length).toBeLessThanOrEqual(200)
+    expect(entries.length).toBeLessThanOrEqual(300) // 增加触球回合后文字条数相应增加
     expect(entries.map((entry) => entry.seq)).toEqual(entries.map((_, index) => index + 1))
     for (let i = 1; i < entries.length; i++) expect(entries[i].clock).toBeGreaterThanOrEqual(entries[i - 1].clock)
     for (const log of engine.state.log) expect(entries.some((entry) => entry.clock === log.clock && entry.type === log.type && entry.text.endsWith(log.text))).toBe(true)

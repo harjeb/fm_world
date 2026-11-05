@@ -1,4 +1,5 @@
-import type { AttrKey, Attributes, Foot, Position, PositionTable, Player, SkillId, StyleId, TraitId } from '../types.ts'
+import type { AttrKey, Attributes, BaseTraitId, Foot, Position, PositionTable, Player, SkillId, StyleId, TraitId } from '../types.ts'
+import { starTraitId, traitNameOf } from './star-traits.ts'
 import { ALL_ATTRIBUTES, GK_ATTRIBUTES, POSITIONS } from '../types.ts'
 import { caCeilingOf, caOf } from '../ca.ts'
 import { attrLimit, attrMax, attrStorage } from '../scale.ts'
@@ -281,7 +282,7 @@ const STYLE_KEYS: Record<StyleId, Partial<Record<AttrKey, number>>> = {
   st_false9: { firstTouch: 1, passing: 0.9, vision: 0.85, decisions: 0.85, shooting: 0.8, offBall: 0.75, dribbling: 0.75 },
 }
 
-const STYLE_TRAIT: Record<StyleId, TraitId> = {
+const STYLE_TRAIT: Record<StyleId, BaseTraitId> = {
   gk_wall: 'wall',
   gk_shotstopper: 'shotstopper',
   gk_sweeper: 'sweeper',
@@ -495,7 +496,8 @@ export function createPlayerFromSeed(seed: PlayerSeed): Player {
     pa,
     positions,
     personality,
-    traitId: STYLE_TRAIT[seed.style],
+    // 真实球星每人一个专属特性，随机球员按打法风格用通用特性。
+    traitId: seed.era === 'random' ? STYLE_TRAIT[seed.style] : starTraitId(seed.id),
     skills,
     signatureSkill,
     skillTiers: signatureSkill ? { [signatureSkill]: 'rainbow' } : {},
@@ -541,11 +543,13 @@ export function addLegacySignature(player: Player): boolean {
   if (!player.skills.includes(skill)) player.skills.push(skill)
   player.signatureSkill = skill
   player.skillTiers = { ...player.skillTiers, [skill]: 'rainbow' }
+  if (player.baseSkills && !player.baseSkills.includes(skill)) player.baseSkills.push(skill)
+  if (player.baseSkillTiers) player.baseSkillTiers[skill] = 'rainbow'
   return true
 }
 
 export function traitName(traitId: TraitId): string {
-  return TRAITS[traitId]?.name ?? traitId
+  return traitNameOf(traitId)
 }
 
 export const PLAYER_STYLE_LABEL: Record<StyleId, string> = {

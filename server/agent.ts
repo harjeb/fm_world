@@ -1,10 +1,10 @@
-import type { AttrKey, EventDef, FormationId, GameState, Lineup, Position, RoleId, Tactics, TrainingSession } from '../src/game/types.ts'
+import type { AttrKey, EventDef, FormationId, GameState, Lineup, PlayerCard, Position, RoleId, Tactics, TrainingSession } from '../src/game/types.ts'
 import type { TrainingRequest } from '../src/game/training.ts'
 import { trainingDate, trainingOptions, type TrainingActivityId } from '../src/game/training-calendar.ts'
 import type { SkillId } from '../src/game/types.ts'
 import { SKILLS } from '../src/game/data/skills.ts'
-import { economyOf, upgradeFacility, FACILITIES, facilityUpgradeCost, type FacilityId } from '../src/game/economy.ts'
-import { buyFreeAgent, listPlayer, cancelListing, playerMarketValue } from '../src/game/market.ts'
+import { economyOf, upgradeFacility, FACILITIES, facilityLevel, facilityRoundIncome, facilityStageChance, facilityStageInLevel, facilityUpgradeCost, type FacilityId } from '../src/game/economy.ts'
+import { bestMarketValue, buyFreeAgent, listPlayer, cancelListing } from '../src/game/market.ts'
 import { ALL_ATTRIBUTES, POSITIONS } from '../src/game/types.ts'
 import { caOf } from '../src/game/ca.ts'
 import { displayCA, displayAttr, displayGain, initialDisplayCA } from '../src/game/rating.ts'
@@ -20,14 +20,20 @@ import { displayClock } from '../src/game/match/time.ts'
 import { leagueDisplayClock } from '../src/game/realtime.ts'
 import { injuryUntil } from '../src/game/injury.ts'
 import { buildReview } from '../src/game/review.ts'
+import { cardsOf, playerCards } from '../src/game/cards.ts'
+import { traitEffectText } from '../src/game/data/skill-effects.ts'
+import { traitNameOf } from '../src/game/data/star-traits.ts'
 import {
   autoLineup,
   changeMatchTactics,
   confirmTraining,
   discardTraining,
+  equipPlayerCard,
   finishMatch,
+  keepTraining,
   makeSubstitution,
   previewTraining,
+  removePlayerCard,
   restoreActiveEngine,
   setAutoSubs,
   setLineup,
@@ -63,13 +69,35 @@ function visibleAttrs(player: GameState['roster'][number]) {
   return { attrs }
 }
 
+function cardView(card: PlayerCard, game: GameState) {
+  const gk = card.positions.GK > 0
+  const attrs: Partial<Record<AttrKey, number>> = {}
+  for (const key of mainAttrsFor(gk)) attrs[key] = displayAttr(key, card.attrs[key], gk)
+  const owner = game.roster.find((player) => player.id === card.playerId)
+  return {
+    id: card.id,
+    playerId: card.playerId,
+    playerName: card.playerName,
+    serial: card.serial,
+    routeId: card.routeId,
+    ca: displayCA(caOf(card.attrs, gk)),
+    attrs,
+    positions: card.positions,
+    personality: card.personality,
+    skills: card.skills,
+    skillTiers: card.skillTiers ?? {},
+    equipped: owner?.equippedCardId === card.id,
+    ownerInSquad: !!owner,
+  }
+}
+
 function visibleGains(gains: Partial<Record<AttrKey, number>>, gk: boolean) {
   const result: Partial<Record<AttrKey, number>> = {}
   for (const key of mainAttrsFor(gk)) if (gains[key] != null) result[key] = displayGain(key, gains[key]!, gk)
   return result
 }
 
-function playerView(player: GameState['roster'][number], game: GameState, now: number) {
+export function playerView(player: GameState['roster'][number], game: GameState, now: number) {
   const isGk = player.positions.GK > 0
   return {
     id: player.id,
@@ -87,12 +115,36 @@ function playerView(player: GameState['roster'][number], game: GameState, now: n
     ...visibleAttrs(player),
     personality: player.personality,
     traitId: player.traitId,
+    traitName: traitNameOf(player.traitId),
+    traitEffect: traitEffectText(player.traitId),
     style: player.style,
     skills: player.skills,
     skillTiers: player.skillTiers ?? {},
     condition: player.condition,
     energy: player.energy,
     injuryUntil: injuryUntil(game, player, now),
+    equippedCardId: player.equippedCardId ?? null,
+    cardIds: playerCards(game, player.id).map((card) => card.id),
+  }
+}
+
+/** 设施用“阶段”存储（每级 5 个，共 25 个），对外同时给出阶段、等级与成长概率。 */
+function economyView(game: GameState) {
+  const economy = economyOf(game)
+  return {
+    ...economy,
+    facilities: Object.entries(FACILITIES).map(([id, info]) => {
+      const facility = id as FacilityId
+      const stage = economy[facility]
+      return {
+        id, ...info, stage,
+        level: facilityLevel(stage),
+        stageInLevel: facilityStageInLevel(stage),
+        growthChance: facilityStageChance(stage),
+        roundIncome: facilityRoundIncome(economy, facility),
+        upgradeCost: facilityUpgradeCost(facility, stage),
+      }
+    }),
   }
 }
 
@@ -237,6 +289,7 @@ export function agentView(game: GameState, now = Date.now()) {
       stamina: 100 - session.fatigue,
       energy: player?.energy ?? session.energy,
       completed: session.completed,
+      cardId: session.cardId ?? null,
       routeId: session.routeId,
       routePoints: session.routePoints,
       nextEventChance: session.action >= trainingActionsTotal(session) ? null : eventChance(session, session.action + 1),
@@ -273,9 +326,9 @@ export function agentView(game: GameState, now = Date.now()) {
         .filter((fixture) => fixture.round <= 5)
         .map((fixture) => fixtureView(game, fixture)),
     },
-    economy: { ...economyOf(game), facilities: Object.entries(FACILITIES).map(([id, info]) => ({ id, ...info, level: economyOf(game)[id as FacilityId], upgradeCost: facilityUpgradeCost(id as FacilityId, economyOf(game)[id as FacilityId]) })) },
+    economy: economyView(game),
     market: {
-      freeAgents: game.freeStars.map((player) => ({ player: playerView(player, game, now), price: playerMarketValue(player) })),
+      freeAgents: game.freeStars.map((player) => ({ player: playerView(player, game, now), price: bestMarketValue(game, player) })),
       listings: (game.market?.listings ?? []).map(({ player, price }) => ({ player: playerView(player, game, now), price })),
     },
     teams: game.aiTeams.map((team) => ({ id: team.id, name: team.name, strength: team.strength, style: team.style, formationId: team.formationId })),
@@ -311,6 +364,7 @@ export function agentView(game: GameState, now = Date.now()) {
     roles: ROLES_BY_POSITION,
     trainingSessions: sessionView,
     candidates: Object.values(game.candidates).map((player) => playerView(player, game, now)),
+    cards: cardsOf(game).map((card) => cardView(card, game)),
     activeMatch: matchView(game),
     matchHistory: game.matchHistory.map(matchSummary),
     challengeHistory: game.challengeHistory.map(matchSummary),
@@ -462,6 +516,18 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
     }
     case 'discard_training': {
       const result = discardTraining(game, text(body.playerId))
+      return { ...result, result }
+    }
+    case 'keep_training': {
+      const result = keepTraining(game, text(body.playerId))
+      return { ...result, result }
+    }
+    case 'equip_card': {
+      const result = equipPlayerCard(game, text(body.playerId), body.cardId === null ? null : text(body.cardId))
+      return { ...result, result }
+    }
+    case 'delete_card': {
+      const result = removePlayerCard(game, text(body.cardId))
       return { ...result, result }
     }
     case 'upgrade_facility': {

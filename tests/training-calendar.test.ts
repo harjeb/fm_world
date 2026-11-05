@@ -171,24 +171,52 @@ describe('calendar training', () => {
     expect(game).toEqual(before)
   })
 
-  it('never blocks a mandatory match when a preceding event exhausts stamina', () => {
+  it('交流赛和队内比赛不耗体力，体力耗尽时也照常有成长', () => {
     const { game, ids } = setup()
     const s = game.training[ids[0]]
     s.action = 8
-    s.fatigue = 98
+    s.fatigue = 100
     const plan = previewTraining(game, ids[0], activity('match')).plan!
-    expect(plan.fatigue).toBe(2)
+    expect(plan.fatigue).toBe(0)
+    expect(Object.values(plan.gains).some((value) => (value ?? 0) > 0)).toBe(true)
     expect(trainingAction(game, ids[0], activity('match')).ok).toBe(true)
     expect(s.fatigue).toBe(100)
-    expect(trainingOptions(s).map(option => option.id)).toEqual(['rest'])
-    expect(trainingAction(game, ids[0], activity('rest')).ok).toBe(true)
-    expect(s.fatigue).toBe(70)
     s.action = 14
-    s.fatigue = 100
+    s.fatigue = 40
     const exchange = trainingAction(game, ids[0], activity('exchange'))
     expect(exchange.ok).toBe(true)
     expect(exchange.exchange?.week).toBe(2)
-    expect(s.fatigue).toBe(100)
+    expect(s.fatigue).toBe(40)
+  })
+
+  it('周五下午的休整不恢复体力，平时的恢复照常加 30', () => {
+    const { game, ids } = setup()
+    const s = game.training[ids[0]]
+    s.action = 9
+    s.fatigue = 60
+    const [rest] = trainingOptions(s)
+    expect(trainingOptions(s)).toHaveLength(1)
+    expect(rest).toMatchObject({ id: 'rest', label: '休整', noRecovery: true })
+    const plan = previewTraining(game, ids[0], activity('rest')).plan!
+    expect(plan.fatigue).toBe(0)
+    expect(plan.label).toBe('休整')
+    expect(trainingAction(game, ids[0], activity('rest')).ok).toBe(true)
+    expect(s.fatigue).toBe(60)
+    expect(s.action).toBe(10)
+    const normal = trainingOptions(s).find((option) => option.id === 'rest')!
+    expect(normal.noRecovery).toBeUndefined()
+    expect(trainingAction(game, ids[0], activity('rest')).ok).toBe(true)
+    expect(s.fatigue).toBe(30)
+  })
+
+  it('其他项目体力不足还是不能执行，得先恢复', () => {
+    const { game, ids } = setup()
+    const s = game.training[ids[0]]
+    s.action = 1
+    s.fatigue = 100
+    const paid = trainingOptions(s).find((option) => (option.cost ?? 0) > 0)!
+    expect(trainingAction(game, ids[0], activity(paid.id)).ok).toBe(false)
+    expect(s.action).toBe(1)
   })
 
   it('rejects an invalid exchange lineup without mutation', () => {

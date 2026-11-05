@@ -87,9 +87,10 @@ describe('比赛引擎', () => {
   })
 
   it('比赛会产生角球并复用定位球流程', () => {
-    const state = run(3)
-    expect(state.stats.home.corners + state.stats.away.corners).toBeGreaterThan(0)
-    expect(state.log.some((entry) => entry.type === 'setpiece' && entry.text.includes('角球'))).toBe(true)
+    // 单场可能一个角球都没有，看几场。
+    const states = [1, 2, 3, 4, 5].map((seed) => run(seed))
+    expect(states.reduce((total, state) => total + state.stats.home.corners + state.stats.away.corners, 0)).toBeGreaterThan(0)
+    expect(states.some((state) => state.log.some((entry) => entry.type === 'setpiece' && entry.text.includes('角球')))).toBe(true)
   })
 
   it('镜像批量胜率接近 50%', () => {

@@ -3,6 +3,7 @@ import { createInitialGame, loadGame, saveGame } from '../src/game/state.ts'
 import { previewTraining, startTraining, trainingAction, trainingEventChoice } from '../src/game/actions.ts'
 import { EVENTS, eventById } from '../src/game/data/events.ts'
 import { createTrainingSession, eligibleEvents } from '../src/game/training.ts'
+import { economyOf } from '../src/game/economy.ts'
 import { displayEventHint } from '../src/ui/format.ts'
 import type { GameState, TrainingSession } from '../src/game/types.ts'
 
@@ -15,6 +16,9 @@ function suppressEvents(session: TrainingSession) {
 
 function setup(count = 1) {
   const game = createInitialGame(410)
+  // 满 1 级（第 5 阶段）保证设施加成 100% 触发，便于比较确定数值。
+  const economy = economyOf(game)
+  for (const id of ['stadium', 'academy', 'medical', 'shop', 'sponsor', 'psychology', 'tactics'] as const) economy[id] = 5
   const players = game.roster.filter(player => !player.positions.GK).slice(0, count)
   for (const [index, player] of players.entries()) {
     expect(startTraining(game, player.id, 120 + index).ok).toBe(true)
@@ -190,7 +194,7 @@ describe('expanded training courses', () => {
 
   it('adds the medical and stadium facility bonus once, independently of quality', () => {
     const { game, players, sessions } = setup()
-    sessions[0].facilityLevels = { stadium: 1, academy: 1, medical: 3, shop: 1, sponsor: 1 }
+    sessions[0].facilityLevels = { stadium: 5, academy: 5, medical: 15, shop: 5, sponsor: 5, psychology: 5, tactics: 5 }
     for (let seed = 0; seed < 40; seed++) {
       sessions[0].seed = seed
       const withFacility = preview(game, players[0].id, drill).plan!
@@ -198,7 +202,7 @@ describe('expanded training courses', () => {
       const withoutFacility = preview(game, players[0].id, drill).plan!
       expect(withFacility.quality).toEqual(withoutFacility.quality)
       expect(withFacility.gains.speed! - withoutFacility.gains.speed!).toBeCloseTo(17)
-      sessions[0].facilityLevels = { stadium: 1, academy: 1, medical: 3, shop: 1, sponsor: 1 }
+      sessions[0].facilityLevels = { stadium: 5, academy: 5, medical: 15, shop: 5, sponsor: 5, psychology: 5, tactics: 5 }
     }
   })
 

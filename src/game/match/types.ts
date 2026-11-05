@@ -48,6 +48,10 @@ export type MatchPlayerState = {
   yellowCards: number
   sentOff: boolean
   stats: PlayerMatchStats
+  /** 替补上场的球员；专属特性的“替补上场后”看这一项。 */
+  subbedOn?: boolean
+  /** “每场一次”的专属特性已经用过。 */
+  traitUsed?: boolean
 }
 
 export type MatchTeamState = {
@@ -65,6 +69,8 @@ export type MatchTeamState = {
   subsUsed: number
 }
 
+export type PitchPoint = { x: number; y: number }
+
 export type BallState = {
   x: number
   y: number
@@ -72,7 +78,33 @@ export type BallState = {
   justReceived: boolean
 }
 
+/** 单步结束后的视觉轨迹；不影响球权/结算，旧存档可缺省。 */
+export type BallMotion = {
+  step: number
+  kind: 'pass' | 'shot' | 'dribble' | 'loose'
+  from: { x: number; y: number }
+  /** 同一步传中接头球时，先到接球点再飞向球门。 */
+  via?: { x: number; y: number }
+  to: { x: number; y: number }
+}
+
 export type SetPieceType = 'kickoff' | 'throw_in' | 'goal_kick' | 'corner' | 'free_kick' | 'penalty'
+
+/** 纯视觉的位置快照，不含球员属性、日志或未来状态。 */
+export type MatchPlaybackPose = {
+  clock: number
+  ball: BallState
+  players: { id: string; x: number; y: number }[]
+}
+
+export type MatchPlaybackFrame = {
+  step: number
+  from: MatchPlaybackPose
+  to: MatchPlaybackPose
+  motion?: BallMotion
+  restart?: SetPieceType
+  goal?: boolean
+}
 
 export type SetPieceState = {
   type: SetPieceType
@@ -120,6 +152,8 @@ export type MatchState = {
   score: { home: number; away: number }
   teams: [MatchTeamState, MatchTeamState]
   ball: BallState
+  ballMotion?: BallMotion
+  playbackFrames?: MatchPlaybackFrame[]
   possession: MatchSide | null
   pendingSetPiece: SetPieceState | null
   finished: boolean

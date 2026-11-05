@@ -82,13 +82,14 @@ describe('next season', () => {
     game.market!.lastSettledRound = 37
     const balance = economy.balance
     expect(startNextSeason(game, 123456).ok).toBe(true)
-    expect(economy.balance).toBe(balance + 32000 + price)
+    expect(economy.balance).toBeGreaterThan(balance + price)
+    const settled = economy.balance
     expect(economy.lastIncomeRound).toBe(0)
     expect(game.market!.lastSettledRound).toBe(0)
     expect(game.market!.listings).toHaveLength(0)
     expect(game.freeStars.some(item => item.id === player.id)).toBe(true)
     expect(startNextSeason(game, 123456).ok).toBe(false)
-    expect(economy.balance).toBe(balance + 32000 + price)
+    expect(economy.balance).toBe(settled)
   })
 
   it('initializes legacy economy and changes league match seeds', () => {

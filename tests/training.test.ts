@@ -30,7 +30,7 @@ function finishSession(session: ReturnType<typeof createTrainingSession>) {
 }
 
 describe('培养', () => {
-  it('30 次行动后生成候选成品，候选不自动替换', () => {
+  it('30 次行动后生成新卡进入库存，不自动换上', () => {
     const game = createInitialGame(2024)
     const player = game.roster.find((item) => item.positions.GK === 0)!
     expect(startTraining(game, player.id, 777).ok).toBe(true)
@@ -51,29 +51,32 @@ describe('培养', () => {
     expect(game.candidates[player.id]).toBeTruthy()
     expect(game.roster.find((item) => item.id === player.id)?.version).toBe(player.version)
     expect(caOf(game.candidates[player.id].attrs, false)).toBeLessThanOrEqual(1500 + 1e-6)
+    const versionBefore = player.version
     const result = confirmTraining(game, player.id)
     expect(result.ok).toBe(true)
-    expect(game.roster.find((item) => item.id === player.id)?.version).toBe(player.version + 1)
+    expect(game.roster.find((item) => item.id === player.id)?.version).toBe(versionBefore + 1)
     expect(validateLineup(game.roster, game.lineup).valid).toBe(true)
   })
 
-  it('培养累积到个人上限后停止：上限因人而异，PA 不参与', () => {
+  it('每轮从原始属性开始，练到个人上限后停止：上限因人而异，PA 不参与', () => {
     const game = createInitialGame(4)
-    let player = game.roster.find(item => item.positions.GK === 0)!
+    const player = game.roster.find(item => item.positions.GK === 0)!
     const id = player.id
     player.pa = 1
     player.attrs.passing = 450
+    player.baseAttrs.passing = 450
     player.ceilings.passing = 470
-    let previous = 450
+    const original = structuredClone(player)
     for (let course = 0; course < 2; course++) {
       const current = structuredClone(player)
       expect(startTraining(game, id, 99 + course).ok).toBe(true)
       delete game.training[id].scheduleVersion
       const session = game.training[id]
-      expect(session.candidate.attrs).toEqual(current.attrs)
-      expect(session.candidate.positions).toEqual(current.positions)
-      expect(session.candidate.skills).toEqual(current.skills)
-      expect(session.candidate.skillTiers).toEqual(current.skillTiers)
+      // 第二轮时他已经装备了第一张卡，起点仍然是原始属性。
+      expect(session.candidate.attrs).toEqual(original.baseAttrs)
+      expect(session.candidate.positions).toEqual(original.basePositions)
+      expect(session.candidate.skills).toEqual(original.skills)
+      expect(session.candidate.skillTiers).toEqual(original.skillTiers)
       for (let guard = 0; guard < 100 && !session.completed; guard++) {
         const result = session.pendingEventId
           ? trainingEventChoice(game, id, eventById(session.pendingEventId)!.options[0].id)
@@ -83,13 +86,9 @@ describe('培养', () => {
       expect(session.completed).toBe(true)
       expect(game.roster.find(item => item.id === id)!.attrs).toEqual(current.attrs)
       expect(confirmTraining(game, id).ok).toBe(true)
-      player = game.roster.find(item => item.id === id)!
-      const passing = player.attrs.passing
-      expect(passing).toBeGreaterThanOrEqual(previous)
-      previous = passing
+      // 到上限即停：上限来自球员自己的 ceilings，而不是统一的 1500。
+      expect(player.attrs.passing).toBe(470)
     }
-    // 到上限即停：上限来自球员自己的 ceilings，而不是统一的 1500。
-    expect(previous).toBe(470)
     expect(player.pa).toBe(1)
     expect(player.ceilings.passing).toBe(470)
   })

@@ -1,29 +1,41 @@
-import type { AutoSubPlan, GameState, Lineup, MatchMentality, MatchRecord, TrainingExchange, TrainingSession } from './types.ts'
+import { ALL_ATTRIBUTES, type AITeam, type AttrKey, type Attributes, type AutoSubPlan, type EventDef, type EventEffect, type EventOption, type GameState, type Lineup, type MatchMentality, type MatchRecord, type TrainingAutoConfig, type TrainingExchange, type TrainingSession } from './types.ts'
 import type { MatchEngine } from './match/engine.ts'
 import { MatchEngine as Engine } from './match/engine.ts'
 import type { MatchState } from './match/types.ts'
-import { createTrainingSession, planTraining, performTrainingAction, trainingActionsTotal, resolveTrainingEvent, confirmCandidate, discardCandidate, TRAINING_ENERGY_COST, type PerformResult, type ResolveResult, type TrainingRequest, type TrainingPlan } from './training.ts'
+import { branchProbability, createTrainingSession, planTraining, performTrainingAction, trainingActionsTotal, resolveTrainingEvent, confirmCandidate, discardCandidate, keepCandidate, TRAINING_ENERGY_COST, type PerformResult, type ResolveResult, type TrainingRequest, type TrainingPlan } from './training.ts'
+import { addTrainedCard, closeFinishedTraining, deleteCard, equipCard, untrainedPlayer, type CardOutcome } from './cards.ts'
 import { newTrainingSeed, saveGame } from './state.ts'
+import { nextSeasonCountdown } from './season.ts'
+import { seasonEndAt } from './calendar.ts'
 import { autoFillLineup, validateLineup } from './squad.ts'
-import { advanceSeasonRound, finishActiveMatch, startChallenge, startLeagueMatch, startNextSeason } from './season.ts'
+import { advanceSeasonRound, finishActiveMatch, startChallenge, startChallengeAgainstTeam, startLeagueMatch, startNextSeason } from './season.ts'
+import { cachedOwnerlessTeams } from './world.ts'
 import { emptyAutoSubs, validateAutoSubPlan } from './match/management.ts'
 import { recordMatchInjuries } from './injury.ts'
 import { economyOf } from './economy.ts'
-import { trainingDate, trainingOptions } from './training-calendar.ts'
+import { trainingDate, trainingOptions, type TrainingActivity } from './training-calendar.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 import { teamInputFromAI, teamInputFromLineup } from './match/setup.ts'
 import { leagueMatchClockAt } from './realtime.ts'
+import { eventById } from './data/events.ts'
+import { attrLabel } from './data/attributes.ts'
+import { normalizeCeilings } from './data/attr-profile.ts'
+import { isGoalkeeper } from './ca.ts'
+import { MAIN_ATTR_MAX, attrLimit, mainAttrsFor } from './rating.ts'
 
 export function startTraining(game: GameState, playerId: string, seed?: number): { ok: boolean; error?: string } {
-  if (game.training[playerId]) return { ok: false, error: '该球员已有一轮培养' }
-  if (game.candidates[playerId]) return { ok: false, error: '请先确认或放弃上一份候选成品' }
+  const running = game.training[playerId]
+  if (running && !running.completed) return { ok: false, error: '该球员已有一轮培养' }
   const player = game.roster.find((item) => item.id === playerId)
   if (!player) return { ok: false, error: '球员不存在' }
   const energy = player.energy ?? 100
   if (!Number.isFinite(energy) || energy < TRAINING_ENERGY_COST) return { ok: false, error: `精力不足：开始一轮培养需要 ${TRAINING_ENERGY_COST} 点，当前 ${Math.round(energy)} 点。等待比赛日恢复。` }
+  // 上一轮的新卡已经在库存里，不需要先处理结果页才能开始下一轮。
+  if (running?.completed || game.candidates[playerId]) closeFinishedTraining(game, playerId)
   player.energy = Math.max(0, energy - TRAINING_ENERGY_COST)
   const economy = economyOf(game)
-  const session = createTrainingSession(player, seed ?? newTrainingSeed(game, playerId), { stadium: economy.stadium, academy: economy.academy, medical: economy.medical, shop: economy.shop, sponsor: economy.sponsor })
+  // 每轮都从原始属性开始，和他现在装备哪张卡无关。
+  const session = createTrainingSession(untrainedPlayer(player), seed ?? newTrainingSeed(game, playerId), { stadium: economy.stadium, academy: economy.academy, medical: economy.medical, shop: economy.shop, sponsor: economy.sponsor, psychology: economy.psychology, tactics: economy.tactics })
   session.scheduleSeed = splitSeed(game.seed, 'training-calendar')
   game.training[playerId] = session
   saveGame(game)
@@ -133,7 +145,204 @@ export function trainingEventChoice(game: GameState, playerId: string, optionId:
 
 function syncCandidate(game: GameState, playerId: string): void {
   const session = game.training[playerId]
-  if (session?.completed) game.candidates[playerId] = structuredClone(session.candidate)
+  if (session?.completed) {
+    game.candidates[playerId] = structuredClone(session.candidate)
+    addTrainedCard(game, session)
+  }
+}
+
+/* ---------- 自动培养 ---------- */
+
+/** 自动培养一步的结果：start 表示刚开了一轮，event 表示自动选了事件，action 表示执行了训练项目。 */
+export type AutoTrainingStepResult = {
+  ok: boolean
+  error?: string
+  completed: boolean
+  kind: 'start' | 'event' | 'action' | 'done'
+  label?: string
+}
+
+export type AutoTrainingRunResult = {
+  ok: boolean
+  steps: number
+  error?: string
+  completed: boolean
+}
+
+/**
+ * 读取自动培养配置。旧存档没有配置（或缺少字段）时按球员的主属性顺序补一份，
+ * 只返回结果、不写存档，保存由界面负责。
+ */
+export function autoTrainingConfig(game: GameState, playerId?: string): TrainingAutoConfig {
+  const player = playerId ? game.roster.find((item) => item.id === playerId) : undefined
+  const mains = mainAttrsFor(player ? isGoalkeeper(player) : false)
+  const existing = game.trainingAuto
+  const priority: AttrKey[] = [...new Set((existing?.priority ?? []).filter((key) => ALL_ATTRIBUTES.includes(key)))]
+  // 优先级里保证有这名球员的全部主属性，顺序沿用玩家设置。
+  for (const key of mains) if (!priority.includes(key)) priority.push(key)
+  const targets: Partial<Record<AttrKey, number>> = {}
+  for (const [key, value] of Object.entries(existing?.targets ?? {}) as [AttrKey, number | undefined][]) {
+    if (!ALL_ATTRIBUTES.includes(key) || typeof value !== 'number' || !Number.isFinite(value)) continue
+    targets[key] = Math.round(Math.max(0, Math.min(MAIN_ATTR_MAX, value)))
+  }
+  return { enabled: existing?.enabled !== false, mode: existing?.mode === 'targets' ? 'targets' : 'priority', priority, targets }
+}
+
+/** 本次培养里该球员各属性还能练到多少（球员个人上限）。 */
+function autoTrainableCeilings(session: TrainingSession): Attributes {
+  const gk = isGoalkeeper(session.candidate)
+  return normalizeCeilings(session.candidate.attrs, session.candidate.ceilings, (key) => attrLimit(key, gk))
+}
+
+type AutoWeight = { key: AttrKey; weight: number }
+
+/**
+ * 当前最值得练的属性（权重从高到低）：
+ * - targets：补差距最大的主属性，达标的不列入；
+ * - priority：按优先级依次练还没顶到个人上限的属性（练满就下一个）。
+ */
+function autoTrainingWeights(session: TrainingSession, config: TrainingAutoConfig): AutoWeight[] {
+  const gk = isGoalkeeper(session.candidate)
+  const ceilings = autoTrainableCeilings(session)
+  const attrs = session.candidate.attrs
+  const mains = mainAttrsFor(gk)
+  const below = (key: AttrKey): boolean => attrs[key] + 0.5 < ceilings[key]
+  const order = config.priority.filter((key) => mains.includes(key))
+  for (const key of mains) if (!order.includes(key)) order.push(key)
+  if (config.mode === 'targets') {
+    // 差距 = 目标值 - 当前值，目标超过个人上限时以实际上限为准。
+    return mains
+      .map((key) => ({ key, weight: Math.min(config.targets[key] ?? 0, ceilings[key]) - attrs[key] }))
+      .filter((item) => item.weight > 0.5 && below(item.key))
+      .sort((a, b) => b.weight - a.weight || order.indexOf(a.key) - order.indexOf(b.key))
+  }
+  return order
+    .map((key, index) => ({ key, weight: order.length - index }))
+    .filter((item) => below(item.key))
+}
+
+/** 项目对门将/外场球员的实际成长表。 */
+function autoActivityGains(activity: TrainingActivity, gk: boolean): Partial<Record<AttrKey, number>> {
+  return (gk ? activity.goalkeeperGains ?? activity.gains : activity.gains) ?? {}
+}
+
+/** 在当前时段允许的项目里挑一个对目标属性收益最大的；都不涨属性时返回 null。 */
+function autoBestActivity(session: TrainingSession, weights: AutoWeight[]): TrainingActivity | null {
+  if (weights.length === 0) return null
+  const gk = isGoalkeeper(session.candidate)
+  let best: TrainingActivity | null = null
+  let bestScore = 0
+  for (const activity of trainingOptions(session)) {
+    const gains = autoActivityGains(activity, gk)
+    let score = 0
+    for (const item of weights) {
+      const gain = gains[item.key] ?? 0
+      if (gain > 0) score += gain * item.weight
+    }
+    if (score > bestScore + 1e-9) {
+      best = activity
+      bestScore = score
+    }
+  }
+  return best
+}
+
+/** 没有值得练的项目时：体力吃紧先恢复，否则找导师推进事件。 */
+function autoFallbackActivity(session: TrainingSession, options: TrainingActivity[]): TrainingActivity | undefined {
+  const rest = options.find((item) => item.id === 'rest')
+  const mentor = options.find((item) => item.id === 'mentor')
+  if (session.fatigue >= 60 && rest) return rest
+  return mentor ?? rest ?? options[0]
+}
+
+/** 事件自动选项：按目标属性收益（分支取期望值）排序，拿不到收益就选第一个。 */
+function autoEventOption(session: TrainingSession, event: EventDef, weights: AutoWeight[]): EventOption {
+  const weightOf = new Map(weights.map((item) => [item.key, item.weight]))
+  const score = (effect: EventEffect | undefined): number => {
+    let total = 0
+    for (const [key, gain] of Object.entries(effect?.attrs ?? {}) as [AttrKey, number][]) {
+      const weight = weightOf.get(key) ?? 0
+      if (gain > 0 && weight > 0) total += gain * weight
+    }
+    return total
+  }
+  let best = event.options[0]
+  let bestScore = -1
+  for (const option of event.options) {
+    const value = option.branch
+      ? (() => {
+          const p = branchProbability(session, option.branch!.check, option.branch!.p)
+          return p * score(option.branch!.success) + (1 - p) * score(option.branch!.failure)
+        })()
+      : score(option.effect)
+    if (value > bestScore + 1e-9) {
+      best = option
+      bestScore = value
+    }
+  }
+  return best
+}
+
+/**
+ * 自动培养一步：没有进行中的培养就先开始一轮；有待处理事件就按目标收益选一个；
+ * 否则按配置挑出当前最值得练的项目并执行（日历课程只在当天的候选项目里选）。
+ */
+export function autoTrainingStep(game: GameState, playerId: string): AutoTrainingStepResult {
+  const player = game.roster.find((item) => item.id === playerId)
+  if (!player) return { ok: false, error: '球员不存在', completed: false, kind: 'done' }
+  let session = game.training[playerId]
+  if (session?.completed) return { ok: true, completed: true, kind: 'done', label: '本轮培养已完成' }
+  if (!session) {
+    const started = startTraining(game, playerId)
+    if (!started.ok) return { ok: false, error: started.error ?? '无法开始培养', completed: false, kind: 'start' }
+    session = game.training[playerId]
+    return { ok: true, completed: false, kind: 'start', label: '开始新一轮培养' }
+  }
+  const config = autoTrainingConfig(game, playerId)
+  const weights = autoTrainingWeights(session, config)
+  // 先处理事件：最后一个时段触发的事件会挡住培养完成。
+  if (session.pendingEventId) {
+    const event = eventById(session.pendingEventId)
+    if (!event) return { ok: false, error: '未知的事件配置', completed: false, kind: 'event' }
+    const option = autoEventOption(session, event, weights)
+    const result = trainingEventChoice(game, playerId, option.id)
+    if (!result.ok) return { ok: false, error: result.error ?? '事件结算失败', completed: false, kind: 'event' }
+    return { ok: true, completed: result.completed, kind: 'event', label: `${event.title} · ${option.label}` }
+  }
+  if (session.action >= trainingActionsTotal(session)) return { ok: true, completed: true, kind: 'done', label: '本轮培养已完成' }
+  const options = session.scheduleVersion === 1 ? trainingOptions(session) : []
+  if (options.length > 0) {
+    let activity: TrainingActivity | null | undefined = autoBestActivity(session, weights)
+    // 体力不够或当天没有能练目标属性的项目时，退到休息/导师。
+    if (!activity || session.fatigue + (activity.cost ?? 0) > 100) activity = autoFallbackActivity(session, options)
+    if (!activity) return { ok: false, error: '当前时段没有可执行的训练项目', completed: false, kind: 'action' }
+    if (activity.cost !== undefined && session.fatigue + activity.cost > 100) {
+      const rest = options.find((item) => item.id === 'rest')
+      if (rest) activity = rest
+    }
+    const result = trainingAction(game, playerId, { kind: 'activity', activityId: activity.id })
+    if (!result.ok) return { ok: false, error: result.error ?? '自动训练失败', completed: false, kind: 'action' }
+    return { ok: true, completed: result.completed, kind: 'action', label: activity.label }
+  }
+  // 旧课程（没有日历项目）：直接练主属性，体力不够先休息。
+  const top = weights[0]
+  const request: TrainingRequest = session.fatigue + 12 > 100 ? { kind: 'rest' } : top ? { kind: 'drill', attr: top.key } : { kind: 'rest' }
+  const result = trainingAction(game, playerId, request)
+  if (!result.ok) return { ok: false, error: result.error ?? '自动训练失败', completed: false, kind: 'action' }
+  return { ok: true, completed: result.completed, kind: 'action', label: request.kind === 'drill' ? `专项训练 · ${attrLabel(top.key)}` : '休息' }
+}
+
+/** 连续自动培养，直到本轮结束或用完步数（默认 60 步，足够跑完 30 个时段加事件）。 */
+export function runAutoTraining(game: GameState, playerId: string, maxSteps = 60): AutoTrainingRunResult {
+  let steps = 0
+  for (let guard = 0; guard < maxSteps; guard++) {
+    const step = autoTrainingStep(game, playerId)
+    steps++
+    if (!step.ok) return { ok: false, steps, error: step.error, completed: step.completed }
+    if (step.completed) return { ok: true, steps, completed: true }
+  }
+  const session = game.training[playerId]
+  return { ok: true, steps, completed: !!session?.completed }
 }
 
 export function confirmTraining(game: GameState, playerId: string): { ok: boolean; error?: string; replacedName?: string } {
@@ -144,6 +353,25 @@ export function confirmTraining(game: GameState, playerId: string): { ok: boolea
 
 export function discardTraining(game: GameState, playerId: string): { ok: boolean; error?: string } {
   const result = discardCandidate(game, playerId)
+  if (result.ok) saveGame(game)
+  return result
+}
+
+export function keepTraining(game: GameState, playerId: string): { ok: boolean; error?: string } {
+  const result = keepCandidate(game, playerId)
+  if (result.ok) saveGame(game)
+  return result
+}
+
+/** cardId 为 null 表示换回原始属性。 */
+export function equipPlayerCard(game: GameState, playerId: string, cardId: string | null): CardOutcome {
+  const result = equipCard(game, playerId, cardId)
+  if (result.ok) saveGame(game)
+  return result
+}
+
+export function removePlayerCard(game: GameState, cardId: string): CardOutcome {
+  const result = deleteCard(game, cardId)
   if (result.ok) saveGame(game)
   return result
 }
@@ -167,6 +395,10 @@ export function autoLineup(game: GameState, formationId = game.lineup.formationI
 }
 
 export function startNextSeasonAction(game: GameState, now = Date.now()): { ok: boolean; error?: string } {
+  // 赛季结束后先过 12 个游戏日的休整窗口（升级附加赛 + 友谊赛），不能一点就开新赛季。
+  if (game.world && game.season.finished && now < seasonEndAt(game.season.startedAt)) {
+    return { ok: false, error: `赛后休整还没结束：${nextSeasonCountdown(game, now)}后开始下一赛季` }
+  }
   const result = startNextSeason(game, now)
   if (result.ok) saveGame(game)
   return result
@@ -176,6 +408,33 @@ export function startLeague(game: GameState, now = Date.now()): { ok: boolean; e
   const error = validateAutoSubPlan(game.roster, game.lineup, game.autoSubs ?? emptyAutoSubs())[0]
   if (error) return { ok: false, error: `自动换人规则无效：${error}` }
   const result = startLeagueMatch(game, now)
+  if (result.ok) saveGame(game)
+  return { ok: result.ok, error: result.error }
+}
+
+/**
+ * 世界任意球队的友谊赛（含赛季休整期）。
+ * 同一轮的对手用同一套名单生成逻辑，和世界页看到的球员一致。
+ */
+export function startWorldChallenge(game: GameState, clubId: string, now = Date.now()): { ok: boolean; error?: string } {
+  const error = validateAutoSubPlan(game.roster, game.lineup, game.autoSubs ?? emptyAutoSubs())[0]
+  if (error) return { ok: false, error: `自动换人规则无效：${error}` }
+  if (clubId === 'player') return { ok: false, error: '不能和自己踢友谊赛' }
+  const own = game.aiTeams.find((team) => team.id === clubId)
+  const ai = own ?? (game.world ? cachedOwnerlessTeams(game.world, game.seed, game.aiClubs)[clubId] : undefined)
+  if (!ai) return { ok: false, error: '找不到这支球队' }
+  const seed = splitSeed(game.seed, `world-friendly-${clubId}-${game.challengeHistory.length}`)
+  const result = startChallengeAgainstTeam(game, ai, seed, now)
+  if (result.ok) saveGame(game)
+  return { ok: result.ok, error: result.error }
+}
+
+/** 用服务器给的名单开一场友谊赛（联机时对手可能由别的教练执教）。 */
+export function startChallengeWithOpponent(game: GameState, opponent: AITeam, now = Date.now()): { ok: boolean; error?: string } {
+  const error = validateAutoSubPlan(game.roster, game.lineup, game.autoSubs ?? emptyAutoSubs())[0]
+  if (error) return { ok: false, error: `自动换人规则无效：${error}` }
+  const seed = splitSeed(game.seed, `world-friendly-${opponent.id}-${game.challengeHistory.length}`)
+  const result = startChallengeAgainstTeam(game, opponent, seed, now)
   if (result.ok) saveGame(game)
   return { ok: result.ok, error: result.error }
 }

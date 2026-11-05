@@ -1,4 +1,5 @@
-import type { GameState } from './game/types.ts'
+import type { Auction, AuctionResult } from './game/auction.ts'
+import type { AITeam, Attributes, GameState, Player, SeasonTableRow, Fixture, TierId, ConferenceId } from './game/types.ts'
 import { setRemoteSaver, saveGame } from './game/state.ts'
 
 const TOKEN_KEY = 'fm-online-token'
@@ -20,6 +21,56 @@ export const onlineState: {
   connected: false,
   error: '',
   lastSync: 0,
+}
+
+/** 全服自由市场。只有联机时有内容；单机还是用存档里的 freeStars。 */
+export type WorldPublicPlayer = Pick<Player, 'id' | 'name' | 'enName' | 'country' | 'era' | 'age' | 'foot' | 'height' | 'positions' | 'traitId' | 'skills' | 'skillTiers'> & { attrs: Partial<Attributes>; ca: number }
+export type WorldPublicClub = Pick<AITeam, 'id' | 'name' | 'color' | 'formationId'> & { tier: TierId; conference?: ConferenceId; managed?: boolean; players: WorldPublicPlayer[] }
+export type WorldPublicSnapshot = {
+  seasonIndex: number
+  ownClubId: string | null
+  clubs: WorldPublicClub[]
+  divisions: { id: string; tier?: TierId; conference?: ConferenceId; round: number; table: SeasonTableRow[]; fixtures: Fixture[] }[]
+}
+
+/** 只包含公开球员资料，不接收体能、精力或教练存档。 */
+export let publicWorld: WorldPublicSnapshot | null = null
+let publicWorldRequest = 0
+
+export async function refreshPublicWorld(): Promise<void> {
+  if (onlineState.status !== 'online') return
+  const request = ++publicWorldRequest
+  try {
+    const data = await requestJson<WorldPublicSnapshot>('/api/world/teams')
+    if (request === publicWorldRequest && onlineState.status === 'online') {
+      publicWorld = data
+      notify()
+    }
+  } catch {
+    // 网络中断时保留最近一次快照，下次打开世界页再重试。
+  }
+}
+
+export const marketState = {
+  pool: [] as Player[],
+  auctions: [] as Auction[],
+  log: [] as AuctionResult[],
+  version: 0,
+  serverOffset: 0,
+}
+
+type MarketMessage = { type: 'market'; auctions: Auction[]; log: AuctionResult[]; version: number; serverTime: number }
+
+const marketListeners = new Set<(previous: Auction[], previousLog: AuctionResult[]) => void>()
+
+export function subscribeMarket(listener: (previous: Auction[], previousLog: AuctionResult[]) => void): () => void {
+  marketListeners.add(listener)
+  return () => marketListeners.delete(listener)
+}
+
+/** 倒计时按服务器时间算，本机时钟不准也不会提前或拖后。 */
+export function serverNow(): number {
+  return Date.now() + marketState.serverOffset
 }
 
 export type RegistrationMode = 'open' | 'invite' | 'closed'
@@ -140,6 +191,9 @@ export async function logoutOnline(): Promise<void> {
   onlineState.connected = false
   onlineState.revision = 0
   onlineState.error = ''
+  Object.assign(marketState, { pool: [], auctions: [], log: [], version: 0 })
+  ++publicWorldRequest
+  publicWorld = null
   notify()
 }
 
@@ -157,6 +211,7 @@ async function restoreSession(): Promise<GameState | null> {
     setRemoteSaver((next) => queueSave(next))
     connectEvents()
     notify()
+    void refreshPublicWorld()
     return game.game
   } catch (error) {
     onlineState.status = 'offline'
@@ -181,6 +236,7 @@ function acceptSession(data: AuthResponse): void {
   setRemoteSaver((next) => queueSave(next))
   connectEvents()
   notify()
+  void refreshPublicWorld()
 }
 
 function connectEvents(): void {
@@ -197,7 +253,12 @@ function connectEvents(): void {
   }
   eventSource.onmessage = (event) => {
     try {
-      const data = JSON.parse(event.data) as StateResponse
+      const parsed = JSON.parse(event.data) as StateResponse | MarketMessage
+      if (parsed.type === 'market') {
+        applyMarket(parsed as MarketMessage)
+        return
+      }
+      const data = parsed as StateResponse
       if (data.type !== 'state' || !data.game) return
       if (data.revision < onlineState.revision) return
       onlineState.revision = data.revision
@@ -207,11 +268,45 @@ function connectEvents(): void {
         if (saving || pendingGame) deferredState = data
         else remoteGameHandler?.(data.game)
       }
+      if (publicWorld && data.game.world?.seasonIndex !== publicWorld.seasonIndex) void refreshPublicWorld()
       notify()
     } catch {
       // 忽略心跳或损坏消息。
     }
   }
+}
+
+function applyMarket(data: MarketMessage): void {
+  const previous = marketState.auctions
+  const previousLog = marketState.log
+  marketState.auctions = data.auctions
+  marketState.log = data.log
+  marketState.serverOffset = data.serverTime - Date.now()
+  for (const listener of marketListeners) listener(previous, previousLog)
+  if (data.version !== marketState.version) void refreshMarketPool()
+  notify()
+}
+
+/** 球员池比较大，只在它变了的时候才拉。 */
+async function refreshMarketPool(): Promise<void> {
+  try {
+    const data = await requestJson<MarketMessage & { pool: Player[] }>('/api/market')
+    marketState.pool = data.pool
+    marketState.version = data.version
+    notify()
+  } catch {
+    // 下一条市场消息还会再试。
+  }
+}
+
+export async function bidOnline(playerId: string, amount: number): Promise<void> {
+  await flushOnlineNow()
+  const data = await requestJson<MarketMessage>('/api/market/bid', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ playerId, amount }),
+  })
+  applyMarket(data)
 }
 
 function queueSave(game: GameState): void {
@@ -292,9 +387,19 @@ export function hasOnlineSession(): boolean {
 }
 
 export async function leagueActionOnline(body: Record<string, unknown>): Promise<GameState> {
+  return onlineGameAction('/api/match/action', body)
+}
+
+export async function nextWorldSeasonOnline(): Promise<GameState> {
+  const next = await onlineGameAction('/api/world/next-season', {})
+  void refreshPublicWorld()
+  return next
+}
+
+async function onlineGameAction(endpoint: string, body: Record<string, unknown>): Promise<GameState> {
   await flushOnlineNow()
   if (onlineState.status !== 'online' || onlineState.error) throw new Error(onlineState.error || '请先连接服务器')
-  const result = await requestJson<{ revision: number; game: GameState }>('/api/match/action', {
+  const result = await requestJson<{ revision: number; game: GameState }>(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -317,6 +422,17 @@ export async function initOnline(): Promise<GameState | null> {
 /** 让本地离线流程也保留一份最新存档；联网时再由 remoteSaver 推送。 */
 export function saveLocally(game: GameState): void {
   saveGame(game)
+}
+
+/** 联机友谊赛对手名单：服务器返回权威阵容（其他教练的球队也一样）。 */
+export async function fetchFriendlyTeam(clubId: string): Promise<{ team: AITeam } | { error: string }> {
+  const response = await fetch('/api/world/friendly-team', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ clubId }),
+  })
+  const data = await response.json().catch(() => ({})) as { team?: AITeam; error?: string }
+  return response.ok && data.team ? { team: data.team } : { error: data.error ?? '服务器没有返回对手名单' }
 }
 
 export async function createAgentTokenOnline(): Promise<string> {

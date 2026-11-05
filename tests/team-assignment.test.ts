@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createOwnerlessWorld, pickFreeClubForNewAccount, worldSlots } from '../src/game/world.ts'
+import { createOwnerlessWorld, expandWorldConference, pickFreeClubForNewAccount, worldSlots } from '../src/game/world.ts'
 import type { WorldState } from '../src/game/types.ts'
 
 const world = (): WorldState => createOwnerlessWorld(1, Date.now()).world
@@ -19,15 +19,28 @@ const assignTimes = (target: WorldState, count: number) => {
 }
 
 describe('新账号球队分配', () => {
-  it('优先低级别：先填满 40 支二级球队，再往一级联赛放', () => {
+  it('只在二级联赛发队：40 支满了就停下来，不往一级/冠军塞人', () => {
     const target = world()
     const { owners, picked } = assignTimes(target, 41)
-    expect(picked).toHaveLength(41)
-    expect(new Set(picked).size).toBe(41) // 不重复发同一支球队
+    expect(picked).toHaveLength(40)
+    expect(new Set(picked).size).toBe(40) // 不重复发同一支球队
     const tiers = picked.map((id) => target.clubs.find((club) => club.id === id)!.tier)
-    expect(tiers.slice(0, 40).every((tier) => tier === 'division2')).toBe(true)
-    expect(tiers[40]).toBe('division1')
-    expect(Object.keys(owners)).toHaveLength(41)
+    expect(tiers.every((tier) => tier === 'division2')).toBe(true)
+    expect(pickFreeClubForNewAccount(target, owners, [...Object.values(owners), 'extra'])).toBeUndefined()
+    expect(Object.keys(owners)).toHaveLength(40)
+  })
+
+  it('二级满员后开新赛区，新账号仍然从二级开始', () => {
+    const target = world()
+    const { owners } = assignTimes(target, 40)
+    expect(pickFreeClubForNewAccount(target, owners, Object.values(owners))).toBeUndefined()
+    const { conference, divisionId } = expandWorldConference(target, 7)
+    expect(divisionId).toBe(`d2-${conference}`)
+    const extra = pickFreeClubForNewAccount(target, owners, [...Object.values(owners), 'extra'])
+    expect(extra?.tier).toBe('division2')
+    expect(extra?.conference).toBe(conference)
+    expect(target.divisions.some((division) => division.divisionId === divisionId)).toBe(true)
+    expect(target.divisions.find((division) => division.divisionId === divisionId)?.clubIds).toHaveLength(20)
   })
 
   it('已有人带的球队不会再发出去', () => {

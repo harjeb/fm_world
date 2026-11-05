@@ -178,9 +178,10 @@ describe('比赛管理', () => {
 
   it('真实比赛可随机受伤，伤病与身体接触发生在同一步', () => {
     let found = false
-    for (let seed = 1; seed <= 30 && !found; seed++) {
-      const game = createInitialGame(12)
-      const input = teamInputFromLineup(game.roster, game.lineup, { id: 'p', name: 'P', color: '#fff', accent: '#000' })
+    // 伤病很少见，多试几个比赛种子，找到一次就够了。
+    const game = createInitialGame(1)
+    const input = teamInputFromLineup(game.roster, game.lineup, { id: 'p', name: 'P', color: '#fff', accent: '#000' })
+    for (let seed = 1; seed <= 400 && !found; seed++) {
       const e = new MatchEngine({ seed, home: input, away: input, knockout: false })
       while (!e.state.finished && !found) {
         const start = e.state.log.length

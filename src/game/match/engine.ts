@@ -1,3 +1,7 @@
+import { STAR_TRAITS } from '../data/star-traits.generated.ts'
+import type { PassScope, ShotScope, TraitCondition } from '../data/star-traits.ts'
+import type { AttrKey, BaseTraitId } from '../types.ts'
+import { MAIN_ATTR_SCALE } from '../scale.ts'
 import { skillTierMultiplier } from './team.ts'
 import type {
   GoalDetail,
@@ -20,10 +24,13 @@ import { commentLog, commentPossession, restoreCommentary } from './commentary.t
 import { chooseShotFoot, chooseShotTarget, isWeakShotFoot, shotPositionText, shotTargetText } from './shooting.ts'
 import { GOAL_Y, PITCH_LENGTH, PITCH_WIDTH, GOAL_WIDTH, buildMatchTeam, opponentSide } from './team.ts'
 import { LOGIC_MATCH_SECONDS, MATCH_RULES_VERSION, displayClock } from './time.ts'
+import { capturePlaybackPose, PLAYBACK_FRAME_LIMIT } from './playback.ts'
 import type {
   BallState,
   MatchEventContext,
   MatchPlayerState,
+  MatchPlaybackFrame,
+  MatchPlaybackPose,
   MatchSide,
   MatchState,
   MatchTeamInput,
@@ -38,6 +45,21 @@ const TEMPO_MULT = { slow: 1.2, normal: 1, fast: 0.8 } as const
 const LINE_X = { low: 16, mid: 27, high: 39 } as const
 const PRESS_RANGE = { low: 17, mid: 27, high: 38 } as const
 const PRESS_LEVEL = { low: 0, mid: 1, high: 2 } as const
+/** 任意球离球门多远以内直接射门；再远一点就传中到禁区，更远的只是短传开出。 */
+const FREE_KICK_SHOT_RANGE = 35
+const FREE_KICK_DELIVERY_RANGE = 50
+/** 至少多远的传球算长传。 */
+const LONG_PASS_METERS = 25
+/**
+ * 战术犯规：只是拉人、绊人，比盘带对抗里的犯规轻。
+ * 离球门越近越愿意动手，也越容易吃牌。50 米外的犯规只是打断节奏，任意球短传开出。
+ */
+const TACTICAL_FOUL_ZONES = [
+  { within: FREE_KICK_SHOT_RANGE, chance: 0.14, yellow: 0.15 },
+  { within: FREE_KICK_DELIVERY_RANGE, chance: 0.1, yellow: 0.12 },
+  { within: Infinity, chance: 0.025, yellow: 0.08 },
+]
+const TACTICAL_FOUL_RED = 0.001
 const GOAL_CENTER = { x: PITCH_LENGTH, y: GOAL_Y }
 
 type ActionChoice = {
@@ -155,8 +177,15 @@ export class MatchEngine {
   private durationSeconds: number
   private legacyRules: boolean
   private offside: boolean
+  private teamTraitStep = -1
+  private teamTraits = new Map<string, number>()
+  /** 最近一次成功传球，用于给进球记助攻；同一队且 3 步内有效。 */
+  private recordAssist?: { id: string; name: string; side: MatchSide; step: number }
+  private playbackStepActive = false
+  private playbackBeforeReset?: MatchPlaybackPose
+  private recordPlayback = true
 
-  constructor(options: { seed: number; home: MatchTeamInput; away: MatchTeamInput; knockout: boolean; durationSeconds?: number; offside?: boolean }) {
+  constructor(options: { seed: number; home: MatchTeamInput; away: MatchTeamInput; knockout: boolean; durationSeconds?: number; offside?: boolean; recordPlayback?: boolean }) {
     const home = buildMatchTeam(options.home, 'home')
     const away = buildMatchTeam(options.away, 'away')
     this.decisionRng = derivedRng(options.seed, 'match-decision')
@@ -165,6 +194,7 @@ export class MatchEngine {
     this.durationSeconds = options.durationSeconds ?? LOGIC_MATCH_SECONDS
     this.legacyRules = false
     this.offside = options.offside ?? false
+    this.recordPlayback = options.recordPlayback ?? true
     this.state = {
       seed: options.seed,
       rulesVersion: MATCH_RULES_VERSION,
@@ -216,6 +246,12 @@ export class MatchEngine {
     engine.knockout = false
     engine.durationSeconds = state.durationSeconds ?? 1200
     engine.legacyRules = state.rulesVersion !== MATCH_RULES_VERSION
+    // Object.create 不会跑字段初始值，这里要自己补上。
+    engine.teamTraitStep = -1
+    engine.teamTraits = new Map()
+    engine.playbackStepActive = false
+    engine.playbackBeforeReset = undefined
+    engine.recordPlayback = true
     return engine
   }
 
@@ -228,6 +264,14 @@ export class MatchEngine {
   serialize(): MatchState {
     this.syncRng()
     return this.state
+  }
+
+  /** 隔离副本保留比赛模式与随机流，不对原状态执行 serialize 的同步写入。 */
+  clone(): MatchEngine {
+    const state = structuredClone(this.state)
+    state.decisionRng = rngState(this.decisionRng)
+    state.resultRng = rngState(this.resultRng)
+    return MatchEngine.restore(state, this.knockout)
   }
 
   private syncRng(): void {
@@ -254,27 +298,83 @@ export class MatchEngine {
 
   step(realtime = false): StepResult {
     if (this.state.finished) return { state: this.state, entry: null, finished: true }
-    this.state.step++
-    const logStart = this.state.log.length
-    let entry: MatchLogEntry | null = null
-    if (realtime && this.state.phase !== 'shootout') this.checkPeriod()
-    if (this.state.finished) {
+    let playbackFrom = this.recordPlayback ? capturePlaybackPose(this.state) : undefined
+    let restart = this.state.pendingSetPiece?.type
+    this.playbackStepActive = this.recordPlayback
+    this.playbackBeforeReset = undefined
+    try {
+      this.state.step++
+      const logStart = this.state.log.length
+      this.state.ballMotion = undefined
+      let entry: MatchLogEntry | null = null
+      if (realtime && this.state.phase !== 'shootout') this.checkPeriod()
+      if (this.state.finished) {
+        this.syncRng()
+        this.recordPlaybackFrame(playbackFrom, restart, false)
+        return { state: this.state, entry: this.state.log.at(-1) ?? null, finished: true }
+      }
+      if (realtime && this.playbackBeforeReset) {
+        // 实时中场重置发生在动作之前：本步应播放新开球，不是重播上半场末的位置。
+        playbackFrom = capturePlaybackPose(this.state)
+        restart = this.state.pendingSetPiece?.type
+        this.playbackBeforeReset = undefined
+      }
+      const oldBall = this.state.ball
+      const oldOwner = this.carrier()
+      const from = this.state.pendingSetPiece
+        ? { x: this.state.pendingSetPiece.x, y: this.state.pendingSetPiece.y }
+        : oldOwner ? { x: oldOwner.x, y: oldOwner.y } : { x: oldBall.x, y: oldBall.y }
+      if (this.state.phase !== 'shootout' && this.state.clock < this.durationSeconds) this.applyAutoSubs()
+      if (this.state.phase === 'shootout') {
+        this.advanceShootout()
+      } else {
+        const carrier = this.carrier()
+        if (carrier && !this.state.pendingSetPiece && this.state.step % 2 === 0) commentPossession(this.state, carrier)
+        entry = this.state.pendingSetPiece ? this.executeSetPiece() : this.openPlay()
+        if (realtime && this.state.half === 1) this.state.clock = Math.min(this.state.clock, this.durationSeconds / 2)
+        if (!realtime) this.checkPeriod()
+      }
       this.syncRng()
-      return { state: this.state, entry: this.state.log.at(-1) ?? null, finished: true }
+      if (entry === null && this.state.log.length > logStart) entry = this.state.log[this.state.log.length - 1]
+      const events = this.state.log.slice(logStart)
+      const goal = events.find((event) => event.type === 'goal')
+      const shot = events.find((event) => ['goal', 'save', 'miss', 'block', 'shot'].includes(event.type))
+      const action = goal ?? shot ?? entry
+      if (action && this.state.phase !== 'shootout') {
+        const kind = shot ? 'shot' : action.type === 'dribble' ? 'dribble' : action.type === 'pass' ? 'pass' : 'loose'
+        const origin = goal?.goal?.origin
+        const via = origin && distance(from, origin) > 4 ? origin : undefined
+        // resetKickoffPositions 可在上面的动作调用内写入；TS 不跟踪方法的字段副作用。
+        const beforeReset = this.playbackBeforeReset as MatchPlaybackPose | undefined
+        const target = goal?.goal
+          ? { x: goalXOf(goal.goal.side), y: GOAL_Y }
+          : { x: beforeReset?.ball.x ?? this.state.ball.x, y: beforeReset?.ball.y ?? this.state.ball.y }
+        this.state.ballMotion = { step: this.state.step, kind, from, ...(via ? { via } : {}), to: target }
+      }
+      this.recordPlaybackFrame(playbackFrom, restart, goal !== undefined)
+      return { state: this.state, entry, finished: this.state.finished }
+    } finally {
+      this.playbackStepActive = false
+      this.playbackBeforeReset = undefined
     }
-    if (this.state.phase !== 'shootout' && this.state.clock < this.durationSeconds) this.applyAutoSubs()
-    if (this.state.phase === 'shootout') {
-      this.advanceShootout()
-    } else {
-      const carrier = this.carrier()
-      if (carrier && !this.state.pendingSetPiece && this.state.step % 2 === 0) commentPossession(this.state, carrier)
-      entry = this.state.pendingSetPiece ? this.executeSetPiece() : this.openPlay()
-      if (realtime && this.state.half === 1) this.state.clock = Math.min(this.state.clock, this.durationSeconds / 2)
-      if (!realtime) this.checkPeriod()
+  }
+
+  private recordPlaybackFrame(from: MatchPlaybackPose | undefined, restart: MatchPlaybackFrame['restart'], goal: boolean): void {
+    if (!from) return
+    const to = this.playbackBeforeReset ?? capturePlaybackPose(this.state)
+    to.clock = this.state.clock
+    const motion = this.state.ballMotion ? structuredClone(this.state.ballMotion) : undefined
+    // 赛果已将真实球重置到中圈；视觉球仍须先飞抵球门。
+    if (goal && motion) to.ball = { ...to.ball, ...motion.to, ownerId: null, justReceived: false }
+    const frame: MatchPlaybackFrame = {
+      step: this.state.step,
+      from,
+      to,
+      ...(motion ? { motion } : {}),
+      ...(restart ? { restart } : {}),
+      ...(goal ? { goal: true } : {}),
     }
-    this.syncRng()
-    if (entry === null && this.state.log.length > logStart) entry = this.state.log[this.state.log.length - 1]
-    return { state: this.state, entry, finished: this.state.finished }
+    this.state.playbackFrames = [...(this.state.playbackFrames ?? []), frame].slice(-PLAYBACK_FRAME_LIMIT)
   }
 
   simulate(maxSteps = 20000): MatchState {
@@ -316,6 +416,14 @@ export class MatchEngine {
     return this.getTeam(opponentSide(side))
   }
 
+  /** 助攻：同一队最后一次成功传球发生在 3 步内，且不是射门者自己。 */
+  private assistFor(shooter: MatchPlayerState): MatchPlayerState | undefined {
+    const pass = this.recordAssist
+    if (!pass || pass.side !== shooter.side || pass.id === shooter.id) return undefined
+    if (this.state.step - pass.step > 3) return undefined
+    return this.getTeam(shooter.side).players.find((player) => player.id === pass.id)
+  }
+
   private statsOf(team: MatchTeamState) {
     return this.state.stats[team.side]
   }
@@ -338,7 +446,11 @@ export class MatchEngine {
     const ratio = player.stamina / Math.max(1, player.maxStamina)
     const gk = player.position === 'GK'
     let value = effectiveAttr(player.attrs, ratio, player.positions[player.position], key, gk)
-    const trait = TRAITS[player.traitId]
+    const star = STAR_TRAITS[player.traitId]
+    if (star?.kind === 'attr' && star.attr === key && this.traitConditionMet(player, star.when, ctx) && this.traitRoll(player, 'attr', star.chance)) value += star.bonus / MAIN_ATTR_SCALE
+    if (star?.kind === 'hotStreak' && key === 'shooting') value += (star.bonus / MAIN_ATTR_SCALE) * player.stats.goals
+    value += this.teamTraitBonus(player.side, key)
+    const trait = TRAITS[player.traitId as BaseTraitId]
     if (trait) {
       switch (trait.effect) {
         case 'vision':
@@ -381,8 +493,96 @@ export class MatchEngine {
     return clamp(value * (player.injured ? 0.7 : 1), 1, 100)
   }
 
+  private traitConditionMet(player: MatchPlayerState, when: TraitCondition, ctx: MatchEventContext = {}): boolean {
+    switch (when) {
+      case 'any': return true
+      case 'late': return this.matchProgress() >= 75 / 90
+      case 'early': return this.matchProgress() <= 15 / 90
+      case 'secondHalf': return this.matchProgress() >= 0.5
+      case 'behind': return this.state.score[player.side] < this.state.score[opponentSide(player.side)]
+      case 'ahead': return this.state.score[player.side] > this.state.score[opponentSide(player.side)]
+      case 'level': return this.state.score[player.side] === this.state.score[opponentSide(player.side)]
+      case 'tired': return player.stamina / Math.max(1, player.maxStamina) < 0.7
+      case 'fresh': return player.stamina / Math.max(1, player.maxStamina) > 0.8
+      case 'wide': return wideZone(player)
+      case 'attackingThird': return progressOf(player.side, player.x) > 0.65
+      case 'ownHalf': return progressOf(player.side, player.x) < 0.5
+      case 'home': return player.side === 'home'
+      case 'away': return player.side === 'away'
+      case 'subbedOn': return player.subbedOn === true
+      case 'inBox': return ctx.inBox === true
+      case 'crossing': return ctx.crossing === true
+      case 'aerial': return ctx.aerial === true
+    }
+  }
+
+  private matchProgress(): number {
+    return this.durationSeconds > 0 ? this.state.clock / this.durationSeconds : 0
+  }
+
+  /**
+   * 专属特性的概率判定。按“这一步 + 这名球员 + 用途”派生，不消耗比赛主随机流：
+   * 同一步里多次读取结果一致，读档后也一样，比赛仍然可复现。
+   */
+  private traitRoll(player: MatchPlayerState, purpose: string, chance: number): boolean {
+    return chance >= 100 || derivedRng(this.state.seed, 'star-trait', purpose, this.state.step, player.id).float() * 100 < chance
+  }
+
+  /** 光环和威慑：场上球员对全队或对手全队的属性加减。每一步算一次，避免 eff 里反复遍历。 */
+  private teamTraitBonus(side: MatchSide, key: AttrKey): number {
+    if (this.teamTraitStep !== this.state.step) {
+      this.teamTraitStep = this.state.step
+      this.teamTraits.clear()
+      for (const team of this.state.teams) {
+        for (const carrier of team.players) {
+          const trait = STAR_TRAITS[carrier.traitId]
+          if (!carrier.onPitch || (trait?.kind !== 'aura' && trait?.kind !== 'intimidate')) continue
+          if (!this.traitConditionMet(carrier, trait.when)) continue
+          const target = `${trait.kind === 'aura' ? carrier.side : opponentSide(carrier.side)}|${trait.attr}`
+          const delta = (trait.kind === 'aura' ? trait.bonus : -trait.bonus) / MAIN_ATTR_SCALE
+          this.teamTraits.set(target, (this.teamTraits.get(target) ?? 0) + delta)
+        }
+      }
+    }
+    if (this.teamTraits.size === 0) return 0
+    return this.teamTraits.get(`${side}|${key}`) ?? 0
+  }
+
+  private shotScopeMatches(scope: ShotScope, chance: ShotChanceDetail, inBoxShot: boolean, opts: { header: boolean; penalty: boolean; freeKick: boolean }): boolean {
+    switch (scope) {
+      case 'any': return true
+      // 射门路线上没有防守球员，只剩门将。clear_chance 每场只有零点几次，这样才碰得到。
+      case 'oneOnOne': return !opts.header && !opts.penalty && !opts.freeKick && chance.blockers === 0
+      case 'inBox': return inBoxShot && !opts.penalty
+      case 'longRange': return !inBoxShot && !opts.penalty && !opts.freeKick
+      case 'header': return opts.header
+      case 'freeKick': return opts.freeKick
+      case 'penalty': return opts.penalty
+    }
+  }
+
+  /** 传球成功率的修正：传球人的特性加，主要拦截人的特性减。 */
+  private passTraitDelta(carrier: MatchPlayerState, interceptor: MatchPlayerState | null, type: ActionChoice['type'], pressure: number, dist = 0, freeKick = false): number {
+    let delta = 0
+    const passer = STAR_TRAITS[carrier.traitId]
+    if (passer?.kind === 'pass' && this.passScopeMatches(passer.scope, carrier, type, pressure, dist, freeKick) && this.traitConditionMet(carrier, passer.when)) delta += passer.success / 100
+    const defender = interceptor ? STAR_TRAITS[interceptor.traitId] : undefined
+    if (interceptor && defender?.kind === 'defend' && this.traitConditionMet(interceptor, defender.when)) delta -= defender.success / 100
+    return delta
+  }
+
+  private passScopeMatches(scope: PassScope, carrier: MatchPlayerState, type: ActionChoice['type'], pressure: number, dist: number, freeKick: boolean): boolean {
+    if (scope === 'any') return true
+    if (scope === 'pressured') return pressure > 2.5
+    if (scope === 'freeKick') return freeKick
+    // 真正的传中和长传每场才一两次，所以边路的传球、够远的传球都算。
+    if (scope === 'cross') return type === 'cross' || wideZone(carrier)
+    if (scope === 'long') return type === 'long' || dist >= LONG_PASS_METERS
+    return scope === type
+  }
+
   private staminaFactor(player: MatchPlayerState): number {
-    const trait = TRAITS[player.traitId]
+    const trait = TRAITS[player.traitId as BaseTraitId]
     return trait?.effect === 'stamina' ? 1 - trait.value / 100 : 1
   }
 
@@ -408,7 +608,8 @@ export class MatchEngine {
       this.moveAll(team, opp, carrier, decision.choice, timing.total)
     }
     this.state.ball.justReceived = false
-    const entry = this.resolveChoice(team, opp, carrier, decision.choice, timing.total)
+    const foul = this.legacyRules ? null : this.maybeTacticalFoul(opp, carrier)
+    const entry = foul ?? this.resolveChoice(team, opp, carrier, decision.choice, timing.total)
     if (entry?.reason && decision.missed > 0 && (decision.choice.kind === 'pass' || decision.choice.kind === 'dribble')) {
       this.addFailure(carrier, 'unrecognized', `${carrier.name} 没有识别到更向前的线路`)
     }
@@ -500,7 +701,8 @@ export class MatchEngine {
       }
       if (distance(point, carrier) < 2) continue
       const defender = this.nearestOpponent(opp, carrier)
-      const p = defender ? this.dribbleModel(carrier, defender, false).p : 0.93
+      // 无人贴身时推进比回传更合理；接近防守者时仍按对抗模型评估。
+      const p = !defender || distance(defender, carrier) > 12 ? 0.96 : this.dribbleModel(carrier, defender, false).p
       const progress = progressOf(carrier.side, point.x)
       const carrierProgress = progressOf(carrier.side, carrier.x)
       const successValue = 0.005 + Math.max(0, progress - carrierProgress) * 0.22 + (inBox(carrier.side, point) ? 0.07 : 0)
@@ -642,8 +844,10 @@ export class MatchEngine {
         this.markSkill(carrier, 'one_touch', false, false)
       }
     }
-    const prep = Math.max(0.25, (basePrep + receiveAdjust) * tempo - reduction)
-    return { prep, execution, total: prep + execution }
+    // 增加完整比赛中的触球回合，保持一脚出球技能原有的时间收益。
+    const pace = this.legacyRules ? 1 : 0.74
+    const prep = Math.max(0.1, (basePrep + receiveAdjust) * tempo * pace - reduction)
+    return { prep, execution: execution * pace, total: prep + execution * pace }
   }
 
   private moveAll(team: MatchTeamState, opp: MatchTeamState, carrier: MatchPlayerState, choice: ActionChoice, time: number): void {
@@ -664,7 +868,8 @@ export class MatchEngine {
       const ratio = player.stamina / Math.max(1, player.maxStamina)
       const speed = this.eff(player, 'speed')
       const accel = this.eff(player, 'acceleration', { wide: wideZone(player) })
-      let maxSpeed = 0.07 * speed + 0.035 * accel + 1.2
+      // 速度决定长距离，爆发决定启动和短距离：一个动作只有几秒，两者差不多重要。
+      let maxSpeed = 0.06 * speed + 0.05 * accel + 1.2
       if (player.role === 'st_runner' || player.role === 'w_winger') maxSpeed += 0.4
       const moveCap = maxSpeed * time * (0.75 + 0.25 * ratio)
       const dx = target.x - player.x
@@ -681,10 +886,17 @@ export class MatchEngine {
       const enduranceFactor = 0.7 + endurance / 180
       const pressIntensity = 1 + (player.side === opp.side ? PRESS_LEVEL[opp.tactics.press] * 0.08 : 0) + (player.role === 'cm_destroyer' ? 0.06 : 0)
       let drain = (move * 0.028 + 0.018) * pressIntensity * this.staminaFactor(player) / enduranceFactor
+      if (!this.legacyRules) drain *= 0.77 // 更密集的动作不应使终场体力按步数额外翻倍。
       if (player.skills.includes('iron_lung')) drain *= 1 - (0.05 + (skillTierMultiplier(player, 'iron_lung') - 1) * 0.25)
       if (player.position === 'GK') drain *= 0.5
       if (player.side === opp.side && presser === player.id) drain *= 1.12
+      const staminaTrait = STAR_TRAITS[player.traitId]
+      if (staminaTrait?.kind === 'stamina' && this.traitConditionMet(player, staminaTrait.when)) drain *= 1 - staminaTrait.drain / 100
       player.stamina = Math.max(0, player.stamina - drain)
+      if (staminaTrait?.kind === 'secondWind' && !player.traitUsed && player.stamina / Math.max(1, player.maxStamina) < 0.6) {
+        player.traitUsed = true
+        player.stamina = Math.min(player.maxStamina, player.stamina + player.maxStamina * staminaTrait.stamina / 100)
+      }
       if (move < 0.8 && player.stamina < player.maxStamina) player.stamina = Math.min(player.maxStamina, player.stamina + 0.02)
       player.stats.staminaLeft = Math.round((player.stamina / player.maxStamina) * 100)
       if (player.skills.includes('iron_lung')) {
@@ -803,7 +1015,8 @@ export class MatchEngine {
   }
 
   private pickPresser(team: MatchTeamState, carrier: MatchPlayerState): string | null {
-    const range = PRESS_RANGE[team.tactics.press]
+    // 中/高位压迫要从较远处主动接近持球人，而非等他进入防守三区。
+    const range = PRESS_RANGE[team.tactics.press] + (team.tactics.press === 'low' ? 0 : team.tactics.press === 'mid' ? 18 : 22)
     const level = PRESS_LEVEL[team.tactics.press]
     let best: MatchPlayerState | null = null
     let bestScore = Infinity
@@ -905,7 +1118,7 @@ export class MatchEngine {
     } else if (carrier.skills.includes('weak_foot')) {
       if (markSkills) this.markSkill(carrier, 'weak_foot', false, false)
     }
-    const p = clamp(sigmoid(logit(p0) + (a - d + c) / 30), 0.05, 0.97)
+    const p = clamp(sigmoid(logit(p0) + (a - d + c) / 30) + this.passTraitDelta(carrier, main, type, pressure, dist), 0.05, 0.97)
     return { p, a, d, c, p0, interceptor: main, support, weakFoot: weak }
   }
 
@@ -941,7 +1154,11 @@ export class MatchEngine {
   private passValue(carrier: MatchPlayerState, receiver: MatchPlayerState, type: ActionChoice['type']): number {
     const fromProgress = progressOf(carrier.side, carrier.x)
     const progress = progressOf(carrier.side, receiver.x)
-    let value = 0.005 + (progress - fromProgress) * 0.22
+    const advance = progress - fromProgress
+    // 无压回传不能与向前接应近似等价；受到逼抢时保留回做的价值。
+    const pressure = this.nearestOpponent(this.getOpponent(carrier.side), carrier)
+    const escape = pressure ? clamp((12 - distance(pressure, carrier)) / 12, 0, 1) : 0
+    let value = 0.005 + Math.max(0, advance) * 0.35 + Math.min(0, advance) * 0.32 * (1 - escape * 0.7)
     if (type === 'through') value += 0.04
     if (type === 'cross') value += 0.02
     if (inBox(carrier.side, receiver)) value += 0.1
@@ -992,6 +1209,7 @@ export class MatchEngine {
     const roll = round(this.resultRng.float())
     const success = roll < p
     if (success) {
+      this.recordAssist = { id: carrier.id, name: carrier.name, side: carrier.side, step: this.state.step }
       carrier.stats.passesCompleted++
       this.statsOf(team).passesCompleted++
       if (!this.legacyRules && (choice.type === 'through' || choice.type === 'cross')) {
@@ -1000,7 +1218,9 @@ export class MatchEngine {
       }
       this.state.ball = { x: receiver.x, y: receiver.y, ownerId: receiver.id, justReceived: true }
       this.state.possession = carrier.side
-      if (this.offside && choice.type === 'through' && this.isOffside(receiver, opp, carrier.side)) {
+      const runner = STAR_TRAITS[receiver.traitId]
+      const beatsTheLine = runner?.kind === 'onside' && this.traitRoll(receiver, 'onside', runner.chance)
+      if (this.offside && choice.type === 'through' && this.isOffside(receiver, opp, carrier.side) && !beatsTheLine) {
         const entry = this.log('out', carrier.side, `${receiver.name} 越位，进攻被吹停。`, {
           playerId: receiver.id,
           probabilities,
@@ -1078,14 +1298,14 @@ export class MatchEngine {
     const weak = weakFoot(carrier)
     const wing = wideZone(carrier)
     const pressure = distance(defender, carrier) < 5 ? 1 : 0
-    let a = 0.45 * this.eff(carrier, 'dribbling') + 0.3 * this.eff(carrier, 'agility') + 0.25 * this.eff(carrier, 'strength')
+    let a = 0.4 * this.eff(carrier, 'dribbling') + 0.22 * this.eff(carrier, 'agility') + 0.18 * this.eff(carrier, 'strength') + 0.2 * this.eff(carrier, 'acceleration')
     if (carrier.skills.includes('wing_runner') && wing) {
       a += 5 * skillTierMultiplier(carrier, 'wing_runner')
       if (markSkills) this.markSkill(carrier, 'wing_runner', true, true)
     } else if (carrier.skills.includes('wing_runner')) {
       if (markSkills) this.markSkill(carrier, 'wing_runner', false, false)
     }
-    let d = 0.65 * this.eff(defender, 'tackling') + 0.2 * this.eff(defender, 'agility') + 0.15 * this.eff(defender, 'strength')
+    let d = 0.6 * this.eff(defender, 'tackling') + 0.15 * this.eff(defender, 'agility') + 0.1 * this.eff(defender, 'strength') + 0.15 * this.eff(defender, 'acceleration')
     if (defender.skills.includes('sweeper')) {
       d += 3 * skillTierMultiplier(defender, 'sweeper')
       if (markSkills) this.markSkill(defender, 'sweeper', true, true)
@@ -1093,7 +1313,12 @@ export class MatchEngine {
     let c = -pressure * 2 - (weak ? 3 : 0)
     if (carrier.skills.includes('weak_foot') && weak) c += 2 * skillTierMultiplier(carrier, 'weak_foot')
     if (defender.role === 'cb_stopper' || defender.role === 'cm_destroyer') c -= 1
-    return { p: clamp(sigmoid(logit(0.72) + (a - d + c) / 30), 0.12, 0.95), a, d }
+    let traitDelta = 0
+    const dribbler = STAR_TRAITS[carrier.traitId]
+    if (dribbler?.kind === 'dribble' && this.traitConditionMet(carrier, dribbler.when)) traitDelta += dribbler.success / 100
+    const stopper = STAR_TRAITS[defender.traitId]
+    if (stopper?.kind === 'defend' && this.traitConditionMet(defender, stopper.when)) traitDelta -= stopper.success / 100
+    return { p: clamp(sigmoid(logit(0.72) + (a - d + c) / 30) + traitDelta, 0.12, 0.95), a, d }
   }
 
   private resolveDribble(team: MatchTeamState, opp: MatchTeamState, carrier: MatchPlayerState, choice: ActionChoice, time: number): MatchLogEntry | null {
@@ -1102,6 +1327,7 @@ export class MatchEngine {
     if (!defender || !inTackleRange) {
       carrier.stats.touches++
       const moved = this.legacyRules ? this.moveCarrier(carrier, choice.point, time) : choice.start ? distance(choice.start, carrier) : 0
+      this.state.ball = { x: carrier.x, y: carrier.y, ownerId: carrier.id, justReceived: false }
       return this.log('dribble', carrier.side, `${carrier.name} 带球推进 ${moved.toFixed(1)} 米。`, { playerId: carrier.id, probabilities: { success: 1 } })
     }
     const model = this.dribbleModel(carrier, defender, true)
@@ -1119,6 +1345,7 @@ export class MatchEngine {
     if (roll < model.p) {
       carrier.stats.touches++
       const moved = this.legacyRules ? this.moveCarrier(carrier, choice.point, time) : choice.start ? distance(choice.start, carrier) : 0
+      this.state.ball = { x: carrier.x, y: carrier.y, ownerId: carrier.id, justReceived: false }
       return this.log('dribble', carrier.side, `${carrier.name} 摆脱 ${defender.name}，推进 ${moved.toFixed(1)} 米。`, {
         playerId: carrier.id,
         probabilities,
@@ -1129,7 +1356,7 @@ export class MatchEngine {
     if (roll < model.p + tackleShare) {
       defender.stats.tackles++
       this.statsOf(opp).tackles++
-      this.state.ball = { x: carrier.x, y: carrier.y, ownerId: defender.id, justReceived: true }
+      this.state.ball = { x: defender.x, y: defender.y, ownerId: defender.id, justReceived: true }
       this.state.possession = defender.side
       this.addFailure(carrier, 'position_timing', `${carrier.name} 被 ${defender.name} 干净断球`)
       const entry = this.log('tackle', defender.side, `${defender.name} 干净地断下 ${carrier.name} 的球。`, {
@@ -1148,7 +1375,7 @@ export class MatchEngine {
       this.addFailure(carrier, 'position_timing', `${carrier.name} 被 ${defender.name} 犯规`)
       const card = this.book(opp, defender)
       this.setPendingSetPiece(penalty ? 'penalty' : 'free_kick', carrier.side, carrier.x, carrier.y, `${defender.name} 对 ${carrier.name} 犯规`)
-      const entry = this.log('foul', defender.side, `${defender.name} 犯规，${penalty ? '判罚点球' : '前场任意球'}${card === 'red' ? '；红牌罚下' : card === 'yellow' ? '；黄牌' : ''}。`, {
+      const entry = this.log('foul', defender.side, `${defender.name} 犯规，${penalty ? '判罚点球' : '判罚任意球'}${card === 'red' ? '；红牌罚下' : card === 'yellow' ? '；黄牌' : ''}。`, {
         playerId: defender.id,
         probabilities,
         ratings: { a: round(model.a), d: round(model.d) },
@@ -1175,7 +1402,7 @@ export class MatchEngine {
     const ratio = carrier.stamina / Math.max(1, carrier.maxStamina)
     const speed = this.eff(carrier, 'speed')
     const accel = this.eff(carrier, 'acceleration', { wide: wideZone(carrier) })
-    const maxMove = (0.07 * speed + 0.035 * accel + 1.2) * time * (0.75 + 0.25 * ratio)
+    const maxMove = (0.06 * speed + 0.05 * accel + 1.2) * time * (0.75 + 0.25 * ratio)
     const dx = point.x - carrier.x
     const dy = point.y - carrier.y
     const dist = Math.hypot(dx, dy)
@@ -1301,28 +1528,32 @@ export class MatchEngine {
       type, label, base, floor, ceiling, goalBase, distance: dist, angle, pressure, blockers, reason,
     })
     if (opts.penalty) return mk('penalty', '点球', 0.7, 0.68, 0.95, 0.5, '点球，仅门将和主罚者')
-    if (opts.freeKick) return mk('free_kick', '任意球', 0.38, 0.1, 0.75, 0.24, '直接任意球，有人墙和距离影响')
-    if (opts.header) return mk('header', '头球', 0.48, 0.2, 0.88, 0.32, '头球，使用头球与镇定')
+    if (opts.freeKick) {
+      // 20 米以内最好罚，越远射正和破门都越难。
+      const far = Math.max(0, dist - 20)
+      return mk('free_kick', '任意球', clamp(0.46 - far * 0.008, 0.3, 0.46), 0.1, 0.75, clamp(0.3 - far * 0.003, 0.24, 0.3), '直接任意球，有人墙和距离影响')
+    }
+    if (opts.header) return mk('header', '头球', 0.5, 0.2, 0.88, 0.36, '头球，使用头球与镇定')
     if (dist <= 8 && angle >= 35 && nearest > 8 && blockers === 0 && gkOut) {
       return mk('open_goal', '近距空门', 0.94, 0.9, 0.99, 0.82, '近距离、角度开放、门将未覆盖')
     }
     if (dist <= 16 && angle >= 24 && nearest > 6.5 && blockers === 0) {
       // 接近空门时把单刀参数连续抬高，避免 8 米边界跳变。
       const nearOpen = clamp((10 - dist) / 2, 0, 1) * clamp((nearest - 6) / 2, 0, 1) * clamp((angle - 30) / 5, 0, 1)
-      return mk('clear_chance', '干净单刀', 0.85 + 0.09 * nearOpen, 0.78 + 0.12 * nearOpen, 0.97, 0.56, '距门近、角度开放、外场防守来不及干扰')
+      return mk('clear_chance', '干净单刀', 0.85 + 0.09 * nearOpen, 0.78 + 0.12 * nearOpen, 0.97, 0.6, '距门近、角度开放、外场防守来不及干扰')
     }
     if (dist <= 18 && angle >= 18 && nearest > 4.5 && blockers === 0) {
       const nearClear = clamp((18 - dist) / 2, 0, 1) * clamp((nearest - 5) / 1.5, 0, 1) * clamp((angle - 20) / 4, 0, 1)
-      return mk('box_open', '禁区空位', 0.77 + 0.08 * nearClear, 0.65 + 0.13 * nearClear, 0.95, 0.43, '禁区内空位，仍有门将')
+      return mk('box_open', '禁区空位', 0.77 + 0.08 * nearClear, 0.65 + 0.13 * nearClear, 0.95, 0.48, '禁区内空位，仍有门将')
     }
     if (dist <= 26 && angle >= 12) {
       const nearBox = clamp((20 - dist) / 2, 0, 1)
-      const base = clamp(0.6 - Math.max(0, dist - 20) * 0.02 - (nearest <= 4 ? 0.06 : 0) + 0.17 * nearBox, 0.45, 0.7)
-      return mk('normal', '普通射门', base, 0.35 + 0.3 * nearBox, 0.9, 0.33, nearest <= 4 ? '有贴身干扰的普通射门' : '角度尚可的普通射门')
+      const base = clamp(0.62 - Math.max(0, dist - 20) * 0.02 - (nearest <= 4 ? 0.06 : 0) + 0.17 * nearBox, 0.47, 0.72)
+      return mk('normal', '普通射门', base, 0.35 + 0.3 * nearBox, 0.9, 0.38, nearest <= 4 ? '有贴身干扰的普通射门' : '角度尚可的普通射门')
     }
     const nearNormal = clamp((34 - dist) / 8, 0, 1)
     const base = clamp(0.6 - Math.max(0, dist - 20) * 0.023 - Math.max(0, 16 - angle) * 0.004, 0.16, 0.6)
-    return mk('difficult', '困难射门', base, 0.05 + 0.3 * nearNormal, 0.75 + 0.15 * nearNormal, 0.2 + 0.13 * nearNormal, '距离远、角度小或有封堵')
+    return mk('difficult', '困难射门', base, 0.05 + 0.3 * nearNormal, 0.75 + 0.15 * nearNormal, 0.23 + 0.15 * nearNormal, '距离远、角度小或有封堵')
   }
 
   private shotModel(
@@ -1352,8 +1583,10 @@ export class MatchEngine {
     let goalGiven = chance.goalBase
     let gkScore = 45
     const noKeeper = !gk
+    let keeperInPosition = false
     if (gk) {
       const gkOut = distance(gk, { x: ownGoalXOf(gk.side), y: GOAL_Y }) > 10
+      keeperInPosition = !gkOut
       if (gkOut) {
         // 已失位的门将不能隔空用高属性扑救；只保留很小的回追影响。
         gkScore = 25
@@ -1398,6 +1631,16 @@ export class MatchEngine {
       goalGiven += 0.04 * skillTierMultiplier(shooter, 'penalty_specialist')
       if (markSkills) this.markSkill(shooter, 'penalty_specialist', true, true)
     }
+    // 先调整普通射门的基础转化率，再叠加技能/专属特性的固定加成。
+    if (!this.legacyRules && !noKeeper && (chance.type === 'normal' || chance.type === 'difficult')) goalGiven *= 0.9
+    const finisher = STAR_TRAITS[shooter.traitId]
+    if (finisher?.kind === 'shot' && this.shotScopeMatches(finisher.scope, chance, inBoxShot, opts) && this.traitConditionMet(shooter, finisher.when)) {
+      onTarget += finisher.onTarget / 100
+      goalGiven += finisher.goal / 100
+    }
+    // 失位的门将不能隔空扑救，特性也一样；空门本来就没有扑救。
+    const keeper = gk ? STAR_TRAITS[gk.traitId] : undefined
+    if (gk && keeperInPosition && chance.type !== 'open_goal' && keeper?.kind === 'save' && this.shotScopeMatches(keeper.scope, chance, inBoxShot, opts) && this.traitConditionMet(gk, keeper.when)) goalGiven -= keeper.goal / 100
     onTarget = clamp(onTarget, chance.floor, chance.ceiling)
     goalGiven = clamp(goalGiven, 0.05, noKeeper || chance.type === 'open_goal' ? 1 : 0.95)
     let block = 0
@@ -1473,6 +1716,10 @@ export class MatchEngine {
       this.state.score[shooter.side]++
       this.state.lastGoalBy = shooter.side
       shooter.stats.goals++
+      const assister = this.assistFor(shooter)
+      if (assister) assister.stats.assists = (assister.stats.assists ?? 0) + 1
+      const scorerTrait = STAR_TRAITS[shooter.traitId]
+      if (scorerTrait?.kind === 'goalRecover') shooter.stamina = Math.min(shooter.maxStamina, shooter.stamina + shooter.maxStamina * scorerTrait.stamina / 100)
       this.statsOf(team).goals++
       this.statsOf(team).shotsOnTarget++
       this.addPossessionTime(shooter.side, 0)
@@ -1482,6 +1729,7 @@ export class MatchEngine {
         origin, distance: Math.round(model.distance * 10) / 10,
         bodyPart: foot ?? 'head', technique,
         situation: opts.penalty ? 'penalty' : opts.freeKick ? 'free_kick' : 'open', chance: model.chance.type, target,
+        ...(assister ? { assistId: assister.id, assistName: assister.name } : {}),
       }
       const action = technique === 'header' ? '头球攻门' : `${foot === 'left' ? '左脚' : '右脚'}${technique === 'power' ? '抽射' : '推射'}`
       const situation = opts.penalty ? '主罚点球，' : opts.freeKick ? '主罚任意球，' : ''
@@ -1684,7 +1932,7 @@ export class MatchEngine {
       for (const player of team.players) {
         if (!player.onPitch) continue
         const dist = distance(player, ball)
-        const reach = 4.5 + this.eff(player, 'anticipation') * 0.035 + this.eff(player, 'speed') * 0.02
+        const reach = 4.5 + this.eff(player, 'anticipation') * 0.035 + this.eff(player, 'speed') * 0.01 + this.eff(player, 'acceleration') * 0.01
         if (dist <= reach) {
           const gk = player.position === 'GK'
           const weight = gk
@@ -1692,7 +1940,8 @@ export class MatchEngine {
             : 0.35 * this.eff(player, 'anticipation') +
               0.2 * (player.position === 'CB' ? this.eff(player, 'defPos') : this.eff(player, 'offBall')) +
               0.2 * this.eff(player, 'strength') +
-              0.15 * this.eff(player, 'speed') +
+              0.07 * this.eff(player, 'speed') +
+              0.08 * this.eff(player, 'acceleration') +
               Math.max(0, player.height - 175) * 0.15
           candidates.push({ player, weight: weight * (0.75 + this.resultRng.float() * 0.5) })
         }
@@ -1754,7 +2003,7 @@ export class MatchEngine {
     const team = this.getTeam(sp.teamSide)
     const opp = this.getOpponent(sp.teamSide)
     this.state.possession = sp.teamSide
-    let time = 10
+    let time = this.legacyRules ? 10 : 6
     let entry: MatchLogEntry | null = null
     if (sp.type === 'kickoff') {
       const taker = this.pickTaker(team, 'pass', sp.x, sp.y)
@@ -1788,7 +2037,7 @@ export class MatchEngine {
           entry = this.resolvePass(team, opp, taker, choice, 2)
         }
       }
-      time = 8
+      time = this.legacyRules ? 8 : 5
     } else if (sp.type === 'goal_kick') {
       const gk = this.teamGoalkeeper(team)
       if (gk) {
@@ -1803,7 +2052,7 @@ export class MatchEngine {
           entry = this.resolvePass(team, opp, gk, choice, 2)
         }
       }
-      time = 10
+      time = this.legacyRules ? 10 : 6
     } else if (sp.type === 'corner') {
       const taker = this.pickTaker(team, 'cross', sp.x, sp.y)
       if (taker) {
@@ -1815,17 +2064,25 @@ export class MatchEngine {
         this.state.ball = { x: goalXOf(team.side) - dirOf(team.side) * 8, y: GOAL_Y, ownerId: null, justReceived: false }
         entry = this.resolveAerial(team, opp, { x: goalXOf(team.side) - dirOf(team.side) * 8, y: GOAL_Y }, team.side, true)
       }
-      time = 12
+      time = this.legacyRules ? 12 : 7
     } else if (sp.type === 'free_kick') {
-      const taker = this.pickTaker(team, 'shoot', sp.x, sp.y)
+      const distToGoal = distance(sp, { x: goalXOf(team.side), y: GOAL_Y })
+      const direct = distToGoal < (this.legacyRules ? 30 : FREE_KICK_SHOT_RANGE) && Math.abs(sp.y - GOAL_Y) < 22
+      const delivery = !this.legacyRules && !direct && distToGoal < FREE_KICK_DELIVERY_RANGE
+      // 后场的任意球就近开出，不用把别的位置的人叫过来。
+      const taker = this.legacyRules || direct || delivery
+        ? this.pickTaker(team, direct || this.legacyRules ? 'shoot' : 'cross', sp.x, sp.y, true)
+        : this.nearestOutfielder(team, sp)
       if (taker) {
+        if (delivery) this.prepareCorner(team, opp, { ...sp })
         taker.x = sp.x
         taker.y = sp.y
         this.state.ball = { x: sp.x, y: sp.y, ownerId: taker.id, justReceived: false }
-        const distToGoal = distance(sp, { x: goalXOf(team.side), y: GOAL_Y })
         this.log('setpiece', sp.teamSide, `${team.name} 获得任意球，${taker.name} 站在球前。`, { playerId: taker.id })
-        if (distToGoal < 30 && Math.abs(sp.y - GOAL_Y) < 22) {
+        if (direct) {
           entry = this.resolveShot(taker, team, opp, { point: sp, header: false, penalty: false, freeKick: true })
+        } else if (delivery) {
+          entry = this.deliverFreeKick(team, opp, taker)
         } else {
           const target = this.pickSafeOutlet(team, taker)
           if (target) {
@@ -1834,7 +2091,7 @@ export class MatchEngine {
           }
         }
       }
-      time = 12
+      time = this.legacyRules ? 12 : 7
     } else if (sp.type === 'penalty') {
       const taker = this.pickTaker(team, 'shoot', sp.x, sp.y)
       if (taker) {
@@ -1849,13 +2106,67 @@ export class MatchEngine {
         this.log('penalty', sp.teamSide, `${taker.name} 主罚点球。`, { playerId: taker.id })
         entry = this.resolveShot(taker, team, opp, { point: taker, header: false, penalty: true, freeKick: false })
       }
-      time = 10
+      time = this.legacyRules ? 10 : 6
     }
     this.advanceClock(time)
     this.addPossessionTime(sp.teamSide, time)
     this.advancePlayerMinutes(time)
     if (this.state.pendingSetPiece) this.state.phase = 'setpiece'
     return entry
+  }
+
+  /** 前场任意球传中到禁区：先看球能不能传到位，到位了就和角球一样争顶。 */
+  private deliverFreeKick(team: MatchTeamState, opp: MatchTeamState, taker: MatchPlayerState): MatchLogEntry | null {
+    const point = { x: goalXOf(team.side) - dirOf(team.side) * 8, y: GOAL_Y }
+    const quality = 0.6 + (this.eff(taker, 'passing', { passing: true, crossing: true }) - 50) * 0.006
+    const p = clamp(quality + this.passTraitDelta(taker, null, 'cross', 0, distance(taker, point), true), 0.3, 0.95)
+    const roll = this.resultRng.float()
+    taker.stats.passes++
+    taker.stats.touches++
+    this.statsOf(team).passes++
+    if (roll >= p) {
+      const clearer = this.nearestOpponent(opp, point)
+      this.state.ball = { x: clearer?.x ?? point.x, y: clearer?.y ?? point.y, ownerId: clearer?.id ?? null, justReceived: true }
+      this.state.possession = clearer ? opp.side : null
+      return this.log('pass', team.side, `${taker.name} 的任意球传中质量不高，${clearer ? `被 ${clearer.name} 解围` : '没有人碰到'}。`, {
+        playerId: taker.id, probabilities: { success: round(p), fail: round(1 - p) }, roll: round(roll),
+      })
+    }
+    taker.stats.passesCompleted++
+    this.statsOf(team).passesCompleted++
+    this.state.ball = { x: point.x, y: point.y, ownerId: null, justReceived: false }
+    this.log('pass', team.side, `${taker.name} 把任意球传入禁区。`, { playerId: taker.id, probabilities: { success: round(p), fail: round(1 - p) }, roll: round(roll) })
+    return this.resolveAerial(team, opp, point, team.side, true)
+  }
+
+  /**
+   * 被贴身防守时，防守球员可能直接犯规：宁可送一个任意球，也不让对手舒服地射门或直塞。
+   * 这是任意球的主要来源。禁区内不敢动手，门将既不会冲出来拉人，也不会被拉。
+   * 用派生随机数判定，不犯规时不影响比赛主随机流。
+   */
+  private maybeTacticalFoul(opp: MatchTeamState, carrier: MatchPlayerState): MatchLogEntry | null {
+    if (carrier.position === 'GK' || inBox(carrier.side, carrier)) return null
+    const goalDistance = distance(carrier, { x: goalXOf(carrier.side), y: GOAL_Y })
+    const defender = this.nearestOpponent(opp, carrier)
+    if (!defender || defender.position === 'GK' || distance(defender, carrier) > 5) return null
+    const zone = TACTICAL_FOUL_ZONES.find((item) => goalDistance < item.within)!
+    // 和盘带犯规用同一套逼抢倾向；中等逼抢、普通角色是 1 倍。
+    const aggression = clamp(0.16 + ROLES[defender.role].pressBias * 0.05 + PRESS_LEVEL[opp.tactics.press] * 0.02, 0.1, 0.35) / 0.18
+    // 抢断越好越不用动手：评分 50 是 1 倍，90 是 0.8 倍。
+    const discipline = 1.25 - this.eff(defender, 'tackling') / 200
+    const magnet = STAR_TRAITS[carrier.traitId]
+    const drawn = magnet?.kind === 'drawFoul' && this.traitConditionMet(carrier, magnet.when) ? 1 + magnet.pct / 100 : 1
+    // 回合变多后，按每次接触略降低战术犯规率，保持整场犯规/牌数稳定。
+    const chance = zone.chance * aggression * discipline * drawn * 0.88
+    if (!derivedRng(this.state.seed, 'tactical-foul', this.state.step, carrier.id).chance(chance)) return null
+    this.statsOf(opp).fouls++
+    const card = this.book(opp, defender, zone.yellow, TACTICAL_FOUL_RED)
+    this.setPendingSetPiece('free_kick', carrier.side, carrier.x, carrier.y, `${defender.name} 对 ${carrier.name} 犯规`)
+    return this.log('foul', defender.side, `${defender.name} 放倒 ${carrier.name}，判罚任意球${card === 'red' ? '；红牌罚下' : card === 'yellow' ? '；黄牌' : ''}。`, {
+      playerId: defender.id,
+      probabilities: { foul: round(chance) },
+      ...(card ? { card } : {}),
+    })
   }
 
   private prepareCorner(team: MatchTeamState, opp: MatchTeamState, sp: SetPieceState): void {
@@ -1884,17 +2195,36 @@ export class MatchEngine {
     sp.y = sp.y < GOAL_Y ? 2 : PITCH_WIDTH - 2
   }
 
-  private pickTaker(team: MatchTeamState, mode: 'pass' | 'cross' | 'shoot', x: number, y: number): MatchPlayerState | null {
+  private pickTaker(team: MatchTeamState, mode: 'pass' | 'cross' | 'shoot', x: number, y: number, freeKick = false): MatchPlayerState | null {
     const players = team.players.filter((player) => player.onPitch && player.position !== 'GK')
     if (players.length === 0) return null
     const scored = players.map((player) => {
       let score = mode === 'shoot' ? player.attrs.shooting * 0.6 + player.attrs.composure * 0.4 : player.attrs.passing * 0.7 + player.attrs.vision * 0.3
       if (mode === 'cross') score += player.attrs.passing * 0.2
       score -= distance(player, { x, y }) * 0.2
+      // 带任意球特性的人优先主罚，否则特性可能一直用不上。
+      if (freeKick) {
+        const trait = STAR_TRAITS[player.traitId]
+        if ((mode === 'shoot' && trait?.kind === 'shot' && trait.scope === 'freeKick') || (mode === 'cross' && trait?.kind === 'pass' && trait.scope === 'freeKick')) score += 3000
+      }
       return { player, score }
     })
     scored.sort((a, b) => b.score - a.score)
     return scored[0]?.player ?? null
+  }
+
+  private nearestOutfielder(team: MatchTeamState, point: { x: number; y: number }): MatchPlayerState | null {
+    let best: MatchPlayerState | null = null
+    let bestDist = Infinity
+    for (const player of team.players) {
+      if (!player.onPitch || player.position === 'GK') continue
+      const dist = distance(player, point)
+      if (dist < bestDist) {
+        bestDist = dist
+        best = player
+      }
+    }
+    return best
   }
 
   private pickSafeOutlet(team: MatchTeamState, taker: MatchPlayerState): MatchPlayerState | null {
@@ -1946,6 +2276,8 @@ export class MatchEngine {
   }
 
   private resetKickoffPositions(teamSide: MatchSide): void {
+    // 仅 step 中保留首次重置前的位置；构造/读档不会留下临时视觉状态。
+    if (this.playbackStepActive && !this.playbackBeforeReset) this.playbackBeforeReset = capturePlaybackPose(this.state)
     const formationHome = FORMATIONS[this.state.teams[0].formationId]
     const formationAway = FORMATIONS[this.state.teams[1].formationId]
     for (const [index, team] of this.state.teams.entries()) {
@@ -2021,6 +2353,11 @@ export class MatchEngine {
     const gkScore = gk ? this.eff(gk, 'reflexes') * 0.6 + this.eff(gk, 'oneOnOne') * 0.4 + (gk.skills.includes('gk_reflexes') ? 5 * skillTierMultiplier(gk, 'gk_reflexes') : 0) : 50
     let p = clamp(0.7 + (takerScore - 60) / 250 - (gkScore - 55) / 400, 0.5, 0.9)
     if (taker.skills.includes('penalty_specialist')) p += 0.06 * skillTierMultiplier(taker, 'penalty_specialist')
+    // 点球大战只有一个命中率，所以射正和进球的加成合在一起算。条件照常判定，“主场”特性客场不生效。
+    const takerTrait = STAR_TRAITS[taker.traitId]
+    if (takerTrait?.kind === 'shot' && (takerTrait.scope === 'penalty' || takerTrait.scope === 'any') && this.traitConditionMet(taker, takerTrait.when)) p += (takerTrait.onTarget + takerTrait.goal) / 100
+    const keeperTrait = gk ? STAR_TRAITS[gk.traitId] : undefined
+    if (gk && keeperTrait?.kind === 'save' && (keeperTrait.scope === 'penalty' || keeperTrait.scope === 'any') && this.traitConditionMet(gk, keeperTrait.when)) p -= keeperTrait.goal / 100
     if (gk?.skills.includes('sweeper')) p -= 0.015 * skillTierMultiplier(gk, 'sweeper')
     p = clamp(p, 0.45, 0.92)
     const roll = this.resultRng.float()
@@ -2103,11 +2440,14 @@ export class MatchEngine {
     return entry
   }
 
-  private book(team: MatchTeamState, player: MatchPlayerState): 'yellow' | 'red' | null {
+  private book(team: MatchTeamState, player: MatchPlayerState, yellowChance = this.legacyRules ? 0.17 : 0.13, redChance = 0.012): 'yellow' | 'red' | null {
     if (player.sentOff) return null
     const rng = derivedRng(this.state.seed, 'card', this.state.step, player.id)
-    const straight = rng.chance(0.012)
-    const yellow = straight ? false : rng.chance(0.17)
+    const cardTrait = STAR_TRAITS[player.traitId]
+    const cardScale = cardTrait?.kind === 'card' ? 1 - cardTrait.risk / 100 : 1
+    // 触球次数增多不能同步增加每场直红数量；旧比赛保持原规则。
+    const straight = rng.chance(redChance * cardScale * (this.legacyRules ? 1 : 0.25))
+    const yellow = straight ? false : rng.chance(yellowChance * cardScale * (this.legacyRules ? 1 : 0.8))
     player.yellowCards += yellow ? 1 : 0
     const red = straight || player.yellowCards >= 2
     if (red) {
@@ -2133,9 +2473,10 @@ export class MatchEngine {
     const prone = injuryProneness(personId)
     const fatigue = clamp(1 - player.stamina / Math.max(1, player.maxStamina), 0, 1)
     const baseRisk = injuryRisk(prone, fatigue, false)
-    const risk = player.skills.includes('injury_prevention')
+    const injuryTrait = STAR_TRAITS[player.traitId]
+    const risk = (player.skills.includes('injury_prevention')
       ? baseRisk - (baseRisk - injuryRisk(prone, fatigue, true)) * skillTierMultiplier(player, 'injury_prevention')
-      : baseRisk
+      : baseRisk) * (injuryTrait?.kind === 'injury' ? 1 - injuryTrait.risk / 100 : 1)
     const rng = derivedRng(this.state.seed, 'injury', this.state.step, player.id)
     if (rng.chance(risk)) {
       for (const team of this.state.teams) {
@@ -2171,7 +2512,7 @@ export class MatchEngine {
         if (atLogic > this.state.clock) return true
         const out = team.players.find(p => p.sourceId === rule.outId && p.onPitch)
         const incoming = team.bench.find(p => p.sourceId === rule.inId && !p.cameOff && !p.onPitch)
-        if (!out || !incoming || incoming.injured || team.subsUsed >= 3 || incoming.positions[out.position] <= 0) return false
+        if (!out || !incoming || incoming.injured || team.subsUsed >= 3) return false
         return !this.substitute(out.id, incoming.id, team.side, this.state.clock, 'timed').ok
       })
       if (plan.staminaBelow !== null) {
@@ -2204,7 +2545,6 @@ export class MatchEngine {
     const inPlayer = team.bench.find((player) => player.id === inId && !player.cameOff && !player.onPitch)
     if (!inPlayer) return { ok: false, error: '替补球员不可用' }
     const out = team.players[outIndex]
-    if (inPlayer.positions[out.position] <= 0) return { ok: false, error: `${inPlayer.name} 尚未学会 ${out.position}，不能替换到该位置` }
     const role = ROLES[out.role]
     if (role.position !== out.position) return { ok: false, error: '职责与位置不匹配' }
     const incoming: MatchPlayerState = {
@@ -2217,6 +2557,7 @@ export class MatchEngine {
       stamina: inPlayer.stamina,
       onPitch: true,
       cameOff: false,
+      subbedOn: true,
       stats: { ...inPlayer.stats, staminaLeft: Math.round(inPlayer.stamina / Math.max(1, inPlayer.maxStamina) * 100) },
     }
     const outgoing: MatchPlayerState = { ...out, onPitch: false, cameOff: true, stats: { ...out.stats, staminaLeft: Math.round((out.stamina / out.maxStamina) * 100) } }

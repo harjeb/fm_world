@@ -2,7 +2,7 @@ import type { GameState, Player } from './types.ts'
 import type { MatchState } from './match/types.ts'
 import { INJURY_PROFILES } from './data/injury-profiles.ts'
 import { derivedRng, type PCG32 } from './rng.ts'
-import { economyOf } from './economy.ts'
+import { economyOf, facilityLevel } from './economy.ts'
 import { matchRealSeconds } from './match/time.ts'
 
 export function personKey(player: Pick<Player, 'id' | 'seedId'>): string {
@@ -50,8 +50,7 @@ export function recordMatchInjuries(game: GameState, state: MatchState, baseTime
     if (until === undefined) {
       const team = state.teams.find(team => team.side === entry.team)
       if (team?.id === 'player') {
-        const medical = economyOf(game).medical
-        const level = Number.isInteger(medical) && medical >= 1 && medical <= 5 ? medical : 1
+        const level = facilityLevel(economyOf(game).medical)
         injury.recoveryDays = Math.max(1, Math.ceil(injury.recoveryDays * (1 - 0.08 * (level - 1))))
       }
       const time = baseTime + (useMatchClock ? matchRealSeconds(entry.clock, state.durationSeconds) * 1000 : 0)

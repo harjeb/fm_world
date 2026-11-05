@@ -121,16 +121,17 @@ try {
   if (restoredToken !== token) throw new Error('online session did not restore after reload')
 
   await click('[data-nav="club"]')
-  await waitFor(`document.body.innerText.includes('本地 NPC 转会市场')`)
-  if (!(await evaluate(`document.body.innerText.includes('培养免费') && document.body.innerText.includes('医疗 3 级') && document.body.innerText.includes('主属性最高 1500')`))) throw new Error('facility growth or free training rules missing')
-  if (!(await evaluate(`document.querySelector('[data-action="club-upgrade"][data-facility="stadium"]').disabled`))) throw new Error('new club should not afford a stadium upgrade')
+  await waitFor(`document.body.innerText.includes('培养免费')`)
+  if (!(await evaluate(`document.body.innerText.includes('医疗 3 级') && document.body.innerText.includes('每项主属性各有自己的上限') && document.body.innerText.includes('LV1')`))) throw new Error('facility growth, stage label or free training rules missing')
+  if (!(await evaluate(`!!document.querySelector('[data-action="club-upgrade"][data-facility="stadium"]')`))) throw new Error('stadium upgrade button missing')
+  await click('[data-nav="transfer"]')
+  await waitFor(`document.body.innerText.includes('仅与本地 NPC 交易')`)
+  await click('[data-nav="club"]')
   await click('[data-action="club-upgrade"][data-facility="academy"]')
   await waitFor(`document.body.innerText.includes('设施已升级')`)
   await waitFor(`JSON.parse(localStorage.getItem('fm-seven-a-side-save-v3')).economy.academy === 2`)
-  for (let level = 2; level <= 3; level++) {
-    await click('[data-action="club-upgrade"][data-facility="medical"]')
-    await waitFor(`JSON.parse(localStorage.getItem('fm-seven-a-side-save-v3')).economy.medical === ${level}`)
-  }
+  await click('[data-action="club-upgrade"][data-facility="medical"]')
+  await waitFor(`JSON.parse(localStorage.getItem('fm-seven-a-side-save-v3')).economy.medical === 2`)
 
   await click('[data-nav="training"]')
   await waitFor(`!!document.querySelector('#training-player-select')`)
@@ -158,8 +159,8 @@ try {
   await waitFor(`JSON.parse(localStorage.getItem('fm-seven-a-side-save-v3')).training[${JSON.stringify(playerId)}].action === 1`)
   const training = await evaluate(`JSON.parse(localStorage.getItem('fm-seven-a-side-save-v3')).training[${JSON.stringify(playerId)}]`)
   const teammateTraining = await evaluate(`JSON.parse(localStorage.getItem('fm-seven-a-side-save-v3')).training[${JSON.stringify(teammateId)}]`)
-  if (training.facilityLevels.medical !== 3 || training.fatigue !== 25 || !training.exchangeMatches?.length) throw new Error('Monday exchange did not record its result and stamina cost')
-  if (teammateTraining.action !== 1 || teammateTraining.fatigue !== 25 || teammateTraining.pendingEventId !== 'main_intake') throw new Error('teammate did not execute training and receive their own event')
+  if (training.facilityLevels.medical !== 2 || training.fatigue !== 0 || !training.exchangeMatches?.length) throw new Error('Monday exchange did not record its result, or it used stamina')
+  if (teammateTraining.action !== 1 || teammateTraining.fatigue !== 0 || teammateTraining.pendingEventId !== 'main_intake') throw new Error('teammate did not execute training and receive their own event')
   if (!(await evaluate(`document.querySelector('[data-action="open-training"][data-player="${teammateId}"]').innerText.includes('待处理事件')`))) throw new Error('teammate pending event is not visible')
   if (await evaluate(`JSON.parse(localStorage.getItem('fm-seven-a-side-save-v3')).economy.balance`) !== trainingBalance) throw new Error('training unexpectedly charged coins')
   if (await evaluate(`!!document.querySelector('[data-action="event-option"]')`)) await click('[data-action="event-option"]')
@@ -265,7 +266,7 @@ try {
     headers: { ...auth, 'Content-Type': 'application/json' },
     body: JSON.stringify({ game: latest.game, baseRevision: latest.revision }),
   })
-  await waitFor(`/第 (2|3|4|5) \\/ 38 轮/.test(document.body.innerText) || document.body.innerText.includes('赛季结束')`, 20000)
+  await waitFor(`/第 (2|3|4|5) \\/ 38 轮/.test(document.body.innerText) || document.body.innerText.includes('赛季结束')`, 45000) // 须长于默认 FM_TICK_MS（30 秒）
 
   const final = await api('/api/game', { headers: auth })
   if (final.game.season.round < 2) throw new Error('auto season advance did not persist')

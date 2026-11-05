@@ -4,7 +4,7 @@ import { canLearnSkill, SKILLS } from './data/skills.ts'
 import { derivedRng } from './rng.ts'
 
 /** Unmarked skills in legacy saves are silver. Original star skills should be marked at creation. */
-export function getSkillTier(player: Player, skillId: SkillId): SkillTier {
+export function getSkillTier(player: Pick<Player, 'skillTiers'>, skillId: SkillId): SkillTier {
   return player.skillTiers?.[skillId] ?? 'silver'
 }
 

@@ -1,4 +1,6 @@
-import type { SkillId, TraitEffect, TraitId } from '../types.ts'
+import type { BaseTraitId, SkillId, TraitEffect } from '../types.ts'
+
+export type { BaseTraitId }
 
 export type SkillCategory = 'main' | 'auxiliary'
 export const MAIN_SKILL_CAPACITY = 4
@@ -71,7 +73,7 @@ export const SKILLS: Record<SkillId, SkillDef> = {
   sweeper: {
     id: 'sweeper',
     name: '扫荡者',
-    desc: '作为实际拦截或抢断参与者时，改善夺球能力，但消耗更多体力。',
+    desc: '作为实际拦截或抢断参与者时，改善夺球能力。',
     condition: '实际参与抢断 / 拦截',
     cost: '中',
   },
@@ -115,15 +117,16 @@ export const SKILLS: Record<SkillId, SkillDef> = {
   },
 }
 
+/** 随机球员用的 20 个通用特性；真实球星用 star-traits.ts 里的专属特性。 */
 export type TraitDef = {
-  id: TraitId
+  id: BaseTraitId
   name: string
   desc: string
   effect: TraitEffect
   value: number
 }
 
-export const TRAITS: Record<TraitId, TraitDef> = {
+export const TRAITS: Record<BaseTraitId, TraitDef> = {
   metronome: { id: 'metronome', name: '节拍器', desc: '组织传球时视野更清晰', effect: 'vision', value: 6 },
   visionary: { id: 'visionary', name: '空间阅读者', desc: '识别向前线路时获得视野加成', effect: 'vision', value: 7 },
   cold_blood: { id: 'cold_blood', name: '冷血终结者', desc: '禁区内射门更冷静', effect: 'finishing', value: 7 },

@@ -47,8 +47,8 @@ describe('CA / PA 与初始数据', () => {
     }
     const ronaldo = stars.find((player) => player.name === 'C罗')!
     const yamal = stars.find((player) => player.name === '亚马尔')!
-    expect(ronaldo.pa).toBe(825.7)
-    expect(yamal.pa).toBe(706.7)
+    expect(ronaldo.pa).toBe(825.5)
+    expect(yamal.pa).toBe(706.9)
     expect(ronaldo.pa - caOf(ronaldo.attrs, false)).toBeGreaterThan(500)
     expect(yamal.pa - caOf(yamal.attrs, false)).toBeGreaterThan(400)
   })

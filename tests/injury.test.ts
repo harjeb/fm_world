@@ -129,7 +129,8 @@ describe('人物伤病', () => {
   })
 
   it('补赛按实际赛程记录伤病，一次或分批补算结果相同', () => {
-    const one = createInitialGame(15)
+    // 伤病很少见，这个种子的第一轮确实有人受伤。姓名池变了要重新找。
+    const one = createInitialGame(40)
     const batches = structuredClone(one)
     const start = one.season.startedAt
     catchUpSeason(one, start + 3 * ROUND_MS)

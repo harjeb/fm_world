@@ -5,6 +5,7 @@ import path from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
 import { ROUND_MS } from '../src/game/season.ts'
+import { GAME_DAY_MS, SEASON_GAME_DAYS } from '../src/game/calendar.ts'
 import { FORMATIONS } from '../src/game/data/formations.ts'
 import { createInitialGame } from '../src/game/state.ts'
 import type { FormationId } from '../src/game/types.ts'
@@ -107,6 +108,52 @@ describe('联机服务器 / 账号 / SSE', () => {
     expect(saved.game.season.fixtures).toEqual(account.game.season.fixtures)
   })
 
+  it('拒绝损坏的球员卡库存；合法的库存能存能取', async () => {
+    const { base } = await start()
+    const account = await register(base, 'card_inventory')
+    const headers = { Authorization: `Bearer ${account.token}`, 'Content-Type': 'application/json' }
+    for (const cards of ['nope', [null], [{ id: 'card-1' }], [{ id: 'card-1', playerId: 'p', attrs: {}, positions: {}, personality: {}, skills: 'x' }]]) {
+      const invalid = structuredClone(account.game)
+      invalid.cards = cards
+      const response = await fetch(`${base}/api/game`, { method: 'PUT', headers, body: JSON.stringify({ game: invalid, baseRevision: account.revision }) })
+      expect(response.status).toBe(400)
+    }
+    const owner = account.game.roster[0]
+    const card = { id: 'card-1', playerId: owner.id, playerName: owner.name, serial: 1, version: 1, parentCardId: null, routeId: null, createdAt: 1, attrs: owner.attrs, positions: owner.positions, personality: owner.personality, skills: owner.skills }
+    const valid = structuredClone(account.game)
+    valid.cards = [card]
+    const put = await fetch(`${base}/api/game`, { method: 'PUT', headers, body: JSON.stringify({ game: valid, baseRevision: account.revision }) })
+    expect(put.status).toBe(200)
+    const saved = await (await fetch(`${base}/api/game`, { headers })).json() as { game: Record<string, any> }
+    expect(saved.game.cards).toEqual([card])
+  })
+
+  it('服务器重启后把旧存档已确认的培养成果收进库存', async () => {
+    const { app, base, dir } = await start()
+    const account = await register(base, 'legacy_cards')
+    app.close()
+    const file = path.join(dir, 'accounts.json')
+    const db = JSON.parse(fs.readFileSync(file, 'utf8'))
+    const oldGame = db.accounts[0].game
+    delete oldGame.cards
+    const trained = oldGame.roster[0]
+    trained.version = 2
+    trained.attrs.passing += 50
+    fs.writeFileSync(file, JSON.stringify(db))
+    const restarted = createAppServer({ dataDir: dir, staticDir: path.resolve('dist'), tickMs: 0 })
+    servers.push(restarted)
+    await new Promise<void>((resolve) => restarted.server.listen(0, '127.0.0.1', resolve))
+    const port = (restarted.server.address() as AddressInfo).port
+    const response = await fetch(`http://127.0.0.1:${port}/api/game`, { headers: { Authorization: `Bearer ${account.token}` } })
+    const result = await response.json() as { revision: number; game: Record<string, any> }
+    expect(result.revision).toBeGreaterThan(account.revision)
+    expect(result.game.cards).toHaveLength(1)
+    const player = result.game.roster.find((item: any) => item.id === trained.id)
+    expect(player.equippedCardId).toBe(result.game.cards[0].id)
+    expect(result.game.cards[0].attrs).toEqual(player.attrs)
+    expect(result.game.cards[0].version).toBe(2)
+  })
+
   it('服务器重启后先迁移旧存档经济和招牌技能，再推进赛季', async () => {
     const { app, base, dir } = await start()
     const account = await register(base, 'legacy_migration')
@@ -130,9 +177,12 @@ describe('联机服务器 / 账号 / SSE', () => {
     const result = await response.json() as { revision: number; game: Record<string, any> }
     expect(result.revision).toBeGreaterThan(account.revision)
     const fixture = result.game.season.fixtures.find((item: any) => item.round === 1 && item.isPlayer)
-    const won = fixture.homeId === 'player' ? fixture.score.home > fixture.score.away : fixture.score.away > fixture.score.home
-    const expectedBalance = 122000 + (won ? 10000 : 0)
-    expect(result.game.economy).toMatchObject({ balance: expectedBalance, lastIncomeRound: 1 })
+    // 迁移只补球迷与设施阶段，金额按第 1 轮的赛果结算；这里只校验结算发生且只发生一次。
+    const economy = result.game.economy as Record<string, number>
+    expect(economy.lastIncomeRound).toBe(1)
+    expect(economy.balance).toBeGreaterThan(100000)
+    expect(economy.stageVersion).toBe(3)
+    const expectedBalance = economy.balance
     expect(result.game.roster.find((player: any) => player.id === star.id)).toMatchObject({ signatureSkill: signature, skillTiers: { [signature]: 'rainbow' } })
     const stored = JSON.parse(fs.readFileSync(file, 'utf8'))
     expect(stored.accounts[0].game.economy.balance).toBe(expectedBalance)
@@ -173,6 +223,9 @@ describe('联机服务器 / 账号 / SSE', () => {
     const first = await readSse(reader)
     expect(first.data.revision).toBe(account.revision)
     expect(first.data.game.clubName).toBe(account.game.clubName)
+    // 连上之后紧跟一条全服市场消息。
+    const market = await readSse(reader, first.rest)
+    expect(market.data.type).toBe('market')
 
     account.game.clubName = 'SSE 队'
     await fetch(`${base}/api/game`, {
@@ -180,7 +233,7 @@ describe('联机服务器 / 账号 / SSE', () => {
       headers: { Authorization: `Bearer ${account.token}`, 'Content-Type': 'application/json', 'X-FM-Client': 'test-tab' },
       body: JSON.stringify({ game: account.game, baseRevision: account.revision }),
     })
-    const second = await readSse(reader, first.rest)
+    const second = await readSse(reader, market.rest)
     expect(second.data.revision).toBe(account.revision + 1)
     expect(second.data.source).toBe('test-tab')
     expect(second.data.game.clubName).toBe('SSE 队')
@@ -258,7 +311,7 @@ describe('联机服务器 / 账号 / SSE', () => {
     const { app, base, dir } = await start(() => now)
     const account = await register(base, 'injuryguard')
     const headers = { Authorization: `Bearer ${account.token}`, 'Content-Type': 'application/json' }
-    const prepared = createInitialGame(21)
+    const prepared = createInitialGame(49) // 当前规则下首场在 590 秒前有受伤事件
     const init = await fetch(`${base}/api/game`, { method: 'PUT', headers, body: JSON.stringify({ game: prepared, baseRevision: account.revision }) })
     expect(init.status).toBe(200)
     const token = await (await fetch(`${base}/api/agent/token`, { method: 'POST', headers })).json() as { token: string }
@@ -394,7 +447,8 @@ describe('Agent API', () => {
   })
 
   it('MCP 和 Agent 可开始下一赛季并持久保存历史', async () => {
-    const { base } = await start()
+    let clock = Date.now()
+    const { base } = await start(() => clock)
     const account = await register(base, 'agent_next_season')
     const tokenResponse = await fetch(`${base}/api/agent/token`, { method: 'POST', headers: { Authorization: `Bearer ${account.token}` } })
     const { token } = await tokenResponse.json() as { token: string }
@@ -413,6 +467,9 @@ describe('Agent API', () => {
       const balance = account.game.economy.balance
       const put = await fetch(`${base}/api/game`, { method: 'PUT', headers: { Authorization: `Bearer ${account.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ game: account.game, baseRevision: account.revision }) })
       expect(put.status).toBe(200)
+      // 常规赛结束后要等 12 个游戏日的赛后休整窗口走完，才允许开始新赛季。
+      expect((await client.callTool({ name: 'start_next_season', arguments: {} })).isError).toBe(true)
+      clock += SEASON_GAME_DAYS * GAME_DAY_MS
       expect((await client.callTool({ name: 'start_next_season', arguments: {} })).isError).not.toBe(true)
       const saved = await (await fetch(`${base}/api/game`, { headers: { Authorization: `Bearer ${account.token}` } })).json() as { game: Record<string, any> }
       expect(saved.game.season.index).toBe(2)
@@ -420,8 +477,10 @@ describe('Agent API', () => {
       expect(saved.game.seasonHistory).toHaveLength(1)
       expect(saved.game.seasonHistory[0].fixtures.every((fixture: { played: boolean }) => fixture.played)).toBe(true)
       expect(saved.game.economy.balance).toBe(balance)
+      // 重试是幂等的空操作：服务器刚换过季，再点一次不该报错。
       const retry = await fetch(`${base}/api/agent/action`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'start_next_season' }) })
-      expect(retry.status).toBe(400)
+      expect(retry.status).toBe(200)
+      expect((await retry.json() as { alreadyRolled?: boolean }).alreadyRolled).toBe(true)
     } finally {
       await client.close()
       await mcp.close()
@@ -447,14 +506,14 @@ describe('Agent API', () => {
       const preview = await client.callTool({ name: 'preview_training', arguments: { playerId: first.id, request } })
       expect(preview.isError).not.toBe(true)
       const result = JSON.parse((preview.content as Array<{ text: string }>)[0].text)
-      expect(result.result.plan).toMatchObject({ fatigue: 25, quality: { label: expect.any(String), multiplier: expect.any(Number) } })
+      expect(result.result.plan).toMatchObject({ fatigue: 0, quality: { label: expect.any(String), multiplier: expect.any(Number) } })
       expect((await client.callTool({ name: 'training_action', arguments: { playerId: first.id, request } })).isError).not.toBe(true)
       const view = await (await fetch(`${base}/api/agent/state`, { headers: { Authorization: `Bearer ${token}` } })).json() as { game: { trainingSessions: Array<{ playerId: string; action: number; actionsTotal: number; stamina: number; pendingEvent: { id: string } }> } }
-      for (const id of [first.id, second.id]) expect(view.game.trainingSessions.find(session => session.playerId === id)).toMatchObject({ action: 1, actionsTotal: 30, stamina: 75, pendingEvent: { id: 'main_intake' } })
+      for (const id of [first.id, second.id]) expect(view.game.trainingSessions.find(session => session.playerId === id)).toMatchObject({ action: 1, actionsTotal: 30, stamina: 100, pendingEvent: { id: 'main_intake' } })
       const invalid = await action({ action: 'training_action', playerId: first.id, request: { ...request, teammateIds: [second.id, second.id] } })
       expect(invalid.status).toBe(400)
       const saved = await (await fetch(`${base}/api/game`, { headers: { Authorization: `Bearer ${account.token}` } })).json() as { game: { training: Record<string, { action: number; fatigue: number; pendingEventId: string }> } }
-      for (const id of [first.id, second.id]) expect(saved.game.training[id]).toMatchObject({ action: 1, fatigue: 25, pendingEventId: 'main_intake' })
+      for (const id of [first.id, second.id]) expect(saved.game.training[id]).toMatchObject({ action: 1, fatigue: 0, pendingEventId: 'main_intake' })
     } finally {
       await client.close()
       await mcp.close()

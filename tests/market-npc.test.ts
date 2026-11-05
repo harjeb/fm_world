@@ -53,9 +53,9 @@ describe('本地 NPC 报价', () => {
   it('建议价就是买家一口价，等于估值九折', () => {
     const g = game()
     const player = g.roster[0]
-    expect(suggestedPrice(player)).toBe(Math.round(playerMarketValue(player) * NPC_BID_RATIO))
-    expect(listPlayer(g, player.id, suggestedPrice(player)).ok).toBe(true)
-    const expected = suggestedPrice(player)
+    expect(suggestedPrice(g, player)).toBe(Math.round(playerMarketValue(player) * NPC_BID_RATIO))
+    expect(listPlayer(g, player.id, suggestedPrice(g, player)).ok).toBe(true)
+    const expected = suggestedPrice(g, player)
     expect(settleMarket(g, 1)).toBe(expected)
   })
 
@@ -85,21 +85,21 @@ describe('本地 NPC 报价', () => {
     expect(g.freeStars.some((item) => item.id === player.id)).toBe(false)
     expect(economyOf(g).balance).toBe(start - value)
     // 只有折价才卖得掉，卖价必然低于买入价 —— 循环越跑越亏
-    expect(suggestedPrice(player)).toBeLessThan(value)
+    expect(suggestedPrice(g, player)).toBeLessThan(value)
   })
 
   it('同一轮最多成交 NPC_MAX_DEALS 笔，且受买家预算约束', () => {
     const g = game()
     const listed = g.roster.slice(0, 6)
-    for (const player of listed) escrow(g, player, suggestedPrice(player))
+    for (const player of listed) escrow(g, player, suggestedPrice(g, player))
     const proceeds = settleMarket(g, 1)
     const sold = g.freeStars.filter((player) => listed.some((item) => item.id === player.id))
     expect(sold.length).toBeGreaterThan(0)
     expect(sold.length).toBeLessThanOrEqual(NPC_MAX_DEALS)
     expect(g.market!.listings).toHaveLength(listed.length - sold.length)
-    expect(proceeds).toBe(sold.reduce((sum, player) => sum + suggestedPrice(player), 0))
+    expect(proceeds).toBe(sold.reduce((sum, player) => sum + suggestedPrice(g, player), 0))
     // 第一笔可以突破预算，其余受 12 万预算约束
-    expect(proceeds).toBeLessThanOrEqual(Math.max(...sold.map(suggestedPrice)) + NPC_ROUND_BUDGET)
+    expect(proceeds).toBeLessThanOrEqual(Math.max(...sold.map((player) => suggestedPrice(g, player))) + NPC_ROUND_BUDGET)
   })
 
   it('同样的种子与轮次得到同样的成交结果', () => {

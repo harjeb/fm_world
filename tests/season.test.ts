@@ -194,7 +194,7 @@ describe('赛季与存档', () => {
     expect(loaded.training[first.id].stadiumLevel).toBeUndefined()
     expect(loaded.training[first.id].facilityLevels).toBeUndefined()
     expect(planTraining(loaded.training[first.id], { kind: 'drill', attr: 'passing' }).gains.passing!).toBeCloseTo(1)
-    expect(loaded.training[second.id].stadiumLevel).toBe(3)
+    expect(loaded.training[second.id].stadiumLevel).toBe(15)
   })
 
   it('本地旧存档立即持久化默认经济，避免已完成比赛的收入被跳过', () => {

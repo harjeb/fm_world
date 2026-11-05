@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { GAME_DAY_MS, ROUND_GAME_DAYS, ROUND_MS, elapsedGameDays, gameDayOfRound, kickoffAtForRound } from '../src/game/calendar.ts'
 import { createWorldGame } from '../src/game/world.ts'
-import { createSeason, roundKickoffAt, seasonDay } from '../src/game/season.ts'
+import { createSeason, dueRound, matchdayCountdown, nextMatchdayAt, roundKickoffAt, seasonDay } from '../src/game/season.ts'
 
 describe('赛季日历', () => {
   it('一轮 = 4 个游戏日 = 现实 24 小时', () => {
@@ -42,6 +42,17 @@ describe('赛季日历', () => {
     }
     expect(roundKickoffAt(game, 4)).toBe(kickoffAtForRound(startedAt, 4))
     expect(seasonDay(game, startedAt + 3 * GAME_DAY_MS)).toBe(4)
+  })
+
+  it('倒计时指向当前轮的结算时刻，也就是自动结算真正发生的时间', () => {
+    const startedAt = 1_700_000_000_000
+    const game = createWorldGame(1, undefined, '测试队', startedAt)
+    expect(game.season.round).toBe(1)
+    expect(nextMatchdayAt(game)).toBe(startedAt + ROUND_MS)
+    expect(matchdayCountdown(game, startedAt)).toBe('24 小时 0 分')
+    expect(matchdayCountdown(game, startedAt + ROUND_MS - 90 * 60 * 1000)).toBe('1 小时 30 分')
+    expect(dueRound(game, nextMatchdayAt(game) - 1)).toBe(1)
+    expect(dueRound(game, nextMatchdayAt(game))).toBe(2)
   })
 
   it('单人赛季与共享世界用同一套轮次节奏', () => {

@@ -42,7 +42,7 @@ export function validateAutoSubPlan(roster: Player[], lineup: Lineup, plan: unkn
       const incoming = roster.find(x => x.id === r.inId)
       const outgoing = roster.find(x => x.id === r.outId)
       const slot = FORMATIONS[lineup.formationId]?.slots.find(s => s.id === starter?.slotId)
-      if (!starter || !outgoing || !lineup.bench.includes(r.inId) || !incoming || !slot || !(incoming.positions[slot.position] > 0)) errors.push('首发、替补或位置不匹配')
+      if (!starter || !outgoing || !lineup.bench.includes(r.inId) || !incoming || !slot) errors.push('换下的球员要在首发里，换上的球员要在替补里')
     }
   } catch { errors.push('换人计划或阵容格式错误') }
   return errors

@@ -6,10 +6,14 @@ import { autoFillLineup, validateLineup } from './squad.ts'
 import { FORMATIONS } from './data/formations.ts'
 import { validateAutoSubPlan } from './match/management.ts'
 import { createSeason } from './season.ts'
+import { ensureWorldCalendar } from './world.ts'
 import { splitSeed } from './rng.ts'
 import { economyOf } from './economy.ts'
 import { addLegacySignature } from './data/players.ts'
+import { ensureCards } from './cards.ts'
+import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION, upgradeBurstAttr, upgradeNames, upgradeStarTraits } from './names.ts'
 
+// 游戏改名后仍沿用旧键，改了已有存档就读不到了。
 export const SAVE_KEY = 'fm-seven-a-side-save-v3'
 export const LEGACY_SAVE_KEY = 'fm-seven-a-side-save-v2'
 export const GAME_VERSION = 3
@@ -38,6 +42,10 @@ export function createInitialGame(seed?: number, clubName = '青石'): GameState
     lineup,
     training: {},
     candidates: {},
+    cards: [],
+    namesVersion: NAMES_VERSION,
+    traitsVersion: TRAITS_VERSION,
+    attrsVersion: ATTRS_VERSION,
     season: createSeason(gameSeed, aiTeams, playerTeam.name, startedAt),
     aiTeams,
     freeStars,
@@ -96,6 +104,7 @@ export function loadGame(): GameState | null {
       }
       parsed.season = division
       parsed.world.playerDivisionId = division.divisionId ?? parsed.world.playerDivisionId
+      ensureWorldCalendar(parsed.world)
       parsed.reserveStars ??= []
       parsed.suspensions ??= {}
       parsed.yellowCounts ??= {}
@@ -105,8 +114,12 @@ export function loadGame(): GameState | null {
     const signaturesAdded = upgradeLegacySignatures(parsed)
     const economyAdded = parsed.economy == null
     economyOf(parsed)
+    const cardsAdded = ensureCards(parsed)
+    const namesUpgraded = upgradeNames(parsed)
+    const traitsUpgraded = upgradeStarTraits(parsed)
+    const attrsUpgraded = upgradeBurstAttr(parsed)
     parsed.ui = parsed.ui ?? { screen: 'home' }
-    if (repaired || migrated || signaturesAdded || economyAdded) saveGame(parsed)
+    if (repaired || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded) saveGame(parsed)
     return parsed
   } catch {
     return null

@@ -1,4 +1,4 @@
-# 七人·青训经理 — 联机服务器镜像（Node + 静态站点同端口）
+# FM 世界 — 联机服务器镜像（Node + 静态站点同端口）
 # 目标：群晖 Container Manager / 任意 Docker 主机，配合 Cloudflare Tunnel 使用。
 
 FROM node:22-alpine AS build

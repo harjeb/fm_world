@@ -193,13 +193,13 @@ export const ROLES_BY_POSITION: Record<Position, RoleId[]> = {
   ST: ['st_finisher', 'st_target', 'st_runner'],
 }
 
-export function roleFit(playerAttrs: Record<string, number>, roleId: RoleId): number {
+/** playerIsGk 决定属性按哪种尺度换算；门将和外场互相客串时不能用职责的位置来判断。 */
+export function roleFit(playerAttrs: Record<string, number>, roleId: RoleId, playerIsGk = ROLES[roleId].position === 'GK'): number {
   const role = ROLES[roleId]
-  const gk = role.position === 'GK'
   let sum = 0
   let total = 0
   for (const [key, weight] of Object.entries(role.weights) as [AttrKey, number][]) {
-    sum += attrRating(key, playerAttrs[key] ?? 0, gk) * weight
+    sum += attrRating(key, playerAttrs[key] ?? 0, playerIsGk) * weight
     total += weight
   }
   return total > 0 ? sum / total : 0

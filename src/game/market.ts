@@ -4,18 +4,27 @@ import { attrMax, attrRating } from './scale.ts'
 import { autoFillLineup, repairLineup, validateLineup } from './squad.ts'
 import { wageForPlayer } from './world.ts'
 import { derivedRng } from './rng.ts'
+import { closeFinishedTraining, playerCards } from './cards.ts'
 
 type Market = NonNullable<GameState['market']>
 type Listing = Market['listings'][number]
 export type MarketOutcome = { ok: boolean; error?: string }
 
 /** A deterministic local NPC price based on the player's current attributes. */
-export function playerMarketValue(player: Player): number {
+export function playerMarketValue(player: Pick<Player, 'attrs' | 'positions'>): number {
   if (!player || !player.positions || !player.attrs) return 0
   const gk = player.positions.GK > 0
   if (ALL_ATTRIBUTES.some(key => !Number.isFinite(player.attrs[key]) || player.attrs[key] < 0 || player.attrs[key] > attrMax(key, gk))) return 0
   const values = ALL_ATTRIBUTES.map(key => attrRating(key, player.attrs[key], gk))
   return Math.max(1, Math.round(values.reduce((a, b) => a + b, 0) / values.length * 1000))
+}
+
+/**
+ * 这名球员的市场估值：按他身上的属性和他所有球员卡里最好的一套算。
+ * 挂牌和买回用同一个数，所以换一张弱卡挂牌、再低价买回不会多赚钱。
+ */
+export function bestMarketValue(game: Pick<GameState, 'cards'>, player: Player): number {
+  return playerCards(game, player.id).reduce((best, card) => Math.max(best, playerMarketValue(card)), playerMarketValue(player))
 }
 
 /** 本地 NPC 买家的预算上限：一轮最多花这么多，避免无脑倒卖把游戏刷成印钞机。 */
@@ -28,8 +37,8 @@ export const NPC_BID_RATIO = 0.9
 export const MAX_LISTING_RATIO = 1
 
 /** 建议挂牌价：按这个价挂等于买家一口价，必定成交。 */
-export function suggestedPrice(player: Player): number {
-  return Math.max(1, Math.round(playerMarketValue(player) * NPC_BID_RATIO))
+export function suggestedPrice(game: Pick<GameState, 'cards'>, player: Player): number {
+  return Math.max(1, Math.round(bestMarketValue(game, player) * NPC_BID_RATIO))
 }
 
 /**
@@ -63,6 +72,12 @@ function assignContract(game: GameState, player: Player): void {
   player.contract = { clubId: 'player', wage: wageForPlayer(player), expiresSeason: game.season.index + 3 }
 }
 
+/** 球员加入阵容并签合同。联机竞拍结算也走这里。 */
+export function joinRoster(game: GameState, player: Player): void {
+  game.roster.push(player)
+  assignContract(game, player)
+}
+
 // Validate the entire escrow before reading or changing any of it. Old saves have
 // no listedRound; those listings are eligible on the next unsettled round.
 function validMarket(market: Market | undefined): boolean {
@@ -93,7 +108,7 @@ export function buyFreeAgent(game: GameState, playerId: string): MarketOutcome {
   if (!validMarket(market) || !uniquePlayers(game, market)) return fail('市场数据无效或球员重复')
   const player = game.freeStars.find(p => p.id === playerId)
   if (!player) return fail('球员不存在')
-  const price = playerMarketValue(player)
+  const price = bestMarketValue(game, player)
   if (!positive(price)) return fail('无效的价格')
   if (!transferWindowOpen(game)) return fail('转会窗口已关闭')
   if (game.world && game.roster.length >= SQUAD_LIMIT) return fail('阵容已满（最多 25 人）')
@@ -114,11 +129,12 @@ export function listPlayer(game: GameState, playerId: string, price: number): Ma
   if (game.season.finished) return fail('赛季已结束，无法挂牌')
   const market = game.market
   if (!validMarket(market) || !uniquePlayers(game, market)) return fail('市场数据无效或球员重复')
-  if (game.training[playerId] || game.candidates[playerId]) return fail('该球员正在培养或有待确认候选')
+  const session = game.training[playerId]
+  if (session && !session.completed) return fail('该球员正在培养')
   if (market?.listings.some(l => l.player.id === playerId)) return fail('球员已挂牌')
   const player = game.roster.find(p => p.id === playerId)
   if (!player) return fail('球员不存在')
-  const value = playerMarketValue(player)
+  const value = bestMarketValue(game, player)
   if (!positive(value)) return fail('球员数据无效')
   if (price > value * MAX_LISTING_RATIO) {
     return fail(`要价不能高于估值 ${value.toLocaleString()}：买家只按估值折价收购，倒卖不会赚钱`)
@@ -129,6 +145,8 @@ export function listPlayer(game: GameState, playerId: string, price: number): Ma
   if (roster.length < 10) return fail('阵容必须保留至少 10 人')
   const repaired = repairLineup(roster, game.lineup)
   if (!validateLineup(roster, repaired.lineup).valid) return fail('挂牌后无法组成合法阵容')
+  // 培养刚结束的新卡已在库存；他的卡都留在库存，离队期间不能装备，回队后可以继续用。
+  closeFinishedTraining(game, playerId)
   game.roster = roster
   game.lineup = repaired.lineup
   if (game.autoSubs && (repaired.changed || game.autoSubs.timed.some(s => s.outId === playerId || s.inId === playerId))) delete game.autoSubs
@@ -163,7 +181,7 @@ export function settleMarket(game: GameState, round: number): number {
   for (const listing of market.listings) {
     if ((listing.listedRound ?? 1) > round) continue
     if (deals >= NPC_MAX_DEALS) break
-    const value = playerMarketValue(listing.player)
+    const value = bestMarketValue(game, listing.player)
     const chance = saleChance(listing.price, value)
     if (chance <= 0) continue
     // 预算按轮共享；第一笔不受预算限制，免得贵球员永远卖不掉。
@@ -192,13 +210,16 @@ export function buyFromClub(game: GameState, clubId: string, playerId: string): 
   const team = game.aiTeams.find((item) => item.id === clubId)
   const player = team?.players.find((item) => item.id === playerId)
   if (!team || !player) return fail('球员不在该球队')
-  const price = Math.round(playerMarketValue(player) * 1.5)
+  const price = Math.round(bestMarketValue(game, player) * 1.5)
   const economy = economyOf(game)
   if (!validBalance(economy.balance) || economy.balance < price) return fail('余额不足')
   economy.balance -= price
   team.players = team.players.filter((item) => item.id !== playerId)
   team.starPlayerIds = team.starPlayerIds.filter((id) => id !== playerId)
   team.playerNames = team.playerNames.filter((name) => name !== player.name)
+  // 下赛季 AI 球队按世界名单重建，这里不清掉他就会再出现一个。
+  const worldClub = game.world?.clubs.find((club) => club.id === clubId)
+  if (worldClub) worldClub.starPlayerIds = worldClub.starPlayerIds.filter((id) => id !== playerId)
   const repaired = repairLineup(team.players, team.lineup)
   if (validateLineup(team.players, repaired.lineup).valid) team.lineup = repaired.lineup
   game.roster.push(player)

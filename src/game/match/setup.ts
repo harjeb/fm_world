@@ -47,6 +47,8 @@ export function simulateAIvsAIState(home: AITeam, away: AITeam, seed: number, du
     knockout: false,
     durationSeconds,
     offside: false,
+    // 世界后台的批量比赛不需要球场回放，避免给每支 AI 队逐帧复制坐标。
+    recordPlayback: false,
   })
   prepareMatchInjuries(engine.state, injuries, now)
   return engine.simulate()
@@ -83,6 +85,7 @@ export function createMatchRecord(game: GameState, state: ReturnType<MatchEngine
     id: `m-${context.seed}-${context.isLeague ? `L${context.round ?? 0}` : 'C'}`,
     seed: context.seed,
     createdAt: Date.now(),
+    seasonIndex: game.season?.index ?? 1,
     durationSeconds: state.durationSeconds,
     isLeague: context.isLeague,
     round: context.round,
@@ -111,6 +114,38 @@ export function createMatchRecord(game: GameState, state: ReturnType<MatchEngine
 
 function cloneStats(stats: MatchTeamStats): MatchTeamStats {
   return { ...stats }
+}
+
+/**
+ * 从比赛状态里抽出本场进球/助攻，写进 Fixture 供射手榜统计。
+ * 用 sourceId（球员 ID），这样跨赛季对得回同一个人的数据。
+ */
+export function fixtureScorers(state: ReturnType<MatchEngine['serialize']>): {
+  scorers: { playerId: string; name: string; goals: number; teamId: string }[]
+  assisters: { playerId: string; name: string; assists: number; teamId: string }[]
+} {
+  const scorers = new Map<string, { playerId: string; name: string; goals: number; teamId: string }>()
+  const assisters = new Map<string, { playerId: string; name: string; assists: number; teamId: string }>()
+  for (const team of state.teams) {
+    for (const player of [...team.players, ...team.bench]) {
+      const id = player.stats.sourceId ?? player.sourceId
+      if (player.stats.goals > 0) {
+        const entry = scorers.get(id) ?? { playerId: id, name: player.name, goals: 0, teamId: team.id }
+        entry.goals += player.stats.goals
+        scorers.set(id, entry)
+      }
+      const assists = player.stats.assists ?? 0
+      if (assists > 0) {
+        const entry = assisters.get(id) ?? { playerId: id, name: player.name, assists: 0, teamId: team.id }
+        entry.assists += assists
+        assisters.set(id, entry)
+      }
+    }
+  }
+  return {
+    scorers: [...scorers.values()].sort((a, b) => b.goals - a.goals),
+    assisters: [...assisters.values()].sort((a, b) => b.assists - a.assists),
+  }
 }
 
 export function buildMatchEngineForGame(game: GameState, context: MatchContext, ai: AITeam, now = Date.now(), suspended?: Set<string>): MatchEngine {

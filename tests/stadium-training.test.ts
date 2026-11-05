@@ -8,15 +8,21 @@ import { EVENTS } from '../src/game/data/events.ts'
 describe('facility training growth', () => {
   it('adds exactly one category and stadium, in raw units', () => {
     const player = createInitialGame(4).roster.find(p => !p.positions.GK)!
-    const session = createTrainingSession(player, 8, { stadium: 2, academy: 3, medical: 3, shop: 4, sponsor: 5 })
+    const session = createTrainingSession(player, 8, { stadium: 10, academy: 15, medical: 15, shop: 20, sponsor: 25, psychology: 20, tactics: 25 })
     delete session.scheduleVersion
+    // 每级第 5 阶段是 100% 触发，所以这里就是旧等级模型下的满额加成。
     expect(facilityGrowthBonus(session, 'speed')).toBeCloseTo(19)
     expect(facilityGrowthBonus(session, 'passing')).toBeCloseTo(19)
     expect(facilityGrowthBonus(session, 'teamwork')).toBeCloseTo(24)
     expect(facilityGrowthBonus(session, 'vision')).toBeCloseTo(29)
     expect(facilityGrowthBonus(session, 'speed') - 4).toBeCloseTo(15)
+    // 前四个阶段按概率触发；roll 落在概率外就不给加成。
+    session.facilityLevels!.medical = 1
+    expect(facilityGrowthBonus(session, 'speed', { stadium: 0, category: 0 })).toBeCloseTo(9)
+    // 球场是第 10 阶段（第 2 级第 5 阶段，必触发），医疗第 1 阶段不触发时只剩球场加成。
+    expect(facilityGrowthBonus(session, 'speed', { stadium: 0.99, category: 0.99 })).toBe(4)
     session.facilityLevels!.medical = NaN
-    expect(facilityGrowthBonus(session, 'speed')).toBeCloseTo(9)
+    expect(facilityGrowthBonus(session, 'speed', { stadium: 0, category: 0 })).toBeCloseTo(9)
   })
 
   it('applies the full medical example through 18 actual speed drills with recovery', () => {
@@ -24,7 +30,7 @@ describe('facility training growth', () => {
     player.attrs.speed = 0
     player.attrs.acceleration = 0
     player.attrs.endurance = 0
-    const enhanced = createTrainingSession(player, 8, { stadium: 1, academy: 1, medical: 3, shop: 1, sponsor: 1 })
+    const enhanced = createTrainingSession(player, 8, { stadium: 5, academy: 5, medical: 15, shop: 5, sponsor: 5, psychology: 5, tactics: 5 })
     delete enhanced.scheduleVersion
     const old = structuredClone(enhanced)
     delete old.facilityLevels
@@ -52,7 +58,7 @@ describe('facility training growth', () => {
   it('applies facility bonuses independently to main and hidden combo gains', () => {
     const player = createInitialGame(4).roster.find(p => !p.positions.GK)!
     player.attrs.passing = 0; player.attrs.firstTouch = 0; player.attrs.teamwork = 0
-    const session = createTrainingSession(player, 8, { stadium: 1, academy: 3, medical: 1, shop: 1, sponsor: 1 })
+    const session = createTrainingSession(player, 8, { stadium: 5, academy: 15, medical: 5, shop: 5, sponsor: 5, psychology: 5, tactics: 5 })
     delete session.scheduleVersion
     const old = structuredClone(session)
     delete old.facilityLevels
@@ -85,7 +91,7 @@ describe('facility training growth', () => {
 
   it('applies event and mentor bonuses once and leaves old sessions bonus-free', () => {
     const player = createInitialGame(4).roster.find(p => !p.positions.GK)!
-    const session = createTrainingSession(player, 8, { stadium: 1, academy: 3, medical: 1, shop: 1, sponsor: 1 })
+    const session = createTrainingSession(player, 8, { stadium: 5, academy: 15, medical: 5, shop: 5, sponsor: 5, psychology: 5, tactics: 5 })
     delete session.scheduleVersion
     const old = structuredClone(session)
     delete old.facilityLevels
@@ -112,12 +118,12 @@ describe('facility training growth', () => {
     expect(startTraining(game, first.id, 11).ok).toBe(true)
     delete game.training[first.id].scheduleVersion
     const session = game.training[first.id]
-    expect(session.facilityLevels).toEqual({ stadium: 1, academy: 1, medical: 1, shop: 1, sponsor: 1 })
-    economy.stadium = 5; economy.medical = 3
+    expect(session.facilityLevels).toEqual({ stadium: 1, academy: 1, medical: 1, shop: 1, sponsor: 1, psychology: 1, tactics: 1 })
+    economy.stadium = 25; economy.medical = 15
     expect(session.facilityLevels!.stadium).toBe(1)
     expect(startTraining(game, second.id, 12).ok).toBe(true)
     delete game.training[second.id].scheduleVersion
-    expect(game.training[second.id].facilityLevels).toMatchObject({ stadium: 5, medical: 3 })
+    expect(game.training[second.id].facilityLevels).toMatchObject({ stadium: 25, medical: 15 })
     expect(trainingAction(game, first.id, { kind: 'drill', attr: 'passing' }).ok).toBe(true)
     expect(economy.balance).toBe(0)
   })

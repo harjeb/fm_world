@@ -1,7 +1,8 @@
 import type { AttrKey, Player, Position, SkillId, Tactics, TraitId, TrainingLogEntry } from '../game/types.ts'
 import { ATTR_META } from '../game/data/attributes.ts'
 import { ALL_ATTRIBUTES } from '../game/types.ts'
-import { SKILLS, TRAITS } from '../game/data/skills.ts'
+import { SKILLS } from '../game/data/skills.ts'
+import { traitNameOf } from '../game/data/star-traits.ts'
 import { caOf } from '../game/ca.ts'
 import { authoredGain, displayAttr, displayCA, displayGain, displayPA, isMainAttr } from '../game/rating.ts'
 import { formatGains } from '../game/training.ts'
@@ -43,12 +44,24 @@ export function trainingLogText(entry: TrainingLogEntry, gk: boolean): string {
   return text
 }
 
+/** 球场上和其他窄位置只放姓：拉斐尔·塞拉 → 塞拉。中日韩名字没有间隔号，原样显示。 */
+/** 竞拍倒计时：分:秒。到点后等服务器结算。 */
+export function countdownText(ms: number): string {
+  if (ms <= 0) return '结算中'
+  const seconds = Math.ceil(ms / 1000)
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+}
+
+export function shortName(name: string): string {
+  return name.split('·').pop() || name
+}
+
 export function skillName(id: SkillId): string {
   return SKILLS[id]?.name ?? id
 }
 
 export function traitName(id: TraitId): string {
-  return TRAITS[id]?.name ?? id
+  return traitNameOf(id)
 }
 
 export function positionLabel(pos: Position): string {
@@ -59,7 +72,7 @@ export function positionClass(pos: Position): string {
   return `pos-${pos.toLowerCase()}`
 }
 
-export function playerCA(player: Player): number {
+export function playerCA(player: Pick<Player, 'attrs' | 'positions'>): number {
   return displayCA(caOf(player.attrs, player.positions.GK > 0))
 }
 

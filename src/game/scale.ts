@@ -1,7 +1,7 @@
 import { GK_ATTRIBUTES, type AttrKey } from './types.ts'
 
 /** 存档中的主属性 0-1500，隐藏属性 0-20。 */
-export const MAIN_FIELD_ATTRS = ['passing', 'shooting', 'dribbling', 'tackling', 'strength', 'speed'] as const
+export const MAIN_FIELD_ATTRS = ['passing', 'shooting', 'dribbling', 'tackling', 'strength', 'speed', 'acceleration'] as const
 export const MAIN_GK_ATTRS = ['reflexes', 'handling', 'rushing', 'oneOnOne', 'passing', 'composure'] as const
 
 export const MAIN_ATTR_SCALE = 15

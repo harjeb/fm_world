@@ -85,7 +85,7 @@ export type TraitEffect =
   | 'link'
   | 'overlap'
 
-export type TraitId =
+export type BaseTraitId =
   | 'metronome'
   | 'visionary'
   | 'cold_blood'
@@ -106,6 +106,9 @@ export type TraitId =
   | 'anchor'
   | 'finisher'
   | 'enforcer'
+
+/** 球星专属特性的 id 是 star_ 加种子 id，比如 star_p001。 */
+export type TraitId = BaseTraitId | `star_${string}`
 
 export type StyleId =
   | 'gk_wall'
@@ -161,11 +164,17 @@ export type Player = {
   skills: SkillId[]
   skillTiers?: Partial<Record<SkillId, SkillTier>>
   signatureSkill?: SkillId
+  /** 0 表示身上是原始属性，否则等于已装备球员卡的 version。 */
   version: number
   history?: TrainingLogEntry[]
   baseAttrs: Attributes
   basePositions: PositionTable
   basePersonality: Personality
+  /** 第一次换上球员卡时记下的原始技能；此前 skills 本身就是原始技能。 */
+  baseSkills?: SkillId[]
+  baseSkillTiers?: Partial<Record<SkillId, SkillTier>>
+  /** 当前装备的球员卡；没有则使用原始属性。 */
+  equippedCardId?: string
   /** 赛季体能/状态，1-100；比赛开始时映射为初始体力。 */
   condition: number
   /** 训练精力，1-100；每次训练消耗，休息恢复。与比赛体力分离。 */
@@ -179,6 +188,31 @@ export type Player = {
   contract?: Contract
 }
 
+/**
+ * 球员卡：一轮培养的成果，属于某一名球员，生成后不再变化。
+ * 姓名、年龄、合同、体力、精力、伤病、停赛都在 Player 上，换卡不影响。
+ */
+export type PlayerCard = {
+  id: string
+  playerId: string
+  /** 球员离队后库存里仍要显示名字。 */
+  playerName: string
+  /** 玩家给这张卡起的名字；同一名球员的卡名不重复。 */
+  customName?: string
+  /** 这名球员的第几张卡，只用于显示。 */
+  serial: number
+  /** 新卡都是 1；旧存档里逐轮累积出来的成果会大于 1。 */
+  version: number
+  routeId: RouteId | null
+  createdAt: number
+  attrs: Attributes
+  positions: PositionTable
+  personality: Personality
+  skills: SkillId[]
+  skillTiers?: Partial<Record<SkillId, SkillTier>>
+  history?: TrainingLogEntry[]
+}
+
 export type Contract = {
   clubId: string
   /** 每轮工资。 */
@@ -188,7 +222,8 @@ export type Contract = {
 }
 
 export type TierId = 'champions' | 'division1' | 'division2'
-export type ConferenceId = 'north' | 'south'
+/** 二级联赛的赛区：north/south 是开局的南北两区，二级满员后服务器会开出 zone3、zone4…… */
+export type ConferenceId = 'north' | 'south' | `zone${number}`
 
 export type WorldClub = AITeamDef & {
   tier: TierId
@@ -196,11 +231,14 @@ export type WorldClub = AITeamDef & {
   starPlayerIds: string[]
   starCount: number
   isPlayer?: boolean
+  /** 被玩家接管后 id 会变成 player，开局名单仍按这支队原来的 id 生成，否则选哪支队都一样。 */
+  squadKey?: string
 }
 
 export type PromotionMatch = {
   id: string
-  stage: 'quarter' | 'semi' | 'third' | 'final'
+  /** qualifier=各区 2/3 名加赛，group=小组循环（瑞士轮），runnerup=小组第二再战，legacy 旧赛制用 quarter/semi/third/final。 */
+  stage: 'qualifier' | 'group' | 'runnerup' | 'quarter' | 'semi' | 'third' | 'final'
   homeId: string
   awayId: string
   score?: { home: number; away: number }
@@ -213,6 +251,10 @@ export type PromotionPlayoff = {
   matches: PromotionMatch[]
   promoted: string[]
   finished: boolean
+  /** 进入小组赛的两组球队。 */
+  groups?: string[][]
+  /** 小组第二再战那一组的球队。 */
+  runnerUps?: string[]
 }
 
 export type WorldSeasonSummary = {
@@ -226,6 +268,8 @@ export type WorldState = {
   version: 1
   seasonIndex: number
   seasonStartedAt: number
+  /** 游戏第一天对应的真实时间（2026/11/01）；旧存档缺省时由赛季开始时间推算。 */
+  calendarStartAt?: number
   clubs: WorldClub[]
   divisions: SeasonState[]
   playerDivisionId: string
@@ -267,6 +311,17 @@ export type Lineup = {
   starters: Starter[]
   bench: string[]
   tactics: Tactics
+  /** 玩家自己摆的位置（0–1 归一化坐标），key 是 starter.slotId。没摆过的位置用阵型默认值。 */
+  customPositions?: Record<string, { x: number; y: number }>
+  /** 玩家命名保存的战术配置。 */
+  presets?: TacticPreset[]
+}
+
+export type TacticPreset = {
+  id: string
+  name: string
+  createdAt: number
+  lineup: Omit<Lineup, 'presets'>
 }
 
 export type TrainingLogKind = 'action' | 'event' | 'test' | 'system'
@@ -301,8 +356,13 @@ export type TrainingSession = {
   candidate: Player
   academyLevel?: number
   stadiumLevel?: number
-  facilityLevels?: Pick<EconomyState, 'stadium' | 'academy' | 'medical' | 'shop' | 'sponsor'>
+  /** 培养快照里的设施阶段；旧存档/旧课程可能缺新增的两个设施。 */
+  facilityLevels?: Partial<Pick<EconomyState, FacilityId>>
+  /** 设施快照用的是“阶段”（1–25）还是旧存档的“等级”（1–5）。 */
+  facilityStageVersion?: number
   baseVersion: number
+  /** 培养完成后生成的球员卡。 */
+  cardId?: string
   /** 旧培养无此字段，仍按 18 次完成。 */
   actionsTotal?: number
   action: number
@@ -423,6 +483,8 @@ export type PlayerMatchStats = {
   passesCompleted: number
   shots: number
   goals: number
+  /** 助攻：进球前最后一次成功传球。旧战报没有这一项。 */
+  assists?: number
   tackles: number
   interceptions: number
   distance: number
@@ -478,6 +540,9 @@ export type GoalDetail = {
   situation: 'open' | 'penalty' | 'free_kick'
   chance?: ShotChanceType
   target: 'top_left' | 'top_center' | 'top_right' | 'bottom_left' | 'bottom_center' | 'bottom_right'
+  /** 助攻者；点球、单干或对方失误造成的进球没有。 */
+  assistId?: string
+  assistName?: string
 }
 
 export type CommentaryEntry = {
@@ -556,6 +621,8 @@ export type MatchRecord = {
   id: string
   seed: number
   createdAt: number
+  /** 这场比赛属于第几赛季；旧战报没有这一项，只用于球员数据统计。 */
+  seasonIndex?: number
   durationSeconds?: number
   isLeague: boolean
   round?: number
@@ -603,6 +670,11 @@ export type Fixture = {
   gameDay?: number
   kickoffAt?: number
   autoSimulated?: boolean
+  /** 本场进球与助攻（含 AI 对 AI），供射手榜/助攻榜统计。 */
+  scorers?: { playerId: string; name: string; goals: number; teamId?: string }[]
+  assisters?: { playerId: string; name: string; assists: number; teamId?: string }[]
+  /** 服务器共享世界中首次提交这场真实比赛的教练 ID。 */
+  reportedBy?: string
 }
 
 export type SeasonTableRow = {
@@ -637,6 +709,8 @@ export type SeasonState = {
 export type AITeamDef = {
   id: string
   name: string
+  /** 真实球队的英文名；冠军联赛的球队和自定义队名没有这一项。 */
+  enName?: string
   short: string
   color: string
   accent: string
@@ -657,15 +731,28 @@ export type AITeam = AITeamDef & {
   starCount?: number
 }
 
-export type FacilityId = 'stadium' | 'academy' | 'medical' | 'shop' | 'sponsor'
+export type FacilityId = 'stadium' | 'academy' | 'medical' | 'shop' | 'sponsor' | 'psychology' | 'tactics'
 
 export type EconomyState = {
   balance: number
+  /** 支持球队的球迷人数，随联赛赛果增长；旧存档由 economyOf 补齐。 */
+  fans: number
+  /** 最近一次结算的实际收入，供俱乐部界面显示。 */
+  lastRoundIncome?: number
+  lastFanChange?: number
+  /** 设施用的是“阶段”数值（1–25）；2 表示已从旧的 1–5 等级迁移过；3 加了心理/战术两座设施。 */
+  stageVersion?: number
   stadium: number
   academy: number
   medical: number
+  /** 球迷商店：只提高每轮收入，不再给属性成长。 */
   shop: number
+  /** 赞助商：只提高每轮收入，不再给属性成长。 */
   sponsor: number
+  /** 心理辅导室：团队合作、镇定、决断成长。 */
+  psychology: number
+  /** 战术研究室：视野、预判、无球跑动、防守站位成长。 */
+  tactics: number
   lastIncomeRound: number
 }
 
@@ -674,6 +761,8 @@ export type GameState = {
   createdAt: number
   seed: number
   clubName: string
+  /** 培养页的自动培养设置。 */
+  trainingAuto?: TrainingAutoConfig
   economy?: EconomyState
   market?: { listings: { player: Player; price: number; listedRound?: number }[]; lastSettledRound: number }
   roster: Player[]
@@ -681,10 +770,21 @@ export type GameState = {
   autoSubs?: AutoSubPlan
   training: Record<string, TrainingSession>
   injuries?: Record<string, number>
+  /** 培养结束、玩家还没决定是否换上的那一份；对应的卡已经在 cards 里。 */
   candidates: Record<string, Player>
+  /** 库存：培养出来的所有球员卡。 */
+  cards?: PlayerCard[]
+  cardSeq?: number
+  /** 存档里的名字用的是第几版命名，见 names.ts。 */
+  namesVersion?: number
+  /** 球星专属特性升级到了第几版，见 names.ts。 */
+  traitsVersion?: number
+  attrsVersion?: number
   season: SeasonState
   seasonHistory?: SeasonState[]
   aiTeams: AITeam[]
+  /** 电脑球队的钱、设施和培养成果；单机世界自己算，联机以服务器的为准。 */
+  aiClubs?: Record<string, AIClubState>
   freeStars: Player[]
   matchHistory: MatchRecord[]
   challengeHistory: MatchRecord[]
@@ -695,6 +795,26 @@ export type GameState = {
   suspensions?: Record<string, Suspension>
   yellowCounts?: Record<string, number>
   settings?: GameSettings
+}
+
+/** 电脑球队练出来的一张卡：属性是绝对值，评分最高的那张才会被留下。 */
+export type AICard = {
+  /** 1500 分制的能力评分，和属性一起变；只有更高分的新卡才会替换旧卡。 */
+  rating: number
+  attrs: Attributes
+}
+
+/** 一支电脑球队的经营状态。设施同样是 1–25 阶段，和玩家的经济系统共用一套函数。 */
+export type AIClubState = {
+  economy: EconomyState
+  /** 还没兑现的培养名额（按游戏日累计的小数）。 */
+  progress: number
+  /** 阵容槽位（0 起）上最强的那张卡。 */
+  cards: Record<string, AICard>
+  /** 从转会市场签下、下一场比赛起可以出场的球员。 */
+  signings: Player[]
+  trained: number
+  upgrades: number
 }
 
 export type MatchContext = {
@@ -722,4 +842,14 @@ export type ReviewRecommendation = {
   title: string
   detail: string
   tone: 'good' | 'warn' | 'bad'
+}
+
+/** 自动培养：按属性优先级练，或者把主属性练到最低目标。 */
+export type TrainingAutoConfig = {
+  enabled: boolean
+  mode: 'priority' | 'targets'
+  /** 属性优先级，靠前的先练。 */
+  priority: AttrKey[]
+  /** 最低目标（存档值 0–1500）；没达到就优先安排对应训练。 */
+  targets: Partial<Record<AttrKey, number>>
 }

@@ -18,7 +18,8 @@ import { SKILLS, canLearnSkill } from './data/skills.ts'
 import { applyGains, attrText, caOf, isGoalkeeper } from './ca.ts'
 import { derivedRng } from './rng.ts'
 import { PLAYER_COUNT } from './data/players.ts'
-import { repairLineup } from './squad.ts'
+import { FACILITY_STAGE_VERSION, MAX_FACILITY_LEVEL, MAX_FACILITY_STAGE, STAGES_PER_LEVEL, facilityLevel, facilityStageChance, type FacilityId } from './economy.ts'
+import { addTrainedCard, closeFinishedTraining, deleteCard, equipCard } from './cards.ts'
 import { attrLimit, attrMax, attrRating, MAIN_ATTR_MAX, displayGain, isMainAttr, scaleAuthoredGains } from './rating.ts'
 import { inheritanceChances, mentorSkill, validateInheritance } from './inheritance.ts'
 import { trainingDate, trainingLowMood, trainingOptions, type TrainingActivityId } from './training-calendar.ts'
@@ -108,8 +109,14 @@ function sessionWeek(session: TrainingSession, action: number): number {
   return session.scheduleVersion === 1 ? trainingDate(action).week : weekOfAction(action)
 }
 
-export function createTrainingSession(player: Player, seed: number, snapshot: TrainingSession['facilityLevels'] | number = { stadium: 1, academy: 1, medical: 1, shop: 1, sponsor: 1 }, stadiumLevel = 1): TrainingSession {
-  const levels = typeof snapshot === 'number' ? { stadium: stadiumLevel, academy: snapshot, medical: 1, shop: 1, sponsor: 1 } : snapshot!
+/** 没有显式快照时的默认阶段：1 级满阶段，保留旧课程测试的满额加成。 */
+const DEFAULT_STAGE = STAGES_PER_LEVEL
+
+export function createTrainingSession(player: Player, seed: number, snapshot: TrainingSession['facilityLevels'] | number = { stadium: DEFAULT_STAGE, academy: DEFAULT_STAGE, medical: DEFAULT_STAGE, shop: DEFAULT_STAGE, sponsor: DEFAULT_STAGE, psychology: DEFAULT_STAGE, tactics: DEFAULT_STAGE }, stadiumLevel = 1): TrainingSession {
+  // 旧的三参数写法传的是等级，换算成阶段后与新的存档格式一致。
+  const levels = typeof snapshot === 'number'
+    ? { stadium: stadiumLevel * STAGES_PER_LEVEL, academy: snapshot * STAGES_PER_LEVEL, medical: DEFAULT_STAGE, shop: DEFAULT_STAGE, sponsor: DEFAULT_STAGE, psychology: DEFAULT_STAGE, tactics: DEFAULT_STAGE }
+    : snapshot!
   const candidate: Player = {
     ...player,
     attrs: { ...player.attrs },
@@ -131,6 +138,7 @@ export function createTrainingSession(player: Player, seed: number, snapshot: Tr
     seed,
     candidate,
     facilityLevels: { ...levels },
+    facilityStageVersion: FACILITY_STAGE_VERSION,
     academyLevel: levels.academy,
     stadiumLevel: levels.stadium,
     baseVersion: player.version,
@@ -154,7 +162,7 @@ export function createTrainingSession(player: Player, seed: number, snapshot: Tr
         week: 1,
         kind: 'system',
         title: '开始新一轮培养',
-        text: '从当前能力继续培养。本轮 30 个半天，共 15 天；每周一上午交流赛，周五上午队内比赛、下午恢复。旧成品仍可上场，结束后再决定是否替换。主属性最高为 1500。',
+        text: '从原始属性开始培养。本轮 30 个半天，共 15 天；每周一上午交流赛，周五上午队内比赛、下午恢复。结束后产出一张新卡进入库存，和之前的卡互不影响。主属性最高为 1500。',
       },
     ],
     completed: false,
@@ -170,18 +178,55 @@ function actionRng(session: TrainingSession, nextAction: number, label: string) 
   return derivedRng(session.seed, 'training-action', session.playerId, nextAction, label)
 }
 
-const FACILITY_CATEGORY: Record<AttrKey, 'medical' | 'academy' | 'shop' | 'sponsor'> = {
+const FACILITY_CATEGORY: Record<AttrKey, 'medical' | 'academy' | 'psychology' | 'tactics'> = {
   acceleration: 'medical', speed: 'medical', agility: 'medical', strength: 'medical', endurance: 'medical',
   passing: 'academy', firstTouch: 'academy', dribbling: 'academy', shooting: 'academy', tackling: 'academy', heading: 'academy', reflexes: 'academy', handling: 'academy', rushing: 'academy', oneOnOne: 'academy',
-  teamwork: 'shop', composure: 'shop', decisions: 'shop',
-  vision: 'sponsor', anticipation: 'sponsor', offBall: 'sponsor', defPos: 'sponsor',
+  teamwork: 'psychology', composure: 'psychology', decisions: 'psychology',
+  vision: 'tactics', anticipation: 'tactics', offBall: 'tactics', defPos: 'tactics',
 }
 
-export function facilityGrowthBonus(session: TrainingSession, key: AttrKey): number {
+const FACILITY_IDS: FacilityId[] = ['stadium', 'academy', 'medical', 'shop', 'sponsor', 'psychology', 'tactics']
+
+/** 旧培养快照存的是 1–5 级，就地换成阶段，保留原有等级与满级加成。 */
+function stageSnapshot(session: TrainingSession): TrainingSession['facilityLevels'] {
   const levels = session.facilityLevels
+  if (!levels) return undefined
+  if (session.facilityStageVersion !== FACILITY_STAGE_VERSION) {
+    for (const id of FACILITY_IDS) {
+      if (id === 'psychology' || id === 'tactics') continue
+      const value = levels[id]
+      const legacy = Number.isInteger(value) && (value as number) >= 1 && (value as number) <= MAX_FACILITY_LEVEL ? (value as number) : 1
+      levels[id] = Math.min(MAX_FACILITY_STAGE, legacy * STAGES_PER_LEVEL)
+    }
+    // 旧培养快照里的商店/赞助商同时包含培养加成，拆出来以后由新设施继承。
+    levels.psychology ??= levels.shop
+    levels.tactics ??= levels.sponsor
+    session.facilityStageVersion = FACILITY_STAGE_VERSION
+  }
+  return levels
+}
+
+export type FacilityRolls = { stadium: number; category: number }
+
+/**
+ * 设施提供的成长加成。阶段 1–5 依次有 20%/40%/60%/80%/100% 的概率触发，
+ * 因此没触发时这次行动就没有建筑加成；等级决定加成数值。
+ */
+export function facilityGrowthBonus(session: TrainingSession, key: AttrKey, rolls?: FacilityRolls): number {
+  const levels = stageSnapshot(session)
   if (!levels) return 0 // Old in-progress saves have no facility snapshot.
-  const level = (value: number) => Number.isInteger(value) && value >= 1 && value <= 5 ? value : 1
-  return 2 * level(levels.stadium) + 5 * level(levels[FACILITY_CATEGORY[key]])
+  const category = FACILITY_CATEGORY[key]
+  const roll = (id: FacilityId, slot: keyof FacilityRolls): number => rolls
+    ? rolls[slot]
+    : derivedRng(session.seed, 'facility-bonus', session.playerId, session.action + 1, key, id).float()
+  const stadiumStage = levels.stadium
+  const categoryStage = levels[category]
+  // 旧课程快照里可能没有新增设施：那种情况只算球场。
+  if (stadiumStage === undefined) return 0
+  const stadium = roll('stadium', 'stadium') < facilityStageChance(stadiumStage) ? 2 * facilityLevel(stadiumStage) : 0
+  if (categoryStage === undefined) return stadium
+  const bonus = roll(category, 'category') < facilityStageChance(categoryStage) ? 5 * facilityLevel(categoryStage) : 0
+  return stadium + bonus
 }
 
 function trainingCeilings(session: TrainingSession): Player['ceilings'] {
@@ -244,7 +289,7 @@ export function planTraining(session: TrainingSession, request: TrainingRequest,
       activity.id === 'match' || activity.id === 'exchange' ? { kind: 'match' } : undefined
     if (legacy) {
       const plan = planLegacyTraining(session, legacy, mentor, teammateCount)
-      return { ...plan, label: activity.label, text: activity.desc }
+      return { ...plan, label: activity.label, text: activity.desc, ...(activity.noRecovery ? { fatigue: 0, note: undefined } : {}) }
     }
     const cost = activity.cost!
     if (session.fatigue + cost > 100) return emptyPlan(activity.label, `训练体力不足，需要 ${cost} 点，请先休息。`, before)
@@ -263,8 +308,8 @@ function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingR
   const before = caOf(session.candidate.attrs, isGk)
   const requestedCost = request.kind === 'drill' ? 12 : request.kind === 'combo' ? 16 : request.kind === 'match' ? 25 :
     request.kind === 'position' || request.kind === 'protection' || request.kind === 'inherit' ? 8 : 0
-  // Mandatory matches remain playable even if an event exhausted the player just before kickoff.
-  const cost = session.scheduleVersion === 1 && request.kind === 'match' ? Math.min(requestedCost, 100 - session.fatigue) : requestedCost
+  // 新课程里的交流赛和队内比赛是必须参加的，不消耗训练体力；作为交换，周五下午的休整不恢复体力。
+  const cost = session.scheduleVersion === 1 && request.kind === 'match' ? 0 : requestedCost
   if (session.fatigue + cost > 100) return emptyPlan('训练体力不足', `训练体力不足，需要 ${cost} 点，请先休息。`, before)
   if (request.kind === 'drill') {
     const attr = request.attr
@@ -839,34 +884,36 @@ function completeSession(session: TrainingSession): void {
     week: sessionWeek(session, trainingActionsTotal(session)),
     kind: 'system',
     title: '培养完成',
-    text: `${trainingActionsTotal(session)} 次行动结束。候选成品已生成，旧成品仍在阵容中；确认前不会替换。`,
+    text: `${trainingActionsTotal(session)} 次行动结束。新球员卡已进入库存，换上之前球员仍使用原来的卡。`,
   })
 }
 
-export function confirmCandidate(game: GameState, playerId: string): { ok: boolean; error?: string; replaced?: Player; lineupRepaired?: boolean } {
-  const candidate = game.candidates[playerId]
-  if (!candidate) return { ok: false, error: '没有待确认的候选成品' }
-  const index = game.roster.findIndex((player) => player.id === playerId)
-  if (index < 0) return { ok: false, error: '原球员不存在' }
+/** 培养结果页的“装备新卡”：换上刚练出来的卡并收起结果页。 */
+export function confirmCandidate(game: GameState, playerId: string): { ok: boolean; error?: string; replaced?: Player } {
   const session = game.training[playerId]
-  const replaced: Player = {
-    ...candidate,
-    energy: game.roster[index].energy,
-    condition: game.roster[index].condition,
-    history: session?.log ?? game.roster[index].history,
-  }
-  game.roster[index] = replaced
-  delete game.candidates[playerId]
-  delete game.training[playerId]
-  const repaired = repairLineup(game.roster, game.lineup)
-  if (repaired.changed) game.lineup = repaired.lineup
-  return { ok: true, replaced, lineupRepaired: repaired.changed }
+  if (!game.candidates[playerId] || !session) return { ok: false, error: '没有刚完成培养的新卡' }
+  const player = game.roster.find((item) => item.id === playerId)
+  if (!player) return { ok: false, error: '原球员不存在' }
+  const card = addTrainedCard(game, session)
+  const result = equipCard(game, playerId, card.id)
+  if (!result.ok) return result
+  closeFinishedTraining(game, playerId)
+  return { ok: true, replaced: player }
 }
 
+/** 培养结果页的“丢弃”：这张新卡不要了，球员继续用原来的卡。 */
 export function discardCandidate(game: GameState, playerId: string): { ok: boolean; error?: string } {
-  if (!game.candidates[playerId]) return { ok: false, error: '没有待确认的候选成品' }
-  delete game.candidates[playerId]
-  delete game.training[playerId]
+  const session = game.training[playerId]
+  if (!game.candidates[playerId] || !session) return { ok: false, error: '没有刚完成培养的新卡' }
+  return deleteCard(game, addTrainedCard(game, session).id)
+}
+
+/** 培养结果页的“留在库存”：卡已入库，球员继续用原来的卡。 */
+export function keepCandidate(game: GameState, playerId: string): { ok: boolean; error?: string } {
+  const session = game.training[playerId]
+  if (!game.candidates[playerId] || !session) return { ok: false, error: '没有刚完成培养的新卡' }
+  addTrainedCard(game, session)
+  closeFinishedTraining(game, playerId)
   return { ok: true }
 }
 

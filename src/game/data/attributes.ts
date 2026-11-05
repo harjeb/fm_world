@@ -23,7 +23,7 @@ export const ATTR_META: Record<AttrKey, AttrMeta> = {
   anticipation: { key: 'anticipation', label: '预判', short: '预', group: '精神', desc: '判断落点、运动趋势和拦截时机' },
   composure: { key: 'composure', label: '镇定', short: '定', group: '精神', desc: '受压、单刀等场景下的技术稳定性' },
   teamwork: { key: 'teamwork', label: '团队合作', short: '团', group: '精神', desc: '按职责接应、补位和留后，而非只追球' },
-  acceleration: { key: 'acceleration', label: '加速', short: '加', group: '身体', desc: '短距离起步和追上第一步' },
+  acceleration: { key: 'acceleration', label: '爆发', short: '爆', group: '身体', desc: '短距离起步、第一步和摆脱时的瞬间加速' },
   speed: { key: 'speed', label: '速度', short: '速', group: '身体', desc: '持续冲刺的最高移动速度' },
   agility: { key: 'agility', label: '灵活', short: '灵', group: '身体', desc: '转身与变向，避免速度快却转不过身' },
   strength: { key: 'strength', label: '力量', short: '力', group: '身体', desc: '护球、身体争抢和对抗中的稳定性' },

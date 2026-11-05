@@ -1,14 +1,15 @@
 import type { AITeam, Fixture, GameState, MatchContext, MatchRecord, SeasonState, SeasonTableRow } from './types.ts'
 import { splitSeed } from './rng.ts'
-import { buildMatchEngineForGame, createMatchRecord, simulateAIvsAIState } from './match/setup.ts'
+import { buildMatchEngineForGame, createMatchRecord, fixtureScorers, simulateAIvsAIState } from './match/setup.ts'
 import { MatchEngine } from './match/engine.ts'
 import { ENERGY_RECOVERY_PER_GAME_DAY } from './training.ts'
-import { GAME_DAY_MS, ROUND_GAME_DAYS, ROUND_MS, elapsedGameDays, gameDayOfRound, kickoffAtForRound } from './calendar.ts'
+import { GAME_DAY_MS, ROUND_GAME_DAYS, ROUND_MS, elapsedGameDays, gameDayOfRound, kickoffAtForRound, seasonEndAt } from './calendar.ts'
 import { recordMatchInjuries } from './injury.ts'
 import { awardRoundIncome, economyOf } from './economy.ts'
 import { playerMarketValue, settleMarket } from './market.ts'
 import { LOGIC_MATCH_SECONDS } from './match/time.ts'
-import { advanceWorldSeason, simulateOtherDivisions, syncPlayerDivision, payWorldWages } from './world.ts'
+import { advanceWorldSeason, ensurePromotionPlayoff, simulateOtherDivisions, syncPlayerDivision, payWorldWages } from './world.ts'
+import { runAIClubs } from './ai-club.ts'
 import { recordMatchDiscipline, serveSuspensions, suspendedPlayerIds } from './discipline.ts'
 
 export const PLAYER_TEAM_ID = 'player'
@@ -180,6 +181,8 @@ export function updateSeasonTable(game: GameState): void {
   if (allPlayed) {
     game.season.champion = game.season.table[0]?.teamId ?? null
     game.season.playerFinish = game.season.table.findIndex((row) => row.teamId === PLAYER_TEAM_ID) + 1
+    // 常规赛一结束就把升级杯算好，赛后休整期间世界页能看到赛果。
+    ensurePromotionPlayoff(game)
   }
 }
 
@@ -208,8 +211,25 @@ export function roundKickoffAt(game: GameState, round = game.season.round): numb
   return kickoffAtForRound(game.season.startedAt, round)
 }
 
+/** 当前轮的结算时刻，也就是下一轮开赛的时刻。 */
 export function nextMatchdayAt(game: GameState): number {
-  return roundKickoffAt(game, game.season.round)
+  return roundKickoffAt(game, game.season.round + 1)
+}
+
+/** 赛后休整还要多久（升级附加赛窗口）。 */
+export function nextSeasonCountdown(game: GameState, now = Date.now()): string {
+  const diff = Math.max(0, seasonEndAt(game.season.startedAt) - now)
+  const days = Math.floor(diff / GAME_DAY_MS)
+  const hours = Math.floor((diff % GAME_DAY_MS) / 3_600_000)
+  const minutes = Math.floor((diff % 3_600_000) / 60_000)
+  if (days > 0) return `${days} 天 ${hours} 小时`
+  if (hours > 0) return `${hours} 小时 ${minutes} 分`
+  return `${minutes} 分钟`
+}
+
+/** 赛季结束后是否还在赛后休整窗口里（这期间只能踢友谊赛）。 */
+export function inPostseason(game: GameState, now = Date.now()): boolean {
+  return game.season.finished && now < seasonEndAt(game.season.startedAt)
 }
 
 export function matchdayCountdown(game: GameState, now = Date.now()): string {
@@ -265,6 +285,9 @@ export function simulateFixture(game: GameState, fixture: Fixture, auto = false,
   fixture.played = true
   fixture.score = { ...record.score }
   fixture.matchId = record.id
+  const tally = fixtureScorers(state)
+  fixture.scorers = tally.scorers
+  fixture.assisters = tally.assisters
   if (auto) fixture.autoSimulated = true
   applyMatchConditions(game, record.playerStats)
   return record
@@ -282,6 +305,9 @@ export function simulateAIFixturesInRound(game: GameState, round = game.season.r
     recordMatchDiscipline(game, state)
     fixture.score = { home: state.score.home, away: state.score.away }
     fixture.played = true
+    const tally = fixtureScorers(state)
+    fixture.scorers = tally.scorers
+    fixture.assisters = tally.assisters
     const record = createMatchRecord(game, state, {
       isLeague: true,
       round,
@@ -316,6 +342,7 @@ export function catchUpSeason(game: GameState, now = Date.now()): { advanced: nu
     if (!isRoundComplete(game, round)) break
     awardRoundIncome(game, round)
     settleMarket(game, round)
+    runAIClubs(game, round)
     if (game.world) {
       simulateOtherDivisions(game, round)
       payWorldWages(game, round)
@@ -346,6 +373,7 @@ export function advanceSeasonRound(game: GameState, now = Date.now()): { ok: boo
   if (!isRoundComplete(game, round)) return { ok: false, error: '本轮仍有比赛未完成' }
   awardRoundIncome(game, round)
   settleMarket(game, round)
+  runAIClubs(game, round)
   if (game.world) {
     simulateOtherDivisions(game, round)
     payWorldWages(game, round)
@@ -378,6 +406,35 @@ export function startLeagueMatch(game: GameState, now = Date.now()): { ok: boole
     opponentName: ai.name,
     seed: splitSeed(game.season.seed, `league-${game.season.round}-${ai.id}`),
     homeAway: fixture.homeId === PLAYER_TEAM_ID ? 'home' : 'away',
+    durationSeconds: LEAGUE_MATCH_SECONDS,
+    offside: game.settings?.offside ?? true,
+  }
+  const engine = buildMatchEngineForGame(game, context, ai, now)
+  game.activeMatch = {
+    context,
+    engineState: engine.serialize(),
+    instructions: [],
+    lineup: structuredClone(game.lineup),
+    startedAt: now,
+    coachPausesLeft: 3,
+  }
+  return { ok: true, context }
+}
+
+/** 任意一支球队的友谊赛；赛季休整期间也可以约世界里的其他球队。 */
+export function startChallengeAgainstTeam(
+  game: GameState,
+  ai: AITeam,
+  seed: number,
+  now = Date.now(),
+): { ok: boolean; error?: string; context?: MatchContext } {
+  if (game.activeMatch) return { ok: false, error: '已有进行中的比赛' }
+  const context: MatchContext = {
+    isLeague: false,
+    opponentId: ai.id,
+    opponentName: ai.name,
+    seed,
+    homeAway: 'home',
     durationSeconds: LEAGUE_MATCH_SECONDS,
     offside: game.settings?.offside ?? true,
   }
@@ -434,6 +491,9 @@ export function finishActiveMatch(game: GameState, engine: MatchEngine, now = Da
       fixture.played = true
       fixture.score = { ...record.score }
       fixture.matchId = record.id
+      const tally = fixtureScorers(state)
+      fixture.scorers = tally.scorers
+      fixture.assisters = tally.assisters
     }
     game.matchHistory.unshift(record)
     simulateAIFixturesInRound(game, round, active.startedAt, true)

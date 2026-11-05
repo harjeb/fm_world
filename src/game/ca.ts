@@ -128,7 +128,7 @@ export function effectiveAttr(
   key: AttrKey,
   isGk: boolean,
 ): number {
-  const k = key === 'endurance' ? 0 : isPhysical(key) ? 0.25 : 0.1
+  const k = key === 'endurance' ? 0 : isPhysical(key) ? 0.75 : 0.5
   const fatigue = 1 - k * (1 - Math.max(0, Math.min(1, staminaRatio)))
   const m = positionMultiplier(proficiency)
   return Math.max(1, Math.min(100, attrs[key] * fatigue * m))
