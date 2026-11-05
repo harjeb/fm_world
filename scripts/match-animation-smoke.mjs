@@ -97,14 +97,15 @@ try {
   await waitFor(`!!document.querySelector('#pitch')`)
   await evaluate(`window.__pitch = document.querySelector('#pitch'); true`)
   await waitFor(`(async () => { const {ui} = await import('/src/ui/state.ts'); return ui.matchPlaying })()`)
-  await sleep(5000)
+  // 正常档一场约 10 分钟，12 秒大约走 4–5 个动作。
+  await sleep(12000)
   const motion = await evaluate(`(async () => {
     const {ui} = await import('/src/ui/state.ts');
     const {pitchMotionTicks} = await import('/src/ui/pitch-canvas.ts');
     return { steps: ui.matchEngine.state.step, draws: window.__motion.length, uniqueBall: new Set(window.__motion.map(p => p.x.toFixed(2) + ':' + p.y.toFixed(2))).size, sameCanvas: window.__pitch === document.querySelector('#pitch'), ticks: pitchMotionTicks() };
   })()`)
-  assert(motion.steps >= 5, `not enough engine steps: ${JSON.stringify(motion)}`)
-  assert(motion.draws > motion.steps * 5, `animation still tied to engine steps: ${JSON.stringify(motion)}`)
+  assert(motion.steps >= 3, `not enough engine steps: ${JSON.stringify(motion)}`)
+  assert(motion.draws > motion.steps * 20, `animation still tied to engine steps: ${JSON.stringify(motion)}`)
   assert(motion.uniqueBall > 20, `ball is not moving continuously: ${JSON.stringify(motion)}`)
   assert(motion.sameCanvas, 'DOM render replaced the canvas')
   const speeds = await evaluate(`(async () => {
@@ -125,8 +126,8 @@ try {
   assert(speeds.points >= 14, `motion layer is not tracking all players: ${JSON.stringify(speeds)}`)
   assert(speeds.top > 0.8, `players are not moving: ${JSON.stringify(speeds)}`)
   assert(speeds.still >= 1, `everyone moves at the same time, no shape: ${JSON.stringify(speeds)}`)
-  // 10 Hz 运动层：5 秒正常播放应推进约 50 个 tick（允许首帧和暂停前后有少量误差）。
-  assert(motion.ticks >= 30 && motion.ticks <= 70, `motion layer did not tick at 10 Hz: ${JSON.stringify(motion)}`)
+  // 运动层按“比赛时间”10 Hz 推进：正常档 12 秒 ≈ 180 tick（倍速 1.5 左右）。
+  assert(motion.ticks >= 60 && motion.ticks <= 400, `motion layer did not tick with playback speed: ${JSON.stringify(motion)}`)
 
   await click('[data-action="match-toggle"]')
   const paused = await evaluate(`(async () => { const {ui} = await import('/src/ui/state.ts'); const {pitchMotionTicks} = await import('/src/ui/pitch-canvas.ts'); return {step:ui.matchEngine.state.step, point:window.__motion.at(-1), ticks: pitchMotionTicks()} })()`)
@@ -157,6 +158,7 @@ try {
     ui.matchEngine = MatchEngine.restore(before, true);
     game.activeMatch.engineState = before;
     ui.matchStepMs = 80;
+    ui.matchSpeed = 300; // 终场动作用一个快档播完，别让冒烟测试等 10 分钟的比赛节奏
     ui.coachPanel = false;
     ui.matchPlaying = false;
     return true;

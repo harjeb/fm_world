@@ -250,6 +250,47 @@ export class MotionField {
   }
 }
 
+/**
+ * 运动层的时钟：把“现实时间 × 播放倍速”折算成比赛里的 10 Hz tick。
+ *
+ * 这一点很关键：慢放的 1 秒现实时间可能等于 1.1 秒比赛时间，快放则等于 4 秒以上。
+ * 如果按现实 10 Hz 推进，一次 4 秒的动作只摊到 3 个 tick，球员就只能在一步里瞬移。
+ */
+export class MotionClock {
+  private remainder = 0
+  private rate = 1
+
+  /** 累加现实时间，返回这一帧应该推进几个 tick；`rate` 是“比赛秒 / 现实秒”。 */
+  add(dtWall: number, rate: number, maxTicks = 240): number {
+    this.rate = rate
+    if (!(dtWall > 0) || !(rate > 0)) return 0
+    this.remainder += dtWall * rate
+    let ticks = Math.floor(this.remainder / MOTION_TICK_SECONDS)
+    if (ticks > maxTicks) {
+      // 切后台回来时不能一次补上千个 tick，直接对齐到当前目标。
+      ticks = maxTicks
+      this.remainder = 0
+    } else {
+      this.remainder -= ticks * MOTION_TICK_SECONDS
+    }
+    return ticks
+  }
+
+  /** 两个 tick 之间的插值比例。 */
+  get alpha(): number {
+    return Math.max(0, Math.min(1, this.remainder / MOTION_TICK_SECONDS))
+  }
+
+  /** 当前按比赛时间算的 tick 频率（现实每秒几个 tick）。 */
+  get ticksPerSecond(): number {
+    return MOTION_TICK_HZ * this.rate
+  }
+
+  reset(): void {
+    this.remainder = 0
+  }
+}
+
 /** 一场比赛按 10 Hz 铺满会有多少 tick：用于对比“加判定回合”和“加运动层”。 */
 export function motionTicksForFrames(frames: { from: { clock: number }; to: { clock: number } }[]): number {
   let ticks = 0

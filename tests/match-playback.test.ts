@@ -117,6 +117,21 @@ describe('数据驱动的比赛编舞与独立播放时钟', () => {
     expect(playback.sample(1000).players[0].x).toBe(10)
   })
 
+  it('播放倍速 = 这一段动作的比赛秒 / 现实秒，暂停时为 0', () => {
+    const playback = new MatchPlayback(pose(0, 10), 0, 0)
+    // 4 个比赛秒安排 2 秒放完 → 2 倍速。
+    playback.enqueue([clip(1, 0, 4, 10, 30)], () => 2000, 0)
+    expect(playback.rate()).toBeCloseTo(2, 5)
+    playback.setPlaying(false, 0)
+    expect(playback.rate()).toBe(0)
+    playback.setPlaying(true, 0)
+    expect(playback.rate()).toBeCloseTo(2, 5)
+    // 一步 4 秒放 2.7 秒（正常档）→ 约 1.48 倍。
+    const normal = new MatchPlayback(pose(0, 10), 0, 0)
+    normal.enqueue([clip(1, 0, 4, 10, 30)], () => 2700, 0)
+    expect(normal.rate()).toBeCloseTo(4 / 2.7, 4)
+  })
+
   it('暂停冻结在当前帧，继续时不跳到终点，刷新页面元素不消费时间', () => {
     const a = clip(1, 0, 4, 10, 20)
     const playback = new MatchPlayback(a.from, 0, 0)

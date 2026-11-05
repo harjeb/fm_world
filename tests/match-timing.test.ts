@@ -28,13 +28,23 @@ describe('比赛画面的节奏', () => {
   })
 
   it('友谊赛：速度档还是原来的快慢，一场总时长基本不变', () => {
-    for (const speed of [650, 300, 120]) {
+    for (const speed of [4000, 2700, 1350]) {
       const gaps = [1, 2, 3].flatMap(stepSeconds)
       const total = gaps.reduce((sum, gap) => sum + friendlyStepMs(gap, speed), 0)
       const before = gaps.length * speed
       expect(total / before).toBeGreaterThan(0.8)
       expect(total / before).toBeLessThan(1.25)
     }
+  })
+
+  it('友谊赛正常档一场约 9–10 分钟，慢档约 13–15 分钟，快档约 4–5 分钟', () => {
+    const gaps = [1, 2, 3, 4, 5, 6].flatMap(stepSeconds)
+    // 一场比赛约 226 步：用上面这些步长估平均每步耗时，再乘回去。
+    const oneMatch = (speed: number) => (gaps.reduce((sum, gap) => sum + friendlyStepMs(gap, speed), 0) / gaps.length) * 226 / 1000
+    expect(oneMatch(2700)).toBeGreaterThan(8 * 60)
+    expect(oneMatch(2700)).toBeLessThan(11 * 60)
+    expect(oneMatch(4000)).toBeGreaterThan(12 * 60)
+    expect(oneMatch(1350)).toBeLessThan(6 * 60)
   })
 
   it('联赛：队列使用真实动作时长，不再每回合额外拖慢800ms', () => {

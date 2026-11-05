@@ -2,7 +2,9 @@ import { LEAGUE_REALTIME_SECONDS } from '../game/match/time.ts'
 import type { BallMotion } from '../game/match/types.ts'
 
 /**
- * 引擎增加触球次数后，保持正常档约 300ms/动作；联赛时长独立固定为 600 秒。
+ * 友谊赛的播放速度档位（ms / 一次动作，动作平均 4.1 逻辑秒）：
+ *   慢 4000 ≈ 一场 13–15 分钟，正常 2700 ≈ 9–10 分钟，快 1350 ≈ 4–5 分钟。
+ * 联赛时长独立固定为 600 秒。
  */
 
 /** 一步平均的逻辑秒数（900 秒约 250–300 步）。 */

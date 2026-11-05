@@ -6,6 +6,7 @@ import {
   MotionField,
   PHYSICAL,
   motionProfileOf,
+  MotionClock,
   motionTicksForFrames,
   planBallFlight,
   SNAP_DISTANCE,
@@ -105,6 +106,70 @@ describe('连续运动层', () => {
     ]
     expect(motionTicksForFrames(frames)).toBe(40 + 25)
     expect(motionTicksForFrames([])).toBe(0)
+  })
+
+  it('播放倍速换算成 tick：慢放 1 秒要补足对应的比赛时间，不能只走 10 个 tick', () => {
+    const clock = new MotionClock()
+    // 实时（1×）：1 秒 10 个 tick。
+    expect(clock.add(1, 1)).toBe(10)
+    expect(clock.alpha).toBeCloseTo(0, 6)
+    // 慢放档：1 秒现实 ≈ 6.2 秒比赛，需要 62 个 tick。
+    clock.reset()
+    expect(clock.add(1, 6.2)).toBe(62)
+    // 快放：一帧只走 0.7 个 tick 的零头会累到下一帧。
+    clock.reset()
+    expect(clock.add(1 / 60, 1.5)).toBe(0)
+    expect(clock.add(1 / 60, 1.5)).toBe(0)
+    expect(clock.alpha).toBeGreaterThan(0)
+    expect(clock.alpha).toBeLessThan(1)
+    // 暂停（rate 0）不推进。
+    clock.reset()
+    expect(clock.add(1, 0)).toBe(0)
+    expect(clock.alpha).toBe(0)
+    // 切后台回来不能一次补上千个 tick。
+    clock.reset()
+    expect(clock.add(600, 6)).toBe(240)
+  })
+
+  it('慢放 6 倍速时整场跟跑不瞬移：误差中位 < 0.6 米、90% < 4 米', () => {
+    const game = createInitialGame(41)
+    const input = teamInputFromLineup(game.roster, game.lineup, { id: 'player', name: game.clubName, color: '#34d399', accent: '#052e1b' })
+    const engine = new MatchEngine({ seed: 41, home: input, away: structuredClone(input), knockout: false, durationSeconds: LOGIC_MATCH_SECONDS })
+    const frames = planMatchReplay(engine).frames
+    const profiles = new Map(engine.state.teams.flatMap((team) => team.players.map((player) => [player.id, motionProfileOf({
+      speed: player.attrs.speed,
+      acceleration: player.attrs.acceleration,
+      agility: player.attrs.agility,
+      stamina: player.stamina / Math.max(1, player.maxStamina),
+    })] as const)))
+    const field = new MotionField(profiles, frames[0].from.players)
+    const clock = new MotionClock()
+    const rate = 6.2
+    const lags: number[] = []
+    for (const frame of frames) {
+      if (frame.restart) {
+        field.reset(frame.to.players)
+        clock.reset()
+        continue
+      }
+      const duration = Math.max(0.2, frame.to.clock - frame.from.clock)
+      const ticks = clock.add(duration / rate, rate)
+      for (let index = 1; index <= ticks; index++) {
+        const step = samplePlaybackFrame(frame, index / ticks)
+        field.tick(new Map(step.players.map((player) => [player.id, { x: player.x, y: player.y }])))
+      }
+      const target = samplePlaybackFrame(frame, 1)
+      for (const point of field.sample(0)) {
+        const wanted = target.players.find((player) => player.id === point.id)
+        if (wanted) lags.push(Math.hypot(point.x - wanted.x, point.y - wanted.y))
+      }
+    }
+    lags.sort((a, b) => a - b)
+    const pct = (q: number) => lags[Math.min(lags.length - 1, Math.floor(lags.length * q))]
+    expect(pct(0.5)).toBeLessThan(0.6)
+    expect(pct(0.9)).toBeLessThan(4)
+    // 只有引擎瞬移（定位球站位）才会对齐，且远少于 5% 的球员 tick。
+    expect(field.snaps / (field.ticks * 14)).toBeLessThan(0.05)
   })
 
   it('球：踢出瞬间算好整条飞行，起终点精确、长传才有弧线', () => {

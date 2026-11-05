@@ -110,7 +110,7 @@ export function renderMatch(): string {
           ? `<span class="muted small">联赛按现实时间进行，不可暂停、加速或跳过。</span><button class="btn small ${ui.coachPanel ? 'active' : ''}" data-action="match-coach">${icon('coach', 13)}教练调整</button>`
           : `<span class="muted small steps">${state.step} 步 · 种子 ${active.context.seed}</span>
             <button class="btn ${ui.matchPlaying ? '' : 'primary'}" data-action="match-toggle">${ui.matchPlaying ? `${icon('pause', 14)}暂停` : state.finished ? '已结束' : `${icon('play', 14)}开始 / 继续`}</button>
-            <div class="seg" role="group" aria-label="比赛速度"><button class="${ui.matchSpeed === 650 ? 'active' : ''}" data-speed="650">慢</button><button class="${ui.matchSpeed === 300 ? 'active' : ''}" data-speed="300">正常</button><button class="${ui.matchSpeed === 120 ? 'active' : ''}" data-speed="120">快</button></div>
+            <div class="seg" role="group" aria-label="比赛速度"><button class="${ui.matchSpeed === 4000 ? 'active' : ''}" data-speed="4000">慢</button><button class="${ui.matchSpeed === 2700 ? 'active' : ''}" data-speed="2700">正常</button><button class="${ui.matchSpeed === 1350 ? 'active' : ''}" data-speed="1350">快</button></div>
             <button class="btn small" data-action="match-skip">${icon('skip', 13)}跳过到终场</button>
             <button class="btn small" data-action="match-coach" ${active.coachPausesLeft <= 0 ? 'disabled' : ''}>${icon('coach', 13)}教练暂停（${active.coachPausesLeft}）</button>`}
         ${active.context.isLeague ? `<span class="muted small steps">${state.step} 步 · 种子 ${active.context.seed}</span>` : ''}

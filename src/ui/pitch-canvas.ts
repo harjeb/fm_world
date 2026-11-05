@@ -8,7 +8,7 @@ import { capturePlaybackPose } from '../game/match/playback.ts'
 import { planMatchReplay } from '../game/match/replay.ts'
 import type { MatchPlaybackPose, MatchPlayerState } from '../game/match/types.ts'
 import { convexHull, MatchPlayback, type PlaybackSample } from '../game/match/visualization.ts'
-import { MOTION_TICK_SECONDS, MotionField, motionProfileOf, type MotionProfile } from '../game/match/motion.ts'
+import { MotionClock, MotionField, motionProfileOf, type MotionProfile } from '../game/match/motion.ts'
 import { drawFootball2dBase } from './football2d-field.ts'
 import { matchKits } from './screens/match.ts'
 
@@ -29,8 +29,10 @@ const view = {
   /** 10 Hz 连续运动层：圆点按各自的速度/加速度/转向速率追引擎给的位置。 */
   motion: null as MotionField | null,
   motionAt: 0,
-  motionAcc: 0,
+  clock: new MotionClock(),
   motionRestart: '',
+  /** 当前播放倍速（比赛秒/现实秒），由 MatchPlayback 提供。 */
+  playbackRate: 1,
 }
 
 function reducedMotion(): boolean {
@@ -225,7 +227,7 @@ function advanceMotion(sample: PlaybackSample, now: number, first: boolean): Pla
   if (!view.motion || first) {
     view.motion = new MotionField(profiles, sample.players)
     view.motionAt = now
-    view.motionAcc = 0
+    view.clock.reset()
     return sample
   }
   view.motion.setProfiles(profiles)
@@ -235,7 +237,7 @@ function advanceMotion(sample: PlaybackSample, now: number, first: boolean): Pla
   if (restartKey && restartKey !== view.motionRestart) {
     view.motionRestart = restartKey
     view.motion.reset(sample.players)
-    view.motionAcc = 0
+    view.clock.reset()
     return { ...sample, players: sample.players }
   }
   if (!sample.restart) view.motionRestart = ''
@@ -247,20 +249,19 @@ function advanceMotion(sample: PlaybackSample, now: number, first: boolean): Pla
   }, 0)
   if (drift > 12) {
     view.motion.reset(sample.players)
-    view.motionAcc = 0
+    view.clock.reset()
     return { ...sample, players: sample.players }
   }
   const dt = Math.max(0, Math.min(0.5, (now - view.motionAt) / 1000))
   view.motionAt = now
   const live = ui.matchEngine ? isLive(ui.matchEngine) : false
-  if (live) view.motionAcc += dt
+  // 按“比赛时间”推进：播放倍速越高，一帧里要走的 tick 越多，球员才不会一步瞬移。
+  view.playbackRate = view.playback?.rate() ?? 0
+  const rate = live ? view.playbackRate : 0
+  const ticks = live ? view.clock.add(dt, rate) : 0
   const targets = new Map(sample.players.map((player) => [player.id, player]))
-  let guard = 0
-  while (view.motionAcc >= MOTION_TICK_SECONDS && guard++ < 8) {
-    view.motion.tick(targets)
-    view.motionAcc -= MOTION_TICK_SECONDS
-  }
-  const alpha = Math.max(0, Math.min(1, view.motionAcc / MOTION_TICK_SECONDS))
+  for (let index = 0; index < ticks; index++) view.motion.tick(targets)
+  const alpha = view.clock.alpha
   const moved = new Map(view.motion.sample(alpha).map((player) => [player.id, player]))
   return {
     ...sample,
@@ -355,7 +356,7 @@ export function resetPitchView(): void {
   view.step = -1
   view.motion = null
   view.motionAt = 0
-  view.motionAcc = 0
+  view.clock.reset()
   view.motionRestart = ''
   view.roster.clear()
 }

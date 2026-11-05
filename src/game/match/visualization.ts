@@ -215,4 +215,15 @@ export class MatchPlayback {
   }
 
   get pending(): boolean { return this.clips.length > 0 }
+
+  /**
+   * 当前这一段动作的播放倍速：比赛秒 / 现实秒。
+   * 运动层用它换算出“这一帧应该推进几个 10 Hz tick”。
+   */
+  rate(): number {
+    const clip = this.clips[0]
+    if (!clip || !this.playing) return 0
+    const logical = Math.max(0.01, clip.frame.to.clock - clip.frame.from.clock)
+    return logical / Math.max(0.016, clip.duration / 1000)
+  }
 }
