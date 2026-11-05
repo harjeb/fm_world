@@ -117,6 +117,22 @@ describe('数据驱动的比赛编舞与独立播放时钟', () => {
     expect(playback.sample(1000).players[0].x).toBe(10)
   })
 
+  it('球贴着“画出来的那个点”走：接球瞬间不会从落点跳到球员脚下', () => {
+    const frame = clip(1, 0, 4, 10, 30)
+    // 引擎里接球人在 30，但运动层只跑到 27（落后 3 米）。
+    const lagging = (id: string, fallback: { x: number; y: number }) => (id.endsWith(':a') ? { x: fallback.x - 3, y: fallback.y } : fallback)
+    const before = samplePlaybackFrame(frame, 0.89, undefined, undefined, lagging)
+    const after = samplePlaybackFrame(frame, 0.9, undefined, undefined, lagging)
+    const end = samplePlaybackFrame(frame, 1, undefined, undefined, lagging)
+    expect(Math.hypot(after.ball.x - before.ball.x, after.ball.y - before.ball.y)).toBeLessThan(1.2)
+    expect(end.ball.ownerId).toBe('home:a')
+    expect(end.ball.x).toBeCloseTo(27, 5)
+    // 带球时球也在脚下：用的是运动层的位置（引擎 20 − 落后 3 = 17），不是引擎坐标。
+    const dribble = samplePlaybackFrame(frame, 0.5, undefined, undefined, lagging)
+    expect(dribble.players[0].x).toBeCloseTo(20, 5)
+    expect(dribble.ball.x).toBeCloseTo(17, 5)
+  })
+
   it('播放倍速 = 这一段动作的比赛秒 / 现实秒，暂停时为 0', () => {
     const playback = new MatchPlayback(pose(0, 10), 0, 0)
     // 4 个比赛秒安排 2 秒放完 → 2 倍速。

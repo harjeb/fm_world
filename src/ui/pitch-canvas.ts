@@ -7,7 +7,7 @@ import { friendlyStepMs, leagueTweenMs } from './match-timing.ts'
 import { capturePlaybackPose } from '../game/match/playback.ts'
 import { planMatchReplay } from '../game/match/replay.ts'
 import type { MatchPlaybackPose, MatchPlayerState } from '../game/match/types.ts'
-import { convexHull, MatchPlayback, type PlaybackSample } from '../game/match/visualization.ts'
+import { convexHull, MatchPlayback, type PlaybackSample, type PoseResolver } from '../game/match/visualization.ts'
 import { MotionClock, MotionField, motionProfileOf, type MotionProfile } from '../game/match/motion.ts'
 import { drawFootball2dBase } from './football2d-field.ts'
 import { matchKits } from './screens/match.ts'
@@ -205,12 +205,25 @@ function drawFrame(canvas: HTMLCanvasElement, engine: MatchEngine, sample: Playb
     }
   }
 
+  // 脚下球往跑动方向挪一点，别被圆点盖住。
+  let ballX = ball.x
+  let ballY = ball.y
+  if (ball.ownerId) {
+    const owner = sample.players.find((player) => player.id === ball.ownerId)
+    if (owner) {
+      const length = Math.hypot(owner.dx, owner.dy)
+      if (length > 0.2) {
+        ballX += (owner.dx / length) * 0.9
+        ballY += (owner.dy / length) * 0.9
+      }
+    }
+  }
   ctx.beginPath()
-  ctx.ellipse(x(ball.x), y(ball.y) + 5 * unit, 5 * unit, 2 * unit, 0, 0, Math.PI * 2)
+  ctx.ellipse(x(ballX), y(ballY) + 5 * unit, 5 * unit, 2 * unit, 0, 0, Math.PI * 2)
   ctx.fillStyle = 'rgba(0,0,0,.35)'
   ctx.fill()
   ctx.beginPath()
-  ctx.arc(x(ball.x), y(ball.y) - ball.height * 4 * unit, (4.5 + ball.height * 0.15) * unit, 0, Math.PI * 2)
+  ctx.arc(x(ballX), y(ballY) - ball.height * 4 * unit, (4.5 + ball.height * 0.15) * unit, 0, Math.PI * 2)
   ctx.fillStyle = '#ffffff'
   ctx.fill()
   ctx.strokeStyle = '#10141a'
@@ -222,7 +235,11 @@ function drawFrame(canvas: HTMLCanvasElement, engine: MatchEngine, sample: Playb
  * 把“已判好的位置”交给 10 Hz 运动层：每 0.1 秒推进一次，两次 tick 之间插值给屏幕刷新率。
  * 圆点的速度上限、加速度、转向速率都来自球员属性；这里仍然不判定任何比赛结果。
  */
-function advanceMotion(sample: PlaybackSample, now: number, first: boolean): PlaybackSample {
+function advanceMotion(now: number, first: boolean): PlaybackSample {
+  // 用上一帧画出来的位置解析球权：球必须贴在圆点脚下，而不是引擎坐标。
+  const dots = view.motion ? new Map(view.motion.sample(view.clock.alpha).map((player) => [player.id, player])) : null
+  const resolve: PoseResolver | undefined = dots ? (id, fallback) => dots.get(id) ?? fallback : undefined
+  const sample = view.playback!.sample(now, resolve)
   const profiles = motionProfiles(view.roster)
   if (!view.motion || first) {
     view.motion = new MotionField(profiles, sample.players)
@@ -277,7 +294,7 @@ function loop(): void {
   const canvas = document.getElementById('pitch') as HTMLCanvasElement | null
   const engine = ui.matchEngine
   if (!canvas || !engine || !view.playback) return
-  drawFrame(canvas, engine, advanceMotion(view.playback.sample(performance.now()), performance.now(), false))
+  drawFrame(canvas, engine, advanceMotion(performance.now(), false))
   if (isLive(engine) && view.playback.pending) view.frame = window.requestAnimationFrame(loop)
 }
 
@@ -325,8 +342,7 @@ export function drawPitch(): void {
   }
   view.step = state.step
   view.pose = capturePlaybackPose(state)
-  const sample = view.playback!.sample(now)
-  drawFrame(canvas, engine, advanceMotion(sample, now, first))
+  drawFrame(canvas, engine, advanceMotion(now, first))
   if (view.frame === null && isLive(engine) && view.playback!.pending) view.frame = window.requestAnimationFrame(loop)
 }
 

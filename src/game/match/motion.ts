@@ -131,7 +131,11 @@ export class MotionAgent {
     const distance = Math.hypot(dx, dy)
     const current = this.speed
     // 距离近但目标在移动时不能收油：用目标速度做前馈，再补上距离修正。
-    const chase = targetSpeed > 0.05 ? Math.max(targetSpeed, distance / 0.45) : distance / 0.25
+    // 目标在身后时先减速再转身：真实球员不会全速画大弧线，
+    // 低速下转向速率也更高（192°/s），于是更快贴回目标。
+    const behind = distance > 0.5 ? Math.abs(wrapAngle(Math.atan2(dy, dx) - this.heading)) : 0
+    const turnFactor = behind > 2.1 ? 0.25 : behind > 1.05 ? 0.5 : 1
+    const chase = (targetSpeed > 0.05 ? Math.max(targetSpeed, distance / 0.45) : distance / 0.25) * turnFactor
     // 追赶余量：引擎允许瞬时转身，展示层不行，所以急转后会有 1–4 米落后。
     // 落后越多，允许的冲刺倍率越高（最多 1.35 倍）；不落后时严格按属性上限跑。
     const jumpy = targetSpeed > this.profile.maxSpeed * 1.2

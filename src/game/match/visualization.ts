@@ -31,7 +31,13 @@ function curve(a: number, b: number, before: number, after: number, t: number): 
 }
 
 /** 根据相邻已算出的动作编排跑位；不重新判定传射、碰撞、球权和比分。 */
-export function samplePlaybackFrame(frame: MatchPlaybackFrame, progress: number, previous?: MatchPlaybackFrame, next?: MatchPlaybackFrame): PlaybackSample {
+/**
+ * 画面里的球员位置可以由运动层覆盖：球必须贴在“画出来的那个圆点”脚下，
+ * 而不是引擎里那个还没追上来的坐标。
+ */
+export type PoseResolver = (id: string, fallback: PitchPoint) => PitchPoint
+
+export function samplePlaybackFrame(frame: MatchPlaybackFrame, progress: number, previous?: MatchPlaybackFrame, next?: MatchPlaybackFrame, resolve?: PoseResolver): PlaybackSample {
   const t = clamp01(progress)
   const duration = span(frame)
   const starts = new Map(frame.from.players.map((player) => [player.id, player]))
@@ -72,8 +78,12 @@ export function samplePlaybackFrame(frame: MatchPlaybackFrame, progress: number,
   let ball: PlaybackSample['ball']
   let airborne = false
 
+  const onPitch = (id: string | null | undefined, fallback: PitchPoint): PitchPoint =>
+    id && resolve ? resolve(id, fallback) : fallback
+
   if (controlled && receiver) {
-    ball = { x: receiver.x, y: receiver.y, ownerId: receiverId, height: 0 }
+    const at = onPitch(receiverId, receiver)
+    ball = { x: at.x, y: at.y, ownerId: receiverId, height: 0 }
   } else if (!motion) {
     ball = {
       x: frame.from.ball.x + (frame.to.ball.x - frame.from.ball.x) * t,
@@ -92,19 +102,24 @@ export function samplePlaybackFrame(frame: MatchPlaybackFrame, progress: number,
     const fly = clamp01((t - release) / flight)
     if (t < release) {
       const waiting = !frame.restart && source ? source : motion.from
-      ball = { x: waiting.x, y: waiting.y, ownerId: frame.restart ? null : sourceId, height: 0 }
+      const at = onPitch(frame.restart ? null : sourceId, waiting)
+      ball = { x: at.x, y: at.y, ownerId: frame.restart ? null : sourceId, height: 0 }
     } else if (t >= arrival) {
       const landed = receiver && !frame.goal ? receiver : motion.to
-      ball = { x: landed.x, y: landed.y, ownerId: receiverId, height: 0 }
+      const at = onPitch(frame.goal ? null : receiverId, landed)
+      ball = { x: at.x, y: at.y, ownerId: receiverId, height: 0 }
     } else {
       const firstLeg = !!motion.via && fly < 0.65
       const start = motion.via && !firstLeg ? motion.via : launch
       const end = motion.via && firstLeg ? motion.via : landing
       const part = motion.via ? firstLeg ? fly / 0.65 : (fly - 0.65) / 0.35 : fly
       const high = (motion.kind === 'pass' && distance > 22) || firstLeg
+      // 飞行末段把落点拉向“画出来的接球人”，避免球落地后突然出现在脚边。
+      const landAt = onPitch(motion.via ? null : receiverId, end)
+      const target = { x: end.x + (landAt.x - end.x) * part * part, y: end.y + (landAt.y - end.y) * part * part }
       ball = {
-        x: start.x + (end.x - start.x) * part,
-        y: start.y + (end.y - start.y) * part,
+        x: start.x + (target.x - start.x) * part,
+        y: start.y + (target.y - start.y) * part,
         ownerId: null,
         // 高球用离地高度表现，而不是把平面落点画歪。
         height: high ? Math.sin(Math.PI * part) * Math.min(5, distance * 0.08) : 0,
@@ -188,7 +203,7 @@ export class MatchPlayback {
     }
   }
 
-  sample(now: number): PlaybackSample {
+  sample(now: number, resolve?: PoseResolver): PlaybackSample {
     const delta = Math.max(0, now - this.lastTime)
     this.lastTime = now
     if (this.playing && this.clips.length) this.elapsed += delta
@@ -196,7 +211,7 @@ export class MatchPlayback {
       const clip = this.clips.shift()!
       this.elapsed -= clip.duration
       const next = clip.started ? clip.next : this.clips[0]?.frame ?? this.lookahead.get(clip.frame.step + 1)
-      this.lastSample = samplePlaybackFrame(clip.frame, 1, this.previous, next)
+      this.lastSample = samplePlaybackFrame(clip.frame, 1, this.previous, next, resolve)
       this.previous = clip.frame
     }
     const clip = this.clips[0]
@@ -206,7 +221,7 @@ export class MatchPlayback {
         clip.next = this.clips[1]?.frame ?? this.lookahead.get(clip.frame.step + 1)
         clip.started = true
       }
-      this.lastSample = samplePlaybackFrame(clip.frame, this.elapsed / clip.duration, this.previous, clip.next)
+      this.lastSample = samplePlaybackFrame(clip.frame, this.elapsed / clip.duration, this.previous, clip.next, resolve)
     } else {
       // 新动作稍晚到达时保持落点，不回到引擎已重置的中圈，也不累积空等时间。
       this.elapsed = 0
