@@ -23,10 +23,17 @@ import { injuryProneness, injuryRisk, injuryRecoveryDays } from '../injury.ts'
 import { commentLog, commentPossession, restoreCommentary } from './commentary.ts'
 import { chooseShotFoot, chooseShotTarget, isWeakShotFoot, shotAimPoint, shotPositionText, shotTargetText } from './shooting.ts'
 import { GOAL_Y, PITCH_LENGTH, PITCH_WIDTH, GOAL_WIDTH, buildMatchTeam, opponentSide } from './team.ts'
-import { LOGIC_MATCH_SECONDS, MATCH_RULES_VERSION, displayClock } from './time.ts'
-import { capturePlaybackPose, PLAYBACK_FRAME_LIMIT } from './playback.ts'
+import { LOGIC_MATCH_SECONDS, MATCH_BASE_TICK_SECONDS, MATCH_RULES_VERSION, displayClock, matchRuleSet } from './time.ts'
+import type { MatchRuleSet } from './time.ts'
+import { capturePlaybackPose, PLAYBACK_FRAME_LIMIT, PLAYBACK_FRAME_LIMIT_V3 } from './playback.ts'
+import { motionProfileOf, motionStateAt, stepMotion } from './kinematics.ts'
+import type { MotionProfile, MotionState } from './kinematics.ts'
 import type {
+  BallMotion,
   BallState,
+  MatchActionChoice,
+  MatchActionState,
+  MatchBallFlight,
   MatchEventContext,
   MatchPlayerState,
   MatchPlaybackFrame,
@@ -112,6 +119,9 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
 
+/** 0.1 秒基础步的量化：避免 0.30000000000000004 这类时钟误差累积。 */
+const toTick = (value: number): number => Math.round(value * 10) / 10
+
 function distance(a: { x: number; y: number }, b: { x: number; y: number }): number {
   return Math.hypot(a.x - b.x, a.y - b.y)
 }
@@ -175,29 +185,29 @@ export class MatchEngine {
   private resultRng: PCG32
   private knockout: boolean
   private durationSeconds: number
+  private rules: MatchRuleSet
+  private continuous: boolean
   private legacyRules: boolean
   private offside: boolean
-  private teamTraitStep = -1
-  private teamTraits = new Map<string, number>()
-  /** 最近一次成功传球，用于给进球记助攻；同一队且 3 步内有效。 */
-  private recordAssist?: { id: string; name: string; side: MatchSide; step: number }
+  private recordPlayback = true
   private playbackStepActive = false
   private playbackBeforeReset?: MatchPlaybackPose
-  private recordPlayback = true
 
-  constructor(options: { seed: number; home: MatchTeamInput; away: MatchTeamInput; knockout: boolean; durationSeconds?: number; offside?: boolean; recordPlayback?: boolean }) {
+  constructor(options: { seed: number; home: MatchTeamInput; away: MatchTeamInput; knockout: boolean; durationSeconds?: number; offside?: boolean; recordPlayback?: boolean; rulesVersion?: number }) {
     const home = buildMatchTeam(options.home, 'home')
     const away = buildMatchTeam(options.away, 'away')
     this.decisionRng = derivedRng(options.seed, 'match-decision')
     this.resultRng = derivedRng(options.seed, 'match-result')
     this.knockout = options.knockout
     this.durationSeconds = options.durationSeconds ?? LOGIC_MATCH_SECONDS
-    this.legacyRules = false
+    this.rules = matchRuleSet(options.rulesVersion ?? MATCH_RULES_VERSION)
+    this.continuous = this.rules === 'v3'
+    this.legacyRules = this.rules === 'legacy'
     this.offside = options.offside ?? false
     this.recordPlayback = options.recordPlayback ?? true
     this.state = {
       seed: options.seed,
-      rulesVersion: MATCH_RULES_VERSION,
+      rulesVersion: options.rulesVersion ?? MATCH_RULES_VERSION,
       step: 0,
       clock: 0,
       durationSeconds: this.durationSeconds,
@@ -245,10 +255,10 @@ export class MatchEngine {
     engine.resultRng = PCG32.fromState(state.resultRng.state, state.resultRng.inc)
     engine.knockout = false
     engine.durationSeconds = state.durationSeconds ?? 1200
-    engine.legacyRules = state.rulesVersion !== MATCH_RULES_VERSION
+    engine.rules = matchRuleSet(state.rulesVersion)
+    engine.continuous = engine.rules === 'v3'
+    engine.legacyRules = engine.rules === 'legacy'
     // Object.create 不会跑字段初始值，这里要自己补上。
-    engine.teamTraitStep = -1
-    engine.teamTraits = new Map()
     engine.playbackStepActive = false
     engine.playbackBeforeReset = undefined
     engine.recordPlayback = true
@@ -296,7 +306,16 @@ export class MatchEngine {
     }
   }
 
+  get ruleSet(): MatchRuleSet {
+    return this.rules
+  }
+
   step(realtime = false): StepResult {
+    if (this.continuous) return this.stepContinuous(realtime)
+    return this.stepAtomic(realtime)
+  }
+
+  private stepAtomic(realtime = false): StepResult {
     if (this.state.finished) return { state: this.state, entry: null, finished: true }
     let playbackFrom = this.recordPlayback ? capturePlaybackPose(this.state) : undefined
     let restart = this.state.pendingSetPiece?.type
@@ -382,6 +401,691 @@ export class MatchEngine {
     this.state.playbackFrames = [...(this.state.playbackFrames ?? []), frame].slice(-PLAYBACK_FRAME_LIMIT)
   }
 
+  // ── v3：0.1 秒连续仿真 ─────────────────────────────────────────────
+
+  /** 推进到目标比赛时刻；不启动 target 之后的新动作，也不产生 target 之后的事件。 */
+  advanceTo(targetClock: number): { changed: boolean; entries: MatchLogEntry[] } {
+    if (!this.continuous) throw new Error('advanceTo 只用于 v3 比赛')
+    const startClock = this.state.clock
+    const logStart = this.state.log.length
+    let guard = 0
+    while (!this.state.finished && this.state.clock < targetClock - 1e-6 && guard++ < 200_000) {
+      this.tickOnce()
+    }
+    this.syncRng()
+    return { changed: this.state.clock > startClock, entries: this.state.log.slice(logStart) }
+  }
+
+  /** 一次 step 仍是一个动作/回合：从选动作推进到它被裁决（或半场/终场）。 */
+  private stepContinuous(_realtime = false): StepResult {
+    if (this.state.finished) return { state: this.state, entry: null, finished: true }
+    const logStart = this.state.log.length
+    const startStep = this.state.step
+    let guard = 0
+    while (!this.state.finished && guard++ < 20_000) {
+      if (this.state.phase === 'shootout') {
+        this.advanceShootout()
+        this.state.step++
+        break
+      }
+      const boundary = this.tickOnce()
+      if (boundary) break
+      if (this.state.step > startStep && !this.state.action) break
+    }
+    this.syncRng()
+    const entries = this.state.log.slice(logStart)
+    return { state: this.state, entry: entries.at(-1) ?? null, finished: this.state.finished }
+  }
+
+  private tickOnce(): boolean {
+    if (this.state.finished) return true
+    if (this.state.phase === 'shootout') return false
+    if (!this.state.action) {
+      const periodEnd = this.state.half === 1 ? this.durationSeconds / 2 : this.durationSeconds
+      if (this.state.clock >= periodEnd - 1e-6) return this.checkPeriodContinuous()
+      this.beginContinuousAction()
+      if (!this.state.action) {
+        this.advanceContinuousClock()
+        return false
+      }
+    }
+    const action = this.state.action!
+    // 上一帧的 to 就是这一 tick 的起点；重启首 tick 例外：先摆好球/站位，让切镜头从新位置开始。
+    const startsRestart = action.restart !== undefined && Math.abs(this.state.clock - action.startedAt) < 1e-9
+    const previousFrame = this.state.playbackFrames?.at(-1)
+    const from = this.recordPlayback
+      ? (startsRestart || !previousFrame || Math.abs(previousFrame.to.clock - this.state.clock) > 1e-9
+        ? capturePlaybackPose(this.state)
+        : previousFrame.to)
+      : undefined
+    const logStart = this.state.log.length
+    this.refreshActionTargets(action)
+    this.integrateTeams(MATCH_BASE_TICK_SECONDS)
+    this.advanceContinuousClock()
+    if (action.kind === 'open' && action.phase === 'prepare') this.glueBallToOwner()
+    if (
+      action.phase === 'prepare'
+      && action.kind !== 'loose'
+      && action.kind !== 'foul'
+      && action.choice?.kind !== 'dribble'
+      && this.state.clock >= action.releaseAt - 1e-6
+    ) {
+      this.releaseContinuousAction(action)
+    }
+    if (action.flight) {
+      this.positionFlight(action)
+      this.glueBallToOwner()
+    }
+    if (this.state.clock >= action.resolveAt - 1e-6) this.resolveContinuousAction(action)
+    const goal = this.state.log.slice(logStart).some((entry) => entry.type === 'goal')
+    this.recordContinuousFrame(from, action, goal)
+    if (!this.state.action) {
+      const periodEnd = this.state.half === 1 ? this.durationSeconds / 2 : this.durationSeconds
+      if (this.state.clock >= periodEnd - 1e-6) return this.checkPeriodContinuous()
+    }
+    return false
+  }
+
+  private advanceContinuousClock(): void {
+    this.state.tick = (this.state.tick ?? 0) + 1
+    this.state.clock = toTick(this.state.clock + MATCH_BASE_TICK_SECONDS)
+    if (this.state.possession) this.addPossessionTime(this.state.possession, MATCH_BASE_TICK_SECONDS)
+    this.advancePlayerMinutes(MATCH_BASE_TICK_SECONDS)
+  }
+
+  private beginContinuousAction(): void {
+    if (this.state.phase === 'shootout' || this.state.finished) return
+    if (this.state.clock < this.durationSeconds) this.applyAutoSubs()
+    const pending = this.state.pendingSetPiece
+    if (pending) {
+      this.beginSetPieceAction(pending)
+      return
+    }
+    const carrier = this.carrier()
+    if (carrier) this.beginOpenAction(carrier)
+    else this.beginLooseAction()
+  }
+
+  private beginOpenAction(carrier: MatchPlayerState): void {
+    const team = this.getTeam(carrier.side)
+    const opp = this.getOpponent(carrier.side)
+    this.state.possession = carrier.side
+    this.state.phase = 'open'
+    const decision = this.chooseAction(team, opp, carrier)
+    const timing = this.computeTiming(team, opp, carrier, decision.choice)
+    const ticks = Math.max(1, Math.round(timing.total / MATCH_BASE_TICK_SECONDS))
+    const prepTicks = Math.max(1, Math.min(ticks - 1, Math.round(timing.prep / MATCH_BASE_TICK_SECONDS)))
+    const start = this.state.clock
+    const periodEnd = this.state.half === 1 ? this.durationSeconds / 2 : this.durationSeconds
+    const resolveAt = Math.min(periodEnd, toTick(start + ticks * MATCH_BASE_TICK_SECONDS))
+    const id = this.state.step + 1
+    this.state.step = id
+    const choice = decision.choice as unknown as MatchActionChoice
+    const action: MatchActionState = {
+      id,
+      kind: 'open',
+      phase: 'prepare',
+      choice,
+      startedAt: start,
+      releaseAt: Math.min(resolveAt, toTick(start + prepTicks * MATCH_BASE_TICK_SECONDS)),
+      resolveAt,
+      from: { x: carrier.x, y: carrier.y },
+      target: { ...choice.point },
+      actorId: carrier.id,
+      receiverId: choice.targetId,
+      targets: {},
+      targetsAt: -1,
+      decision: {
+        recognized: decision.recognized,
+        missed: decision.missed,
+        chosenQ: decision.chosenQ,
+        bestQ: decision.bestQ,
+      },
+    }
+    if (choice.kind === 'dribble') action.releaseAt = resolveAt
+    this.state.action = action
+    if (this.state.step % 2 === 0) commentPossession(this.state, carrier)
+    // 先设好本步 id 再判犯规：v2 的派生随机数就是按 step 取的，这样两边不会错位。
+    const foul = this.maybeTacticalFoul(opp, carrier)
+    if (foul) {
+      action.kind = 'foul'
+      action.resolveAt = Math.min(action.resolveAt, toTick(start + MATCH_BASE_TICK_SECONDS))
+      action.releaseAt = action.resolveAt
+    }
+  }
+
+  private beginLooseAction(): void {
+    let nearest: { player: MatchPlayerState; dist: number } | null = null
+    for (const team of this.state.teams) {
+      for (const player of team.players) {
+        if (!player.onPitch || player.position === 'GK') continue
+        const dist = distance(player, this.state.ball)
+        if (!nearest || dist < nearest.dist) nearest = { player, dist }
+      }
+    }
+    const start = this.state.clock
+    const periodEnd = this.state.half === 1 ? this.durationSeconds / 2 : this.durationSeconds
+    const duration = nearest ? clamp(nearest.dist / 6.2, 1, 3.2) : 1
+    const resolveAt = Math.min(periodEnd, toTick(start + duration))
+    const id = this.state.step + 1
+    this.state.step = id
+    const action: MatchActionState = {
+      id,
+      kind: 'loose',
+      phase: 'prepare',
+      startedAt: start,
+      releaseAt: resolveAt,
+      resolveAt,
+      from: { x: this.state.ball.x, y: this.state.ball.y },
+      target: { x: this.state.ball.x, y: this.state.ball.y },
+      targets: {},
+      targetsAt: -1,
+    }
+    this.state.action = action
+    this.state.phase = 'open'
+    if (nearest) this.state.possession = nearest.player.side
+  }
+
+  private beginSetPieceAction(sp: SetPieceState): void {
+    const type = sp.type
+    const teamSide = sp.teamSide
+    const team = this.getTeam(teamSide)
+    const opp = this.getOpponent(teamSide)
+    const gx = goalXOf(teamSide)
+    const dir = dirOf(teamSide)
+    if (type === 'kickoff') this.resetKickoffPositions(teamSide)
+    const start = this.state.clock
+    const periodEnd = this.state.half === 1 ? this.durationSeconds / 2 : this.durationSeconds
+    const total = type === 'throw_in' ? 5 : type === 'corner' || type === 'free_kick' ? 7 : 6
+    let mode: 'pass' | 'shot' | 'cross' = 'pass'
+    let taker: MatchPlayerState | null = null
+    let target: MatchPlayerState | null = null
+    let delivery = { x: sp.x, y: sp.y }
+    if (type === 'kickoff') {
+      taker = this.pickTaker(team, 'pass', sp.x, sp.y)
+      target = taker ? this.pickSafeOutlet(team, taker) : null
+    } else if (type === 'throw_in') {
+      taker = this.nearestOutfielder(team, sp)
+      target = taker ? this.pickSafeOutlet(team, taker) : null
+    } else if (type === 'goal_kick') {
+      taker = this.teamGoalkeeper(team)
+      target = taker ? this.pickSafeOutlet(team, taker) : null
+    } else if (type === 'corner') {
+      taker = this.pickTaker(team, 'cross', sp.x, sp.y)
+      delivery = { x: gx - dir * 8, y: GOAL_Y }
+      mode = 'cross'
+    } else if (type === 'free_kick') {
+      const dist = distance(sp, { x: gx, y: GOAL_Y })
+      if (dist < FREE_KICK_SHOT_RANGE && Math.abs(sp.y - GOAL_Y) < 22) mode = 'shot'
+      else if (dist < FREE_KICK_DELIVERY_RANGE) mode = 'cross'
+      taker = this.pickTaker(team, mode === 'shot' ? 'shoot' : mode === 'cross' ? 'cross' : 'pass', sp.x, sp.y, true)
+      if (mode === 'shot') delivery = { x: gx, y: GOAL_Y }
+      else if (mode === 'cross') delivery = { x: gx - dir * 8, y: GOAL_Y }
+      else target = taker ? this.pickSafeOutlet(team, taker) : null
+    } else {
+      mode = 'shot'
+      taker = this.pickTaker(team, 'shoot', gx - dir * 12, GOAL_Y)
+      delivery = { x: gx, y: GOAL_Y }
+    }
+    if (!taker) {
+      this.state.pendingSetPiece = null
+      this.state.ball = { x: PITCH_LENGTH / 2, y: GOAL_Y, ownerId: null, justReceived: false }
+      this.state.phase = 'open'
+      return
+    }
+    const point = mode === 'shot' ? { x: gx, y: GOAL_Y } : mode === 'cross' ? delivery : target ? { x: target.x, y: target.y } : { x: sp.x + dir * 14, y: sp.y }
+    const choice: MatchActionChoice = {
+      kind: mode === 'shot' ? 'shoot' : 'pass',
+      type: mode === 'cross' ? 'cross' : undefined,
+      targetId: target?.id,
+      point,
+      label: type === 'kickoff' ? '开球' : type === 'corner' ? '角球' : type === 'penalty' ? '点球' : type === 'free_kick' ? '任意球' : '定位球',
+      estimatedP: 0.8,
+      successValue: 0,
+      failureValue: 0,
+      estimatedTime: total,
+    }
+    const flightSeconds = mode === 'shot' ? 0.6 : mode === 'cross' ? 0.9 : 0.7
+    const setup = Math.max(0.8, total - flightSeconds - 0.3)
+    const releaseAt = toTick(start + setup)
+    const resolveAt = Math.min(periodEnd, toTick(start + total))
+    const id = this.state.step + 1
+    this.state.step = id
+    const action: MatchActionState = {
+      id,
+      kind: 'setpiece',
+      phase: 'prepare',
+      choice,
+      startedAt: start,
+      releaseAt: Math.min(releaseAt, resolveAt - MATCH_BASE_TICK_SECONDS),
+      resolveAt,
+      from: { x: sp.x, y: sp.y },
+      target: { ...choice.point },
+      restart: type,
+      setPiece: { type, teamSide, x: sp.x, y: sp.y, takerId: taker.id, mode, targetId: target?.id },
+      actorId: taker.id,
+      receiverId: target?.id,
+      targets: {},
+      targetsAt: -1,
+      decision: { recognized: 0, missed: 0, chosenQ: 0, bestQ: 0 },
+    }
+    this.state.action = action
+    this.state.pendingSetPiece = null
+    this.state.phase = 'setpiece'
+    this.state.possession = teamSide
+    this.state.ball = { x: sp.x, y: sp.y, ownerId: null, justReceived: false }
+    action.targets = this.buildSetPieceTargets(action, team, opp)
+    action.targetsAt = start
+    const note = type === 'kickoff' ? `${team.name} 在中圈开球。`
+      : type === 'throw_in' ? `${team.name} 获得界外球。`
+        : type === 'goal_kick' ? `${team.name} 门将开球门球。`
+          : type === 'corner' ? `${team.name} 获得角球。`
+            : type === 'penalty' ? `${taker.name} 站上点球点。`
+              : `${team.name} 获得任意球。`
+    this.log('setpiece', teamSide, note, { playerId: taker.id })
+  }
+
+  private buildSetPieceTargets(action: MatchActionState, team: MatchTeamState, opp: MatchTeamState): Record<string, { x: number; y: number }> {
+    const targets: Record<string, { x: number; y: number }> = {}
+    const sp = action.setPiece!
+    const taker = this.playerById(action.actorId)
+    const choice = action.choice as unknown as ActionChoice
+    const presser = taker ? this.pickPresser(opp, taker) : null
+    const marking = this.buildMarking(opp, team)
+    for (const player of [...team.players, ...opp.players]) {
+      if (!player.onPitch) continue
+      const ownTeam = player.side === team.side ? team : opp
+      const otherTeam = player.side === team.side ? opp : team
+      targets[player.id] = this.desiredTarget(player, player.side === team.side, ownTeam, otherTeam, taker ?? player, choice, presser, marking)
+    }
+    if (taker) targets[taker.id] = { x: sp.x, y: sp.y }
+    if (sp.type === 'corner' || (sp.type === 'free_kick' && sp.mode === 'cross')) {
+      const gx = goalXOf(team.side)
+      const dir = dirOf(team.side)
+      const attackers = team.players.filter((player) => player.onPitch && player.position !== 'GK').sort((a, b) => b.attrs.heading - a.attrs.heading)
+      const defenders = opp.players.filter((player) => player.onPitch && player.position !== 'GK').sort((a, b) => b.attrs.heading - a.attrs.heading)
+      attackers.slice(0, 3).forEach((player, index) => {
+        targets[player.id] = { x: clamp(gx - dir * (7 + index * 2), 4, PITCH_LENGTH - 4), y: clamp(GOAL_Y + (index - 1) * 7, 20, 44) }
+      })
+      defenders.slice(0, 4).forEach((player, index) => {
+        targets[player.id] = { x: clamp(gx - dir * (3 + index * 1.5), 3, PITCH_LENGTH - 3), y: clamp(GOAL_Y + (index - 1.5) * 6, 22, 42) }
+      })
+      const gk = this.teamGoalkeeper(opp)
+      if (gk) targets[gk.id] = { x: gx - dir, y: GOAL_Y }
+    } else if (sp.type === 'penalty') {
+      const gx = goalXOf(team.side)
+      const dir = dirOf(team.side)
+      targets[taker!.id] = { x: gx - dir * 12, y: GOAL_Y }
+      const gk = this.teamGoalkeeper(opp)
+      if (gk) targets[gk.id] = { x: gx - dir * 0.8, y: GOAL_Y }
+    } else if (sp.type === 'goal_kick') {
+      const dir = dirOf(team.side)
+      targets[taker!.id] = { x: ownGoalXOf(team.side) + dir * 6, y: GOAL_Y }
+    }
+    return targets
+  }
+
+  private refreshActionTargets(action: MatchActionState): void {
+    if (action.kind === 'foul') return
+    if (action.kind === 'setpiece' && this.state.clock < action.releaseAt - 1e-6) return
+    const owner = this.carrier()
+    const receiver = action.receiverId ? this.playerById(action.receiverId) : undefined
+    const teamSide = action.setPiece?.teamSide ?? owner?.side ?? this.playerById(action.actorId)?.side ?? this.state.possession ?? 'home'
+    const team = this.getTeam(teamSide)
+    const opp = this.getOpponent(teamSide)
+    const carrier = owner ?? receiver ?? this.nearestToBall() ?? this.playerById(action.actorId)
+    if (!carrier) return
+    const choice = (action.choice as unknown as ActionChoice | undefined) ?? {
+      kind: 'dribble', point: { x: this.state.ball.x, y: this.state.ball.y }, label: '', estimatedP: 0, successValue: 0, failureValue: 0, estimatedTime: 0,
+    }
+    const tick = this.state.tick ?? 0
+    if (!action.targets) action.targets = {}
+    const chasers = action.kind === 'loose' ? this.looseChasers() : null
+    let anyDue = false
+    for (const player of [...team.players, ...opp.players]) {
+      if (!player.onPitch) continue
+      if (!action.targets[player.id] || this.intentDue(player.id, tick) || chasers?.has(player.id)) {
+        anyDue = true
+        break
+      }
+    }
+    if (!anyDue) return
+    const presser = this.pickPresser(opp, carrier)
+    const marking = this.buildMarking(opp, team)
+    action.presserId = presser ?? undefined
+    for (const player of [...team.players, ...opp.players]) {
+      if (!player.onPitch) continue
+      if (action.targets[player.id] && !this.intentDue(player.id, tick) && !chasers?.has(player.id)) continue
+      if (chasers?.has(player.id)) {
+        action.targets[player.id] = { x: this.state.ball.x, y: this.state.ball.y }
+        continue
+      }
+      const ownTeam = player.side === team.side ? team : opp
+      const otherTeam = player.side === team.side ? opp : team
+      action.targets[player.id] = this.desiredTarget(player, player.side === team.side, ownTeam, otherTeam, carrier, choice, presser, marking)
+    }
+    action.targetsAt = this.state.clock
+  }
+
+  private intentDue(id: string, tick: number): boolean {
+    let hash = 2166136261
+    for (const char of id) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619) >>> 0
+    const period = 2 + (hash % 4)
+    return (tick + (hash % period)) % period === 0
+  }
+
+  private nearestToBall(): MatchPlayerState | undefined {
+    let best: MatchPlayerState | undefined
+    let bestDist = Infinity
+    for (const team of this.state.teams) {
+      for (const player of team.players) {
+        if (!player.onPitch) continue
+        const dist = distance(player, this.state.ball)
+        if (dist < bestDist) {
+          best = player
+          bestDist = dist
+        }
+      }
+    }
+    return best
+  }
+
+  private looseChasers(): Set<string> {
+    const picked = new Set<string>()
+    for (const team of this.state.teams) {
+      team.players
+        .filter((player) => player.onPitch && (player.position !== 'GK' || inBox(team.side, this.state.ball) || distance(player, this.state.ball) < 10))
+        .sort((a, b) => distance(a, this.state.ball) - distance(b, this.state.ball))
+        .slice(0, 2)
+        .forEach((player) => picked.add(player.id))
+    }
+    return picked
+  }
+
+  private motionProfileFor(player: MatchPlayerState): MotionProfile {
+    // 用整数百分位做键：缓存连同 profile 一起存档，读档后不会在动作中途重算。
+    const staminaKey = Math.round((player.stamina / Math.max(1, player.maxStamina)) * 100)
+    this.state.motionProfiles ??= {}
+    const cached = this.state.motionProfiles[player.id]
+    if (cached && cached.stamina === staminaKey) return cached.profile
+    const profile = motionProfileOf({
+      speed: this.eff(player, 'speed'),
+      acceleration: this.eff(player, 'acceleration', { wide: wideZone(player) }),
+      agility: this.eff(player, 'agility'),
+      stamina: staminaKey / 100,
+    })
+    this.state.motionProfiles[player.id] = { stamina: staminaKey, profile }
+    return profile
+  }
+
+  private integrateTeams(dt: number): void {
+    const action = this.state.action
+    if (!action) return
+    const presser = action.presserId ?? null
+    for (const team of this.state.teams) {
+      const opp = this.getOpponent(team.side)
+      for (const player of team.players) {
+        if (!player.onPitch) continue
+        const target = action.targets?.[player.id]
+        if (!target) continue
+        const ratio = player.stamina / Math.max(1, player.maxStamina)
+        const profile = this.motionProfileFor(player)
+        const stored = player.motion
+        const motion: MotionState = {
+          x: player.x,
+          y: player.y,
+          vx: stored?.vx ?? 0,
+          vy: stored?.vy ?? 0,
+          heading: stored?.heading ?? 0,
+        }
+        stepMotion(motion, profile, target, dt)
+        const nx = clamp(motion.x, 2, PITCH_LENGTH - 2)
+        const ny = clamp(motion.y, 2, PITCH_WIDTH - 2)
+        const moved = Math.hypot(nx - player.x, ny - player.y)
+        player.x = nx
+        player.y = ny
+        player.motion = { vx: motion.vx, vy: motion.vy, heading: motion.heading }
+        if (moved > 0) {
+          player.stats.distance += moved
+          this.state.stats[player.side].distance += moved
+        }
+        const endurance = this.eff(player, 'endurance')
+        const enduranceFactor = 0.7 + endurance / 180
+        const pressIntensity = 1 + (player.side === opp.side ? PRESS_LEVEL[opp.tactics.press] * 0.08 : 0) + (player.role === 'cm_destroyer' ? 0.06 : 0)
+        let drain = (moved * 0.028 + 0.018 * (dt / 4.1)) * pressIntensity * this.staminaFactor(player) / enduranceFactor
+        if (!this.legacyRules) drain *= 0.77
+        if (player.skills.includes('iron_lung')) drain *= 1 - (0.05 + (skillTierMultiplier(player, 'iron_lung') - 1) * 0.25)
+        if (player.position === 'GK') drain *= 0.5
+        if (player.side === opp.side && presser === player.id) drain *= 1.12
+        const staminaTrait = STAR_TRAITS[player.traitId]
+        if (staminaTrait?.kind === 'stamina' && this.traitConditionMet(player, staminaTrait.when)) drain *= 1 - staminaTrait.drain / 100
+        player.stamina = Math.max(0, player.stamina - drain)
+        if (staminaTrait?.kind === 'secondWind' && !player.traitUsed && player.stamina / Math.max(1, player.maxStamina) < 0.6) {
+          player.traitUsed = true
+          player.stamina = Math.min(player.maxStamina, player.stamina + player.maxStamina * staminaTrait.stamina / 100)
+        }
+        if (moved < 0.08 && player.stamina < player.maxStamina) player.stamina = Math.min(player.maxStamina, player.stamina + 0.02 * (dt / 4.1))
+        player.stats.staminaLeft = Math.round((player.stamina / Math.max(1, player.maxStamina)) * 100)
+      }
+    }
+  }
+
+  private glueBallToOwner(): void {
+    const owner = this.carrier()
+    if (!owner) return
+    this.state.ball.x = owner.x
+    this.state.ball.y = owner.y
+  }
+
+  private releaseContinuousAction(action: MatchActionState): void {
+    const carrier = this.playerById(action.actorId) ?? this.carrier()
+    const choice = action.choice as unknown as ActionChoice | undefined
+    if (!carrier || !choice) return
+    const team = this.getTeam(carrier.side)
+    const opp = this.getOpponent(carrier.side)
+    const sp = action.setPiece
+    const launch = sp ? { x: sp.x, y: sp.y } : { x: carrier.x, y: carrier.y }
+    let flight: MatchBallFlight | null = null
+    if (choice.kind === 'pass') {
+      let to = { ...choice.point }
+      if (choice.type !== 'through' && choice.type !== 'cross') {
+        const receiver = this.playerById(choice.targetId ?? null)
+        if (receiver) {
+          const rough = distance(launch, receiver) / 22
+          to = {
+            x: clamp(receiver.x + (receiver.motion?.vx ?? 0) * rough * 0.6, 2, PITCH_LENGTH - 2),
+            y: clamp(receiver.y + (receiver.motion?.vy ?? 0) * rough * 0.6, 2, PITCH_WIDTH - 2),
+          }
+        }
+      }
+      const speed = choice.type === 'cross' ? 19 : distance(launch, to) > 25 ? 19 : 22
+      const span = clamp(distance(launch, to) / speed, 0.18, Math.max(0.2, action.resolveAt - this.state.clock))
+      flight = { kind: 'pass', from: launch, to, startedAt: this.state.clock, endsAt: toTick(this.state.clock + span) }
+    } else if (choice.kind === 'shoot') {
+      const opts = {
+        point: { x: carrier.x, y: carrier.y },
+        header: false,
+        penalty: sp?.type === 'penalty',
+        freeKick: sp?.type === 'free_kick',
+      }
+      const aim = this.shotAimFor(carrier, opp, opts)
+      action.shotTarget = aim.target
+      const span = clamp(distance(launch, aim.point) / 30, 0.25, Math.max(0.25, action.resolveAt - this.state.clock))
+      flight = { kind: 'shot', from: launch, to: aim.point, startedAt: this.state.clock, endsAt: toTick(this.state.clock + span) }
+    } else if (choice.kind === 'clear') {
+      const span = clamp(distance(launch, choice.point) / 24, 0.2, Math.max(0.2, action.resolveAt - this.state.clock))
+      flight = { kind: 'loose', from: launch, to: { ...choice.point }, startedAt: this.state.clock, endsAt: toTick(this.state.clock + span) }
+    }
+    if (!flight) return
+    action.flight = flight
+    action.phase = 'flight'
+    this.state.ball = { x: launch.x, y: launch.y, ownerId: null, justReceived: false }
+  }
+
+  private shotAimFor(
+    shooter: MatchPlayerState,
+    opp: MatchTeamState,
+    opts: { point: { x: number; y: number }; header: boolean; penalty: boolean; freeKick: boolean },
+  ): { target: GoalDetail['target']; point: { x: number; y: number } } {
+    const detailRng = derivedRng(this.state.seed, 'shot-detail', this.state.step, this.state.log.length)
+    const balance = (this.eff(shooter, 'firstTouch') + this.eff(shooter, 'agility')) / 2
+    if (!opts.header && !(opts.penalty && shooter.foot !== 'B')) chooseShotFoot(shooter, opts.point.y, balance, detailRng)
+    const precision = opts.header
+      ? 0.7 * this.eff(shooter, 'heading') + 0.3 * this.eff(shooter, 'composure')
+      : 0.7 * this.eff(shooter, 'shooting') + 0.3 * this.eff(shooter, 'composure')
+    const gk = this.teamGoalkeeper(opp)
+    const target = chooseShotTarget(precision, detailRng, gk ? gk.y - GOAL_Y : 0)
+    return { target, point: shotAimPoint(shooter.side, target) }
+  }
+
+  private positionFlight(action: MatchActionState): void {
+    const flight = action.flight
+    if (!flight) return
+    const span = Math.max(0.1, flight.endsAt - flight.startedAt)
+    const t = clamp((this.state.clock - flight.startedAt) / span, 0, 1)
+    this.state.ball.x = flight.from.x + (flight.to.x - flight.from.x) * t
+    this.state.ball.y = flight.from.y + (flight.to.y - flight.from.y) * t
+    this.state.ball.ownerId = null
+    if (t >= 1 && action.phase === 'flight') action.phase = 'settle'
+  }
+
+  private resolveContinuousAction(action: MatchActionState): void {
+    const logStart = this.state.log.length
+    let entry: MatchLogEntry | null = null
+    if (action.kind === 'foul') {
+      this.state.action = null
+      return
+    }
+    if (action.kind === 'loose') {
+      entry = this.resolveLooseBall()
+    } else if (action.kind === 'setpiece') {
+      entry = this.resolveSetPiece(action)
+    } else {
+      const carrier = this.playerById(action.actorId) ?? this.carrier()
+      const choice = action.choice as unknown as ActionChoice | undefined
+      if (carrier && choice) {
+        const team = this.getTeam(carrier.side)
+        const opp = this.getOpponent(carrier.side)
+        if (choice.kind === 'pass') {
+          choice.start = action.flight?.from
+          entry = this.resolvePass(team, opp, carrier, choice, action.resolveAt - action.startedAt)
+        } else if (choice.kind === 'dribble') {
+          entry = this.resolveDribble(team, opp, carrier, choice, action.resolveAt - action.startedAt)
+        } else if (choice.kind === 'shoot') {
+          entry = this.resolveShot(carrier, team, opp, {
+            point: { x: carrier.x, y: carrier.y }, header: false, penalty: false, freeKick: false, target: action.shotTarget,
+          })
+        } else {
+          entry = this.resolveClear(team, carrier, choice)
+        }
+      }
+    }
+    this.state.action = null
+    if (entry === null) entry = this.state.log.slice(logStart).at(-1) ?? null
+    const carrier = this.playerById(action.actorId)
+    if (entry?.reason && carrier && action.decision) {
+      if (action.decision.missed > 0 && (action.choice?.kind === 'pass' || action.choice?.kind === 'dribble')) {
+        this.addFailure(carrier, 'unrecognized', `${carrier.name} 没有识别到更向前的线路`)
+      }
+      if (action.decision.chosenQ < action.decision.bestQ - 0.05 && action.choice?.kind !== 'clear') {
+        this.addFailure(carrier, 'misjudged', `${carrier.name} 在多个选择中选了一个风险收益更差的动作`)
+      }
+    }
+    this.state.phase = this.state.pendingSetPiece ? 'setpiece' : 'open'
+  }
+
+  private resolveSetPiece(action: MatchActionState): MatchLogEntry | null {
+    const sp = action.setPiece
+    const choice = action.choice as unknown as ActionChoice | undefined
+    if (!sp || !choice) return null
+    const team = this.getTeam(sp.teamSide)
+    const opp = this.getOpponent(sp.teamSide)
+    const taker = this.playerById(sp.takerId ?? null)
+    if (!taker) return null
+    if (sp.type === 'corner') return this.resolveAerial(team, opp, choice.point, sp.teamSide, true)
+    if (sp.type === 'free_kick') {
+      if (sp.mode === 'shot') {
+        return this.resolveShot(taker, team, opp, { point: { x: sp.x, y: sp.y }, header: false, penalty: false, freeKick: true, target: action.shotTarget })
+      }
+      if (sp.mode === 'cross') return this.deliverFreeKick(team, opp, taker)
+    }
+    if (sp.type === 'penalty') {
+      return this.resolveShot(taker, team, opp, { point: { x: taker.x, y: taker.y }, header: false, penalty: true, freeKick: false, target: action.shotTarget })
+    }
+    return this.resolvePass(team, opp, taker, choice, 0)
+  }
+
+  private recordContinuousFrame(from: MatchPlaybackPose | undefined, action: MatchActionState, goal: boolean): void {
+    if (!this.recordPlayback || !from) return
+    const to = capturePlaybackPose(this.state)
+    const motion = this.frameMotion(from, to, action)
+    // 只有重启的首帧是硬切；定位球准备/飞行继续按子帧插值。
+    const restart = action.restart && Math.abs(from.clock - action.startedAt) < 1e-9 ? action.restart : undefined
+    const seq = (this.state.playbackSeq ?? 0) + 1
+    this.state.playbackSeq = seq
+    const frame: MatchPlaybackFrame = {
+      step: action.id,
+      seq,
+      from,
+      to,
+      ...(motion ? { motion } : {}),
+      ...(restart ? { restart } : {}),
+      ...(goal ? { goal: true } : {}),
+      substep: true,
+    }
+    // 每个 0.1 秒都记一帧：只保留最近 18 秒，播放时首尾相接，不会隔一帧空 0.1 秒。
+    const frames = this.state.playbackFrames ??= []
+    frames.push(frame)
+    if (frames.length > PLAYBACK_FRAME_LIMIT_V3) frames.splice(0, frames.length - PLAYBACK_FRAME_LIMIT_V3)
+    this.state.ballMotion = motion
+  }
+
+  private frameMotion(from: MatchPlaybackPose, to: MatchPlaybackPose, action: MatchActionState): BallMotion | undefined {
+    const moved = distance(from.ball, to.ball)
+    if (action.flight && this.state.clock <= action.flight.endsAt + 1e-6) {
+      return {
+        step: action.id,
+        kind: action.flight.kind,
+        from: { x: from.ball.x, y: from.ball.y },
+        to: { x: to.ball.x, y: to.ball.y },
+      }
+    }
+    if (to.ball.ownerId && to.ball.ownerId === from.ball.ownerId) {
+      return { step: action.id, kind: 'dribble', from: { x: from.ball.x, y: from.ball.y }, to: { x: to.ball.x, y: to.ball.y } }
+    }
+    if (moved > 0.02 || from.ball.ownerId !== to.ball.ownerId) {
+      return { step: action.id, kind: 'loose', from: { x: from.ball.x, y: from.ball.y }, to: { x: to.ball.x, y: to.ball.y } }
+    }
+    return undefined
+  }
+
+  private checkPeriodContinuous(): boolean {
+    if (this.state.finished) return true
+    const halfLength = this.durationSeconds / 2
+    if (this.state.half === 1 && this.state.clock >= halfLength - 1e-6) {
+      this.state.clock = halfLength
+      this.state.tick = Math.round(halfLength * 10)
+      this.state.half = 2
+      this.state.action = null
+      this.resetKickoffPositions('away')
+      this.log('half', 'none', '上半场结束，双方交换半场。', {})
+      return true
+    }
+    if (this.state.half === 2 && this.state.clock >= this.durationSeconds - 1e-6) {
+      if (this.knockout && this.state.score.home === this.state.score.away) this.startShootout()
+      else this.finishMatch('全场结束。')
+      return true
+    }
+    return false
+  }
+
+  /** v3 进球后不立刻把全队拉回中圈：等开球动作开始时再切镜头。 */
+  private deferKickoff(side: MatchSide): void {
+    this.state.pendingSetPiece = { type: 'kickoff', teamSide: side, x: PITCH_LENGTH / 2, y: GOAL_Y }
+    this.state.phase = 'setpiece'
+    this.state.possession = side
+  }
+
   simulate(maxSteps = 20000): MatchState {
     let guard = 0
     while (!this.state.finished && guard++ < maxSteps) this.step()
@@ -423,7 +1127,7 @@ export class MatchEngine {
 
   /** 助攻：同一队最后一次成功传球发生在 3 步内，且不是射门者自己。 */
   private assistFor(shooter: MatchPlayerState): MatchPlayerState | undefined {
-    const pass = this.recordAssist
+    const pass = this.state.recordAssist
     if (!pass || pass.side !== shooter.side || pass.id === shooter.id) return undefined
     if (this.state.step - pass.step > 3) return undefined
     return this.getTeam(shooter.side).players.find((player) => player.id === pass.id)
@@ -433,7 +1137,7 @@ export class MatchEngine {
     return this.state.stats[team.side]
   }
 
-  private playerById(id: string | null): MatchPlayerState | undefined {
+  private playerById(id: string | null | undefined): MatchPlayerState | undefined {
     if (!id) return undefined
     for (const team of this.state.teams) {
       const found = team.players.find((player) => player.id === id) ?? team.bench.find((player) => player.id === id)
@@ -535,9 +1239,9 @@ export class MatchEngine {
 
   /** 光环和威慑：场上球员对全队或对手全队的属性加减。每一步算一次，避免 eff 里反复遍历。 */
   private teamTraitBonus(side: MatchSide, key: AttrKey): number {
-    if (this.teamTraitStep !== this.state.step) {
-      this.teamTraitStep = this.state.step
-      this.teamTraits.clear()
+    if (this.state.teamTraitStep !== this.state.step) {
+      this.state.teamTraitStep = this.state.step
+      const traits: Record<string, number> = {}
       for (const team of this.state.teams) {
         for (const carrier of team.players) {
           const trait = STAR_TRAITS[carrier.traitId]
@@ -545,12 +1249,12 @@ export class MatchEngine {
           if (!this.traitConditionMet(carrier, trait.when)) continue
           const target = `${trait.kind === 'aura' ? carrier.side : opponentSide(carrier.side)}|${trait.attr}`
           const delta = (trait.kind === 'aura' ? trait.bonus : -trait.bonus) / MAIN_ATTR_SCALE
-          this.teamTraits.set(target, (this.teamTraits.get(target) ?? 0) + delta)
+          traits[target] = (traits[target] ?? 0) + delta
         }
       }
+      this.state.teamTraits = traits
     }
-    if (this.teamTraits.size === 0) return 0
-    return this.teamTraits.get(`${side}|${key}`) ?? 0
+    return this.state.teamTraits?.[`${side}|${key}`] ?? 0
   }
 
   private shotScopeMatches(scope: ShotScope, chance: ShotChanceDetail, inBoxShot: boolean, opts: { header: boolean; penalty: boolean; freeKick: boolean }): boolean {
@@ -1222,10 +1926,9 @@ export class MatchEngine {
   private resolvePass(team: MatchTeamState, opp: MatchTeamState, carrier: MatchPlayerState, choice: ActionChoice, time: number): MatchLogEntry | null {
     const receiver = this.playerById(choice.targetId ?? null)
     if (!receiver || !receiver.onPitch) return this.resolveLooseBall()
-    const from = { x: carrier.x, y: carrier.y }
-    // 不再把接球人直接挪到落点：moveAll 已经让他朝那个点跑了一段，球就落在他脚下。
-    // 这样直塞不会出现“人凭空出现在 20 米外”，代价是极端情况下传球会略微短一点。
-    const to = { x: receiver.x, y: receiver.y }
+    const from = this.continuous ? (choice.start ?? { x: carrier.x, y: carrier.y }) : { x: carrier.x, y: carrier.y }
+    // v3：球已经按权威轨迹飞到落点；模型必须用真实落点，而不是把球瞬移回接球人脚下。
+    const to = this.continuous ? { x: this.state.ball.x, y: this.state.ball.y } : { x: receiver.x, y: receiver.y }
     const model = this.passModel(carrier, receiver, choice.type, opp, from, to, true)
     const deviation = choice.type === 'cross' ? 0 : distance(receiver, to)
     const p = clamp(model.p - Math.min(0.12, Math.max(0, deviation - 4) * 0.015), 0.05, 0.97)
@@ -1253,7 +1956,22 @@ export class MatchEngine {
     const roll = round(this.resultRng.float())
     const success = roll < p
     if (success) {
-      this.recordAssist = { id: carrier.id, name: carrier.name, side: carrier.side, step: this.state.step }
+      // v3：模型说“能传到”不等于接球人真能到。球落在几米外就变成落点争抢，
+      // 不把球瞬移到他脚下，也不计完成传球/助攻。
+      if (this.continuous) {
+        const reach = choice.type === 'cross' ? 8 : 3.4 + this.eff(receiver, 'anticipation') * 0.02
+        if (distance(receiver, to) > reach) {
+          this.state.ball = { x: to.x, y: to.y, ownerId: null, justReceived: false }
+          this.state.possession = carrier.side
+          return this.log('contest', carrier.side, `${receiver.name} 没能在落点接住，球权待争。`, {
+            playerId: receiver.id,
+            probabilities,
+            ratings,
+            roll,
+          })
+        }
+      }
+      this.state.recordAssist = { id: carrier.id, name: carrier.name, side: carrier.side, step: this.state.step }
       carrier.stats.passesCompleted++
       this.statsOf(team).passesCompleted++
       this.state.ball = { x: receiver.x, y: receiver.y, ownerId: receiver.id, justReceived: true }
@@ -1715,7 +2433,7 @@ export class MatchEngine {
     shooter: MatchPlayerState,
     team: MatchTeamState,
     opp: MatchTeamState,
-    opts: { point: { x: number; y: number }; header: boolean; penalty: boolean; freeKick: boolean },
+    opts: { point: { x: number; y: number }; header: boolean; penalty: boolean; freeKick: boolean; target?: GoalDetail['target'] },
   ): MatchLogEntry {
     const origin = { x: opts.point.x, y: opts.point.y }
     const detailRng = derivedRng(this.state.seed, 'shot-detail', this.state.step, this.state.log.length)
@@ -1728,7 +2446,7 @@ export class MatchEngine {
       : 0.7 * this.eff(shooter, 'shooting') + 0.3 * this.eff(shooter, 'composure')
     // 门将偏哪边就往另一边打，射门不再总是打在门将身上。
     const gkNow = this.teamGoalkeeper(opp)
-    const target = chooseShotTarget(precision, detailRng, gkNow ? gkNow.y - GOAL_Y : 0)
+    const target = opts.target ?? chooseShotTarget(precision, detailRng, gkNow ? gkNow.y - GOAL_Y : 0)
     const technique: GoalDetail['technique'] = opts.header ? 'header' : detailRng.chance(clamp(0.5 + (this.eff(shooter, 'strength') - this.eff(shooter, 'composure')) / 160, 0.2, 0.8)) ? 'power' : 'placed'
     const model = this.shotModel(shooter, team, opp, { ...opts, point: origin, foot }, true)
     const corner = target.endsWith('left') || target.endsWith('right')
@@ -1783,7 +2501,8 @@ export class MatchEngine {
         shotChance,
         roll,
       })
-      this.resetKickoffPositions(opponentSide(shooter.side))
+      if (this.continuous) this.deferKickoff(opponentSide(shooter.side))
+      else this.resetKickoffPositions(opponentSide(shooter.side))
       return this.state.log[this.state.log.length - 1]
     }
     if (roll < raw.goal + raw.save) {
@@ -2079,7 +2798,7 @@ export class MatchEngine {
       }
       // 没人够得着：球就留在落点，下一步由两队最近的球员跑过去抢（chaseLooseBall）。
       const entry = this.log('info', 'none', '球落在无人区，双方开始追抢。', {})
-      this.advanceClock(1.2)
+      if (!this.continuous) this.advanceClock(1.2)
       return entry
     }
     const total = candidates.reduce((sum, item) => sum + item.weight, 0)
@@ -2102,8 +2821,8 @@ export class MatchEngine {
       probabilities,
       roll: round(roll / total),
     })
-    this.advanceClock(2)
-    this.advancePlayerMinutes(2)
+    if (this.continuous) this.advancePlayerMinutes(2)
+    if (!this.continuous) this.advanceClock(2)
     return entry
   }
 
@@ -2366,7 +3085,9 @@ export class MatchEngine {
     }
     this.state.phase = 'setpiece'
     this.state.possession = teamSide
-    this.state.ball = { x: clamp(x, 1, PITCH_LENGTH - 1), y: clamp(y, 1, PITCH_WIDTH - 1), ownerId: null, justReceived: false }
+    if (!this.continuous) {
+      this.state.ball = { x: clamp(x, 1, PITCH_LENGTH - 1), y: clamp(y, 1, PITCH_WIDTH - 1), ownerId: null, justReceived: false }
+    }
   }
 
   private outcomeOut(side: MatchSide, point: { x: number; y: number }): SetPieceState['type'] {
@@ -2399,6 +3120,7 @@ export class MatchEngine {
         const baseY = slot.y * PITCH_WIDTH
         player.x = team.side === 'home' ? baseX : PITCH_LENGTH - baseX
         player.y = team.side === 'home' ? baseY : PITCH_WIDTH - baseY
+        player.motion = undefined
       }
     }
     this.state.ball = { x: PITCH_LENGTH / 2, y: GOAL_Y, ownerId: null, justReceived: false }

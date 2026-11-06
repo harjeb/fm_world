@@ -13,6 +13,7 @@
     "sim": "tsx scripts/simulate.ts",
     "match:profile": "tsx scripts/count-steps.ts",
     "match:motion": "tsx scripts/motion-profile.ts",
+    "match:timing": "tsx scripts/playback-timing.ts",
     "match:tracking": "tsx scripts/export-match-tracking.ts",
     "smoke:animation": "node scripts/match-animation-smoke.mjs",
     "server": "tsx server/index.ts",

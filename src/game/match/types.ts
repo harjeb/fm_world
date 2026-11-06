@@ -5,6 +5,7 @@ import type {
   CommentaryEntry,
   FailureReason,
   FormationId,
+  GoalDetail,
   MatchInstruction,
   MatchLogEntry,
   MatchMentality,
@@ -19,6 +20,12 @@ import type {
 } from '../types.ts'
 
 export type MatchSide = 'home' | 'away'
+
+export type PlayerMotionState = {
+  vx: number
+  vy: number
+  heading: number
+}
 
 export type MatchPlayerState = {
   id: string
@@ -52,6 +59,8 @@ export type MatchPlayerState = {
   subbedOn?: boolean
   /** “每场一次”的专属特性已经用过。 */
   traitUsed?: boolean
+  /** v3 连续仿真的速度/朝向；v2 存档没有这一项。 */
+  motion?: PlayerMotionState
 }
 
 export type MatchTeamState = {
@@ -99,11 +108,71 @@ export type MatchPlaybackPose = {
 
 export type MatchPlaybackFrame = {
   step: number
+  /** v3 每 0.2 秒一帧，同一步会有多帧；用 seq 去重和排序。 */
+  seq?: number
+  /** v3 权威子帧：球和球员按 from→to 直接插值，不再套用动作级出脚时间线。 */
+  substep?: boolean
   from: MatchPlaybackPose
   to: MatchPlaybackPose
   motion?: BallMotion
   restart?: SetPieceType
   goal?: boolean
+}
+
+export type MatchActionChoice = {
+  kind: 'pass' | 'dribble' | 'shoot' | 'clear'
+  type?: 'short' | 'long' | 'through' | 'cross'
+  targetId?: string
+  point: PitchPoint
+  label: string
+  estimatedP: number
+  successValue: number
+  failureValue: number
+  estimatedTime: number
+  chanceType?: string
+}
+
+export type MatchBallFlight = {
+  kind: 'pass' | 'shot' | 'loose'
+  from: PitchPoint
+  via?: PitchPoint
+  to: PitchPoint
+  startedAt: number
+  endsAt: number
+}
+
+/**
+ * v3 的一个动作：选好动作后先连续跑位，release 时出球，resolve 时只裁决一次。
+ * 全部字段都能存档，因此在任意 0.1 秒边界恢复都能继续。
+ */
+export type MatchActionState = {
+  id: number
+  kind: 'open' | 'setpiece' | 'loose' | 'foul'
+  phase: 'prepare' | 'flight' | 'settle'
+  choice?: MatchActionChoice
+  startedAt: number
+  /** 出脚/出球时刻；dribble 与 loose 等于 resolveAt。 */
+  releaseAt: number
+  resolveAt: number
+  from: PitchPoint
+  target: PitchPoint
+  /** 定位球/开球类型；开放比赛为空。 */
+  restart?: SetPieceType
+  setPiece?: { type: SetPieceType; teamSide: MatchSide; x: number; y: number; takerId?: string; mode?: 'pass' | 'shot' | 'cross'; targetId?: string }
+  /** 最近一次意图更新里各球员的目标位置。 */
+  targets?: Record<string, PitchPoint>
+  targetsAt?: number
+  /** 当前压迫者（防守方），供逐 tick 体力消耗复用。 */
+  presserId?: string
+  flight?: MatchBallFlight
+  actorId?: string
+  receiverId?: string
+  /** 出脚时已算好的射门目标（与 resolveShot 的 detailRng 对齐）。 */
+  shotTarget?: GoalDetail['target']
+  /** 选择时的评估摘要，用于赛后失败归因；不影响判定。 */
+  decision?: { recognized: number; missed: number; chosenQ: number; bestQ: number }
+  /** 出脚前已经知道的结果（点球大战等）；普通动作在 resolveAt 才 roll。 */
+  fallback?: boolean
 }
 
 export type SetPieceState = {
@@ -154,6 +223,19 @@ export type MatchState = {
   ball: BallState
   ballMotion?: BallMotion
   playbackFrames?: MatchPlaybackFrame[]
+  /** v3：0.1 秒基础步计数；step 仍是动作/回合数。 */
+  tick?: number
+  /** v3：当前正在执行的动作。 */
+  action?: MatchActionState | null
+  /** v3：帧的单调序号，防止同一步的多帧被去重掉。 */
+  playbackSeq?: number
+  /** 球队光环/威慑缓存：按 step 失效，必须随存档恢复，否则读档后会在动作中途重算。 */
+  teamTraitStep?: number
+  teamTraits?: Record<string, number>
+  /** v3 运动参数缓存：必须随存档恢复，否则会在动作中途按不同时刻重算 eff()。 */
+  motionProfiles?: Record<string, { stamina: number; profile: { maxSpeed: number; acceleration: number; deceleration: number; turnRate: number } }>
+  /** 最近一次成功传球：进球助攻要在读档后仍然成立。 */
+  recordAssist?: { id: string; name: string; side: MatchSide; step: number }
   possession: MatchSide | null
   pendingSetPiece: SetPieceState | null
   finished: boolean
@@ -191,6 +273,8 @@ export type MatchEngineOptions = {
   knockout: boolean
   durationSeconds?: number
   offside?: boolean
+  /** 2 只用于回归对照；默认使用当前规则版本。 */
+  rulesVersion?: number
 }
 
 export type StepResult = {

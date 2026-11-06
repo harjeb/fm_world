@@ -276,7 +276,7 @@ export function simulateFixture(game: GameState, fixture: Fixture, auto = false,
     homeAway: fixture.homeId === PLAYER_TEAM_ID ? 'home' : 'away',
     durationSeconds: LEAGUE_MATCH_SECONDS,
   }
-  const engine = buildMatchEngineForGame(game, context, homeAI ?? awayAI!, now, suspendedPlayerIds(game))
+  const engine = buildMatchEngineForGame(game, context, homeAI ?? awayAI!, now, suspendedPlayerIds(game), auto ? 2 : undefined)
   const state = engine.simulate()
   recordMatchInjuries(game, state, now, auto)
   if (game.world) recordMatchDiscipline(game, state)

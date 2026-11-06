@@ -7,12 +7,13 @@ import { inputFor, makeTeams } from './helpers.ts'
 
 const { roster, lineup } = makeTeams()
 
-function match(seed = 1, knockout = false, durationSeconds?: number) {
+function match(seed = 1, knockout = false, durationSeconds?: number, rulesVersion = 2) {
   return new MatchEngine({
     seed,
     home: inputFor(roster, lineup, 'home', 'Home'),
     away: inputFor(roster, lineup, 'away', 'Away'),
     knockout,
+    rulesVersion,
     ...(durationSeconds === undefined ? {} : { durationSeconds }),
   })
 }
@@ -220,7 +221,7 @@ describe('纯视觉比赛轨迹与隔离预演', () => {
   it('后台 AI 可关闭视觉采集，比分、事件与随机流不受影响', () => {
     const visible = match(31)
     const background = new MatchEngine({
-      seed: 31, knockout: false, recordPlayback: false,
+      seed: 31, knockout: false, recordPlayback: false, rulesVersion: 2,
       home: inputFor(roster, lineup, 'home', 'Home'),
       away: inputFor(roster, lineup, 'away', 'Away'),
     })

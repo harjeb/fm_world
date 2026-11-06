@@ -10,80 +10,17 @@
  *   转向速率 192 / 104 / 53 °/s（步行 / 慢跑 / 全速跑）。
  */
 import type { PitchPoint } from './types.ts'
+import { MOTION_TICK_HZ, MOTION_TICK_SECONDS, motionProfileOf, stepMotion, turnRateAt } from './kinematics.ts'
+import type { MotionProfile } from './kinematics.ts'
 
-/** 与 FM 的 tick 一致：位置 10 Hz，渲染再插值到屏幕刷新率。 */
-export const MOTION_TICK_HZ = 10
-export const MOTION_TICK_SECONDS = 1 / MOTION_TICK_HZ
+export { MOTION_TICK_HZ, MOTION_TICK_SECONDS, PHYSICAL, motionProfileOf, turnRateAt } from './kinematics.ts'
+export type { MotionProfile } from './kinematics.ts'
 
 /** 落后超过这个距离就不再“追”，直接对齐（引擎发生了瞬移）。 */
 export const SNAP_DISTANCE = 10
 
-/** FM24 `physical_constraints.jsb` 的关键取值，单位 m/s、m/s²、°/s。 */
-export const PHYSICAL = {
-  /** 走 / 慢走 / 跑 / 冲刺 / 最高速。 */
-  walkSpeed: 1.341,
-  jogSpeed: 2.682,
-  runSpeed: 4.47,
-  sprintSpeed: 6.706,
-  topSpeed: 8.941,
-  /** 理论最大加速度与减速。 */
-  maxAcceleration: 8.941,
-  minAcceleration: 0.25,
-  maxDeceleration: 4.47,
-  minDeceleration: 1.5,
-  /** 转向速率：低于 2.7 m/s 时 192°/s，低于 5.0 m/s 时 104°/s，全速 53°/s。 */
-  turnRateWalk: 192,
-  turnRateJog: 104,
-  turnRateRun: 53,
-} as const
-
-export type MotionProfile = {
-  /** 本场最高速度（米/秒），由速度属性与剩余体能决定。 */
-  maxSpeed: number
-  /** 起步加速度（米/秒²）。 */
-  acceleration: number
-  /** 刹车减速度（米/秒²）。 */
-  deceleration: number
-  /** 低速时的转向速率（度/秒），高速时按 PHYSICAL 表衰减。 */
-  turnRate: number
-}
-
-/** 属性评分（0–100）与体能比例 → 运动参数。 */
-export function motionProfileOf(input: {
-  speed: number
-  acceleration: number
-  agility: number
-  /** 当前体力 / 满体力，0–1。 */
-  stamina: number
-}): MotionProfile {
-  const speed = Math.max(0, Math.min(100, input.speed)) / 100
-  const accel = Math.max(0, Math.min(100, input.acceleration)) / 100
-  const agility = Math.max(0, Math.min(100, input.agility)) / 100
-  // 体能低于 55% 之后明显掉速；和引擎里体力对跑动的影响方向一致。
-  const stamina = Math.max(0, Math.min(1, input.stamina))
-  const fatigue = 0.62 + 0.38 * Math.min(1, stamina / 0.75)
-  return {
-    maxSpeed: (5.4 + 3.2 * speed) * fatigue,
-    acceleration: PHYSICAL.minAcceleration + (PHYSICAL.maxAcceleration - PHYSICAL.minAcceleration) * accel,
-    deceleration: PHYSICAL.minDeceleration + (PHYSICAL.maxDeceleration - PHYSICAL.minDeceleration) * accel,
-    turnRate: PHYSICAL.turnRateWalk * (0.75 + 0.45 * agility),
-  }
-}
-
-/** 当前速度下的最大转向速率（度/秒）。 */
-export function turnRateAt(profile: MotionProfile, speed: number): number {
-  if (speed < PHYSICAL.jogSpeed) return profile.turnRate
-  if (speed < PHYSICAL.runSpeed) return PHYSICAL.turnRateJog * (profile.turnRate / PHYSICAL.turnRateWalk)
-  return PHYSICAL.turnRateRun * (profile.turnRate / PHYSICAL.turnRateWalk)
-}
-
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
-function wrapAngle(angle: number): number {
-  while (angle > Math.PI) angle -= Math.PI * 2
-  while (angle < -Math.PI) angle += Math.PI * 2
-  return angle
-}
 
 export type MotionPose = PitchPoint & { speed: number }
 
@@ -126,43 +63,7 @@ export class MotionAgent {
    * 否则每 tick 都会“追上→停下→再追”，画面抖成筛子。
    */
   step(target: PitchPoint, dt = MOTION_TICK_SECONDS, targetSpeed = 0): void {
-    const dx = target.x - this.x
-    const dy = target.y - this.y
-    const distance = Math.hypot(dx, dy)
-    const current = this.speed
-    // 距离近但目标在移动时不能收油：用目标速度做前馈，再补上距离修正。
-    // 目标在身后时先减速再转身：真实球员不会全速画大弧线，
-    // 低速下转向速率也更高（192°/s），于是更快贴回目标。
-    const behind = distance > 0.5 ? Math.abs(wrapAngle(Math.atan2(dy, dx) - this.heading)) : 0
-    const turnFactor = behind > 2.1 ? 0.25 : behind > 1.05 ? 0.5 : 1
-    const chase = (targetSpeed > 0.05 ? Math.max(targetSpeed, distance / 0.45) : distance / 0.25) * turnFactor
-    // 追赶余量：引擎允许瞬时转身，展示层不行，所以急转后会有 1–4 米落后。
-    // 落后越多，允许的冲刺倍率越高（最多 1.35 倍）；不落后时严格按属性上限跑。
-    const jumpy = targetSpeed > this.profile.maxSpeed * 1.2
-    const lagging = targetSpeed > 0.5 ? 1 + Math.min(0.35, Math.max(0, distance - 0.8) * 0.06) : 1
-    const catchUp = jumpy && distance > 3 ? Math.max(lagging, 1 + Math.min(0.5, (distance - 3) / 10)) : lagging
-    const wantedSpeed = distance < 0.04 && targetSpeed < 0.05 ? 0 : Math.min(this.profile.maxSpeed * catchUp, chase)
-    const nextSpeed = wantedSpeed > current
-      ? Math.min(wantedSpeed, current + this.profile.acceleration * dt)
-      : Math.max(wantedSpeed, current - this.profile.deceleration * dt)
-    if (distance > 1e-4) {
-      const wantedHeading = Math.atan2(dy, dx)
-      const limit = turnRateAt(this.profile, current) * (Math.PI / 180) * dt
-      const delta = wrapAngle(wantedHeading - this.heading)
-      // 静止时直接朝向目标，不需要先转身。
-      this.heading = current < 0.2 ? wantedHeading : this.heading + clamp(delta, -limit, limit)
-    }
-    this.vx = Math.cos(this.heading) * nextSpeed
-    this.vy = Math.sin(this.heading) * nextSpeed
-    this.x += this.vx * dt
-    this.y += this.vy * dt
-    // 球场边界（留 0.4 米，别把点画到线上）。
-    this.x = clamp(this.x, 0.4, 104.6)
-    this.y = clamp(this.y, 0.4, 63.6)
-    if (nextSpeed === 0) {
-      this.vx = 0
-      this.vy = 0
-    }
+    stepMotion(this, this.profile, target, dt, targetSpeed)
   }
 }
 

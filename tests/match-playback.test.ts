@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { MatchPlaybackFrame, MatchPlaybackPose } from '../src/game/match/types.ts'
-import { convexHull, MatchPlayback, samplePlaybackFrame } from '../src/game/match/visualization.ts'
+import { convexHull, MatchPlayback, playbackTimeline, samplePlaybackFrame } from '../src/game/match/visualization.ts'
 import { matchTrackingRows, TRACKING_COLUMNS, trackingCsvRow } from '../src/game/match/tracking.ts'
 
 const pose = (clock: number, x: number): MatchPlaybackPose => ({
@@ -70,12 +70,12 @@ describe('数据驱动的比赛编舞与独立播放时钟', () => {
     goal.goal = true
     goal.to.ball = { x: 100, y: 32, ownerId: null, justReceived: false }
     goal.motion = { step: 1, kind: 'shot', from: { x: 55, y: 20 }, via: { x: 88, y: 32 }, to: { x: 100, y: 32 } }
-    const arrival = 0.94
-    const distance = Math.hypot(45, 12)
-    const flight = Math.max(0.2, Math.min(0.78, distance / 32 / 4))
-    const contact = samplePlaybackFrame(goal, arrival - flight + flight * 0.65)
+    const plan = playbackTimeline(goal)
+    // 触球点在整段飞行的第一条腿结束处，不再写死 0.65。
+    const contact = samplePlaybackFrame(goal, (plan.release + plan.flight * plan.viaAt) / 4)
     expect(contact.ball.x).toBeCloseTo(88)
     expect(contact.ball.y).toBeCloseTo(32)
+    expect(plan.viaAt).toBeGreaterThan(0.5)
     expect(samplePlaybackFrame(goal, 1).ball).toMatchObject({ x: 100, y: 32, ownerId: null })
     const playback = new MatchPlayback(goal.from, 0, 0)
     playback.enqueue([goal], () => 1000, 0)

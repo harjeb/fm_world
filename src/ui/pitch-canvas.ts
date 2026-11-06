@@ -6,7 +6,7 @@ import { inkOn } from './components.ts'
 import { friendlyStepMs, leagueTweenMs } from './match-timing.ts'
 import { capturePlaybackPose } from '../game/match/playback.ts'
 import { planMatchReplay } from '../game/match/replay.ts'
-import type { MatchPlaybackPose, MatchPlayerState } from '../game/match/types.ts'
+import type { MatchPlaybackFrame, MatchPlaybackPose, MatchPlayerState } from '../game/match/types.ts'
 import { convexHull, MatchPlayback, type PlaybackSample, type PoseResolver } from '../game/match/visualization.ts'
 import { MotionClock, MotionField, motionProfileOf, type MotionProfile } from '../game/match/motion.ts'
 import { drawFootball2dBase } from './football2d-field.ts'
@@ -24,6 +24,8 @@ const view = {
   key: '',
   planKey: '',
   step: -1,
+  /** 已入队的最新轨迹序号（v3 一个动作有多帧，不能再用 step 去重）。 */
+  seq: 0,
   frame: null as number | null,
   ground: null as HTMLCanvasElement | null,
   /** 10 Hz 连续运动层：圆点按各自的速度/加速度/转向速率追引擎给的位置。 */
@@ -237,15 +239,21 @@ function drawFrame(canvas: HTMLCanvasElement, engine: MatchEngine, sample: Playb
  */
 function advanceMotion(now: number, first: boolean): PlaybackSample {
   // 用上一帧画出来的位置解析球权：球必须贴在圆点脚下，而不是引擎坐标。
-  const dots = view.motion ? new Map(view.motion.sample(view.clock.alpha).map((player) => [player.id, player])) : null
-  const resolve: PoseResolver | undefined = dots ? (id, fallback) => dots.get(id) ?? fallback : undefined
-  const sample = view.playback!.sample(now, resolve)
+  const dotsAt = () => view.motion
+    ? new Map(view.motion.sample(view.clock.alpha).map((player) => [player.id, player]))
+    : null
+  const resolverAt = (): PoseResolver | undefined => {
+    const dots = dotsAt()
+    return dots ? (id, fallback) => dots.get(id) ?? fallback : undefined
+  }
+  // 先读当前游标，不消费这一帧的时间：下面按 tick 逐步推进，每个 tick 都有自己的目标。
+  const sample = view.playback!.recompute(resolverAt())
   const profiles = motionProfiles(view.roster)
   if (!view.motion || first) {
     view.motion = new MotionField(profiles, sample.players)
     view.motionAt = now
     view.clock.reset()
-    return sample
+    return view.playback!.sample(now, resolverAt())
   }
   view.motion.setProfiles(profiles)
   for (const player of sample.players) view.motion.ensure(profiles, player)
@@ -255,7 +263,8 @@ function advanceMotion(now: number, first: boolean): PlaybackSample {
     view.motionRestart = restartKey
     view.motion.reset(sample.players)
     view.clock.reset()
-    return { ...sample, players: sample.players }
+    const synced = view.playback!.sample(now, resolverAt())
+    return { ...synced, players: synced.players }
   }
   if (!sample.restart) view.motionRestart = ''
   // 断线补帧或换人后位置可能整体跳变：差距太大就地对齐，别让圆点横穿球场追过去。
@@ -267,7 +276,8 @@ function advanceMotion(now: number, first: boolean): PlaybackSample {
   if (drift > 12) {
     view.motion.reset(sample.players)
     view.clock.reset()
-    return { ...sample, players: sample.players }
+    const synced = view.playback!.sample(now, resolverAt())
+    return { ...synced, players: synced.players }
   }
   const dt = Math.max(0, Math.min(0.5, (now - view.motionAt) / 1000))
   view.motionAt = now
@@ -276,13 +286,24 @@ function advanceMotion(now: number, first: boolean): PlaybackSample {
   view.playbackRate = view.playback?.rate() ?? 0
   const rate = live ? view.playbackRate : 0
   const ticks = live ? view.clock.add(dt, rate) : 0
-  const targets = new Map(sample.players.map((player) => [player.id, player]))
-  for (let index = 0; index < ticks; index++) view.motion.tick(targets)
+  let last = sample
+  if (ticks > 0) {
+    // 一个渲染帧里补多个 tick 时，必须每个 tick 重新采样目标；
+    // 重复喂同一个坐标会用同一段位移估算目标速度，跑起来一顿一顿。
+    const stepMs = (dt * 1000) / ticks
+    for (let index = 0; index < ticks; index++) {
+      last = view.playback!.advanceBy(stepMs)
+      view.motion.tick(new Map(last.players.map((player) => [player.id, player])))
+    }
+    last = view.playback!.recompute(resolverAt())
+  } else {
+    last = view.playback!.sample(now)
+  }
   const alpha = view.clock.alpha
   const moved = new Map(view.motion.sample(alpha).map((player) => [player.id, player]))
   return {
-    ...sample,
-    players: sample.players.map((player) => {
+    ...last,
+    players: last.players.map((player) => {
       const point = moved.get(player.id)
       return point ? { ...player, x: point.x, y: point.y } : player
     }),
@@ -318,6 +339,8 @@ export function drawPitch(): void {
     resetPitchView()
     view.key = key
     view.playback = new MatchPlayback(capturePlaybackPose(state), state.step, now)
+    // 重新进入比赛时只播之后确认的轨迹，不把缓冲区里的旧帧重放一遍。
+    view.seq = state.playbackFrames?.at(-1)?.seq ?? state.step
   }
   view.roster = new Map(state.teams.flatMap((team) => [...team.players, ...team.bench].map((player, index) => [player.id, {
     ...player, number: Number.isFinite(player.number) && player.number > 0 ? player.number : index + 1,
@@ -328,17 +351,30 @@ export function drawPitch(): void {
   }
   view.planKey = planKey
   view.playback!.setPlaying(isLive(engine), now)
-  if (!first && !reducedMotion() && state.step > view.step) {
-    const frames = state.playbackFrames?.length ? state.playbackFrames : [{
-      step: state.step,
-      from: view.pose ?? capturePlaybackPose(state),
-      to: capturePlaybackPose(state),
-      motion: state.ballMotion,
-    }]
-    view.playback!.enqueue(frames, (frame) => {
-      const seconds = Math.max(0, frame.to.clock - frame.from.clock)
-      return isLeague ? leagueTweenMs(seconds, state.durationSeconds) : friendlyStepMs(seconds, ui.matchSpeed)
-    }, now)
+  if (!first && !reducedMotion()) {
+    const keyOf = (frame: MatchPlaybackFrame) => frame.seq ?? frame.step
+    const recorded = state.playbackFrames ?? []
+    const frames = recorded.filter((frame) => keyOf(frame) > view.seq)
+    if (frames.length) {
+      view.playback!.enqueue(frames, (frame) => {
+        const seconds = Math.max(0, frame.to.clock - frame.from.clock)
+        if (isLeague) return leagueTweenMs(seconds, state.durationSeconds)
+        // v3 子帧是动作内部的 0.2 秒片段，不能套“一步至少 0.3×倍速”的下限。
+        if (frame.substep) return Math.max(20, (seconds / 4.1) * ui.matchSpeed)
+        return friendlyStepMs(seconds, ui.matchSpeed)
+      }, now)
+      view.seq = Math.max(view.seq, ...frames.map(keyOf))
+    } else if (!recorded.length && state.step > view.step) {
+      // 没开轨迹的旧存档/录像：仍按一步一帧兜底。
+      const frame: MatchPlaybackFrame = {
+        step: state.step,
+        from: view.pose ?? capturePlaybackPose(state),
+        to: capturePlaybackPose(state),
+        motion: state.ballMotion,
+      }
+      view.playback!.enqueue([frame], (item) => friendlyStepMs(item.to.clock - item.from.clock, ui.matchSpeed), now)
+      view.seq = state.step
+    }
   }
   view.step = state.step
   view.pose = capturePlaybackPose(state)
@@ -370,6 +406,7 @@ export function resetPitchView(): void {
   view.key = ''
   view.planKey = ''
   view.step = -1
+  view.seq = 0
   view.motion = null
   view.motionAt = 0
   view.clock.reset()

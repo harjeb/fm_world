@@ -7,7 +7,7 @@ import { ballPosition } from '../src/ui/match-timing.ts'
 function match(seed: number) {
   const game = createInitialGame(71)
   const input = teamInputFromLineup(game.roster, game.lineup, { id: 'a', name: 'A', color: '#fff', accent: '#000' })
-  return new MatchEngine({ seed, home: input, away: structuredClone(input), knockout: false })
+  return new MatchEngine({ seed, home: input, away: structuredClone(input), knockout: false, rulesVersion: 2 })
 }
 
 describe('回合密度与球的真实运动', () => {

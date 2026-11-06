@@ -31,13 +31,20 @@ export function advanceLeagueRealtime(game: GameState, now = Date.now()): boolea
   const matchElapsed = leagueMatchClock(active, now)
   let engine = MatchEngine.restore(active.engineState as MatchState, false)
   let changed = false
-  for (let count = 0; count < 20_000 && !engine.state.finished && engine.state.clock <= matchElapsed; count++) {
-    const next = MatchEngine.restore(structuredClone(engine.serialize()), false)
-    const logLength = next.state.log.length
-    next.step(true)
-    if (next.state.log.slice(logLength).some((event) => event.clock > matchElapsed)) break
-    engine = next
-    changed = true
+  if (engine.ruleSet === 'v3') {
+    // v3 以 0.1 秒为权威步长：直接推进到当前现实时刻，"比赛时间已经过了"
+    // 和"球员真的跑了这么久"是同一个时钟，不需要试跑整步再回滚。
+    const result = engine.advanceTo(matchElapsed)
+    changed = result.changed
+  } else {
+    for (let count = 0; count < 20_000 && !engine.state.finished && engine.state.clock <= matchElapsed; count++) {
+      const next = MatchEngine.restore(structuredClone(engine.serialize()), false)
+      const logLength = next.state.log.length
+      next.step(true)
+      if (next.state.log.slice(logLength).some((event) => event.clock > matchElapsed)) break
+      engine = next
+      changed = true
+    }
   }
   if (changed) recordMatchInjuries(game, engine.state, active.startedAt, true)
   if (engine.state.finished) {

@@ -11,6 +11,7 @@ function setup(seed = 7) {
     home: inputFor(roster, lineup, 'home', 'Home'),
     away: inputFor(roster, lineup, 'away', 'Away'),
     knockout: false,
+    rulesVersion: 2,
   })
   return engine
 }

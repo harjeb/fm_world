@@ -49,6 +49,9 @@ export function simulateAIvsAIState(home: AITeam, away: AITeam, seed: number, du
     offside: false,
     // 世界后台的批量比赛不需要球场回放，避免给每支 AI 队逐帧复制坐标。
     recordPlayback: false,
+    // 后台只产出赛果：用 v2 的整步模拟，避免几百场比赛按 0.1 秒重算跑位。
+    // 需要展示的比赛（用户自己的联赛/友谊赛）仍走 v3。
+    rulesVersion: 2,
   })
   prepareMatchInjuries(engine.state, injuries, now)
   return engine.simulate()
@@ -148,7 +151,7 @@ export function fixtureScorers(state: ReturnType<MatchEngine['serialize']>): {
   }
 }
 
-export function buildMatchEngineForGame(game: GameState, context: MatchContext, ai: AITeam, now = Date.now(), suspended?: Set<string>): MatchEngine {
+export function buildMatchEngineForGame(game: GameState, context: MatchContext, ai: AITeam, now = Date.now(), suspended?: Set<string>, rulesVersion?: number): MatchEngine {
   const playerInput = teamInputFromLineup(game.roster, game.lineup, {
     id: 'player',
     name: game.clubName,
@@ -164,6 +167,7 @@ export function buildMatchEngineForGame(game: GameState, context: MatchContext, 
     knockout: !context.isLeague,
     durationSeconds: context.durationSeconds,
     offside: context.offside ?? false,
+    ...(rulesVersion === undefined ? {} : { rulesVersion }),
   })
   prepareMatchInjuries(engine.state, game.injuries, now)
   return engine
