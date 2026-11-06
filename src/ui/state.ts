@@ -60,6 +60,8 @@ export type UIState = {
   matchEngine: MatchEngine | null
   matchTimer: number | null
   coachPanel: boolean
+  /** 当前这次教练暂停是否已经扣过一次（同一暂停里多次调整不再扣）。 */
+  coachPauseUsed: boolean
   lineupDraft: Lineup | null
   lineupSlot: string | null
   autoSubsDraft: AutoSubPlan | null
@@ -127,6 +129,7 @@ export const ui: UIState = {
   matchEngine: null,
   matchTimer: null,
   coachPanel: false,
+  coachPauseUsed: false,
   lineupDraft: null,
   lineupSlot: null,
   autoSubsDraft: null,

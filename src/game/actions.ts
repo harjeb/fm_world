@@ -494,3 +494,16 @@ export function useCoachPause(game: GameState): boolean {
   saveGame(game)
   return true
 }
+
+/**
+ * 教练暂停的扣次规则：**打开面板不扣**，只有在同一次暂停里第一次做调整时才扣一次，
+ * 之后这次暂停里的换人/战术都不再重复扣。`alreadyUsed` 是当前这次暂停是否已经扣过。
+ */
+export function reserveCoachPause(game: GameState, alreadyUsed: boolean): { ok: boolean; used: boolean; error?: string } {
+  if (alreadyUsed) return { ok: true, used: true }
+  if (!game.activeMatch || game.activeMatch.context.isLeague) return { ok: false, used: false, error: '联赛不能暂停' }
+  if (game.activeMatch.coachPausesLeft <= 0) return { ok: false, used: false, error: '教练暂停已用完。' }
+  game.activeMatch.coachPausesLeft--
+  saveGame(game)
+  return { ok: true, used: true }
+}

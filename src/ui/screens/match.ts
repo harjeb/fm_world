@@ -69,7 +69,7 @@ function coachPanel(engine: MatchEngine): string {
         <div class="form-row"><label for="match-out">换下</label><select id="match-out" data-keep-value>${players.map((player) => `<option value="${esc(player.id)}">${esc(player.name)} · ${positionLabel(player.position)} · 体力 ${Math.round(staminaOf(player))}%${player.injured ? ' · 受伤' : ''}</option>`).join('')}</select></div>
         <div class="form-row"><label for="match-in">换上</label><select id="match-in" data-keep-value>${bench.length === 0 ? '<option value="">没有可用替补</option>' : bench.map((player) => `<option value="${esc(player.id)}">${esc(player.name)} · ${positionLabel(primaryPosition({ positions: player.positions } as Player))}${player.injured ? ' · 受伤' : ''}</option>`).join('')}</select></div>
         <button class="btn primary small" data-action="match-sub" ${bench.length === 0 ? 'disabled' : ''}>确认换人</button>
-        <p class="hint">${game.activeMatch?.context.isLeague ? '联赛继续进行，调整立即生效' : '换人只在教练暂停时进行'}；被换下球员不能再次上场。</p>
+        <p class="hint">${game.activeMatch?.context.isLeague ? '联赛继续进行，调整立即生效' : `打开面板不消耗暂停；同一次暂停里第一次调整才用掉 1 次（还剩 ${game.activeMatch?.coachPausesLeft ?? 0} 次）`}；被换下球员不能再次上场。</p>
       </div>
     </div>`, { className: 'coach-panel', aside: `<span class="muted small">换人 ${team.subsUsed} / 3 次（含自动）</span>` })
 }
@@ -112,7 +112,7 @@ export function renderMatch(): string {
             <button class="btn ${ui.matchPlaying ? '' : 'primary'}" data-action="match-toggle">${ui.matchPlaying ? `${icon('pause', 14)}暂停` : state.finished ? '已结束' : `${icon('play', 14)}开始 / 继续`}</button>
             <div class="seg" role="group" aria-label="比赛速度"><button class="${ui.matchSpeed === 4000 ? 'active' : ''}" data-speed="4000">慢</button><button class="${ui.matchSpeed === 2700 ? 'active' : ''}" data-speed="2700">正常</button><button class="${ui.matchSpeed === 1350 ? 'active' : ''}" data-speed="1350">快</button></div>
             <button class="btn small" data-action="match-skip">${icon('skip', 13)}跳过到终场</button>
-            <button class="btn small" data-action="match-coach" ${active.coachPausesLeft <= 0 ? 'disabled' : ''}>${icon('coach', 13)}教练暂停（${active.coachPausesLeft}）</button>`}
+            <button class="btn small ${ui.coachPanel ? 'active' : ''}" data-action="match-coach" ${ui.coachPanel || active.coachPausesLeft > 0 ? '' : 'disabled'}>${icon('coach', 13)}${ui.coachPanel ? '收起调整' : `教练暂停（${active.coachPausesLeft}）`}</button>`}
         ${active.context.isLeague ? `<span class="muted small steps">${state.step} 步 · 种子 ${active.context.seed}</span>` : ''}
       </div>
       ${ui.coachPanel ? coachPanel(engine) : ''}

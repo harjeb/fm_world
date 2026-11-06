@@ -26,7 +26,7 @@ import {
   syncActiveEngine,
   trainingAction,
   trainingEventChoice,
-  useCoachPause,
+  reserveCoachPause,
 } from '../game/actions.ts'
 import type { TrainingActionId } from '../game/training.ts'
 import type { TrainingActivityId } from '../game/training-calendar.ts'
@@ -1097,12 +1097,25 @@ document.addEventListener('click', async (event) => {
       if (game.activeMatch?.context.isLeague) {
         ui.coachPanel = !ui.coachPanel
         render()
-      } else if (useCoachPause(game)) {
-        ui.matchPlaying = false
-        stopTimer()
-        ui.coachPanel = true
+        break
+      }
+      // 打开/收起面板都不消耗暂停次数，只有真正做出调整才扣（见 match-tactics-apply / match-sub）。
+      if (ui.coachPanel) {
+        ui.coachPanel = false
+        ui.coachPauseUsed = false
+        if (ui.matchEngine && !ui.matchEngine.state.finished) ui.matchPlaying = true
         render()
-      } else showNotice('教练暂停已用完。')
+        break
+      }
+      if ((game.activeMatch?.coachPausesLeft ?? 0) <= 0) {
+        showNotice('教练暂停已用完。')
+        break
+      }
+      ui.matchPlaying = false
+      stopTimer()
+      ui.coachPanel = true
+      ui.coachPauseUsed = false
+      render()
       break
     case 'match-tactics-apply':
       if (ui.matchEngine) {
@@ -1115,6 +1128,12 @@ document.addEventListener('click', async (event) => {
         } else {
           if (game.activeMatch?.context.isLeague) tickRealtimeLeague()
           if (!ui.matchEngine || !game.activeMatch) break
+          // 友谊赛：同一次暂停里的第一次调整扣 1 次，之后不再重复扣。
+          if (!game.activeMatch.context.isLeague) {
+            const pause = reserveCoachPause(game, ui.coachPauseUsed)
+            if (!pause.ok) { ui.notice = pause.error ?? '无法暂停'; render(); break }
+            ui.coachPauseUsed = pause.used
+          }
           const result = changeMatchTactics(game, ui.matchEngine, mentality)
           ui.notice = result.ok ? '战术已更新。' : result.error ?? '更新失败'
         }
@@ -1134,6 +1153,11 @@ document.addEventListener('click', async (event) => {
       } else {
         if (game.activeMatch?.context.isLeague) tickRealtimeLeague()
         if (!ui.matchEngine || !game.activeMatch) break
+        if (!game.activeMatch.context.isLeague) {
+          const pause = reserveCoachPause(game, ui.coachPauseUsed)
+          if (!pause.ok) { ui.notice = pause.error ?? '无法暂停'; render(); break }
+          ui.coachPauseUsed = pause.used
+        }
         const result = makeSubstitution(game, ui.matchEngine, out, input)
         ui.notice = result.ok ? '换人完成。' : result.error ?? '换人失败'
       }
