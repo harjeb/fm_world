@@ -249,8 +249,8 @@ function advanceMotion(now: number, first: boolean): PlaybackSample {
   }
   view.motion.setProfiles(profiles)
   for (const player of sample.players) view.motion.ensure(profiles, player)
-  // 定位球/开球/进球后的重置：这一步直接对齐，别让全队从球门跑回中圈。
-  const restartKey = sample.restart ? `${sample.step}:${sample.restart}` : ''
+  // 只有开球/中场这种真正的“切镜头”才对齐；角球、任意球、界外球现在会跑过去。
+  const restartKey = sample.restart === 'kickoff' ? `${sample.step}:${sample.restart}` : ''
   if (restartKey && restartKey !== view.motionRestart) {
     view.motionRestart = restartKey
     view.motion.reset(sample.players)

@@ -21,7 +21,7 @@ import { effectiveAttr, isGoalkeeper } from '../ca.ts'
 import { PCG32, derivedRng } from '../rng.ts'
 import { injuryProneness, injuryRisk, injuryRecoveryDays } from '../injury.ts'
 import { commentLog, commentPossession, restoreCommentary } from './commentary.ts'
-import { chooseShotFoot, chooseShotTarget, isWeakShotFoot, shotPositionText, shotTargetText } from './shooting.ts'
+import { chooseShotFoot, chooseShotTarget, isWeakShotFoot, shotAimPoint, shotPositionText, shotTargetText } from './shooting.ts'
 import { GOAL_Y, PITCH_LENGTH, PITCH_WIDTH, GOAL_WIDTH, buildMatchTeam, opponentSide } from './team.ts'
 import { LOGIC_MATCH_SECONDS, MATCH_RULES_VERSION, displayClock } from './time.ts'
 import { capturePlaybackPose, PLAYBACK_FRAME_LIMIT } from './playback.ts'
@@ -346,9 +346,11 @@ export class MatchEngine {
         const via = origin && distance(from, origin) > 4 ? origin : undefined
         // resetKickoffPositions 可在上面的动作调用内写入；TS 不跟踪方法的字段副作用。
         const beforeReset = this.playbackBeforeReset as MatchPlaybackPose | undefined
-        const target = goal?.goal
-          ? { x: goalXOf(goal.goal.side), y: GOAL_Y }
-          : { x: beforeReset?.ball.x ?? this.state.ball.x, y: beforeReset?.ball.y ?? this.state.ball.y }
+        const target = action?.shotAim
+          ? { x: action.shotAim.x, y: action.shotAim.y }
+          : goal?.goal
+            ? { x: goalXOf(goal.goal.side), y: GOAL_Y }
+            : { x: beforeReset?.ball.x ?? this.state.ball.x, y: beforeReset?.ball.y ?? this.state.ball.y }
         this.state.ballMotion = { step: this.state.step, kind, from, ...(via ? { via } : {}), to: target }
       }
       this.recordPlaybackFrame(playbackFrom, restart, goal !== undefined)
@@ -745,8 +747,8 @@ export class MatchEngine {
         chanceType: model.chance.type,
       }
       // 远距离的低质量起脚不再和禁区里的机会等价：距离越远，越倾向再传一脚。
-      const distancePenalty = Math.max(0, carrierGoalDistance - 22) * 0.0012
-      choice.q = p * 1 + (1 - p) * -0.03 + chanceValue * 0.26 - distancePenalty - 3 * 0.0012 - 0.2 * 0.0005 + tactical
+      const distancePenalty = Math.max(0, carrierGoalDistance - 20) * 0.002
+      choice.q = p * 1 + (1 - p) * -0.03 + chanceValue * 0.22 - distancePenalty - 3 * 0.0012 - 0.2 * 0.0005 + tactical
       candidates.push(choice)
     }
 
@@ -856,7 +858,9 @@ export class MatchEngine {
     return { prep, execution: execution * pace, total: prep + execution * pace }
   }
 
-  private moveAll(team: MatchTeamState, opp: MatchTeamState, carrier: MatchPlayerState, choice: ActionChoice, time: number): void {
+  private moveAll(team: MatchTeamState, opp: MatchTeamState, carrier: MatchPlayerState, choice: ActionChoice, requestedTime: number): void {
+    // 终场前最后一步时钟会被截断：跑动时间跟着截断，别让人一步滑出十几米。
+    const time = Math.max(0, Math.min(requestedTime, this.durationSeconds - this.state.clock))
     const attacking = carrier.side
     const presser = this.pickPresser(opp, carrier)
     const marking = this.buildMarking(opp, team)
@@ -1668,7 +1672,7 @@ export class MatchEngine {
       if (markSkills) this.markSkill(shooter, 'penalty_specialist', true, true)
     }
     // 先调整普通射门的基础转化率，再叠加技能/专属特性的固定加成。
-    if (!this.legacyRules && !noKeeper && (chance.type === 'normal' || chance.type === 'difficult')) goalGiven *= 0.9
+    if (!this.legacyRules && !noKeeper && (chance.type === 'normal' || chance.type === 'difficult')) goalGiven *= 0.75
     const finisher = STAR_TRAITS[shooter.traitId]
     if (finisher?.kind === 'shot' && this.shotScopeMatches(finisher.scope, chance, inBoxShot, opts) && this.traitConditionMet(shooter, finisher.when)) {
       onTarget += finisher.onTarget / 100
@@ -1722,13 +1726,15 @@ export class MatchEngine {
     const precision = opts.header
       ? 0.7 * this.eff(shooter, 'heading') + 0.3 * this.eff(shooter, 'composure')
       : 0.7 * this.eff(shooter, 'shooting') + 0.3 * this.eff(shooter, 'composure')
-    const target = chooseShotTarget(precision, detailRng)
+    // 门将偏哪边就往另一边打，射门不再总是打在门将身上。
+    const gkNow = this.teamGoalkeeper(opp)
+    const target = chooseShotTarget(precision, detailRng, gkNow ? gkNow.y - GOAL_Y : 0)
     const technique: GoalDetail['technique'] = opts.header ? 'header' : detailRng.chance(clamp(0.5 + (this.eff(shooter, 'strength') - this.eff(shooter, 'composure')) / 160, 0.2, 0.8)) ? 'power' : 'placed'
     const model = this.shotModel(shooter, team, opp, { ...opts, point: origin, foot }, true)
     const corner = target.endsWith('left') || target.endsWith('right')
-    const onTarget = clamp(model.onTarget + (corner ? -0.02 : 0.02) + (technique === 'power' ? -0.015 : technique === 'placed' ? 0.015 : 0), model.chance.floor, model.chance.ceiling)
+    const onTarget = clamp(model.onTarget + (corner ? -0.035 : 0.02) + (technique === 'power' ? -0.015 : technique === 'placed' ? 0.015 : 0), model.chance.floor, model.chance.ceiling)
     const goalCap = model.chance.type === 'open_goal' || model.goalGivenOnTarget >= 1 ? 1 : 0.95
-    const goalGiven = clamp(model.goalGivenOnTarget + (corner ? 0.03 : -0.02) + (technique === 'power' ? 0.025 : technique === 'placed' ? -0.015 : 0), 0.05, goalCap)
+    const goalGiven = clamp(model.goalGivenOnTarget + (corner ? 0.02 : -0.02) + (technique === 'power' ? 0.025 : technique === 'placed' ? -0.015 : 0), 0.05, goalCap)
     const raw = {
       block: model.block,
       off: (1 - model.block) * (1 - onTarget),
@@ -1744,6 +1750,7 @@ export class MatchEngine {
     const shotRatings = { block: round(model.block), onTarget: round(onTarget), goalGiven: round(goalGiven), finish: round(model.finishScore), gk: round(model.gkScore) }
     const shotChance: ShotChanceDetail | undefined = this.legacyRules ? undefined : { ...model.chance, base: round(model.chance.base), floor: round(model.chance.floor), ceiling: round(model.chance.ceiling), goalBase: round(model.chance.goalBase), distance: round(model.chance.distance), angle: round(model.chance.angle), pressure: round(model.chance.pressure) }
     const roll = this.resultRng.float()
+    const shotAim = shotAimPoint(shooter.side, target)
     shooter.stats.shots++
     shooter.stats.touches++
     this.statsOf(team).shots++
@@ -1770,7 +1777,7 @@ export class MatchEngine {
       const action = technique === 'header' ? '头球攻门' : `${foot === 'left' ? '左脚' : '右脚'}${technique === 'power' ? '抽射' : '推射'}`
       const situation = opts.penalty ? '主罚点球，' : opts.freeKick ? '主罚任意球，' : ''
       this.log('goal', shooter.side, `${shooter.name}${situation}在${shotPositionText(goal)}${action}，球飞入球门${shotTargetText(target)}！${this.state.score.home} : ${this.state.score.away}`, {
-        playerId: shooter.id, goal,
+        playerId: shooter.id, goal, shotAim: shotAimPoint(shooter.side, target),
         probabilities: probs,
         ratings: shotRatings,
         shotChance,
@@ -1793,6 +1800,7 @@ export class MatchEngine {
           shotChance,
           roll,
           reason: 'execution',
+          shotAim,
         })
       }
       if (gk) {
@@ -1809,6 +1817,7 @@ export class MatchEngine {
             shotChance,
             roll,
             reason: 'execution',
+            shotAim,
           })
         }
         const nearGoal = distance(shooter, { x: goalXOf(shooter.side), y: GOAL_Y }) < 18
@@ -1822,6 +1831,7 @@ export class MatchEngine {
             shotChance,
             roll,
             reason: 'execution',
+            shotAim,
           })
         }
         this.state.ball = { x: clamp(gk.x + dirOf(gk.side) * 2, 1, PITCH_LENGTH - 1), y: gk.y, ownerId: null, justReceived: false }
@@ -1834,6 +1844,7 @@ export class MatchEngine {
           shotChance,
           roll,
           reason: 'execution',
+          shotAim,
         })
       }
     }
@@ -1866,6 +1877,7 @@ export class MatchEngine {
         shotChance,
         roll,
         reason: 'position_timing',
+        shotAim,
       })
     }
     this.state.ball = { x: clamp(goalXOf(shooter.side), 2, PITCH_LENGTH - 2), y: shooter.y, ownerId: null, justReceived: false }
@@ -1879,6 +1891,7 @@ export class MatchEngine {
       shotChance,
       roll,
       reason: 'execution',
+      shotAim: { x: shotAim.x, y: clamp(shotAim.y + (shotAim.y - GOAL_Y) * 0.6, 1, PITCH_WIDTH - 1) },
     })
   }
 
@@ -2012,7 +2025,7 @@ export class MatchEngine {
     chasers.sort((a, b) => a.dist - b.dist)
     const closest = chasers[0]
     const pace = Math.max(3.4, 5.4 + 3.2 * (this.eff(closest.player, 'speed') / 100) + 0.3 * (this.eff(closest.player, 'acceleration') / 100))
-    const time = clamp(closest.dist / pace, 1, 3.2)
+    const time = Math.max(0.2, Math.min(clamp(closest.dist / pace, 1, 3.2), this.durationSeconds - this.state.clock))
     for (const { player } of chasers) this.moveRunnerToward(player, ball.x, ball.y, time)
     this.advanceClock(time)
     this.advancePlayerMinutes(time)
@@ -2122,17 +2135,18 @@ export class MatchEngine {
         failureValue: 0,
         estimatedTime: 4,
       }
+      this.moveAll(team, opp, taker, choice, time)
       entry = this.resolvePass(team, opp, taker, choice, time)
     } else if (sp.type === 'throw_in') {
       const taker = this.pickTaker(team, 'pass', sp.x, sp.y)
       if (taker) {
-        taker.x = clamp(sp.x, 2, PITCH_LENGTH - 2)
-        taker.y = clamp(sp.y, 1.5, PITCH_WIDTH - 1.5)
+        this.moveRunnerToward(taker, clamp(sp.x, 2, PITCH_LENGTH - 2), clamp(sp.y, 1.5, PITCH_WIDTH - 1.5), time)
         this.state.ball = { x: taker.x, y: taker.y, ownerId: taker.id, justReceived: false }
         const target = this.pickSafeOutlet(team, taker)
         this.log('setpiece', sp.teamSide, `${team.name} 掷界外球。`, {})
         if (target) {
           const choice: ActionChoice = { kind: 'pass', type: 'short', targetId: target.id, point: target, label: '界外球', estimatedP: 0.85, successValue: 0, failureValue: 0, estimatedTime: 2 }
+          this.moveAll(team, opp, taker, choice, time)
           entry = this.resolvePass(team, opp, taker, choice, 2)
         }
       }
@@ -2140,14 +2154,14 @@ export class MatchEngine {
     } else if (sp.type === 'goal_kick') {
       const gk = this.teamGoalkeeper(team)
       if (gk) {
-        gk.x = ownGoalXOf(team.side) + dirOf(team.side) * 6
-        gk.y = GOAL_Y
+        this.moveRunnerToward(gk, ownGoalXOf(team.side) + dirOf(team.side) * 6, GOAL_Y, time)
         this.state.ball = { x: gk.x, y: gk.y, ownerId: gk.id, justReceived: false }
         const target = this.pickSafeOutlet(team, gk)
         this.log('setpiece', sp.teamSide, `${gk.name} 开球门球。`, { playerId: gk.id })
         if (target) {
           const type = opp.tactics.press === 'high' ? 'long' : 'short'
           const choice: ActionChoice = { kind: 'pass', type, targetId: target.id, point: target, label: '球门球', estimatedP: 0.85, successValue: 0, failureValue: 0, estimatedTime: type === 'short' ? 4 : 6 }
+          this.moveAll(team, opp, gk, choice, time)
           entry = this.resolvePass(team, opp, gk, choice, 2)
         }
       }
@@ -2155,9 +2169,8 @@ export class MatchEngine {
     } else if (sp.type === 'corner') {
       const taker = this.pickTaker(team, 'cross', sp.x, sp.y)
       if (taker) {
-        taker.x = sp.x
-        taker.y = sp.y
-        this.prepareCorner(team, opp, sp)
+        this.moveRunnerToward(taker, sp.x, sp.y, time)
+        this.prepareCorner(team, opp, sp, time)
         this.state.ball = { x: sp.x, y: sp.y, ownerId: taker.id, justReceived: false }
         this.log('setpiece', sp.teamSide, `${taker.name} 主罚角球。`, { playerId: taker.id })
         this.state.ball = { x: goalXOf(team.side) - dirOf(team.side) * 8, y: GOAL_Y, ownerId: null, justReceived: false }
@@ -2173,19 +2186,22 @@ export class MatchEngine {
         ? this.pickTaker(team, direct || this.legacyRules ? 'shoot' : 'cross', sp.x, sp.y, true)
         : this.nearestOutfielder(team, sp)
       if (taker) {
-        if (delivery) this.prepareCorner(team, opp, { ...sp })
-        taker.x = sp.x
-        taker.y = sp.y
+        this.moveRunnerToward(taker, sp.x, sp.y, time)
+        if (delivery) this.prepareCorner(team, opp, { ...sp }, time)
         this.state.ball = { x: sp.x, y: sp.y, ownerId: taker.id, justReceived: false }
         this.log('setpiece', sp.teamSide, `${team.name} 获得任意球，${taker.name} 站在球前。`, { playerId: taker.id })
+        const directChoice: ActionChoice = { kind: 'shoot', point: { x: goalXOf(team.side), y: GOAL_Y }, label: '任意球直接射门', estimatedP: 0.3, successValue: 1, failureValue: 0, estimatedTime: time }
         if (direct) {
+          this.moveAll(team, opp, taker, directChoice, time)
           entry = this.resolveShot(taker, team, opp, { point: sp, header: false, penalty: false, freeKick: true })
         } else if (delivery) {
+          this.moveAll(team, opp, taker, { ...directChoice, label: '任意球传中' }, time)
           entry = this.deliverFreeKick(team, opp, taker)
         } else {
           const target = this.pickSafeOutlet(team, taker)
           if (target) {
             const choice: ActionChoice = { kind: 'pass', type: 'short', targetId: target.id, point: target, label: '任意球', estimatedP: 0.85, successValue: 0, failureValue: 0, estimatedTime: 2 }
+            this.moveAll(team, opp, taker, choice, time)
             entry = this.resolvePass(team, opp, taker, choice, 2)
           }
         }
@@ -2194,15 +2210,13 @@ export class MatchEngine {
     } else if (sp.type === 'penalty') {
       const taker = this.pickTaker(team, 'shoot', sp.x, sp.y)
       if (taker) {
-        taker.x = goalXOf(team.side) - dirOf(team.side) * 12
-        taker.y = GOAL_Y
+        this.moveRunnerToward(taker, goalXOf(team.side) - dirOf(team.side) * 12, GOAL_Y, time)
         const gk = this.teamGoalkeeper(opp)
-        if (gk) {
-          gk.x = goalXOf(team.side) - dirOf(team.side) * 0.8
-          gk.y = GOAL_Y
-        }
+        if (gk) this.moveRunnerToward(gk, goalXOf(team.side) - dirOf(team.side) * 0.8, GOAL_Y, time)
         this.state.ball = { x: taker.x, y: taker.y, ownerId: taker.id, justReceived: false }
         this.log('penalty', sp.teamSide, `${taker.name} 主罚点球。`, { playerId: taker.id })
+        const spot: ActionChoice = { kind: 'shoot', point: { x: goalXOf(team.side), y: GOAL_Y }, label: '点球', estimatedP: 0.9, successValue: 1, failureValue: 0, estimatedTime: time }
+        this.moveAll(team, opp, taker, spot, time)
         entry = this.resolveShot(taker, team, opp, { point: taker, header: false, penalty: true, freeKick: false })
       }
       time = this.legacyRules ? 10 : 6
@@ -2268,7 +2282,7 @@ export class MatchEngine {
     })
   }
 
-  private prepareCorner(team: MatchTeamState, opp: MatchTeamState, sp: SetPieceState): void {
+  private prepareCorner(team: MatchTeamState, opp: MatchTeamState, sp: SetPieceState, time = 6): void {
     const attacking = team.players
       .filter((player) => player.onPitch && player.position !== 'GK')
       .sort((a, b) => b.attrs.heading - a.attrs.heading)
@@ -2277,19 +2291,15 @@ export class MatchEngine {
       .sort((a, b) => b.attrs.heading - a.attrs.heading)
     const gx = goalXOf(team.side)
     const dir = dirOf(team.side)
+    // 定位球站位也靠跑：6–7 秒够从附近跑到禁区，不再把人瞬移进禁区。
     attacking.slice(0, 3).forEach((player, index) => {
-      player.x = clamp(gx - dir * (7 + index * 2), 4, PITCH_LENGTH - 4)
-      player.y = clamp(GOAL_Y + (index - 1) * 7, 20, 44)
+      this.moveRunnerToward(player, clamp(gx - dir * (7 + index * 2), 4, PITCH_LENGTH - 4), clamp(GOAL_Y + (index - 1) * 7, 20, 44), time)
     })
     defenders.slice(0, 4).forEach((player, index) => {
-      player.x = clamp(gx - dir * (3 + index * 1.5), 3, PITCH_LENGTH - 3)
-      player.y = clamp(GOAL_Y + (index - 1.5) * 6, 22, 42)
+      this.moveRunnerToward(player, clamp(gx - dir * (3 + index * 1.5), 3, PITCH_LENGTH - 3), clamp(GOAL_Y + (index - 1.5) * 6, 22, 42), time)
     })
     const gk = this.teamGoalkeeper(opp)
-    if (gk) {
-      gk.x = gx - dir * 1
-      gk.y = GOAL_Y
-    }
+    if (gk) this.moveRunnerToward(gk, gx - dir * 1, GOAL_Y, time)
     sp.x = gx - dir * 1.5
     sp.y = sp.y < GOAL_Y ? 2 : PITCH_WIDTH - 2
   }

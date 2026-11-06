@@ -93,6 +93,12 @@ describe('文字直播与进球', () => {
     expect(model.shotModel(shooter, engine.state.teams[0], opponent, { ...opts, header: true }).pGoal).toBe(model.shotModel(shooter, engine.state.teams[0], opponent, { ...opts, header: true, foot: 'right' }).pGoal)
     const corners = (precision: number) => Array.from({ length: 1000 }, (_, i) => chooseShotTarget(precision, derivedRng(i, 'aim'))).filter((target) => !target.endsWith('center')).length
     expect(corners(90)).toBeGreaterThan(corners(10))
+    // 门将偏一侧时，射门应该更多打向另一侧，而不是照着他踢。
+    const side = (keeperOffset: number) => Array.from({ length: 1000 }, (_, i) => chooseShotTarget(60, derivedRng(i, 'keeper'), keeperOffset))
+    const rightKeeper = side(2)
+    expect(rightKeeper.filter((target) => target.endsWith('left')).length).toBeGreaterThan(rightKeeper.filter((target) => target.endsWith('right')).length * 3)
+    const leftKeeper = side(-2)
+    expect(leftKeeper.filter((target) => target.endsWith('right')).length).toBeGreaterThan(leftKeeper.filter((target) => target.endsWith('left')).length * 3)
   })
 
   it('点球大战逐脚推进，恢复后不会重复或泄露未来结果', () => {

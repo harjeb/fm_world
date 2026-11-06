@@ -26,14 +26,33 @@ export function isWeakShotFoot(player: MatchPlayerState, foot: 'left' | 'right')
 }
 
 /** Abstract aiming zones: their probabilities depend on the same effective attributes as shots. */
-export function chooseShotTarget(precision: number, rng: PCG32): GoalDetail['target'] {
+/**
+ * 射门落点。`keeperOffset` 是门将相对球门中线的横向偏移（米）：
+ * 门将偏哪边，就往另一边打——以前完全不看门将，所以总是“往守门员身上踢”。
+ */
+export function chooseShotTarget(precision: number, rng: PCG32, keeperOffset = 0): GoalDetail['target'] {
   const corner = 0.5 + precision / 100
   const center = 1.6 - precision / 125
   const high = 0.65 + precision / 250
-  return rng.weighted(
-    ['top_left', 'top_center', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right'] as const,
-    [corner * high, center * high, corner * high, corner, center, corner],
-  )
+  const zones = ['top_left', 'top_center', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right'] as const
+  const base = [corner * high, center * high, corner * high, corner, center, corner]
+  // 门将偏右（+y）就把左半边加权，反之亦然；中路稍微降权。
+  const side = Math.abs(keeperOffset) < 0.3 ? 0 : Math.sign(keeperOffset)
+  if (!side) return rng.weighted(zones, base)
+  const weights = zones.map((zone, index) => {
+    const left = zone.endsWith('left')
+    const right = zone.endsWith('right')
+    if (!left && !right) return base[index] * 0.55
+    const far = (side > 0 && left) || (side < 0 && right)
+    return base[index] * (far ? 2.4 : 0.3)
+  })
+  return rng.weighted(zones, weights)
+}
+
+/** 射门目标区域 → 球门线上的落点（x 由进攻方向决定，y 用门将偏移的反方向）。 */
+export function shotAimPoint(side: 'home' | 'away', target: GoalDetail['target']): { x: number; y: number } {
+  const y = target.endsWith('left') ? GOAL_Y - 3.1 : target.endsWith('right') ? GOAL_Y + 3.1 : GOAL_Y
+  return { x: side === 'home' ? PITCH_LENGTH : 0, y }
 }
 
 export function shotPositionText(goal: Pick<GoalDetail, 'side' | 'origin'>): string {

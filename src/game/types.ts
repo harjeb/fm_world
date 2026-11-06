@@ -594,6 +594,8 @@ export type MatchLogEntry = {
   card?: 'yellow' | 'red'
   offside?: boolean
   goal?: GoalDetail
+  /** 射门落点（球门线上的具体位置），回放据此把球踢向角落而不是球门正中。 */
+  shotAim?: { x: number; y: number }
   snapshot?: MatchSnapshot
 }
 

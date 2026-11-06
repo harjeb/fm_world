@@ -304,7 +304,10 @@ describe('联机服务器 / 账号 / SSE', () => {
     expect(finished.game.matchHistory).toHaveLength(1)
     finished.game.activeMatch = oldMatch
     const forged = await fetch(`${base}/api/game`, { method: 'PUT', headers, body: JSON.stringify({ game: finished.game, baseRevision: finished.revision }) })
-    expect(forged.status).toBe(400)
+    // 服务器在两次请求之间可能又推进了一轮（409）；两种拒绝都算没接受伪造的比赛。
+    expect([400, 409]).toContain(forged.status)
+    const afterForgery = await (await fetch(`${base}/api/game`, { headers })).json() as { game: Record<string, any> }
+    expect(afterForgery.game.activeMatch).toBeUndefined()
   })
 
   it('联赛伤病由服务器持久化、跨旧客户端保存和重启，并对 Agent 隐藏易伤属性', async () => {
