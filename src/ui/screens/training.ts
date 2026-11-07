@@ -121,11 +121,18 @@ function autoTrainingPanel(player: Player | null | undefined): string {
         ? tag(`培养中 ${session.action}/${trainingActionsTotal(session)}`, 'info')
         : '<span class="muted small">空闲</span>'
   const priority = config.priority.filter((key) => mains.includes(key))
-  const priorityRows = priority.map((key, index) => `<div class="row-line" style="gap:8px">
-      <span style="flex:1">${index + 1}. ${attrLabel(key)} <span class="muted small">${Math.round(session?.candidate.attrs[key] ?? player?.attrs[key] ?? 0)}</span></span>
+  // 每轮培养都从**原始属性**开始，自动培养也按这个起点算；
+  // 这里绝不能显示当前装备的球员卡，否则玩家会以为是在现有属性上继续练。
+  const priorityRows = priority.map((key, index) => {
+    const start = session?.candidate.attrs[key] ?? player?.baseAttrs?.[key] ?? player?.attrs[key] ?? 0
+    const equipped = player?.attrs[key] ?? start
+    const cardNote = Math.abs(equipped - start) > 0.5 ? `<span class="muted small"> · 当前卡 ${Math.round(equipped)}</span>` : ''
+    return `<div class="row-line" style="gap:8px">
+      <span style="flex:1">${index + 1}. ${attrLabel(key)} <span class="muted small">起点 ${Math.round(start)}</span>${cardNote}</span>
       <button class="btn ghost" data-action="training-auto-priority" data-attr="${key}" data-dir="up" ${index === 0 ? 'disabled' : ''}>↑</button>
       <button class="btn ghost" data-action="training-auto-priority" data-attr="${key}" data-dir="down" ${index === priority.length - 1 ? 'disabled' : ''}>↓</button>
-    </div>`).join('')
+    </div>`
+  }).join('')
   const targetRows = mains.map((key) => `<div class="form-row"><label for="training-auto-target-${key}">${attrLabel(key)}</label>
       <input id="training-auto-target-${key}" data-auto-target="${key}" type="number" min="0" max="1500" step="50" value="${config.targets[key] ?? 0}" style="max-width:140px">
     </div>`).join('')
@@ -134,7 +141,7 @@ function autoTrainingPanel(player: Player | null | undefined): string {
       <div class="seg"><button class="${config.mode === 'priority' ? 'active' : ''}" data-action="training-auto-mode" data-mode="priority">属性优先</button><button class="${config.mode === 'targets' ? 'active' : ''}" data-action="training-auto-mode" data-mode="targets">最低目标</button></div>
       ${state}
     </div>
-    <p class="hint">属性优先：按下面的顺序练，顶到个人上限就换下一个。最低目标：先把低于目标的主属性补到目标，差距最大的先练；全部达标后休息或安排位置/传承。自动培养只在当天日历提供的项目里选择。${config.enabled ? '' : ' 当前设置为停用，自动按钮仍可手动使用。'}</p>
+    <p class="hint">自动培养按<b>起点属性</b>计算——每轮培养都从原始属性重新开始，和现在装备的球员卡无关（括号里同时标出当前卡，方便对比）。属性优先：按下面的顺序练，顶到个人上限就换下一个。最低目标：先把低于目标的主属性补到目标，差距最大的先练；全部达标后休息或安排位置/传承。只在当天日历提供的项目里选择。${config.enabled ? '' : ' 当前设置为停用，自动按钮仍可手动使用。'}</p>
     <div class="grid two">
       <div>
         <div class="field-title">属性优先级</div>
