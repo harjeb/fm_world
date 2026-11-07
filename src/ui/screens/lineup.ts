@@ -101,14 +101,6 @@ function slotPlayerOptions(slot: FormationSlot, role: RoleId, draft: Lineup, for
   }).join('')}`
 }
 
-/** 场上球员的两个关键数字：位置熟练度和当前比赛体能。 */
-function slotMeta(player: Player, position: Position): string {
-  const proficiency = Math.round(player.positions[position])
-  const condition = Math.round(player.condition ?? 100)
-  const tone = condition >= 70 ? 'ok' : condition >= 40 ? 'warn-text' : 'down'
-  return `<small class="slot-meta"><span title="位置熟练度：这名球员踢这个位置的熟练程度">熟练 ${proficiency}</span><span class="slot-sep">·</span><span class="${tone}" title="当前比赛体能，比赛开始时映射为初始体力">体能 ${condition}</span></small>`
-}
-
 function slotCard(slot: FormationSlot, draft: Lineup, formation: FormationDef, selectedId: string | null, color: string): string {
   const starter = draft.starters.find((item) => item.slotId === slot.id)
   const player = playerOf(starter?.playerId)
@@ -120,13 +112,10 @@ function slotCard(slot: FormationSlot, draft: Lineup, formation: FormationDef, s
   const warn = player && (player.positions[slot.position] < 65 || injuryUntil(game, player) || game.suspensions?.[player.id])
   const selected = selectedId === slot.id
   const hint = `${slot.label}：拖动圆点把球员摆到任意位置（松手保存）；选中后用方向键微调；点击圆点在右侧球员表里选人`
-  // 靠近底线的位置（门将）把文字翻到圆点上方，别被球场的 overflow 裁掉。
-  const flip = top > 74
-  return `<div class="slot ${flip ? 'flip' : ''} ${selected ? 'selected' : ''} ${player ? '' : 'vacant'} ${warn ? 'warn' : ''} ${custom ? 'custom-pos' : ''}" style="left:${left.toFixed(1)}%;top:${top.toFixed(1)}%" data-drop="${slotTarget(slot.id)}" data-key="${slot.id}">
+  return `<div class="slot ${selected ? 'selected' : ''} ${player ? '' : 'vacant'} ${warn ? 'warn' : ''} ${custom ? 'custom-pos' : ''}" style="left:${left.toFixed(1)}%;top:${top.toFixed(1)}%" data-drop="${slotTarget(slot.id)}" data-key="${slot.id}">
     <div class="slot-dot" role="button" tabindex="0" aria-pressed="${selected}" data-pos-slot="${slot.id}" data-action="lineup-slot" data-slot="${slot.id}" ${player ? `style="background:${esc(color)};color:${inkOn(color)}"` : ''} aria-label="${esc(hint)}" title="${esc(hint)}">${player ? effectiveFit(player, role, slot.position).toFixed(0) : icon('plus', 13)}</div>
     ${player ? pick(esc(ROLES[role]?.label ?? ''), `<select data-lineup-role="${slot.id}" aria-label="${esc(slot.label)}职责">${roleOptions(slot.position, role)}</select>`, 'slot-role') : ''}
     ${pick(esc(player ? shortName(player.name) : slot.label), `<select data-slot-player="${slot.id}" aria-label="${esc(slot.label)}球员">${slotPlayerOptions(slot, role, draft, formation, player?.id)}</select>`, 'slot-player')}
-    ${player ? slotMeta(player, slot.position) : ''}
   </div>`
 }
 
@@ -268,13 +257,13 @@ function playerRow(player: Player, draft: Lineup, formation: FormationDef, selec
   const winRate = form.apps > 0 ? pct(form.wins / form.apps) : '—'
   return `<tr class="${isPicked ? 'me' : ''} ${assignable ? 'clickable' : ''}" data-key="${esc(player.id)}" data-drop="${dropTarget}" ${assignable ? `tabindex="0" data-action="lineup-assign" data-player="${esc(player.id)}"` : ''}>
     <td class="t-place ${placement.slot || placement.benchIndex !== undefined ? '' : 'reserve'}">${pick(`${posBadge(placement.slot?.position ?? primaryPosition(player))}<span>${esc(placeLabel)}</span>`, `<select data-move-player="${esc(player.id)}" aria-label="${esc(player.name)}的位置">${moveOptions(player, draft, formation)}</select>`)}</td>
-    <td class="t-role">${placement.slot && placement.role ? pick(esc(ROLES[placement.role]?.label ?? ''), `<select data-lineup-role="${placement.slot.id}" aria-label="${esc(placement.slot.label)}职责">${roleOptions(placement.slot.position, placement.role)}</select>`) : '<span class="muted">—</span>'}</td>
     <td class="name-cell t-name"><span class="grip" draggable="true" data-drag-player="${esc(player.id)}" title="拖到球场或替补席">${icon('grip', 13)}</span><button class="name-btn" data-action="detail" data-player="${esc(player.id)}">${esc(player.name)}</button>${playerFlags(player)}</td>
-    <td class="t-card">${cardCell(player)}</td>
-    <td class="num strong">${fitHeat(info.fit)}</td>
-    <td class="num">${caHeat(playerCA(player))}</td>
     <td class="meter-cell t-prof ${info.proficiency < 65 ? 'warn-text' : ''}" title="${positionLabel(info.position)}熟练度，属性折损 ${pct(1 - positionMultiplier(info.proficiency))}">${meter(info.proficiency, 100, { good: 65, warn: 40 })}</td>
     <td class="meter-cell t-cond">${meter(player.condition ?? 100)}</td>
+    <td class="num strong">${fitHeat(info.fit)}</td>
+    <td class="num">${caHeat(playerCA(player))}</td>
+    <td class="t-role">${placement.slot && placement.role ? pick(esc(ROLES[placement.role]?.label ?? ''), `<select data-lineup-role="${placement.slot.id}" aria-label="${esc(placement.slot.label)}职责">${roleOptions(placement.slot.position, placement.role)}</select>`) : '<span class="muted">—</span>'}</td>
+    <td class="t-card">${cardCell(player)}</td>
     <td class="t-form">${formBars(form)}</td>
     <td><span class="pos-list">${positions.map((pos) => `<span title="${positionLabel(pos)} 熟练 ${Math.round(player.positions[pos])}">${posBadge(pos)}</span>`).join('')}</span></td>
     <td class="num dim">${form.apps || '—'}</td>
@@ -312,11 +301,12 @@ function squadTable(draft: Lineup, formation: FormationDef, selectedId: string |
   const reserves = game.roster.filter((player) => !used.has(player.id)).sort((a, b) => scoreOf(b) - scoreOf(a)).map((player) => row(player, {})).join('')
   return `<div class="table-scroll"><table class="dt tac-table">
     <thead><tr>
-      <th>位置</th><th class="t-role">职责</th><th>球员</th><th>球员卡</th>
+      <th>位置</th><th>球员</th>
+      <th class="num t-prof" title="当前位置的熟练度；低于 65 会明显折损属性">熟练度</th>
+      <th class="num t-cond" title="比赛体能属于球员本人，换卡不会恢复">体能</th>
       <th class="num" title="这名球员用这个职责踢这个位置的实际水平（已算位置折损）">有效</th>
       <th class="num">CA</th>
-      <th title="当前位置的熟练度；低于 65 会明显折损属性">熟练</th>
-      <th title="比赛体能属于球员本人，换卡不会恢复">体能</th>
+      <th class="t-role">职责</th><th>球员卡</th>
       <th title="最近 5 场联赛的表现分，由进球、拦截、传球等算出，只用于展示">近 5 场</th>
       <th title="熟练度 40 以上的位置">可踢位置</th>
       <th class="num" title="本赛季联赛出场">场</th><th class="num" title="本赛季联赛进球">球</th><th class="num" title="本赛季出场时的胜率">胜率</th>
