@@ -944,10 +944,13 @@ circle.pm-5 { fill: var(--h6); }
 .prof-bar i { display: block; height: 100%; background: var(--good); border-radius: 3px; }
 .prof-bar.low i { background: var(--warn); }
 .prof-bar.bad i { background: var(--bad); }
-.fitness { font-size: 15px; line-height: 1; }
-.fitness.good { color: var(--good); }
-.fitness.warn { color: var(--warn); }
-.fitness.bad { color: var(--bad); }
+.fitness { position: relative; display: inline-block; width: 15px; height: 15px; line-height: 15px; font-size: 15px; vertical-align: middle; }
+.fitness i { position: absolute; inset: 0; font-style: normal; text-align: center; }
+.fitness-base { color: rgba(255, 255, 255, 0.22); }
+/* 按体力从下往上填充：--fill 是剩余体力的百分比。 */
+.fitness-fill { color: var(--good); clip-path: inset(calc(100% - var(--fill, 100%)) 0 0 0); }
+.fitness.warn .fitness-fill { color: var(--warn); }
+.fitness.bad .fitness-fill { color: var(--bad); }
 .tac-table .meter-wrap { min-width: 54px; gap: 4px; }
 .tac-table .meter { min-width: 24px; }
 .tac-table .t-form { min-width: 84px; }

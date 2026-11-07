@@ -99,10 +99,14 @@ function proficiencyBar(value: number): string {
   return `<span class="prof-bar${tone}" aria-label="熟练度 ${Math.round(value)}"><i style="width:${Math.max(6, Math.min(100, value)).toFixed(0)}%"></i></span>`
 }
 
-/** 体能：一个心形，绿 / 黄 / 红三档——和参考图一致，不用进度条。 */
+/**
+ * 体能：一个心形，按当前体力从下往上填充（体力越低填充越少），
+ * 颜色仍是绿 / 黄 / 红三档。空的部分用暗色轮廓显示。
+ */
 function fitnessHeart(value: number): string {
-  const tone = value >= 70 ? 'good' : value >= 40 ? 'warn' : 'bad'
-  return `<span class="fitness ${tone}" aria-label="体能 ${Math.round(value)}">♥</span>`
+  const fill = Math.max(0, Math.min(100, value))
+  const tone = fill >= 70 ? 'good' : fill >= 40 ? 'warn' : 'bad'
+  return `<span class="fitness ${tone}" style="--fill:${fill.toFixed(0)}%" title="体能 ${Math.round(value)} / 100" aria-label="体能 ${Math.round(value)}"><i class="fitness-base">♥</i><i class="fitness-fill">♥</i></span>`
 }
 
 function slotPlayerOptions(slot: FormationSlot, role: RoleId, draft: Lineup, formation: FormationDef, currentId: string | undefined): string {
