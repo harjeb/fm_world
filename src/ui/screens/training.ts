@@ -380,7 +380,7 @@ function calendarActionPanel(session: TrainingSession): string {
         ${plan ? previewBox(session, plan as ReturnType<typeof planTraining>, isGk) : ''}
         ${preview.error ? `<p class="warn-text training-error small" role="alert">${esc(preview.error)}</p>` : ''}
         <button class="btn primary wide" data-action="training-execute" ${preview.error || !plan ? 'disabled' : ''}>${preview.error || !plan ? '无法执行' : `${icon('play', 14)}执行行动`}</button>
-        <p class="hint">属性课程品质：一般 50% ×0.7 / 成功 30% ×1 / 大成功 15% ×1.3 / 完美成功 5% ×1.6；品质在同一行动固定，不因切换项目重抽。</p>
+        <p class="hint">品质：成功 ×1 / 大成功 ${Math.round(GREAT_CHANCE * 100)}% ×1.3 / 完美成功 ${Math.round(PERFECT_CHANCE * 100)}% ×1.6；体力 ${PLAIN_FREE_STAMINA} 以上不会出“一般”，低于它才会出一般 ×0.7（当前体力 ${Math.round(100 - session.fatigue)}，一般概率 ${Math.round(plainChance(100 - session.fatigue) * 100)}%）。主属性基础值每次 ±${Math.round(GAIN_SPREAD * 100)}% 浮动，隐藏属性不浮动；品质和浮动在同一行动固定，不因切换项目重抽。</p>
       </div>
     </div>`, { aside: `<span class="muted small">行动 ${session.action + 1}/${trainingActionsTotal(session)}</span>`, className: 'action-panel' })
 }
