@@ -1,5 +1,5 @@
 import type { Auction, AuctionResult } from './game/auction.ts'
-import type { AITeam, Attributes, GameState, Player, SeasonTableRow, Fixture, TierId, ConferenceId } from './game/types.ts'
+import type { AITeam, Attributes, FacilityId, GameState, Player, SeasonTableRow, Fixture, TierId, ConferenceId } from './game/types.ts'
 import { setRemoteSaver, saveGame } from './game/state.ts'
 
 const TOKEN_KEY = 'fm-online-token'
@@ -24,8 +24,8 @@ export const onlineState: {
 }
 
 /** 全服自由市场。只有联机时有内容；单机还是用存档里的 freeStars。 */
-export type WorldPublicPlayer = Pick<Player, 'id' | 'name' | 'enName' | 'country' | 'era' | 'age' | 'foot' | 'height' | 'positions' | 'traitId' | 'skills' | 'skillTiers'> & { attrs: Partial<Attributes>; ca: number }
-export type WorldPublicClub = Pick<AITeam, 'id' | 'name' | 'color' | 'formationId'> & { tier: TierId; conference?: ConferenceId; managed?: boolean; players: WorldPublicPlayer[] }
+export type WorldPublicPlayer = Pick<Player, 'id' | 'name' | 'enName' | 'country' | 'era' | 'age' | 'foot' | 'height' | 'positions' | 'traitId' | 'skills' | 'skillTiers'> & { attrs: Partial<Attributes>; ca: number; baseCa?: number }
+export type WorldPublicClub = Pick<AITeam, 'id' | 'name' | 'color' | 'formationId'> & { tier: TierId; conference?: ConferenceId; managed?: boolean; players: WorldPublicPlayer[]; /** 设施阶段（1–25）；电脑球队公开，玩家管理的球队不公开。 */ facilities?: Partial<Record<FacilityId, number>> }
 export type WorldPublicSnapshot = {
   seasonIndex: number
   ownClubId: string | null

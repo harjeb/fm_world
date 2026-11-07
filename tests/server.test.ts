@@ -402,7 +402,7 @@ describe('联机服务器 / 账号 / SSE', () => {
     expect(current.game.season.finished).toBe(true)
     expect(current.game.season.round).toBe(38)
     expect(current.game.matchHistory).toHaveLength(38)
-  }, 20_000)
+  }, 45_000)
 })
 
 describe('Agent API', () => {

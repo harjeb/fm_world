@@ -171,7 +171,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     advanceSharedAIClubs()
   }
 
-  /** 电脑球队按轮推进：收钱、培养、升设施。所有球队共用一份账本，赛季滚动时保留。 */
+  /**
+   * 电脑球队按轮推进：收钱、培养、升设施。所有球队共用一份账本，赛季滚动时保留。
+   * 练出来的卡当场装到共享名册上（每轮只改一次），对手这一轮踢球就用新卡，玩家也能在球队名单里看到。
+   */
   function advanceSharedAIClubs(): void {
     const book = (sharedWorld.aiClubs ??= seedAIClubs(sharedWorld.world, sharedWorld.seed))
     const round = Math.min(38, Math.max(1, Math.floor((now() - sharedWorld.world.seasonStartedAt) / ROUND_MS) + 1))
@@ -185,7 +188,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const state = (book[club.id] ??= createAIClub(club, splitSeed(sharedWorld.seed, `ai-club-${club.id}`)))
       const team = sharedWorld.teams?.[club.id]
       const before = `${state.economy.balance}|${state.trained}|${state.upgrades}`
-      advanceAIClub(state, club, team, rounds, splitSeed(sharedWorld.seed, `ai-advance-${club.id}-${round}`), false)
+      advanceAIClub(state, club, team, rounds, splitSeed(sharedWorld.seed, `ai-advance-${club.id}-${round}`))
       if (`${state.economy.balance}|${state.trained}|${state.upgrades}` !== before) changed = true
     }
     if (changed || rounds > 0) persistWorld()
@@ -364,10 +367,16 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (changed) persistWorld()
   }
 
+  function publicFacilities(economy: AIClubState['economy'] | undefined) {
+    if (!economy) return undefined
+    return { stadium: economy.stadium, academy: economy.academy, medical: economy.medical, shop: economy.shop, sponsor: economy.sponsor, psychology: economy.psychology, tactics: economy.tactics }
+  }
   function publicPlayer(player: Player) {
-    const { id, name, enName, country, era, age, foot, height, positions, attrs, traitId, skills, skillTiers } = player
+    const { id, name, enName, country, era, age, foot, height, positions, attrs, baseAttrs, traitId, skills, skillTiers } = player
     const visible = Object.fromEntries(mainAttrsFor(positions.GK > 0).map((key) => [key, attrs[key]]))
-    return { id, name, enName, country, era, age, foot, height, positions, attrs: visible, traitId, skills, skillTiers, ca: displayCA(caOf(attrs, positions.GK > 0)) }
+    // ca 是现在装备的那张卡；baseCa 是没练过的原始属性，两者之差就是卡带来的提升。
+    const baseCa = baseAttrs ? displayCA(caOf(baseAttrs, positions.GK > 0)) : undefined
+    return { id, name, enName, country, era, age, foot, height, positions, attrs: visible, traitId, skills, skillTiers, ca: displayCA(caOf(attrs, positions.GK > 0)), baseCa }
   }
   for (const account of db.accounts) account.lastUserRevision ??= account.revision
   const sessions: SessionMap = readJson<SessionMap>(sessionPath, {})
@@ -1022,6 +1031,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
             id: club.id, name: validOwner ? owner.game.clubName : club.name, color: club.color,
             tier: club.tier, conference: club.conference, managed: !!owner, formationId: validOwner ? owner.game.lineup.formationId : team?.formationId ?? club.formationId,
             players: (validOwner ? owner.game.roster : team?.players ?? []).map(publicPlayer),
+            // 电脑球队的设施公开；玩家管理的球队不公开经营数据。
+            facilities: owner ? undefined : publicFacilities(sharedWorld.aiClubs?.[club.id]?.economy),
           }
         }),
         divisions: sharedWorld.world.divisions.map((division) => ({ id: division.divisionId, tier: division.tier, conference: division.conference, round: division.round, table: division.table, fixtures: division.fixtures.map(({ reportedBy: _reporter, ...fixture }) => fixture) })),

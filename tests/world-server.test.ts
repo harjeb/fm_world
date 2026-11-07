@@ -83,6 +83,45 @@ describe('服务器共享世界', () => {
     expect(late.game.world.clubs.find((club: any) => club.id === 'player')?.tier).toBe('division2')
   })
 
+  it('电脑球队每轮练卡，装上的卡玩家看得到；级别越高练得越多', async () => {
+    let clock = Date.now()
+    const { base } = await start(() => clock)
+    const a = await register(base, 'ai_cards_a')
+    const teams = async () => (await (await fetch(`${base}/api/world/teams`, { headers: auth(a.token) })).json()) as { clubs: { id: string; tier: string; managed?: boolean; facilities?: Record<string, number>; players: { ca: number; baseCa?: number }[] }[] }
+    const gains = (snapshot: Awaited<ReturnType<typeof teams>>) => {
+      const result: Record<string, { gain: number; players: number }> = {}
+      for (const club of snapshot.clubs) {
+        if (club.managed) continue
+        const row = (result[club.tier] ??= { gain: 0, players: 0 })
+        for (const player of club.players) {
+          expect(player.baseCa, `${club.id} 缺少原始 CA`).toBeTypeOf('number')
+          row.gain += player.ca - player.baseCa!
+          row.players += 1
+        }
+      }
+      return Object.fromEntries(Object.entries(result).map(([tier, row]) => [tier, row.gain / Math.max(1, row.players)]))
+    }
+    const start0 = gains(await teams())
+    clock += ROUND_MS * 8
+    const later = gains(await teams())
+    for (const tier of ['division2', 'division1', 'champions']) expect(later[tier], tier).toBeGreaterThan(start0[tier] + 0.3)
+    expect(later.division1).toBeGreaterThan(later.division2)
+    expect(later.champions).toBeGreaterThan(later.division1)
+    // 电脑球队的设施也公开：顶级球队开局就是 3 级（第 11 阶段）以上，而且会一路往上升。
+    const stages = (snapshot: Awaited<ReturnType<typeof teams>>, tier: string) =>
+      snapshot.clubs.filter((club) => club.tier === tier && !club.managed).flatMap((club) => Object.values(club.facilities ?? {}))
+    const final = await teams()
+    const top = stages(final, 'champions')
+    expect(top.length).toBeGreaterThan(0)
+    expect(Math.min(...top)).toBeGreaterThanOrEqual(11)
+    const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length)
+    expect(mean(top)).toBeGreaterThan(mean(stages(final, 'division1')))
+    expect(mean(stages(final, 'division1'))).toBeGreaterThan(mean(stages(final, 'division2')))
+    // 玩家自己的存档里对手也是装了卡的版本。
+    const mine = await load(base, a.token)
+    expect(mine.game.aiTeams.length).toBeGreaterThan(0)
+  })
+
   it('共享市场对所有账号可见，出售的球员会出现在池子里', async () => {
     const { base } = await start()
     const a = await register(base, 'market_a')

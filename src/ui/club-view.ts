@@ -1,11 +1,13 @@
-import type { WorldState } from '../game/types.ts'
+import type { EconomyState, FacilityId, WorldState } from '../game/types.ts'
+import { FACILITIES, facilityLevel, facilityStageInLevel } from '../game/economy.ts'
 import { buildOwnerlessTeams } from '../game/world.ts'
 import { ATTR_GROUPS } from '../game/data/attributes.ts'
 import { attrRating, mainAttrsFor } from '../game/rating.ts'
 import { publicWorld, onlineState, type WorldPublicClub, type WorldPublicPlayer } from '../online.ts'
 import { PLAYER_TEAM_ID } from '../game/season.ts'
-import { attrHeat, attributeRadar, caHeat, icon, panel, posBadge, positionMap, primaryPosition, skillGroups, traitLabel } from './components.ts'
+import { attrHeat, attributeRadar, caHeat, icon, panel, posBadge, positionMap, primaryPosition, skillGroups, tag, traitLabel } from './components.ts'
 import { attrLabel, esc, playerCA } from './format.ts'
+import { tipAttrs } from './tooltip.ts'
 import { game, ui } from './state.ts'
 
 /** 任意界面点开一支球队时用的公开资料；联机时以服务器快照为准。 */
@@ -27,10 +29,12 @@ export function publicClubFor(world: WorldState | undefined, id: string): WorldP
     tier: club.tier,
     conference: club.conference,
     formationId: club.formationId,
-    players: roster.map(({ id: playerId, name, enName, country, era, age, foot, height, positions, attrs, traitId, skills, skillTiers }) => ({
+    facilities: id === PLAYER_TEAM_ID ? undefined : publicFacilityStages(game.aiClubs?.[id]?.economy),
+    players: roster.map(({ id: playerId, name, enName, country, era, age, foot, height, positions, attrs, baseAttrs, traitId, skills, skillTiers }) => ({
       id: playerId, name, enName, country, era, age, foot, height, positions,
       attrs: Object.fromEntries(mainAttrsFor(positions.GK > 0).map((key) => [key, attrs[key]])),
       traitId, skills, skillTiers, ca: playerCA({ attrs, positions }),
+      baseCa: baseAttrs ? playerCA({ attrs: baseAttrs, positions }) : undefined,
     })),
   }
 }
@@ -44,7 +48,37 @@ export function publicPlayerPanel(player: WorldPublicPlayer): string {
       ? `<div class="attr-group"><div class="attr-group-title">${esc(group.name)}</div>${keys.map((key) => `<div class="attr-row"><span>${esc(attrLabel(key))}</span><span class="attr-bar"><i style="width:${Math.min(100, attrRating(key, player.attrs[key] ?? 0, gk)).toFixed(1)}%"></i></span>${attrHeat(player.attrs[key] ?? 0)}</div>`).join('')}</div>`
       : ''
   }).join('')
-  return `<div class="profile-grid"><div>${attributeRadar(player)}${attrs}</div><div><h3>位置熟练度</h3>${positionMap(player)}<h3>技能与特性</h3>${traitLabel(player.traitId, true)}${skillGroups(player)}</div><div><h3>档案</h3><dl class="facts"><div><dt>年龄</dt><dd>${player.age ?? 24}</dd></div><div><dt>国籍</dt><dd>${esc(player.country)}</dd></div><div><dt>身高</dt><dd>${player.height} cm</dd></div><div><dt>惯用脚</dt><dd>${esc(player.foot)}</dd></div></dl><p class="hint">实时体能、训练精力与伤病状态不公开。</p></div></div>`
+  return `<div class="profile-grid"><div>${attributeRadar(player)}${attrs}</div><div><h3>位置熟练度</h3>${positionMap(player)}<h3>技能与特性</h3>${traitLabel(player.traitId, true)}${skillGroups(player)}</div><div><h3>档案</h3><dl class="facts"><div><dt>年龄</dt><dd>${player.age ?? 24}</dd></div><div><dt>国籍</dt><dd>${esc(player.country)}</dd></div><div><dt>身高</dt><dd>${player.height} cm</dd></div><div><dt>惯用脚</dt><dd>${esc(player.foot)}</dd></div><div><dt>装备球员卡</dt><dd>${equippedCardCell(player)}</dd></div></dl><p class="hint">实时体能、训练精力与伤病状态不公开。</p></div></div>`
+}
+
+const FACILITY_IDS = Object.keys(FACILITIES) as FacilityId[]
+
+function publicFacilityStages(economy: EconomyState | undefined): WorldPublicClub['facilities'] {
+  if (!economy) return undefined
+  return Object.fromEntries(FACILITY_IDS.map((id) => [id, economy[id]]))
+}
+
+/** 电脑球队的设施等级：比如“球场 3级2阶”。 */
+function facilityTags(facilities: NonNullable<WorldPublicClub['facilities']>): string {
+  return FACILITY_IDS.filter((id) => facilities[id] !== undefined).map((id) => {
+    const stage = facilities[id]!
+    return tag(`${FACILITIES[id].label} ${facilityLevel(stage)}级${facilityStageInLevel(stage)}阶`, facilityLevel(stage) >= 3 ? 'gold' : '')
+  }).join(' ')
+}
+
+/** 他现在装备的球员卡：比原始属性强多少。没练过（或没有原始数据）就只标原始。 */
+export function equippedCardGain(player: Pick<WorldPublicPlayer, 'ca' | 'baseCa'>): number | null {
+  if (player.baseCa === undefined) return null
+  const gain = Math.round(player.ca) - Math.round(player.baseCa)
+  return gain >= 1 ? gain : 0
+}
+
+function equippedCardCell(player: WorldPublicPlayer): string {
+  const gain = equippedCardGain(player)
+  if (gain === null) return '<span class="muted small">—</span>'
+  if (gain === 0) return '<span class="muted small">原始</span>'
+  const tip = tipAttrs('装备球员卡', `原始 CA ${Math.round(player.baseCa!)} → 装备卡 CA ${Math.round(player.ca)}`)
+  return `<span class="has-tip" ${tip}><span class="muted small">原始 ${Math.round(player.baseCa!)}</span> ${tag(`卡 +${gain}`, 'gold')}</span>`
 }
 
 /** 任意界面点击球队后弹出的名单（世界页也复用同一份）。 */
@@ -54,9 +88,11 @@ export function clubRosterPanel(club: WorldPublicClub, selectedId?: string | nul
     <td>${posBadge(primaryPosition(player))}</td>
     <td><button class="name-btn" data-club-player="${esc(player.id)}" data-club="${esc(club.id)}">${esc(player.name)}</button></td>
     <td class="num">${player.age ?? 24}</td><td class="num strong">${caHeat(player.ca)}</td>
+    <td>${equippedCardCell(player)}</td>
     <td>${traitLabel(player.traitId)}</td></tr>`).join('')
-  return `${panel(`${esc(club.name)} · 球员名单`, `<p class="hint">公开 CA、属性、位置、技能等资料；实时体能、训练精力与伤病状态不公开。</p>
-    <div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th class="num">年龄</th><th class="num">CA</th><th>特性</th></tr></thead><tbody>${rows}</tbody></table></div>`, { flush: true })}
+  return `${panel(`${esc(club.name)} · 球员名单`, `<p class="hint">公开 CA、属性、位置、技能和他们现在装备的球员卡；实时体能、训练精力与伤病状态不公开。CA 是装备卡的评分，“原始”是没练过的属性。</p>
+    ${club.facilities ? `<p class="hint">设施：${facilityTags(club.facilities)}</p>` : ''}
+    <div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th class="num">年龄</th><th class="num">CA</th><th>装备卡</th><th>特性</th></tr></thead><tbody>${rows}</tbody></table></div>`, { flush: true })}
     ${selected ? `<div id="club-player-detail">${publicPlayerPanel(selected)}</div>` : ''}`
 }
 

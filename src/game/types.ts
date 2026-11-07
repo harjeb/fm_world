@@ -808,6 +808,8 @@ export type AICard = {
   /** 1500 分制的能力评分，和属性一起变；只有更高分的新卡才会替换旧卡。 */
   rating: number
   attrs: Attributes
+  /** 这张卡属于谁（球员 id 加英文名）。槽位上换了人，旧卡不能套给新人。 */
+  owner?: string
 }
 
 /** 一支电脑球队的经营状态。设施同样是 1–25 阶段，和玩家的经济系统共用一套函数。 */
@@ -821,6 +823,8 @@ export type AIClubState = {
   signings: Player[]
   trained: number
   upgrades: number
+  /** 还没兑现的设施升级名额（按轮累计的小数）；二级慢、顶级快。 */
+  upgradeProgress?: number
 }
 
 export type MatchContext = {

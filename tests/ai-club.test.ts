@@ -17,7 +17,8 @@ import {
   seedAIClubs,
 } from '../src/game/ai-club.ts'
 import { AI_BID_PREFIX, placeAIBid, settleAuctions, type FreeMarket } from '../src/game/auction.ts'
-import { facilityUpgradeCost } from '../src/game/economy.ts'
+import { facilityUpgradeCost, facilityLevel, projectedRoundIncome } from '../src/game/economy.ts'
+import { ROUND_GAME_DAYS } from '../src/game/calendar.ts'
 import { createWorldGame } from '../src/game/world.ts'
 
 const game = () => createWorldGame(2024)
@@ -77,7 +78,7 @@ describe('电脑球队账本', () => {
 })
 
 describe('电脑球队的经营节奏', () => {
-  it('按级别决定每天练几次：二级约 1 次，一级 2–3 次，顶级 5–7 次', () => {
+  it('按级别决定每天练几次：二级约 1 次，一级 2–3 次，顶级 3–5 次', () => {
     const counted: Record<string, number> = {}
     for (const tier of ['division2', 'division1', 'champions'] as const) {
       const base = game()
@@ -87,11 +88,101 @@ describe('电脑球队的经营节奏', () => {
       counted[tier] = result.trained
       const [low, high] = aiTierProfile(tier).perDay
       expect(result.trained).toBeGreaterThanOrEqual(low * 5 * 0.5)
-      expect(result.trained).toBeLessThanOrEqual(high * 5 * 3) // 每天 3 个游戏日跨度上界
+      expect(result.trained).toBeLessThanOrEqual(high * 5 * ROUND_GAME_DAYS)
       void low
     }
     expect(counted.division2).toBeLessThan(counted.division1)
     expect(counted.division1).toBeLessThan(counted.champions)
+  })
+
+  it('练出来的卡只套在自己的槽位上：一轮下来每个人只会小幅变强，门将和场上球员的卡不会串', () => {
+    for (const tier of ['division2', 'champions'] as const) {
+      const base = game()
+      const team = base.aiTeams[0]
+      const ai = state(1_000_000, tier)
+      equipAICards(ai, team.players)
+      const before = team.players.map((player) => playerCa(player))
+      const result = advanceAIClub(ai, { id: team.id, tier }, team, 6, 17)
+      expect(result.trained, tier).toBeGreaterThan(0)
+      team.players.forEach((player, slot) => {
+        const delta = playerCa(player) - before[slot]
+        expect(delta, `${tier} slot ${slot}`).toBeGreaterThanOrEqual(-0.5)
+        // 6 轮练出几十点是正常的；上百点说明卡被套错了槽位。
+        expect(delta, `${tier} slot ${slot}`).toBeLessThan(150)
+        // 装上的卡就是这个槽位自己的卡。
+        const card = ai.cards[String(slot)]
+        expect(Math.abs(playerCa(player) - card.rating), `${tier} slot ${slot}`).toBeLessThan(1)
+      })
+    }
+  })
+
+  it('只装备评分更高的卡：评分不高的不装，别人的卡不套，球员比卡强就更新卡', () => {
+    const team = game().aiTeams[0]
+    const ai = state(100_000)
+    equipAICards(ai, team.players)
+    const player = team.players[3]
+    const before = structuredClone(player.attrs)
+    const owner = ai.cards['3'].owner
+    expect(owner).toBe(`${player.id}|${player.enName}`)
+    // 评分比现在低的卡：不装备，卡被球员现在的属性顶上。
+    const weak = scale(player, 0.8)
+    ai.cards['3'] = { rating: playerCa(weak), attrs: { ...weak.attrs }, owner }
+    expect(equipAICards(ai, team.players)).toBe(false)
+    expect(player.attrs).toEqual(before)
+    expect(ai.cards['3'].rating).toBeCloseTo(playerCa(player), 5)
+    // 别人的卡（槽位上换了人）：评分再高也不套给他，重新按他自己开一张。
+    const strong = scale(player, 1.4)
+    ai.cards['3'] = { rating: playerCa(strong), attrs: { ...strong.attrs }, owner: 'someone-else|Other Person' }
+    expect(equipAICards(ai, team.players)).toBe(false)
+    expect(player.attrs).toEqual(before)
+    expect(ai.cards['3'].owner).toBe(owner)
+    expect(ai.cards['3'].rating).toBeCloseTo(playerCa(player), 5)
+    // 自己的、评分更高的卡：装备。
+    ai.cards['3'] = { rating: playerCa(strong), attrs: { ...strong.attrs }, owner }
+    expect(equipAICards(ai, team.players)).toBe(true)
+    expect(playerCa(player)).toBeGreaterThan(playerCa(strong) - 1)
+  })
+
+  it('一次培养的力度和玩家同量级，不再是零点几', () => {
+    const team = structuredClone(game().aiTeams[0])
+    const ai = state(100_000, 'division2')
+    equipAICards(ai, team.players)
+    const before = team.players.reduce((sum, player) => sum + playerCa(player), 0)
+    const result = advanceAIClub(ai, { id: team.id, tier: 'division2' }, team, 10, 21)
+    expect(result.trained).toBeGreaterThan(10)
+    const gain = team.players.reduce((sum, player) => sum + playerCa(player), 0) - before
+    // 玩家一次培养平均涨 7 点左右；这里考虑设施触发概率，每次成功的培养至少几点。
+    expect(gain / result.trained).toBeGreaterThan(2)
+  })
+
+  it('设施升级按级别限速：二级慢、一级积极、顶级最快', () => {
+    const base = game()
+    const upgrades = (tier: 'division2' | 'division1' | 'champions') => {
+      const ai = state(500_000_000, tier)
+      for (const id of ['stadium', 'academy', 'medical', 'shop', 'sponsor', 'psychology', 'tactics'] as const) ai.economy[id] = 1
+      return advanceAIClub(ai, { id: base.aiTeams[0].id, tier }, base.aiTeams[0], 10, 9).upgrades
+    }
+    const slow = upgrades('division2')
+    const active = upgrades('division1')
+    const fast = upgrades('champions')
+    expect(slow).toBeGreaterThan(0)
+    expect(slow).toBeLessThan(active)
+    expect(active).toBeLessThan(fast)
+  })
+
+  it('顶级球队开局所有设施都在 3 级以上，二级球队没有这个保证', () => {
+    const world = game().world!
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const clubs = seedAIClubs(world, seed)
+      for (const club of world.clubs) {
+        if (club.isPlayer) continue
+        const economy = clubs[club.id].economy
+        const stages = ['stadium', 'academy', 'medical', 'shop', 'sponsor', 'psychology', 'tactics'].map((id) => economy[id as 'stadium'])
+        if (club.tier === 'champions') for (const stage of stages) expect(facilityLevel(stage), `${club.id} seed ${seed}`).toBeGreaterThanOrEqual(3)
+      }
+    }
+    const d2 = Object.entries(seedAIClubs(world, 1)).filter(([id]) => world.clubs.find((club) => club.id === id)?.tier === 'division2')
+    expect(d2.some(([, club]) => facilityLevel(club.economy.academy) < 3)).toBe(true)
   })
 
   it('收钱、涨球迷，升级设施时不动留底的钱', () => {
@@ -104,12 +195,13 @@ describe('电脑球队的经营节奏', () => {
     const rich = state(1_000_000, 'division2')
     const before = rich.economy.balance
     const fans = rich.economy.fans
-    const richResult = advanceAIClub(rich, { id: base.aiTeams[0].id, tier: 'division2' }, base.aiTeams[0], 1, 3)
-    // 手头宽裕时可以连升几级，但一轮不会无限升。
-    expect(richResult.upgrades).toBeGreaterThanOrEqual(1)
+    const income = projectedRoundIncome(rich.economy) * 5
+    const richResult = advanceAIClub(rich, { id: base.aiTeams[0].id, tier: 'division2' }, base.aiTeams[0], 5, 3)
+    // 手头宽裕时按级别限速升级：二级约两轮升一次，5 轮最多 3 次。
+    expect(richResult.upgrades).toBeGreaterThanOrEqual(2)
     expect(richResult.upgrades).toBeLessThanOrEqual(3)
     // 升级花的是自己的钱，而且永远留着留底资金。
-    expect(rich.economy.balance).toBeLessThan(before)
+    expect(rich.economy.balance).toBeLessThan(before + income)
     expect(rich.economy.balance).toBeGreaterThanOrEqual(aiTierProfile('division2').reserve)
     expect(rich.economy.fans).toBeGreaterThan(fans)
 

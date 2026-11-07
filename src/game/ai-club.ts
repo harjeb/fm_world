@@ -27,8 +27,14 @@ type TierProfile = {
   fans: number
   /** 开局设施阶段区间（含两端）。 */
   stage: readonly [number, number]
-  /** 留底资金：低于这个数就不再买人、不再升级。 */
+  /** 所有设施开局至少几阶段：顶级球队一开局就是 3 级（第 11 阶段）以上。 */
+  minStage: number
+  /** 留底资金：低于这个数就不再买人。 */
   reserve: number
+  /** 升设施时最少留下的钱占 reserve 的比例。顶级球队优先升级，敢花到留底的一半。 */
+  upgradeFloor: number
+  /** 每轮最多升几次设施（小数按轮累计）：二级慢、一级积极、顶级最快。 */
+  upgradePerRound: number
   /** 抢人时最多愿意出到估值的几倍。级别越高越敢花。 */
   overpay: number
   /** 每个游戏日的培养次数区间（含两端）。 */
@@ -36,15 +42,20 @@ type TierProfile = {
 }
 
 const TIER_PROFILE: Record<TierId, TierProfile> = {
-  champions: { balance: 12_000_000, fans: 44_000, stage: [12, 18], reserve: 3_000_000, overpay: 1.2, perDay: [5, 7] },
-  division1: { balance: 6_000_000, fans: 17_000, stage: [8, 13], reserve: 1_500_000, overpay: 1.1, perDay: [2, 3] },
-  division2: { balance: 2_500_000, fans: 6_000, stage: [3, 7], reserve: 600_000, overpay: 1.0, perDay: [1, 1] },
+  champions: { balance: 12_000_000, fans: 44_000, stage: [12, 18], minStage: 11, reserve: 3_000_000, upgradeFloor: 0.5, upgradePerRound: 4, overpay: 1.2, perDay: [3, 5] },
+  division1: { balance: 6_000_000, fans: 17_000, stage: [8, 13], minStage: 1, reserve: 1_500_000, upgradeFloor: 1, upgradePerRound: 2, overpay: 1.1, perDay: [2, 3] },
+  division2: { balance: 2_500_000, fans: 6_000, stage: [3, 7], minStage: 1, reserve: 600_000, upgradeFloor: 1, upgradePerRound: 0.6, overpay: 1.0, perDay: [1, 1] },
 }
 
 export const aiTierProfile = (tier: TierId): TierProfile => TIER_PROFILE[tier]
 
-/** 一次培养能把能力评分抬高多少（1500 分制）。频率差在次数上，不在单次力度上。 */
-const AI_CA_PER_SESSION = 0.5
+/**
+ * 一次培养的基础力度（1500 分制 CA）：和玩家自己培养同量级——玩家一次平均涨 7 点左右，
+ * 这里再乘设施系数（0.9–2.1）和设施触发概率。级别之间的差距在每天练几次，不在单次力度。
+ */
+const AI_CA_PER_SESSION = 6
+/** 离潜力（PA）还剩这么多 CA 以内时成长逐渐放缓，免得每天练好几次的顶级球队涨到离谱。 */
+const AI_PA_TAPER = 120
 /** 电脑球队阵容上限：比玩家的 25 人低，抢人时会留出位置。 */
 export const AI_SQUAD_LIMIT = 22
 /** 一个赛季最多攒下几个外来球员，免得存档越滚越大。 */
@@ -84,18 +95,19 @@ export function createAIClub(club: Pick<WorldClub, 'id' | 'tier'>, seed: number)
   const rng = derivedRng(seed, 'ai-club', club.id)
   const [low, high] = profile.stage
   const stage = low + rng.int(high - low + 1)
+  const floor = Math.max(1, profile.minStage)
   return {
     economy: {
       balance: Math.round(profile.balance * (0.8 + rng.float() * 0.4)),
       fans: Math.round(profile.fans * (0.8 + rng.float() * 0.4)),
       stageVersion: 3,
       stadium: stage,
-      academy: Math.max(1, stage - rng.int(3)),
-      medical: Math.max(1, stage - rng.int(4)),
-      shop: Math.max(1, stage - rng.int(3)),
-      sponsor: Math.max(1, stage - rng.int(4)),
-      psychology: Math.max(1, stage - rng.int(3)),
-      tactics: Math.max(1, stage - rng.int(4)),
+      academy: Math.max(floor, stage - rng.int(3)),
+      medical: Math.max(floor, stage - rng.int(4)),
+      shop: Math.max(floor, stage - rng.int(3)),
+      sponsor: Math.max(floor, stage - rng.int(4)),
+      psychology: Math.max(floor, stage - rng.int(3)),
+      tactics: Math.max(floor, stage - rng.int(4)),
       lastIncomeRound: 0,
     },
     progress: 0,
@@ -125,11 +137,22 @@ export function aiClubOf(aiClubs: Record<string, AIClubState> | undefined, world
 
 /* ---------------------------------------------------------------- 培养、装备 */
 
+const ownerOf = (player: Pick<Player, 'id' | 'enName'>): string => `${player.id}|${player.enName}`
+
+/**
+ * 这个槽位上这名球员自己的卡。卡跟人走：槽位上换了人（签人、赛季重建），
+ * 旧卡属于上一个人，不能套给新人，这里按新人现在的属性重新开一张。
+ */
 function cardOf(state: AIClubState, slot: number, base: Player): AICard {
   const key = String(slot)
+  const owner = ownerOf(base)
   const existing = state.cards[key]
-  if (existing) return existing
-  const card = { rating: playerCa(base), attrs: { ...base.attrs } }
+  // 老账本的卡没有 owner：认作槽位上现在这个人的。
+  if (existing && (existing.owner === undefined || existing.owner === owner)) {
+    existing.owner = owner
+    return existing
+  }
+  const card: AICard = { rating: playerCa(base), attrs: { ...base.attrs }, owner }
   state.cards[key] = card
   return card
 }
@@ -144,24 +167,28 @@ function clampAttrs(attrs: Attributes, gk: boolean): void {
 }
 
 /**
- * 把每支球队最强的那张卡装到对应槽位：比现役球员评分高就换上，比卡强就以现役球员为准更新卡。
- * 这就是“自动装备评分最高的球员卡”。
+ * 自动装备评分更高的卡：只有这名球员自己的、评分比他现在高的卡才会装上；
+ * 评分不高于现在的不装，球员比卡强时反过来更新卡。别人的卡（槽位上换了人）一律不套。
  */
 export function equipAICards(state: AIClubState, players: Player[]): boolean {
   let changed = false
-  for (let slot = 0; slot < players.length; slot++) {
-    const player = players[slot]
-    const card = cardOf(state, slot, player)
-    const current = playerCa(player)
-    if (card.rating > current + 0.5) {
-      for (const key of ALL_ATTRIBUTES) player.attrs[key] = card.attrs[key] ?? player.attrs[key]
-      clampAttrs(player.attrs, player.positions.GK > 0)
-      changed = true
-    } else if (current > card.rating + 0.5) {
-      state.cards[String(slot)] = { rating: current, attrs: { ...player.attrs } }
-    }
-  }
+  for (let slot = 0; slot < players.length; slot++) if (equipSlot(state, players, slot)) changed = true
   return changed
+}
+
+/** 只处理一个槽位（练完一张卡后用，不必把整个名单再过一遍）。 */
+function equipSlot(state: AIClubState, players: Player[], slot: number): boolean {
+  const player = players[slot]
+  if (!player) return false
+  const card = cardOf(state, slot, player)
+  const current = playerCa(player)
+  if (card.rating > current + 0.5) {
+    for (const key of ALL_ATTRIBUTES) player.attrs[key] = card.attrs[key] ?? player.attrs[key]
+    clampAttrs(player.attrs, player.positions.GK > 0)
+    return true
+  }
+  if (current > card.rating + 0.5) state.cards[String(slot)] = { rating: current, attrs: { ...player.attrs }, owner: ownerOf(player) }
+  return false
 }
 
 /** 把签下的球员塞进阵容：同位置挑最弱的换掉，位置不合适就补一个空位。 */
@@ -192,10 +219,13 @@ export function mergeSignings(state: AIClubState, players: Player[]): Player[] {
 
 const growableAttrs = (gk: boolean): readonly AttrKey[] => costAttrs(gk)
 
-function growCard(state: AIClubState, card: AICard, gk: boolean, rng: ReturnType<typeof derivedRng>): number {
+function growCard(state: AIClubState, card: AICard, gk: boolean, rng: ReturnType<typeof derivedRng>, pa?: number): number {
   const before = caOf(card.attrs, gk)
   const facilityScale = 0.6 + facilityLevel(state.economy.stadium) / 5 + facilityLevel(state.economy.academy) / 10
-  const gain = AI_CA_PER_SESSION * facilityScale * (0.6 + rng.float() * 0.8)
+  // 越接近潜力越难练；没有名单（只有账本）时没有潜力可比，按满力度算。
+  const taper = pa === undefined ? 1 : Math.max(0, Math.min(1, (pa - before) / AI_PA_TAPER))
+  const gain = AI_CA_PER_SESSION * facilityScale * (0.6 + rng.float() * 0.8) * taper
+  if (!(gain > 0)) return before
   const keys = growableAttrs(gk)
   // 把“提升 X 点能力评分”换算成属性比例：评分近似和属性评分的平方成正比。
   const factor = Math.sqrt((before + gain) / Math.max(1, before))
@@ -234,7 +264,7 @@ function pickSlot(state: AIClubState, players: Player[] | undefined, rng: Return
   return ratings[Math.min(ratings.length - 1, rng.int(3))].slot
 }
 
-/** 每支球队每天练几次。二级约 1 次，一级 2–3 次，顶级 5–7 次。 */
+/** 每支球队每天练几次。二级约 1 次，一级 2–3 次，顶级 3–5 次。 */
 export function aiTrainingPerDay(tier: TierId, rng: ReturnType<typeof derivedRng>): number {
   const [low, high] = (TIER_PROFILE[tier] ?? TIER_PROFILE.division2).perDay
   return low + rng.int(high - low + 1)
@@ -271,23 +301,28 @@ export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | '
     if (slot < 0) break
     const base = players?.[slot]
     if (!base && !state.cards[String(slot)]) break
-    const card = cardOf(state, slot, base ?? ({ attrs: { ...state.cards[String(slot)].attrs } } as unknown as Player))
+    const card = base ? cardOf(state, slot, base) : state.cards[String(slot)]
     const gk = base ? base.positions.GK > 0 : state.cards[String(slot)] !== undefined && players === undefined
     const before = card.rating
-    const after = growCard(state, card, gk, rng)
+    const after = growCard(state, card, gk, rng, base?.pa)
     if (after <= before + 0.4) continue
-    state.cards[String(slot)] = { rating: after, attrs: { ...card.attrs } }
+    state.cards[String(slot)] = { rating: after, attrs: { ...card.attrs }, owner: card.owner }
     trained += 1
-    if (base && applyToTeam) equipAICards(state, [base])
+    // 按名单下标装这个槽位自己的卡（不能拿一个人当 0 号槽位去套）。
+    if (base && applyToTeam && players) equipSlot(state, players, slot)
     state.trained += 1
   }
 
-  // 手头宽裕时一轮可以连升几级，免得全服账本一直顶到上限；但绝不越过留底。
+  // 设施升级按级别限速：二级慢（约两轮升一次）、一级积极、顶级最快；名额按轮累计，钱不够就作废。
+  // 升级前的留底比买人时更低：顶级球队优先升设施，宁可少留点钱。
+  state.upgradeProgress = (state.upgradeProgress ?? 0) + profile.upgradePerRound * rounds
+  const allowance = Math.floor(state.upgradeProgress)
+  state.upgradeProgress -= allowance
+  const floor = Math.round(profile.reserve * profile.upgradeFloor)
   let upgrades = 0
-  const upgradeCap = 3 * Math.max(1, rounds)
-  while (upgrades < upgradeCap) {
+  while (upgrades < allowance) {
     const cost = cheapestUpgrade(state, club.tier)
-    if (cost == null || state.economy.balance - cost < profile.reserve) break
+    if (cost == null || state.economy.balance - cost < floor) break
     if (upgradeOneFacility(state, club.tier, seed) === 0) break
     upgrades += 1
   }
@@ -302,10 +337,10 @@ function cheapestUpgrade(state: AIClubState, tier: TierId): number | null {
   return costs.length ? Math.min(...costs) : null
 }
 
-/** 升一次设施（挑阶段最低、优先级最高的那个），不会把留底的钱花掉。 */
+/** 升一次设施（挑阶段最低、优先级最高的那个），不会花到升级留底以下。 */
 function upgradeOneFacility(state: AIClubState, tier: TierId, seed: number): number {
   const profile = TIER_PROFILE[tier] ?? TIER_PROFILE.division2
-  const budget = state.economy.balance - profile.reserve
+  const budget = state.economy.balance - Math.round(profile.reserve * profile.upgradeFloor)
   if (budget <= 0) return 0
   const options = AI_FACILITIES
     .map((id) => ({ id, stage: state.economy[id], cost: facilityUpgradeCost(id, state.economy[id]) }))
