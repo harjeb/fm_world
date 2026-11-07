@@ -937,8 +937,17 @@ circle.pm-5 { fill: var(--h6); }
 .tac-table .t-card { min-width: 58px; }
 .tac-table .meter-cell { min-width: 62px; }
 /* 熟练度和体能是选人时最常看的两列，给足宽度，条和数字都看得清。 */
-.tac-table .t-prof, .tac-table .t-cond { min-width: 78px; }
-.tac-table .t-prof .meter, .tac-table .t-cond .meter { min-width: 34px; }
+.tac-table .t-prof { min-width: 62px; }
+.tac-table .t-cond { min-width: 34px; }
+/* 熟练度：很短的绿条；体能：一个心形。 */
+.prof-bar { display: inline-block; width: 38px; height: 5px; border-radius: 3px; background: var(--raised); overflow: hidden; vertical-align: middle; }
+.prof-bar i { display: block; height: 100%; background: var(--good); border-radius: 3px; }
+.prof-bar.low i { background: var(--warn); }
+.prof-bar.bad i { background: var(--bad); }
+.fitness { font-size: 15px; line-height: 1; }
+.fitness.good { color: var(--good); }
+.fitness.warn { color: var(--warn); }
+.fitness.bad { color: var(--bad); }
 .tac-table .meter-wrap { min-width: 54px; gap: 4px; }
 .tac-table .meter { min-width: 24px; }
 .tac-table .t-form { min-width: 84px; }
@@ -1016,12 +1025,12 @@ circle.pm-5 { fill: var(--h6); }
 }
 @media (max-width: 1400px) {
   .tac-table .t-role { display: table-cell; }
-  /* 右侧面板变窄：熟练度/体能只留数字（去掉细条），保证前四列并排放下。 */
+  /* 右侧面板变窄：位置/球员列收一收，保证「熟练度 + 体能」两个短列并排放下。 */
   .tac-table .t-place { min-width: 64px; }
   .tac-table .t-name { min-width: 88px; }
-  .tac-table .t-prof, .tac-table .t-cond { min-width: 46px; }
-  .tac-table .t-prof .meter, .tac-table .t-cond .meter { display: none; }
-  .tac-table .t-prof .meter-wrap, .tac-table .t-cond .meter-wrap { min-width: 0; justify-content: flex-end; gap: 0; }
+  .tac-table .t-prof { min-width: 56px; }
+  .tac-table .t-cond { min-width: 30px; }
+  .prof-bar { width: 32px; }
   /* 保持左右两栏：球场 + 右侧球员表。1366 宽的笔记本也要能直接看到熟练度/体能。 */
   .tactics { grid-template-columns: minmax(0, 1fr) minmax(300px, 34%); }
   .tac-body { grid-template-columns: 172px minmax(0, 1fr) 118px; }

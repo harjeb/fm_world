@@ -93,6 +93,18 @@ function roleOptions(position: Position, role: RoleId): string {
   return ROLES_BY_POSITION[position].map((item) => `<option value="${item}" ${role === item ? 'selected' : ''} title="${esc(ROLES[item].desc)}">${esc(ROLES[item].label)}</option>`).join('')
 }
 
+/** 熟练度：参考图里那种很短的绿条，低于 65 变黄、低于 40 变红。 */
+function proficiencyBar(value: number): string {
+  const tone = value >= 65 ? '' : value >= 40 ? ' low' : ' bad'
+  return `<span class="prof-bar${tone}" aria-label="熟练度 ${Math.round(value)}"><i style="width:${Math.max(6, Math.min(100, value)).toFixed(0)}%"></i></span>`
+}
+
+/** 体能：一个心形，绿 / 黄 / 红三档——和参考图一致，不用进度条。 */
+function fitnessHeart(value: number): string {
+  const tone = value >= 70 ? 'good' : value >= 40 ? 'warn' : 'bad'
+  return `<span class="fitness ${tone}" aria-label="体能 ${Math.round(value)}">♥</span>`
+}
+
 function slotPlayerOptions(slot: FormationSlot, role: RoleId, draft: Lineup, formation: FormationDef, currentId: string | undefined): string {
   const candidates = [...game.roster].sort((a, b) => effectiveFit(b, role, slot.position) - effectiveFit(a, role, slot.position))
   return `<option value="" ${currentId ? '' : 'selected'}>— 未安排 —</option>${candidates.map((player) => {
@@ -258,8 +270,8 @@ function playerRow(player: Player, draft: Lineup, formation: FormationDef, selec
   return `<tr class="${isPicked ? 'me' : ''} ${assignable ? 'clickable' : ''}" data-key="${esc(player.id)}" data-drop="${dropTarget}" ${assignable ? `tabindex="0" data-action="lineup-assign" data-player="${esc(player.id)}"` : ''}>
     <td class="t-place ${placement.slot || placement.benchIndex !== undefined ? '' : 'reserve'}">${pick(`${posBadge(placement.slot?.position ?? primaryPosition(player))}<span>${esc(placeLabel)}</span>`, `<select data-move-player="${esc(player.id)}" aria-label="${esc(player.name)}的位置">${moveOptions(player, draft, formation)}</select>`)}</td>
     <td class="name-cell t-name"><span class="grip" draggable="true" data-drag-player="${esc(player.id)}" title="拖到球场或替补席">${icon('grip', 13)}</span><button class="name-btn" data-action="detail" data-player="${esc(player.id)}">${esc(player.name)}</button>${playerFlags(player)}</td>
-    <td class="meter-cell t-prof ${info.proficiency < 65 ? 'warn-text' : ''}" title="${positionLabel(info.position)}熟练度，属性折损 ${pct(1 - positionMultiplier(info.proficiency))}">${meter(info.proficiency, 100, { good: 65, warn: 40 })}</td>
-    <td class="meter-cell t-cond">${meter(player.condition ?? 100)}</td>
+    <td class="num t-prof" title="${positionLabel(info.position)}熟练度 ${Math.round(info.proficiency)} / 100，属性折损 ${pct(1 - positionMultiplier(info.proficiency))}">${proficiencyBar(info.proficiency)}</td>
+    <td class="num t-cond" title="体能 ${Math.round(player.condition ?? 100)} / 100，比赛开始时映射为初始体力">${fitnessHeart(player.condition ?? 100)}</td>
     <td class="num strong">${fitHeat(info.fit)}</td>
     <td class="num">${caHeat(playerCA(player))}</td>
     <td class="t-role">${placement.slot && placement.role ? pick(esc(ROLES[placement.role]?.label ?? ''), `<select data-lineup-role="${placement.slot.id}" aria-label="${esc(placement.slot.label)}职责">${roleOptions(placement.slot.position, placement.role)}</select>`) : '<span class="muted">—</span>'}</td>
