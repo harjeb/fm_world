@@ -203,7 +203,7 @@ function render(): void {
       <div class="workspace">
         ${renderTopbar()}
         <main class="content ${ui.screen === 'lineup' ? 'wide' : ''}">${renderScreen()}</main>
-        <footer class="footer">真实球星和俱乐部名称仅用于原型玩法测试；正式发行需取得相应授权。固定 PCG32 随机；同种子同输入可复现。</footer>
+        <footer class="footer">真实球星和俱乐部名称仅用于原型玩法测试；正式发行需取得相应授权。固定 PCG32 随机；同种子同输入可复现。<span class="muted"> · 构建 ${BUILD_ID}</span></footer>
       </div>
     </div>
     ${renderBootGate()}
@@ -236,6 +236,9 @@ function render(): void {
   else stopReplay()
   mountTurnstile()
 }
+
+/** vite.config.ts 在构建时注入的时间戳；开发模式下是启动时间。 */
+const BUILD_ID = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev'
 
 type TurnstileApi = {
   render: (container: HTMLElement, options: Record<string, unknown>) => string
