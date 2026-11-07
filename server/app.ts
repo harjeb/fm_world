@@ -463,7 +463,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const player = market.pool.find((item) => item.id === playerId)
     const alreadyBidding = market.auctions.some((item) => item.playerId === playerId)
     if (player && !alreadyBidding && !isOnMarketToday({ world: account.game.world, createdAt: account.game.createdAt }, player)) {
-      return { ok: false, error: `${player.name} 这个月不在市场，${'等挂牌日再来'}` }
+      return { ok: false, error: `${player.name} 现在不在市场，过些天再来看看` }
     }
     const result = placeBid(market, account.game, account.id, playerId, Number(amount), now())
     if (result.ok) {

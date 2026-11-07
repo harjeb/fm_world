@@ -10,7 +10,16 @@ export const FACILITY_STAGE_VERSION = 3
 
 export const STARTING_FANS = 1200
 export const MAX_FANS = 150000
-export const STARTING_BALANCE = 2_000_000
+/** 新球队的启动资金按所在联赛级别给：二级只够买一两个能打的，顶级才有本钱谈大牌。 */
+export const STARTING_BALANCE_BY_TIER: Record<TierId, number> = {
+  champions: 15_000_000,
+  division1: 3_000_000,
+  division2: 500_000,
+}
+
+export function startingBalance(tier: TierId | undefined): number {
+  return STARTING_BALANCE_BY_TIER[tier ?? 'division2'] ?? STARTING_BALANCE_BY_TIER.division2
+}
 export const BASE_ROUND_INCOME = 1500
 export const LEAGUE_WIN_BONUS = 1000
 export const GOAL_INCOME_BONUS = 500
@@ -128,7 +137,7 @@ export function economyOf(game: GameState): EconomyState {
       completed++
     }
     game.economy = {
-      balance: STARTING_BALANCE,
+      balance: startingBalance(game.season?.tier),
       fans: STARTING_FANS,
       stageVersion: FACILITY_STAGE_VERSION,
       stadium: STARTING_FACILITY_STAGE,

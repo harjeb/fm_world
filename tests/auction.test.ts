@@ -295,9 +295,10 @@ describe('全服自由市场', () => {
     const one = await register(base, 'alpha')
     const two = await register(base, 'bravo')
     const { pool } = await getMarket(base)
-    const message = await waitForEvent(base, two.token, (data) => data.type === 'market' && (data.auctions as unknown[]).length === 1, () => bid(base, one.headers, pool[0].id, playerMarketValue(pool[0])))
+    const target = [...pool].sort((a, b) => playerMarketValue(a) - playerMarketValue(b))[0]
+    const message = await waitForEvent(base, two.token, (data) => data.type === 'market' && (data.auctions as unknown[]).length === 1, () => bid(base, one.headers, target.id, playerMarketValue(target)))
     const [auction] = message.auctions as FreeMarket['auctions']
-    expect(auction.playerId).toBe(pool[0].id)
+    expect(auction.playerId).toBe(target.id)
     expect(leadingBid(auction).club).toBe(one.game.clubName)
   })
 
@@ -306,10 +307,11 @@ describe('全服自由市场', () => {
     const { base } = await start(() => clock)
     const one = await register(base, 'alpha')
     const { pool } = await getMarket(base)
-    await bid(base, one.headers, pool[0].id, playerMarketValue(pool[0]))
+    const target = [...pool].sort((a, b) => playerMarketValue(a) - playerMarketValue(b))[0]
+    await bid(base, one.headers, target.id, playerMarketValue(target))
     clock += AUCTION_DURATION_MS + 1
     const state = await waitForEvent(base, one.token, (data) => data.type === 'state', () => getMarket(base))
-    expect((state.game as GameState).roster.some((item) => item.id === pool[0].id)).toBe(true)
+    expect((state.game as GameState).roster.some((item) => item.id === target.id)).toBe(true)
 
     // 客户端把球员解约后保存，这名球员进全服市场，账号存档里不留。
     const current = await getGame(base, one.headers)
@@ -327,13 +329,14 @@ describe('全服自由市场', () => {
     const one = await register(base, 'alpha')
     const two = await register(base, 'bravo')
     const { pool } = await getMarket(base)
-    await bid(base, one.headers, pool[0].id, playerMarketValue(pool[0]))
+    const target = [...pool].sort((a, b) => playerMarketValue(a) - playerMarketValue(b))[0]
+    await bid(base, one.headers, target.id, playerMarketValue(target))
     clock += AUCTION_DURATION_MS + 1
     await getMarket(base)
     const current = await getGame(base, two.headers)
-    current.game.freeStars = [structuredClone(pool[0])]
+    current.game.freeStars = [structuredClone(target)]
     await fetch(`${base}/api/game`, { method: 'PUT', headers: two.headers, body: JSON.stringify({ game: current.game, baseRevision: current.revision }) })
-    expect((await getMarket(base)).pool.some((item) => item.id === pool[0].id)).toBe(false)
+    expect((await getMarket(base)).pool.some((item) => item.id === target.id)).toBe(false)
   })
 
   it('没登录不能出价；比赛进行中不能出价', async () => {

@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { applyAgentAction, agentView } from '../server/agent.ts'
 import { eventById } from '../src/game/data/events.ts'
 import { trainingOptions } from '../src/game/training-calendar.ts'
+import { playerMarketValue } from '../src/game/market.ts'
+import { isOnMarketToday } from '../src/game/market-window.ts'
+import { economyOf } from '../src/game/economy.ts'
 import { createInitialGame } from '../src/game/state.ts'
 
 describe('agent economy, market and training', () => {
@@ -16,8 +19,9 @@ describe('agent economy, market and training', () => {
     expect(applyAgentAction(game, { action: 'upgrade_facility', facilityId: 'constructor' }).ok).toBe(false)
     expect(applyAgentAction(game, { action: 'list_player', playerId: game.roster[0].id, price: '100' }).ok).toBe(false)
     expect(applyAgentAction(game, { action: 'list_player', playerId: game.roster[0].id, price: Infinity }).ok).toBe(false)
-    if (game.freeStars.length) {
-      const id = game.freeStars[0].id
+    const affordable = game.freeStars.find((player) => isOnMarketToday(game, player) && playerMarketValue(player) <= economyOf(game).balance / 2)
+    if (affordable) {
+      const id = affordable.id
       const result = applyAgentAction(game, { action: 'buy_free_agent', playerId: id })
       expect(result.ok).toBe(true)
       expect(JSON.stringify(result)).not.toContain('injuryProneness')

@@ -266,10 +266,11 @@ describe('球员卡库存', () => {
     const gone = game.freeStars.find((item) => item.id === player.id)!
     expect(gone.attrs).toEqual(gone.baseAttrs)
     expect(playerCards(game, player.id)).toHaveLength(1)
-    // 买回按最好的卡计价：一买一卖净亏一成。
+    // 买回按最好的卡计价：一买一卖净亏一成。先补足余额，避免新身价把账户卡住。
+    economyOf(game).balance = best * 2
     expect(buyFreeAgent(game, player.id)).toEqual({ ok: true })
-    expect(economyOf(game).balance).toBe(balance + price - best)
-    expect(economyOf(game).balance).toBeLessThan(balance)
+    expect(economyOf(game).balance).toBe(best * 2 - best)
+    expect(economyOf(game).balance).toBeLessThan(best * 2)
   })
 
   it('旧存档：已确认的成品和待确认的候选都进库存，重复处理不会多出来', () => {

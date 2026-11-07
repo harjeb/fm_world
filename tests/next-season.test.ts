@@ -100,7 +100,7 @@ describe('next season', () => {
     delete game.economy
     expect(catchUpSeason(game, game.season.startedAt + 100 * ROUND_MS).advanced).toBe(0)
     expect(startNextSeason(game, 1000).ok).toBe(true)
-    expect(game.economy!.balance).toBe(2_000_000)
+    expect(game.economy!.balance).toBe(500_000)
     expect(game.economy!.lastIncomeRound).toBe(0)
     expect(startLeagueMatch(game, 1000).context!.seed).not.toBe(firstSeed)
   })

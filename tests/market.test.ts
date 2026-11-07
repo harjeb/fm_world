@@ -7,7 +7,9 @@ import { validateLineup } from '../src/game/squad.ts'
 
 function game() {
   const { roster, lineup } = makeTeams(30)
-  const freeStars = allPlayers().slice(30, 35)
+  for (const player of roster) delete player.starKey
+  // 去掉 starKey：这些用例测的是市场机制，不想被球星的隐藏挂牌日影响。
+  const freeStars = allPlayers().slice(30, 35).map((player) => ({ ...player, starKey: undefined }))
   return { roster, lineup, freeStars, training: {}, candidates: {}, injuries: {}, season: { round: 1, fixtures: [] } } as unknown as GameState
 }
 
@@ -49,6 +51,7 @@ describe('local market', () => {
     expect(settleMarket(g, 1)).toBe(0)
     expect(settleMarket(g, 2)).toBe(0)
     expect(cancelListing(g, q.id).ok).toBe(true)
+    e.balance = playerMarketValue(p)
     expect(buyFreeAgent(g, p.id).ok).toBe(true)
     expect(g.roster).toContain(p)
   })

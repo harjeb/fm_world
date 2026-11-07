@@ -15,12 +15,21 @@ describe('economy', () => {
     const game = oldSave()
     const e = economyOf(game)
     expect(e).toEqual({
-      balance: 2_000_000, fans: STARTING_FANS, stageVersion: 3,
+      balance: 500_000, fans: STARTING_FANS, stageVersion: 3,
       stadium: startStage, academy: startStage, medical: startStage, shop: startStage, sponsor: startStage,
       psychology: startStage, tactics: startStage,
       lastIncomeRound: 0,
     })
     expect(economyOf(game)).toBe(e)
+  })
+
+  it('启动资金按级别给：二级 50 万、一级 300 万、顶级 1500 万', () => {
+    const d2 = { season: { fixtures: [], tier: 'division2' } } as unknown as GameState
+    const d1 = { season: { fixtures: [], tier: 'division1' } } as unknown as GameState
+    const top = { season: { fixtures: [], tier: 'champions' } } as unknown as GameState
+    expect(economyOf(d2).balance).toBe(500_000)
+    expect(economyOf(d1).balance).toBe(3_000_000)
+    expect(economyOf(top).balance).toBe(15_000_000)
   })
 
   it('walks 5 stages per level and finishes at stage 25', () => {
@@ -125,7 +134,7 @@ describe('economy', () => {
     expect(economyOf(game).fans).toBe(nextFans)
     expect(economyOf(game).lastFanChange).toBe(nextFans - STARTING_FANS)
     expect(awardRoundIncome(game, 1)).toBe(0)
-    expect(economyOf(game).balance).toBe(2_000_000 + expected)
+    expect(economyOf(game).balance).toBe(500_000 + expected)
   })
 
   it('does not pay skipped wins retroactively and rejects overflow atomically', () => {
@@ -138,11 +147,11 @@ describe('economy', () => {
     expect(e.lastIncomeRound).toBe(0)
     expect(e.balance).toBe(Number.MAX_SAFE_INTEGER - 5000)
     expect(e.fans).toBe(STARTING_FANS)
-    e.balance = 2_000_000
+    e.balance = 500_000
     const income = awardRoundIncome(game, 2)
     expect(income).toBeGreaterThan(projectedRoundIncome({ ...e, fans: STARTING_FANS }))
     expect(awardRoundIncome(game, 1)).toBe(0)
-    expect(e.balance).toBe(2_000_000 + income)
+    expect(e.balance).toBe(500_000 + income)
   })
 
   it('fans and income accelerate with score, while invalid scores never grow fans', () => {

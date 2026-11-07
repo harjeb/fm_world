@@ -4,7 +4,7 @@ import { AUCTION_DURATION_MS, AUCTION_EXTEND_MS, AUCTION_MIN_RAISE, committedFun
 import { traitEffectText } from '../../game/data/skill-effects.ts'
 import { traitNameOf } from '../../game/data/star-traits.ts'
 import { NPC_MAX_DEALS, NPC_ROUND_BUDGET, SQUAD_LIMIT, bestMarketValue, clubAsking, freeAgentAsking, saleChance, suggestedPrice, transferWindowOpen } from '../../game/market.ts'
-import { isOnMarketToday, marketWindowLabel, nextMarketDayLabel } from '../../game/market-window.ts'
+import { isOnMarketToday } from '../../game/market-window.ts'
 import { caHeat, clubName, countryLabel, emptyState, icon, pageHead, panel, posBadge, primaryPosition, tag, traitLabel } from '../components.ts'
 import { countdownText, esc, playerCA } from '../format.ts'
 import { isOnlineMode, marketState, onlineState, publicWorld, serverNow } from '../../online.ts'
@@ -147,7 +147,6 @@ function freeTab(): string {
   const rows = agents.slice(ui.clubPage * pageSize, ui.clubPage * pageSize + pageSize).map((player) => {
     const price = freeAgentAsking(game, player)
     const available = isOnMarketToday(game, player)
-    const window = marketWindowLabel(player)
     return `<tr class="clickable ${available ? '' : 'dim-row'}" data-action="detail" data-player="${esc(player.id)}" data-key="${esc(player.id)}">
       <td>${posBadge(primaryPosition(player))}</td>
       ${nameCell(player)}
@@ -155,7 +154,7 @@ function freeTab(): string {
       <td class="num">${player.age ?? 24}</td>
       <td class="num strong">${caHeat(playerCA(player))}</td>
       <td>${traitLabel(player.traitId, true)}</td>
-      <td class="num">${price.toLocaleString()}<br><small class="muted">${esc(available ? window : nextMarketDayLabel(game, player) + '挂牌')}</small></td>
+      <td class="num">${price.toLocaleString()}</td>
       <td class="num">${available
         ? `<button class="btn small" data-action="club-buy" data-player="${esc(player.id)}" ${game.activeMatch || price <= 0 || !transferWindowOpen(game) ? 'disabled' : ''}>谈判</button>`
         : '<span class="muted small">未挂牌</span>'}</td>
@@ -167,9 +166,9 @@ function freeTab(): string {
       <button class="btn small" data-action="club-search">搜索</button>
       <span class="muted small">阵容 ${game.roster.length} / 25 · 余额 ${economy.balance.toLocaleString()}</span>
     </div>
-    <p class="hint">签人要谈判：他会问你的赛季目标和给他的位置，报价越高成功率越高。部分球星只在每月的固定几天挂牌。</p>
+    <p class="hint">签人要谈判：他会问你的赛季目标和给他的位置，报价越高成功率越高。不是所有球员随时都能碰到。</p>
     ${game.roster.length > SQUAD_LIMIT ? `<p class="warn-text">阵容 ${game.roster.length} / ${SQUAD_LIMIT}，已超编：必须裁掉 ${game.roster.length - SQUAD_LIMIT} 人才能进入比赛。</p>` : ''}
-    ${rows ? `<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th>国籍</th><th class="num">龄</th><th class="num">CA</th><th>特性</th><th class="num">底价 / 挂牌日</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('没有匹配的自由球员。')}
+    ${rows ? `<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th>国籍</th><th class="num">龄</th><th class="num">CA</th><th>特性</th><th class="num">底价</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('没有匹配的自由球员。')}
     <div class="pager"><button class="btn small" data-action="club-prev" ${ui.clubPage === 0 ? 'disabled' : ''}>${icon('left', 13)}上一页</button><span class="muted small">${ui.clubPage + 1} / ${pages}</span><button class="btn small" data-action="club-next" ${ui.clubPage >= pages - 1 ? 'disabled' : ''}>下一页${icon('right', 13)}</button></div>
   `, { flush: true })
 }

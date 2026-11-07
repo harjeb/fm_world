@@ -203,7 +203,7 @@ describe('赛季与存档', () => {
     expect(saveGame(game)).toBe(true)
     const loaded = loadGame()!
     expect(loaded.economy?.lastIncomeRound).toBe(0)
-    expect(JSON.parse(localStorage.getItem('fm-seven-a-side-save-v3')!).economy.balance).toBe(2_000_000)
+    expect(JSON.parse(localStorage.getItem('fm-seven-a-side-save-v3')!).economy.balance).toBe(500_000)
   })
 
   it('v2 迁移会把属性和历史训练日志一起换到新尺度', () => {

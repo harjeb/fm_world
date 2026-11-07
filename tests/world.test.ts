@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { createWorldGame, payWorldWages, d2ClubChoices, createOwnerlessWorld, createWorldGameFromWorld, advanceOwnerlessWorld } from '../src/game/world.ts'
 import { ROUND_MS, startLeagueMatch, startNextSeason, updateSeasonTable } from '../src/game/season.ts'
-import { buyFreeAgent, releasePlayer, renewContract, transferWindowOpen } from '../src/game/market.ts'
+import { buyFreeAgent, releasePlayer, renewContract, transferWindowOpen, playerMarketValue } from '../src/game/market.ts'
+import { isOnMarketToday } from '../src/game/market-window.ts'
+import { economyOf } from '../src/game/economy.ts'
 import { recordMatchDiscipline, serveSuspensions } from '../src/game/discipline.ts'
 import { MatchEngine } from '../src/game/match/engine.ts'
 import { allPlayers, inputFor, makeTeams } from './helpers.ts'
@@ -108,7 +110,10 @@ describe('三级共享世界', () => {
 
   it('合同、续约、解约、转会窗口与工资', () => {
     const game = createWorldGame(4)
-    const player = game.freeStars[0]
+    const balance = economyOf(game).balance
+    const player = [...game.freeStars]
+      .filter((item) => isOnMarketToday(game, item) && playerMarketValue(item) <= balance)
+      .sort((a, b) => playerMarketValue(a) - playerMarketValue(b))[0]
     expect(buyFreeAgent(game, player.id).ok).toBe(true)
     expect(player.contract?.clubId).toBe('player')
     const before = player.contract!.expiresSeason

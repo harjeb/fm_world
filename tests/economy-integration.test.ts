@@ -27,7 +27,7 @@ describe('economy integration', () => {
     expect(economyOf(game).lastIncomeRound).toBe(0)
     for (const fixture of game.season.fixtures.filter(f => f.round <= 2)) fixture.played = true
     delete (game as typeof game & { economy?: unknown }).economy
-    expect(economyOf(game)).toMatchObject({ balance: 2_000_000, lastIncomeRound: 2 })
+    expect(economyOf(game)).toMatchObject({ balance: 500_000, lastIncomeRound: 2 })
   })
 
   it('pays each completed round once during batched catchup', () => {

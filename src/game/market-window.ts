@@ -36,21 +36,3 @@ export function isOnMarketToday(
   return days.includes(Math.min(28, marketDayOfMonth(game, now)))
 }
 
-/** 下一次出现在市场是什么时候，给界面用。 */
-export function nextMarketDayLabel(
-  game: Pick<GameState, 'world' | 'createdAt'>,
-  player: Pick<Player, 'id' | 'starKey'>,
-  now = Date.now(),
-): string {
-  const days = starMarketDays(player)
-  if (!days) return '随时'
-  const today = marketDayOfMonth(game, now)
-  const next = days.find((day) => day > today)
-  return next ? `本月 ${next} 号` : `下月 ${days[0]} 号`
-}
-
-/** 市场窗口的说明文字。 */
-export function marketWindowLabel(player: Pick<Player, 'id' | 'starKey'>): string {
-  const days = starMarketDays(player)
-  return days ? `每月 ${days.join('、')} 号挂牌` : '长期在售'
-}
