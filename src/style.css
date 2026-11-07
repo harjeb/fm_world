@@ -749,6 +749,11 @@ h3:first-child { margin-top: 0; }
 .modal-close:hover { background: var(--raised); color: var(--text); }
 .modal-actions { justify-content: flex-end; }
 .account-modal { max-width: 440px; margin-top: 8vh; }
+.boot-modal { max-width: 470px; margin-top: 14vh; }
+.boot-modal h1 { margin-bottom: 10px; }
+.boot-modal .hint { margin-bottom: 8px; }
+.boot-modal .btn-row { margin: 14px 0 10px; }
+.boot-modal .btn-row .btn { flex: 1; justify-content: center; }
 .account-modal > p { margin-bottom: 8px; }
 .newgame-modal { max-width: 1320px; }
 .pick-layout { display: grid; grid-template-columns: 500px minmax(0, 1fr); gap: 14px; align-items: start; margin-top: 10px; }

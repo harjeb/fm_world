@@ -66,7 +66,7 @@ function prepareTraining(game: GameState, playerId: string, request: TrainingReq
     if (!participant) return { error: '没有进行中的培养' }
     if (participant.completed) return { error: '本轮培养已经结束', completed: id === playerId }
     if (participant.pendingEventId) return { error: '请先处理当前事件' }
-    if (participant.action >= trainingActionsTotal(participant)) return { error: `${trainingActionsTotal(participant)} 次行动已用完`, completed: id === playerId }
+    if (participant.action >= trainingActionsTotal(participant)) return { error: '本轮培养的时段已用完', completed: id === playerId }
     if (participant.action !== session.action || participant.scheduleVersion !== session.scheduleVersion || (session.scheduleVersion === 1 && participant.scheduleSeed !== session.scheduleSeed)) return { error: '队友培养日程或行动进度不一致' }
     // Plan and execute on clones: neither preview nor a failed group action may mutate live state.
     const plan = planTraining(structuredClone(participant), request, mentor, ids.length - 1)
@@ -332,7 +332,7 @@ export function autoTrainingStep(game: GameState, playerId: string): AutoTrainin
   return { ok: true, completed: result.completed, kind: 'action', label: request.kind === 'drill' ? `专项训练 · ${attrLabel(top.key)}` : '休息' }
 }
 
-/** 连续自动培养，直到本轮结束或用完步数（默认 60 步，足够跑完 30 个时段加事件）。 */
+/** 连续自动培养，直到本轮结束或用完步数（默认 60 步，足够跑完一整轮加事件）。 */
 export function runAutoTraining(game: GameState, playerId: string, maxSteps = 60): AutoTrainingRunResult {
   let steps = 0
   for (let guard = 0; guard < maxSteps; guard++) {

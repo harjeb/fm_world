@@ -94,7 +94,8 @@ try {
   await waitFor(`document.readyState === 'complete'`)
   await waitFor(`!!document.querySelector('[data-action="account-open"]')`)
 
-  await click('[data-action="account-open"]')
+  // 启动页：联机流程直接选「登录」。
+  await click('[data-action="boot-online"]')
   await waitFor(`!!document.querySelector('#account-username')`)
   await click('[data-action="account-mode"]')
   await waitFor(`!!document.querySelector('#account-username')`)

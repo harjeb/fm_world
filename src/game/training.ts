@@ -162,7 +162,7 @@ export function createTrainingSession(player: Player, seed: number, snapshot: Tr
         week: 1,
         kind: 'system',
         title: '开始新一轮培养',
-        text: '从原始属性开始培养。本轮 30 个半天，共 15 天；每周一上午交流赛，周五上午队内比赛、下午恢复。结束后产出一张新卡进入库存，和之前的卡互不影响。主属性最高为 1500。',
+        text: '从原始属性开始培养。本轮 15 天，每天上午和下午各练一次；每周一上午交流赛，周五上午队内比赛、下午恢复。结束后产出一张新卡进入库存，和之前的卡互不影响。主属性最高为 1500。',
       },
     ],
     completed: false,
@@ -606,7 +606,7 @@ export type PerformResult = {
 export function performTrainingAction(session: TrainingSession, request: TrainingRequest, mentor?: Player, teammateCount = 0): PerformResult {
   if (session.completed) return { ok: false, error: '本轮培养已经结束', completed: true }
   if (session.pendingEventId) return { ok: false, error: '请先处理当前事件', completed: false }
-  if (session.action >= trainingActionsTotal(session)) return { ok: false, error: `${trainingActionsTotal(session)} 次行动已用完`, completed: true }
+  if (session.action >= trainingActionsTotal(session)) return { ok: false, error: '本轮培养的时段已用完', completed: true }
   const plan = planTraining(session, request, mentor, teammateCount)
   if (plan.invalid) return { ok: false, error: plan.note, completed: false }
   if (request.kind === 'activity') {
@@ -884,7 +884,7 @@ function completeSession(session: TrainingSession): void {
     week: sessionWeek(session, trainingActionsTotal(session)),
     kind: 'system',
     title: '培养完成',
-    text: `${trainingActionsTotal(session)} 次行动结束。新球员卡已进入库存，换上之前球员仍使用原来的卡。`,
+    text: '本轮培养结束。新球员卡已进入库存，换上之前球员仍使用原来的卡。',
   })
 }
 

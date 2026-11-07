@@ -206,6 +206,7 @@ function render(): void {
         <footer class="footer">真实球星和俱乐部名称仅用于原型玩法测试；正式发行需取得相应授权。固定 PCG32 随机；同种子同输入可复现。</footer>
       </div>
     </div>
+    ${renderBootGate()}
     ${renderDetailOverlay()}
     ${renderClubOverlay()}
     ${renderAccountOverlay()}
@@ -337,12 +338,14 @@ async function submitAccount(): Promise<void> {
       }
       const data = await registerOnline(username, password, { inviteCode, turnstileToken: ui.turnstileToken })
       ui.accountOpen = false
+      ui.bootGate = false
       ui.turnstileToken = ''
       applyOnlineGame(data.game, `已注册并登录 ${data.user.username}，存档已同步。`)
       return
     }
     const data = await loginOnline(username, password)
     ui.accountOpen = false
+    ui.bootGate = false
     applyOnlineGame(data.game, `已登录 ${data.user.username}，存档已同步。`)
   } catch (error) {
     /* Turnstile token 一次性有效，失败后清空插槽，render() 会重新挂载控件取新 token。 */
@@ -353,13 +356,41 @@ async function submitAccount(): Promise<void> {
   }
 }
 
+/**
+ * 启动页：每次打开页面都先问一次「登录 / 离线」。
+ * 不写进存档，也不记住选择——刷新页面会再问。
+ */
+function renderBootGate(): string {
+  if (!ui.bootGate) return ''
+  const online = hasOnlineSession()
+  const name = onlineState.user ? esc(onlineState.user.username) : ''
+  return `<div class="overlay boot-gate">
+    <div class="modal boot-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="选择游戏模式">
+      <div class="kicker">FM 世界</div>
+      <h1>选择游戏模式</h1>
+      <p class="hint">登录后进入全服共享世界：所有账号看到同一批球队、同一个赛季、同一个日期。</p>
+      <p class="hint">离线模式只玩这台设备上的本地存档，时间和赛季都按本地时间自己走。</p>
+      <div class="btn-row">
+        <button class="btn primary" data-action="boot-online">${online ? (name ? `继续联机（${name}）` : '继续联机') : '登录 / 注册'}</button>
+        <button class="btn ghost" data-action="boot-offline">离线模式</button>
+      </div>
+      <p class="hint">${online ? '离线模式下本次不连接服务器，令牌会保留，下次打开还会再问。' : '离线存档只保存在这个浏览器里，换设备不会同步。'}</p>
+    </div>
+  </div>`
+}
+
 function bootOnline(): void {
   setRemoteGameHandler((next) => applyOnlineGame(next))
   subscribeOnline(() => render())
   subscribeMarket((previous, previousLog) => announceMarket(previous, previousLog))
   void loadPublicConfig().then(() => render())
+}
+
+/** 启动页选了「登录 / 继续联机」才去连服务器；离线模式完全不建立在线会话。 */
+function joinOnline(): void {
   void initOnline().then((remote) => {
     if (remote) applyOnlineGame(remote, '已从服务器载入最新存档。')
+    else render()
   })
 }
 
@@ -1092,6 +1123,22 @@ document.addEventListener('click', async (event) => {
       if (!ui.matchEngine || game.activeMatch?.context.isLeague) break
       ui.matchEngine.simulate()
       completeMatch()
+      break
+    case 'boot-online':
+      ui.bootGate = false
+      if (hasOnlineSession()) {
+        joinOnline()
+        render()
+      } else {
+        ui.accountOpen = true
+        render()
+      }
+      break
+    case 'boot-offline':
+      // 保留令牌，但这次不连服务器：不会建立 remote saver，存档只留在本机。
+      ui.bootGate = false
+      ui.notice = '离线模式：本次不会连接服务器。'
+      render()
       break
     case 'match-coach':
       if (game.activeMatch?.context.isLeague) {

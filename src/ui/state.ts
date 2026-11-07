@@ -13,6 +13,8 @@ export type SquadSortKey = 'pos' | 'name' | 'age' | 'ca' | 'condition' | 'energy
 
 export type UIState = {
   screen: Screen
+  /** 每次打开页面都先问：登录进共享世界，还是离线玩本地存档。 */
+  bootGate: boolean
   clubTab: ClubTab
   transferTab: TransferTab
   clubSearch: string
@@ -88,6 +90,7 @@ export function setGame(next: GameState): void {
 
 export const ui: UIState = {
   screen: 'home',
+  bootGate: true,
   clubTab: 'facilities',
   transferTab: 'market',
   clubSearch: '',

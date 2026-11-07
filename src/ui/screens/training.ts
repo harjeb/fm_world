@@ -97,8 +97,8 @@ export function renderTraining(): string {
   return `
     ${pageHead({
       kicker: '培养',
-      title: '新培养 30 个时段，15 天',
-      sub: '每天上午、下午各一个时段；每周一上午交流赛，周五上午队内比赛、下午休息。旧课程保留原有规则。每轮结束产出一张新球员卡进入库存，原来的卡不会消失。',
+      title: '培养角色卡',
+      sub: '每天上午、下午各练一次，一共 15 天；每周一上午交流赛，周五上午队内比赛、下午休息。每轮结束产出一张球员卡进入库存，原来的卡不会消失。',
       actions: playerSelect(),
     })}
     ${sessionStrip()}
@@ -435,7 +435,7 @@ function eventPanel(session: TrainingSession, event: NonNullable<ReturnType<type
 function candidatePanel(current: Player, cand: Player, session: TrainingSession): string {
   const card = playerCards(game, current.id).find((item) => item.id === session.cardId)
   return panel(`新球员卡${card ? ` · ${esc(cardName(card))}` : ''}`, `
-    <p>${trainingActionsTotal(session)} 次行动已结束，新卡已进入库存。现在换上，还是先留在库存？换卡不影响体能和精力。隐藏属性的变化不在表中公开。</p>
+    <p>本轮培养已结束，新卡已进入库存。现在换上，还是先留在库存？换卡不影响体能和精力。隐藏属性的变化不在表中公开。</p>
     <div class="candidate-layout">
       <div>${attrCompareTable(current, cand)}</div>
       <div class="candidate-side">

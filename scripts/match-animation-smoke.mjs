@@ -81,6 +81,8 @@ try {
     await sleep(100)
   }
   await send('Page.navigate', { url: `http://127.0.0.1:${port}` })
+  // 每次打开都会先问「登录 / 离线」：这里走离线模式。
+  await click('[data-action="boot-offline"]')
   await waitFor(`!!document.querySelector('[data-nav="challenge"]')`)
   await evaluate(`(() => {
     window.__motion = [];
@@ -111,21 +113,23 @@ try {
   const speeds = await evaluate(`(async () => {
     const {pitchMotionSnapshot} = await import('/src/ui/pitch-canvas.ts');
     let top = 0;
-    let still = 0;
+    let bottom = Infinity;
     let points = 0;
     // 单帧可能正好停在一个定位球上：连采 1 秒再看最大值。
     for (let i = 0; i < 10; i++) {
       const snapshot = pitchMotionSnapshot();
+      const speeds = snapshot.map((p) => p.speed);
       points = Math.max(points, snapshot.length);
-      top = Math.max(top, ...snapshot.map((p) => p.speed));
-      still = Math.max(still, snapshot.filter((p) => p.speed < 0.4).length);
+      top = Math.max(top, ...speeds);
+      bottom = Math.min(bottom, ...speeds);
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    return { points, top, still };
+    return { points, top, bottom, spread: top - bottom };
   })()`)
   assert(speeds.points >= 14, `motion layer is not tracking all players: ${JSON.stringify(speeds)}`)
   assert(speeds.top > 0.8, `players are not moving: ${JSON.stringify(speeds)}`)
-  assert(speeds.still >= 1, `everyone moves at the same time, no shape: ${JSON.stringify(speeds)}`)
+  // 不是全队同速平移：至少要有人明显比另一个人快。
+  assert(speeds.spread > 1.5, `everyone moves at the same speed, no shape: ${JSON.stringify(speeds)}`)
   // 运动层按“比赛时间”10 Hz 推进：正常档 12 秒 ≈ 180 tick（倍速 1.5 左右）。
   assert(motion.ticks >= 60 && motion.ticks <= 400, `motion layer did not tick with playback speed: ${JSON.stringify(motion)}`)
 

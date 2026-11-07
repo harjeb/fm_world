@@ -110,7 +110,7 @@ function recentPanel(): string {
 function trainingPanel(): string {
   const sessions = Object.values(game.training).filter((session) => game.roster.some((player) => player.id === session.playerId)).slice(0, 4)
   const body = sessions.length === 0
-    ? '<p class="muted pad">还没有进行中的培养。选一名球员，完成 30 次行动。</p>'
+    ? '<p class="muted pad">还没有进行中的培养。选一名球员，培养一张角色卡。</p>'
     : `<div class="rows">${sessions.map((session) => {
       const player = game.roster.find((item) => item.id === session.playerId)!
       const total = trainingActionsTotal(session)
