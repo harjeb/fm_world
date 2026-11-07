@@ -300,16 +300,17 @@ export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | '
     const slot = pickSlot(state, players, rng)
     if (slot < 0) break
     const base = players?.[slot]
-    if (!base && !state.cards[String(slot)]) break
-    const card = base ? cardOf(state, slot, base) : state.cards[String(slot)]
-    const gk = base ? base.positions.GK > 0 : state.cards[String(slot)] !== undefined && players === undefined
+    // 没有当季名单（其他分区）就不练：账本里的卡等下赛季随名单重建，免得把 GK 属性练到场上球员身上。
+    if (!base) break
+    const card = cardOf(state, slot, base)
+    const gk = base.positions.GK > 0
     const before = card.rating
-    const after = growCard(state, card, gk, rng, base?.pa)
+    const after = growCard(state, card, gk, rng, base.pa)
     if (after <= before + 0.4) continue
     state.cards[String(slot)] = { rating: after, attrs: { ...card.attrs }, owner: card.owner }
     trained += 1
     // 按名单下标装这个槽位自己的卡（不能拿一个人当 0 号槽位去套）。
-    if (base && applyToTeam && players) equipSlot(state, players, slot)
+    if (applyToTeam && players) equipSlot(state, players, slot)
     state.trained += 1
   }
 
