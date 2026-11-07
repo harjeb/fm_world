@@ -5,6 +5,7 @@ import { PLAYER_TEAM_ID, matchdayCountdown, playerFixture, seasonRoundLabel, tea
 import { validateLineup } from '../../game/squad.ts'
 import { trainingActionsTotal } from '../../game/training.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
+import { isOnlineMode } from '../../online.ts'
 import { boardMarkings, boardSpot, caHeat, clubLook, crest, emptyState, formPills, icon, injuryLabel, leagueTable, meter, pageHead, panel, recordResult, resultPill, teamForm, tile } from '../components.ts'
 import { esc, playerCA, shortName } from '../format.ts'
 import { game } from '../state.ts'
@@ -61,7 +62,7 @@ function nextMatchPanel(): string {
       <div class="nm-center">
         ${played ? `<div class="nm-score">${fixture.score!.home} : ${fixture.score!.away}</div>` : '<div class="nm-vs">VS</div>'}
         <div class="nm-meta">${homeIsMe ? '主场' : '客场'} · ${esc(divisionText())}</div>
-        ${played ? `<div class="nm-meta">下一轮 ${esc(matchdayCountdown(game))}</div>` : `<div class="nm-meta">${icon('clock', 13)} 距自动结算 ${esc(matchdayCountdown(game))}</div><button class="btn primary nm-go" data-action="start-league">${icon('play', 14)}开始本轮比赛</button>`}
+        ${played ? `<div class="nm-meta">下一轮 ${esc(matchdayCountdown(game))}</div>` : `<div class="nm-meta">${icon('clock', 13)} 距自动结算 ${esc(matchdayCountdown(game))}</div><button class="btn primary nm-go" data-action="start-league">${icon('play', 14)}${isOnlineMode() ? '开始本轮比赛' : '跳至比赛日'}</button>`}
       </div>
       ${nextMatchSide(fixture.awayId, 'right', !homeIsMe)}
     </div>`, { aside: `<span class="muted">${esc(seasonRoundLabel(game))}</span>`, className: 'next-match span-8' })

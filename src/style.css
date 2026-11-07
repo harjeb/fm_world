@@ -182,6 +182,7 @@ select {
 }
 select:disabled { opacity: 0.5; }
 option { background: var(--panel); color: var(--text); }
+optgroup { background: var(--panel-2); color: var(--text-3); font-weight: 700; }
 input[type="checkbox"] { width: 15px; height: 15px; padding: 0; accent-color: var(--accent); }
 select.compact, input.compact { height: 24px; font-size: 12px; }
 .dt select.compact { width: 100%; min-width: 92px; }
@@ -862,7 +863,14 @@ circle.pm-5 { fill: var(--h6); }
 .pick:focus-within { border-color: var(--accent); }
 .pick-text { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .pick > .ico { color: var(--text-3); }
-.pick select { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; opacity: 0; cursor: pointer; border: 0; background: none; }
+/* 透明的 select 盖在标签上：用透明字而不是 opacity，
+   否则 Chrome 的原生下拉弹层会跟着半透明，浅底浅字看不清。 */
+.pick select { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; color: transparent; cursor: pointer; border: 0; background: none; appearance: none; }
+/* 弹层里的选项用不透明配色，首发/替补的组标题和选项分开，避免糊成一片。 */
+.pick select option { background-color: var(--panel); color: var(--text); }
+.pick select option:checked { background-color: var(--raised); color: var(--text); }
+.pick select optgroup { background-color: var(--panel-2); color: var(--text-3); font-weight: 700; }
+.pick select option.reserve-opt { color: var(--accent); font-weight: 600; }
 .pick select:disabled { cursor: not-allowed; }
 .pick:has(select:disabled) { opacity: 0.55; }
 

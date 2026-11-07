@@ -386,6 +386,15 @@ export function hasOnlineSession(): boolean {
   return !!token
 }
 
+/**
+ * 本次会话是否真的连着服务器。
+ * 启动页选了「离线模式」时，本地令牌仍然保留（方便下次继续联机），
+ * 但这一局的所有推进都必须走本地，不能因为“有令牌”就去请求服务器。
+ */
+export function isOnlineMode(): boolean {
+  return onlineState.status === 'online'
+}
+
 export async function leagueActionOnline(body: Record<string, unknown>): Promise<GameState> {
   return onlineGameAction('/api/match/action', body)
 }

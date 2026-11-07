@@ -18,6 +18,7 @@ import {
   setLineup,
   simulateSeasonRound,
   startLeague,
+  startLeagueOnMatchday,
   startNextSeasonAction,
   startChallengeWithOpponent,
   startSingleChallenge,
@@ -33,8 +34,8 @@ import type { TrainingActivityId } from '../game/training-calendar.ts'
 import { autoFillLineup, clearStarter, movePlayer, type LineupTarget } from '../game/squad.ts'
 import { ensureCards, playerCards } from '../game/cards.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeStarTraits } from '../game/names.ts'
-import { catchUpSeason } from '../game/season.ts'
-import { fetchFriendlyTeam } from '../online.ts'
+import { catchUpSeason, skipToPostseasonEnd } from '../game/season.ts'
+import { fetchFriendlyTeam, isOnlineMode } from '../online.ts'
 import { advanceLeagueRealtime, leagueDisplayClock } from '../game/realtime.ts'
 import { displayClock } from '../game/match/time.ts'
 import { emptyAutoSubs } from '../game/match/management.ts'
@@ -128,6 +129,7 @@ function go(screen: Screen): void {
   ui.matchPlaying = false
   ui.coachPanel = false
   ui.detailPlayerId = null
+  ui.lineupSlot = null
   ui.screen = screen
   if (screen === 'season') ui.seasonRound = null
   if (screen === 'world') void refreshPublicWorld()
@@ -854,6 +856,13 @@ document.addEventListener('click', async (event) => {
       render()
       break
     case 'detail':
+      if (playerId && ui.lineupSlot && ui.screen === 'lineup') {
+        // 正在选人时点名字就是换人：和横幅上「点击下面的球员替换」一致，不再弹详情。
+        const target = selectedSlotTarget(ui.lineupSlot)
+        ui.lineupSlot = null
+        moveInDraft(playerId, target)
+        break
+      }
       if (playerId) {
         ui.detailPlayerId = playerId
         render()
@@ -1043,17 +1052,20 @@ document.addEventListener('click', async (event) => {
       if (ui.completing) break
       ui.completing = true
       try {
-        if (hasOnlineSession()) await leagueActionOnline({ action: 'start_league' })
+        if (isOnlineMode()) await leagueActionOnline({ action: 'start_league' })
         else {
-          const result = startLeague(game)
+          const result = startLeagueOnMatchday(game)
           if (!result.ok) throw new Error(result.error ?? '无法开始比赛')
+          if (result.gameDays > 0) {
+            ui.notice = `已跳至第 ${game.season.round} 轮比赛日（前进 ${Math.round(result.gameDays * 10) / 10} 个游戏日），全队体能已按时间恢复。`
+          }
           advanceLeagueRealtime(game)
         }
         ui.screen = 'match'
         ui.matchEngine = restoreActiveEngine(game)
         ui.matchPlaying = false
         ui.coachPanel = false
-        if (!hasOnlineSession()) persist()
+        if (!isOnlineMode()) persist()
         render()
       } catch (error) {
         showNotice(error instanceof Error ? error.message : '无法开始比赛')
@@ -1067,8 +1079,23 @@ document.addEventListener('click', async (event) => {
       persist()
       showNotice(`越位规则已${game.settings.offside ? '开启' : '关闭'}。`)
       break
+    case 'skip-postseason': {
+      if (isOnlineMode()) break
+      const jump = skipToPostseasonEnd(game)
+      if (!jump.ok) {
+        showNotice(jump.error ?? '无法跳过赛后休整')
+        break
+      }
+      const next = startNextSeasonAction(game)
+      ui.notice = next.ok
+        ? `已跳至新赛季：第 ${game.season.index} 赛季开始（前进 ${Math.round(jump.gameDays * 10) / 10} 个游戏日）。`
+        : next.error ?? '休整已结束，可以开始下一赛季'
+      persist()
+      render()
+      break
+    }
     case 'next-season': {
-      if (hasOnlineSession()) {
+      if (isOnlineMode()) {
         try {
           await nextWorldSeasonOnline()
           ui.notice = '全服已同步进入新赛季；升降级、年龄与合同已结算。'
@@ -1096,7 +1123,7 @@ document.addEventListener('click', async (event) => {
     case 'start-world-challenge': {
       const teamId = actionEl.dataset.team
       if (!teamId) break
-      if (hasOnlineSession()) {
+      if (isOnlineMode()) {
         void (async () => {
           const fetched = await fetchFriendlyTeam(teamId)
           if ('error' in fetched) { showNotice(fetched.error); return }
@@ -1170,7 +1197,7 @@ document.addEventListener('click', async (event) => {
     case 'match-tactics-apply':
       if (ui.matchEngine) {
         const mentality = (document.getElementById('match-mentality') as HTMLSelectElement | null)?.value as MatchMentality
-        if (game.activeMatch?.context.isLeague && hasOnlineSession()) {
+        if (game.activeMatch?.context.isLeague && isOnlineMode()) {
           try {
             await leagueActionOnline({ action: 'set_match_tactics', mentality })
             ui.notice = '战术已更新。'
@@ -1195,7 +1222,7 @@ document.addEventListener('click', async (event) => {
       const out = (document.getElementById('match-out') as HTMLSelectElement | null)?.value
       const input = (document.getElementById('match-in') as HTMLSelectElement | null)?.value
       if (!out || !input) break
-      if (game.activeMatch?.context.isLeague && hasOnlineSession()) {
+      if (game.activeMatch?.context.isLeague && isOnlineMode()) {
         try {
           await leagueActionOnline({ action: 'substitute', outId: out, inId: input })
           ui.notice = '换人完成。'
@@ -1446,7 +1473,7 @@ document.addEventListener('keydown', (event) => {
 })
 
 function autoAdvanceSeason(): void {
-  if (hasOnlineSession() || game.activeMatch || game.season.finished) return
+  if (isOnlineMode() || game.activeMatch || game.season.finished) return
   const result = catchUpSeason(game)
   if (result.advanced <= 0) return
   ui.notice = `已自动结算 ${result.advanced} 轮比赛。`
@@ -1457,7 +1484,7 @@ function autoAdvanceSeason(): void {
 function tickRealtimeLeague(): void {
   const active = game.activeMatch
   if (!active?.context.isLeague) return
-  if (!hasOnlineSession() && advanceLeagueRealtime(game)) {
+  if (!isOnlineMode() && advanceLeagueRealtime(game)) {
     if (game.activeMatch && ui.screen === 'match') ui.matchEngine = restoreActiveEngine(game)
     else if (!game.activeMatch) openFinishedLeague(active)
     persist()

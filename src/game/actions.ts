@@ -8,7 +8,7 @@ import { newTrainingSeed, saveGame } from './state.ts'
 import { nextSeasonCountdown } from './season.ts'
 import { seasonEndAt } from './calendar.ts'
 import { autoFillLineup, validateLineup } from './squad.ts'
-import { advanceSeasonRound, finishActiveMatch, startChallenge, startChallengeAgainstTeam, startLeagueMatch, startNextSeason } from './season.ts'
+import { advanceSeasonRound, finishActiveMatch, skipToMatchday, startChallenge, startChallengeAgainstTeam, startLeagueMatch, startNextSeason } from './season.ts'
 import { cachedOwnerlessTeams } from './world.ts'
 import { emptyAutoSubs, validateAutoSubPlan } from './match/management.ts'
 import { recordMatchInjuries } from './injury.ts'
@@ -410,6 +410,66 @@ export function startLeague(game: GameState, now = Date.now()): { ok: boolean; e
   const result = startLeagueMatch(game, now)
   if (result.ok) saveGame(game)
   return { ok: result.ok, error: result.error }
+}
+
+type ClockSnapshot = {
+  seasonStartedAt: number
+  kickoffs: (number | undefined)[]
+  createdAt: number
+  worldCalendarStartAt?: number
+  worldSeasonStartedAt: number
+  condition: Map<string, { condition: number; energy: number }>
+  injuries: Record<string, number> | undefined
+}
+
+function snapshotClock(game: GameState): ClockSnapshot {
+  const condition = new Map<string, { condition: number; energy: number }>()
+  for (const player of [...game.roster, ...game.aiTeams.flatMap((team) => team.players)]) {
+    condition.set(player.id, { condition: player.condition, energy: player.energy })
+  }
+  return {
+    seasonStartedAt: game.season.startedAt,
+    kickoffs: game.season.fixtures.map((fixture) => fixture.kickoffAt),
+    createdAt: game.createdAt,
+    worldCalendarStartAt: game.world?.calendarStartAt,
+    worldSeasonStartedAt: game.world?.seasonStartedAt ?? 0,
+    condition,
+    injuries: game.injuries ? { ...game.injuries } : undefined,
+  }
+}
+
+function restoreClock(game: GameState, snapshot: ClockSnapshot): void {
+  game.season.startedAt = snapshot.seasonStartedAt
+  game.season.fixtures.forEach((fixture, index) => { fixture.kickoffAt = snapshot.kickoffs[index] })
+  game.createdAt = snapshot.createdAt
+  if (game.world) {
+    game.world.calendarStartAt = snapshot.worldCalendarStartAt
+    game.world.seasonStartedAt = snapshot.worldSeasonStartedAt
+  }
+  for (const player of [...game.roster, ...game.aiTeams.flatMap((team) => team.players)]) {
+    const before = snapshot.condition.get(player.id)
+    if (!before) continue
+    player.condition = before.condition
+    player.energy = before.energy
+  }
+  if (snapshot.injuries) game.injuries = { ...snapshot.injuries }
+  else delete game.injuries
+}
+
+/**
+ * 离线存档专用：先把日历快进到本轮比赛日（顺手恢复体能、愈合伤病），再开赛。
+ * 开赛失败就整体回滚，不会白跳时间。
+ */
+export function startLeagueOnMatchday(game: GameState, now = Date.now()): { ok: boolean; error?: string; gameDays: number } {
+  const before = snapshotClock(game)
+  const jump = skipToMatchday(game, now)
+  if (!jump.ok) return { ok: false, error: jump.error, gameDays: 0 }
+  const result = startLeague(game, now)
+  if (!result.ok) {
+    restoreClock(game, before)
+    return { ok: false, error: result.error, gameDays: 0 }
+  }
+  return { ok: true, gameDays: jump.gameDays }
 }
 
 /**

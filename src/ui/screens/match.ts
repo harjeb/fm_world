@@ -67,7 +67,7 @@ function coachPanel(engine: MatchEngine): string {
       <div class="coach-block">
         <h3>换人</h3>
         <div class="form-row"><label for="match-out">换下</label><select id="match-out" data-keep-value>${players.map((player) => `<option value="${esc(player.id)}">${esc(player.name)} · ${positionLabel(player.position)} · 体力 ${Math.round(staminaOf(player))}%${player.injured ? ' · 受伤' : ''}</option>`).join('')}</select></div>
-        <div class="form-row"><label for="match-in">换上</label><select id="match-in" data-keep-value>${bench.length === 0 ? '<option value="">没有可用替补</option>' : bench.map((player) => `<option value="${esc(player.id)}">${esc(player.name)} · ${positionLabel(primaryPosition({ positions: player.positions } as Player))}${player.injured ? ' · 受伤' : ''}</option>`).join('')}</select></div>
+        <div class="form-row"><label for="match-in">换上</label><select id="match-in" data-keep-value>${bench.length === 0 ? '<option value="">没有可用替补</option>' : bench.map((player) => { const pos = primaryPosition({ positions: player.positions } as Player); return `<option value="${esc(player.id)}">${esc(player.name)} · ${positionLabel(pos)} 熟练 ${Math.round(player.positions[pos])}${player.injured ? ' · 受伤' : ''}</option>` }).join('')}</select></div>
         <button class="btn primary small" data-action="match-sub" ${bench.length === 0 ? 'disabled' : ''}>确认换人</button>
         <p class="hint">${game.activeMatch?.context.isLeague ? '联赛继续进行，调整立即生效' : `打开面板不消耗暂停；同一次暂停里第一次调整才用掉 1 次（还剩 ${game.activeMatch?.coachPausesLeft ?? 0} 次）`}；被换下球员不能再次上场。</p>
       </div>

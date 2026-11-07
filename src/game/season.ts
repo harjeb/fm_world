@@ -248,6 +248,65 @@ function recoverConditions(game: GameState, gameDays: number): void {
   }
 }
 
+/* ---------- 离线存档：手动把日历快进到比赛日 ---------- */
+
+/**
+ * 把存档里的时间锚点一起往前挪 delta 毫秒。
+ * 赛季起点、每场比赛的开球时间、世界日历都要同时动，否则“第 N 轮”和“第几天”会再次错开。
+ */
+function shiftCalendar(game: GameState, delta: number): void {
+  if (!Number.isFinite(delta) || delta <= 0) return
+  game.season.startedAt -= delta
+  for (const fixture of game.season.fixtures) {
+    if (typeof fixture.kickoffAt === 'number') fixture.kickoffAt -= delta
+  }
+  if (game.world) {
+    if (typeof game.world.calendarStartAt === 'number') game.world.calendarStartAt -= delta
+    else game.createdAt -= delta
+    game.world.seasonStartedAt -= delta
+  } else {
+    // 没有世界数据的老存档：顶栏日期回退到建档时间。
+    game.createdAt -= delta
+  }
+}
+
+/** 时间往前跳了多久，伤病就愈合多久（伤病存的是绝对时间）。 */
+function shiftInjuries(game: GameState, delta: number, now: number): void {
+  if (!game.injuries) return
+  for (const [key, until] of Object.entries(game.injuries)) {
+    if (!Number.isFinite(until)) continue
+    if (until - delta <= now) delete game.injuries[key]
+    else game.injuries[key] = until - delta
+  }
+}
+
+function skipCalendar(game: GameState, delta: number, now: number): { ok: boolean; gameDays: number } {
+  if (!(delta > 0)) return { ok: true, gameDays: 0 }
+  const gameDays = delta / game.season.gameDayMs
+  shiftCalendar(game, delta)
+  recoverConditions(game, gameDays)
+  shiftInjuries(game, delta, now)
+  return { ok: true, gameDays }
+}
+
+/**
+ * 离线存档：把游戏日历快进到本轮比赛日。
+ * 「跳至比赛日」用的就是它：日期、赛程、体能和伤病一起按跳过的天数推进，
+ * 避免只踢了 5 轮、日历还停在第 2 天。
+ */
+export function skipToMatchday(game: GameState, now = Date.now()): { ok: boolean; error?: string; gameDays: number } {
+  if (game.season.finished) return { ok: false, error: '赛季已经结束', gameDays: 0 }
+  if (game.activeMatch) return { ok: true, gameDays: 0 }
+  return skipCalendar(game, roundKickoffAt(game, game.season.round) - now, now)
+}
+
+/** 离线存档：把赛后休整快进到结束，之后就能开始下一赛季。 */
+export function skipToPostseasonEnd(game: GameState, now = Date.now()): { ok: boolean; error?: string; gameDays: number } {
+  if (!game.season.finished) return { ok: false, error: '常规赛还没结束', gameDays: 0 }
+  if (now >= seasonEndAt(game.season.startedAt)) return { ok: true, gameDays: 0 }
+  return skipCalendar(game, seasonEndAt(game.season.startedAt) - now, now)
+}
+
 function applyMatchConditions(game: GameState, stats: MatchRecord['playerStats']): void {
   const all = new Map<string, { condition: number }>()
   for (const player of game.roster) all.set(player.id, player)

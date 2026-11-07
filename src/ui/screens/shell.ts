@@ -3,7 +3,7 @@ import { transferWindowOpen } from '../../game/market.ts'
 import { PLAYER_TEAM_ID, inPostseason, matchdayCountdown, nextSeasonCountdown, playerFixture, seasonRoundLabel } from '../../game/season.ts'
 import { gameDateOf } from '../../game/calendar.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
-import { hasOnlineSession, marketState, onlineState, serverNow } from '../../online.ts'
+import { isOnlineMode, marketState, onlineState, serverNow } from '../../online.ts'
 import { clubLook, crest } from '../components.ts'
 import { countdownText, esc } from '../format.ts'
 import { icon, type IconName } from '../icons.ts'
@@ -39,7 +39,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
   { label: '经营', items: [
     { id: 'club', label: '俱乐部', icon: 'club' },
-    { id: 'transfer', label: '转会', icon: 'swap', badge: () => (hasOnlineSession() ? marketState.auctions.length : 0) },
+    { id: 'transfer', label: '转会', icon: 'swap', badge: () => (isOnlineMode() ? marketState.auctions.length : 0) },
   ] },
 ]
 
@@ -81,16 +81,23 @@ export function renderSidebar(): string {
 function continueAction(): string {
   if (game.activeMatch && ui.screen === 'match') return `<span class="continue-wait live">${icon('live', 14)}比赛进行中</span>`
   if (game.activeMatch) return `<button class="btn primary continue" data-nav="match">${icon('play', 14)}继续比赛</button>`
-  if (inPostseason(game)) return `<span class="continue-wait">${icon('clock', 14)}赛后休整 · ${esc(nextSeasonCountdown(game))}</span>`
+  // 离线存档可以手动把日历推向下一个比赛日；联机时时间由服务器统一掌控。
+  if (inPostseason(game)) {
+    return isOnlineMode()
+      ? `<span class="continue-wait">${icon('clock', 14)}赛后休整 · ${esc(nextSeasonCountdown(game))}</span>`
+      : `<button class="btn primary continue" data-action="skip-postseason" title="跳过赛后休整，直接开新赛季">${icon('skip', 14)}跳至新赛季</button>`
+  }
   if (game.season.finished) return `<button class="btn primary continue" data-action="next-season">${icon('play', 14)}开始下一赛季</button>`
   const fixture = playerFixture(game)
-  if (fixture && !fixture.played) return `<button class="btn primary continue" data-action="start-league">${icon('play', 14)}开始本轮比赛</button>`
+  if (fixture && !fixture.played) {
+    return `<button class="btn primary continue" data-action="start-league" title="${isOnlineMode() ? '开打本轮联赛' : '把游戏日历快进到本轮比赛日，体能按跳过的天数恢复'}'>${icon('play', 14)}${isOnlineMode() ? '开始本轮比赛' : '跳至比赛日'}</button>`
+  }
   return `<span class="continue-wait">${icon('clock', 14)}等待下一轮</span>`
 }
 
 /** 全服竞拍在任何页面都看得到。 */
 function auctionChip(): string {
-  if (!hasOnlineSession() || !marketState.auctions.length) return ''
+  if (!isOnlineMode() || !marketState.auctions.length) return ''
   const soonest = Math.min(...marketState.auctions.map((auction) => auction.endsAt))
   return `<button class="btn ghost auction-chip" data-action="open-auctions" title="全服自由球员竞拍">${icon('coin', 15)}<span>竞拍 ${marketState.auctions.length}</span><span class="countdown" data-countdown-end="${soonest}">${countdownText(soonest - serverNow())}</span></button>`
 }

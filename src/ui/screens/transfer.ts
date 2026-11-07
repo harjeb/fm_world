@@ -6,7 +6,7 @@ import { traitNameOf } from '../../game/data/star-traits.ts'
 import { NPC_MAX_DEALS, NPC_ROUND_BUDGET, bestMarketValue, saleChance, suggestedPrice, transferWindowOpen } from '../../game/market.ts'
 import { caHeat, clubName, countryLabel, emptyState, icon, pageHead, panel, posBadge, primaryPosition, tag, traitLabel } from '../components.ts'
 import { countdownText, esc, playerCA } from '../format.ts'
-import { hasOnlineSession, marketState, onlineState, publicWorld, serverNow } from '../../online.ts'
+import { isOnlineMode, marketState, onlineState, publicWorld, serverNow } from '../../online.ts'
 import { game, ui, type TransferTab } from '../state.ts'
 
 const TABS: { id: TransferTab; label: string }[] = [
@@ -39,7 +39,7 @@ function marketTab(): string {
       <td class="num">${suggestedPrice(game, player).toLocaleString()}</td>
       <td class="price-cell"><input type="number" class="compact" min="1" max="9007199254740991" step="1" value="${suggestedPrice(game, player)}" aria-label="${esc(player.name)} 的要价" data-club-price="${esc(player.id)}"><button class="btn small" data-action="club-list" data-player="${esc(player.id)}">挂牌</button></td>
     </tr>`).join('')}</tbody></table></div>`
-  const buyRows = game.aiTeams.filter((team) => !hasOnlineSession() || !publicWorld?.clubs.find((club) => club.id === team.id)?.managed).slice(0, 6).flatMap((team) => team.players.slice(0, 3).map((player) => {
+  const buyRows = game.aiTeams.filter((team) => !isOnlineMode() || !publicWorld?.clubs.find((club) => club.id === team.id)?.managed).slice(0, 6).flatMap((team) => team.players.slice(0, 3).map((player) => {
     const price = Math.round(bestMarketValue(game, player) * 1.5)
     return `<tr data-key="${esc(player.id)}">
       <td>${clubName(team.id, 16)}</td>
@@ -130,7 +130,7 @@ function auctionTab(): string {
 }
 
 function freeTab(): string {
-  if (hasOnlineSession()) return auctionTab()
+  if (isOnlineMode()) return auctionTab()
   const economy = economyOf(game)
   const query = ui.clubSearch.trim().toLowerCase()
   // 特性也能搜：想找“单刀”“点球”的球星时不用一个个点开看。
@@ -168,7 +168,7 @@ export function renderTransfer(): string {
   return `
     ${pageHead({ kicker: '经营', title: '转会市场' })}
     <div class="tabs" role="tablist">
-      ${TABS.map((item) => `<button class="tab ${tab === item.id ? 'active' : ''}" role="tab" aria-selected="${tab === item.id}" data-transfer-tab="${item.id}">${item.id === 'free' && hasOnlineSession() ? '全服竞拍' : item.label}</button>`).join('')}
+      ${TABS.map((item) => `<button class="tab ${tab === item.id ? 'active' : ''}" role="tab" aria-selected="${tab === item.id}" data-transfer-tab="${item.id}">${item.id === 'free' && isOnlineMode() ? '全服竞拍' : item.label}</button>`).join('')}
     </div>
     ${body}
   `

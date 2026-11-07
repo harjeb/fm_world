@@ -84,7 +84,7 @@ function placeOf(playerId: string, draft: Lineup, formation: FormationDef): stri
   const starter = draft.starters.find((item) => item.playerId === playerId)
   if (starter) return formation.slots.find((slot) => slot.id === starter.slotId)?.label ?? '首发'
   const bench = draft.bench.indexOf(playerId)
-  return bench >= 0 ? `替补 ${bench + 1}` : ''
+  return bench >= 0 ? `替补 ${bench + 1}` : '未入选'
 }
 
 /* ---------- 球场 ---------- */
@@ -140,7 +140,8 @@ function benchPlayerOptions(index: number, draft: Lineup, formation: FormationDe
   const candidates = [...game.roster].sort((a, b) => playerCA(b) - playerCA(a))
   return `<option value="" ${currentId ? '' : 'selected'}>— 未安排 —</option>${candidates.map((player) => {
     const place = player.id === currentId ? '' : placeOf(player.id, draft, formation)
-    return `<option value="${esc(player.id)}" ${player.id === currentId ? 'selected' : ''}>${esc(player.name)} · ${positionLabel(primaryPosition(player))} · CA ${playerCA(player).toFixed(0)}${place ? ` · 现${esc(place)}` : ''}${statusNote(player)}</option>`
+    const own = primaryPosition(player)
+    return `<option value="${esc(player.id)}" ${player.id === currentId ? 'selected' : ''}>${esc(player.name)} · ${positionLabel(own)} 熟练 ${Math.round(player.positions[own])} · CA ${playerCA(player).toFixed(0)}${place ? ` · 现${esc(place)}` : ''}${statusNote(player)}</option>`
   }).join('')}`
 }
 
@@ -250,12 +251,15 @@ function moveOptions(player: Player, draft: Lineup, formation: FormationDef): st
     const other = playerOf(draft.starters.find((item) => item.slotId === slot.id)?.playerId)
     return `<option value="${slotTarget(slot.id)}" ${here === slot.id ? 'selected' : ''}>${esc(slot.label)} · 熟练 ${Math.round(player.positions[slot.position])}${other && other.id !== player.id ? ` · 换下 ${esc(other.name)}` : ''}</option>`
   }).join('')
+  // 替补席和未入选都没有固定位置，按这名球员最擅长的位置给熟练度，选人时好比较。
+  const own = primaryPosition(player)
+  const ownLine = `${positionLabel(own)} 熟练 ${Math.round(player.positions[own])}`
   const benchCount = Math.min(BENCH_SLOTS, draft.bench.length + (benchAt >= 0 ? 0 : 1))
   const bench = Array.from({ length: benchCount }, (_, index) => {
     const other = playerOf(draft.bench[index])
-    return `<option value="${benchTarget(index)}" ${benchAt === index ? 'selected' : ''}>替补 ${index + 1}${other && other.id !== player.id ? ` · 换下 ${esc(other.name)}` : ''}</option>`
+    return `<option value="${benchTarget(index)}" ${benchAt === index ? 'selected' : ''}>替补 ${index + 1} · ${ownLine}${other && other.id !== player.id ? ` · 换下 ${esc(other.name)}` : ''}</option>`
   }).join('')
-  return `<optgroup label="首发">${slots}</optgroup><optgroup label="替补">${bench}</optgroup><option value="reserve" ${!here && benchAt < 0 ? 'selected' : ''}>未入选</option>`
+  return `<optgroup label="首发">${slots}</optgroup><optgroup label="替补">${bench}</optgroup><option class="reserve-opt" value="reserve" ${!here && benchAt < 0 ? 'selected' : ''}>未入选（移出比赛名单）· ${ownLine}</option>`
 }
 
 function cardCell(player: Player): string {
