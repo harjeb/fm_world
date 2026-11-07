@@ -175,10 +175,12 @@ describe('服务器共享世界', () => {
     const a = await register(base, 'retire_global_a')
     const b = await register(base, 'retire_global_b')
     const retiredIds: string[] = []
-    for (const account of [a, b]) {
+    for (const [index, account] of [a, b].entries()) {
       const current = await load(base, account.token)
-      const star = current.game.roster.find((player: any) => player.starKey)
+      // 二级开局没有球星：把一名储备球星放进阵容，当作玩家后来签下的人。
+      const star = current.game.reserveStars.splice(index, 1)[0]
       expect(star).toBeDefined()
+      current.game.roster.push(star)
       star.age = 40
       retiredIds.push(star.id)
       for (const fixture of current.game.season.fixtures) {
@@ -186,7 +188,8 @@ describe('服务器共享世界', () => {
         fixture.score = { home: 0, away: 0 }
       }
       current.game.season.finished = true
-      expect((await fetch(`${base}/api/game`, { method: 'PUT', headers: auth(account.token), body: JSON.stringify({ game: current.game, baseRevision: current.revision }) })).status).toBe(200)
+      const put = await fetch(`${base}/api/game`, { method: 'PUT', headers: auth(account.token), body: JSON.stringify({ game: current.game, baseRevision: current.revision }) })
+      expect(put.status, await put.clone().text()).toBe(200)
     }
     clock += SEASON_GAME_DAYS * GAME_DAY_MS
     const rolled = await fetch(`${base}/api/world/next-season`, { method: 'POST', headers: auth(a.token), body: '{}' })

@@ -163,7 +163,9 @@ describe('联机服务器 / 账号 / SSE', () => {
     const db = JSON.parse(fs.readFileSync(file, 'utf8'))
     const oldGame = db.accounts[0].game
     delete oldGame.economy
-    const star = oldGame.roster.find((player: any) => player.signatureSkill)
+    // 二级开局没有球星：把一名储备球星放进阵容，当作玩家后来签下的人。
+    const star = oldGame.reserveStars.shift()
+    oldGame.roster.push(star)
     const signature = star.signatureSkill
     delete star.signatureSkill
     delete star.skillTiers

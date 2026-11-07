@@ -154,6 +154,32 @@ describe('economy', () => {
     expect(e.balance).toBe(500_000 + income)
   })
 
+  it('losing loses fans, and the bigger the fan base the more a defeat costs', () => {
+    expect(fansAfterResult(STARTING_FANS, 0, 1)).toBeLessThan(STARTING_FANS)
+    expect(fansAfterResult(20000, 0, 1)).toBeLessThan(20000)
+    expect(20000 - fansAfterResult(20000, 0, 1)).toBeGreaterThan(STARTING_FANS - fansAfterResult(STARTING_FANS, 0, 1))
+    // 输得越惨掉得越多，净胜球按 4 封顶。
+    expect(fansAfterResult(20000, 0, 3)).toBeLessThan(fansAfterResult(20000, 0, 1))
+    expect(fansAfterResult(20000, 0, 4)).toBe(fansAfterResult(20000, 0, 9))
+    // 平局基本不动，赢球才涨。
+    expect(fansAfterResult(20000, 0, 0)).toBe(20000)
+    expect(fansAfterResult(20000, 1, 0)).toBeGreaterThan(20000)
+    // 一直输会一路掉到下限，不会变成负数。
+    let fans = 20000
+    for (let round = 0; round < 200; round++) fans = fansAfterResult(fans, 0, 2)
+    expect(fans).toBe(200)
+  })
+
+  it('a club that wins a third of its games keeps a steady fan base instead of snowballing', () => {
+    let fans = 20000
+    for (let round = 0; round < 38 * 3; round++) {
+      const result = round % 3 === 0 ? [1, 0] : round % 3 === 1 ? [1, 1] : [0, 1]
+      fans = fansAfterResult(fans, result[0], result[1])
+    }
+    expect(fans).toBeGreaterThan(10000)
+    expect(fans).toBeLessThan(60000)
+  })
+
   it('fans and income accelerate with score, while invalid scores never grow fans', () => {
     expect(fansAfterResult(STARTING_FANS, 3, 0)).toBeGreaterThan(fansAfterResult(STARTING_FANS, 1, 0))
     expect(fansAfterResult(STARTING_FANS, 1, 0)).toBeGreaterThan(fansAfterResult(STARTING_FANS, 0, 1))

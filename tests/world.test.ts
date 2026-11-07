@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createWorldGame, payWorldWages, d2ClubChoices, createOwnerlessWorld, createWorldGameFromWorld, advanceOwnerlessWorld } from '../src/game/world.ts'
 import { ROUND_MS, startLeagueMatch, startNextSeason, updateSeasonTable } from '../src/game/season.ts'
-import { buyFreeAgent, releasePlayer, renewContract, transferWindowOpen, playerMarketValue } from '../src/game/market.ts'
+import { buyFreeAgent, joinRoster, releasePlayer, renewContract, transferWindowOpen, playerMarketValue } from '../src/game/market.ts'
 import { isOnMarketToday } from '../src/game/market-window.ts'
 import { economyOf } from '../src/game/economy.ts'
 import { recordMatchDiscipline, serveSuspensions } from '../src/game/discipline.ts'
@@ -96,7 +96,10 @@ describe('三级共享世界', () => {
 
   it('球员老化、退役，并在自由市场生成同名 16 岁重生', () => {
     const game = createWorldGame(3)
-    const star = game.roster.find((player) => player.starKey)!
+    // 二级开局没有球星：玩家签下一名，再看他老化退役。
+    const star = game.freeStars.find((player) => player.starKey && player.positions.GK < 70)!
+    game.freeStars = game.freeStars.filter((player) => player.id !== star.id)
+    joinRoster(game, star)
     const name = star.name
     star.age = 40
     finishSeason(game)

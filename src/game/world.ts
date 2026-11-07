@@ -348,43 +348,10 @@ export function buildWorldDivisionTeams(
   return { playerTeam: player, aiTeams: teams.filter((team) => !team.isPlayer) }
 }
 
-/**
- * 接管二级队时附带的招牌球员：从球星不止一名的高级别球队调剂，每支二级队对应不同的人，
- * 选队时不会看到两支队有同一个球员。门将不当招牌。
- */
-function signatureStars(world: WorldState, seed: number): Map<string, { donor: WorldClub; starId: string }> {
-  const rng = derivedRng(seed, 'signature-stars')
-  const choices = world.clubs
-    .filter((club) => club.tier !== 'division2' && club.starPlayerIds.length > 1)
-    .flatMap((donor) => donor.starPlayerIds.map((starId) => ({ donor, starId })))
-    .filter((choice) => seedById(choice.starId)?.pos !== 'GK')
-  for (let index = choices.length - 1; index > 0; index--) {
-    const other = rng.int(index + 1)
-    ;[choices[index], choices[other]] = [choices[other], choices[index]]
-  }
-  const clubs = WORLD_CLUB_DEFS.filter((club) => club.tier === 'division2')
-  return new Map(choices.length ? clubs.map((club, index) => [club.id, choices[index % choices.length]]) : [])
-}
-
-function createWorldGameFromSetup(setup: WorldSetup, seed: number, startedAt: number, clubName?: string, assignSignature = true, aiClubs?: Record<string, AIClubState>): GameState {
+function createWorldGameFromSetup(setup: WorldSetup, seed: number, startedAt: number, clubName?: string, aiClubs?: Record<string, AIClubState>): GameState {
   const playerClub = setup.playerClub
   if (clubName) playerClub.name = clubName
   const division = setup.world.divisions.find((item) => item.divisionId === setup.world.playerDivisionId)!
-  if (assignSignature && playerClub.starPlayerIds.length === 0) {
-    // 玩家从二级开始，但保留一名招牌球员；从一级队调剂，保持 100 名俱乐部球星、250 自由、150 储备。
-    const signature = signatureStars(setup.world, seed).get(playerClub.squadKey ?? playerClub.id)
-    if (signature) {
-      signature.donor.starPlayerIds = signature.donor.starPlayerIds.filter((id) => id !== signature.starId)
-      playerClub.starPlayerIds = [signature.starId]
-    } else {
-      const starter = setup.reserveStars[0] ?? setup.freeStars[0]
-      if (starter) {
-        playerClub.starPlayerIds = [starter.id]
-        setup.reserveStars = setup.reserveStars.filter((player) => player.id !== starter.id)
-        setup.freeStars = setup.freeStars.filter((player) => player.id !== starter.id)
-      }
-    }
-  }
   const playerTeam = teamFromClub(setup.world, playerClub, seed)
   const playerRoster = playerTeam.players
   const playerLineup = playerTeam.lineup
@@ -428,7 +395,7 @@ function createWorldGameFromSetup(setup: WorldSetup, seed: number, startedAt: nu
 
 export function createWorldGame(seed = Math.floor(Math.random() * 0x7fffffff), requestedClubId?: string, clubName?: string, startedAt = Date.now()): GameState {
   const setup = createWorld(seed, requestedClubId, startedAt)
-  return createWorldGameFromSetup(setup, seed, startedAt, clubName, true, seedAIClubs(setup.world, seed))
+  return createWorldGameFromSetup(setup, seed, startedAt, clubName, seedAIClubs(setup.world, seed))
 }
 
 export type ClubPreview = {
@@ -448,11 +415,9 @@ export type ClubPreview = {
  */
 export function previewD2Clubs(seed: number): ClubPreview[] {
   const { world } = createWorld(seed)
-  const signatures = signatureStars(world, seed)
   return world.clubs.filter((club) => club.tier === 'division2').map((club) => {
     const squadKey = club.squadKey ?? club.id
-    const signature = signatures.get(squadKey)
-    const team = teamFromClub(world, { ...club, id: 'player', squadKey, isPlayer: true, starPlayerIds: signature ? [signature.starId] : [] }, seed)
+    const team = teamFromClub(world, { ...club, id: 'player', squadKey, isPlayer: true, starPlayerIds: [] }, seed)
     return {
       id: squadKey,
       name: club.name,
@@ -508,13 +473,6 @@ export function createOwnerlessWorld(seed: number, startedAt = Date.now()): { wo
       }
     }
     setup.world.playerDivisionId = divisionIdForTier(def.tier, def.conference)
-  }
-  // 招牌球星从高级别球队统一调剂；不能让每个账号各自挑走同一批球星。
-  for (const [id, { donor, starId }] of signatureStars(setup.world, seed)) {
-    const recipient = setup.world.clubs.find((item) => item.id === id)
-    if (!recipient || recipient.starPlayerIds.length) continue
-    donor.starPlayerIds = donor.starPlayerIds.filter((item) => item !== starId)
-    recipient.starPlayerIds.push(starId)
   }
   return { world: setup.world, freeStars: setup.freeStars, reserveStars: setup.reserveStars }
 }
@@ -758,7 +716,7 @@ export function createWorldGameFromWorld(
     freeStars: structuredClone(freeStars),
     reserveStars: structuredClone(reserveStars),
   // 联机账号的电脑球队以服务器为准，不在这里另算一份（传空对象表示“由服务器推进”）。
-  }, seed, startedAt, clubName, false, {})
+  }, seed, startedAt, clubName, {})
 }
 
 /** 服务器共享世界按现实时间抽象推进；返回是否有变化。 */

@@ -18,7 +18,7 @@ function playedGame(rounds = 6) {
 describe('球员数据与射手榜', () => {
   it('本赛季和生涯数据来自已保存的战报，助攻不会丢', () => {
     const game = playedGame(6)
-    const player = game.roster.find((item) => item.positions.GK <= 0)!
+    const player = game.roster.find((item) => item.positions.GK <= 0 && game.lineup.starters.some((slot) => slot.playerId === item.id))!
     const season = seasonStats(game, player.id)
     const career = careerStats(game, player.id)
     expect(season.apps).toBeGreaterThan(0)
@@ -56,7 +56,7 @@ describe('球员数据与射手榜', () => {
 
   it('赛季推进后本赛季数据归零，生涯继续累计', () => {
     const game = playedGame(4)
-    const player = game.roster.find((item) => item.positions.GK <= 0)!
+    const player = game.roster.find((item) => item.positions.GK <= 0 && game.lineup.starters.some((slot) => slot.playerId === item.id))!
     const before = careerStats(game, player.id)
     expect(before.apps).toBeGreaterThan(0)
     // 手动打一场，确认赛季数据与生涯同步增长。

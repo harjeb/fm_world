@@ -725,7 +725,8 @@ describe('旧存档和 Agent', () => {
     const star = game.freeStars[0]
     const attrs = structuredClone(star.attrs)
     star.traitId = 'cold_blood'
-    const rosterStar = game.roster.find((player) => player.era !== 'random')!
+    const rosterStar = game.freeStars.splice(1, 1)[0]
+    game.roster.push(rosterStar)
     rosterStar.traitId = 'iron'
     const reserveStar = game.reserveStars![0]
     reserveStar.traitId = 'iron'

@@ -220,7 +220,6 @@ function pickTable(club: ClubPreview, players: Player[], gk: boolean): string {
 }
 
 function pickDetail(club: ClubPreview): string {
-  const signature = club.roster.find((player) => player.era !== 'random')
   const keepers = club.roster.filter((player) => primaryPosition(player) === 'GK')
   const outfield = club.roster.filter((player) => primaryPosition(player) !== 'GK')
   return `<div class="pick-detail">
@@ -234,7 +233,6 @@ function pickDetail(club: ClubPreview): string {
       <div><dt>平均年龄</dt><dd>${average(club.roster.map((player) => player.age ?? 24)).toFixed(1)}</dd></div>
       <div><dt>阵型</dt><dd>${esc(club.formationId)}</dd></div>
       <div><dt>人数</dt><dd>${club.roster.length}</dd></div>
-      ${signature ? `<div><dt>招牌球员（接管后加入）</dt><dd>${esc(signature.name)} ${caHeat(playerCA(signature))}</dd></div>` : ''}
     </dl>
     ${heatLegend('CA', CA_STOPS)}
     ${pickTable(club, outfield, false)}

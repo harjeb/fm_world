@@ -32,15 +32,11 @@ function everyone(game: GameState): [string, Player[]][] {
 }
 
 describe('同一个人只出现一次', () => {
-  it('选队界面的 40 支队没有相同的球员，包括招牌球员', () => {
+  it('选队界面的 40 支队没有相同的球员，也没有真实球星', () => {
     for (const seed of [1, 2, 3, 2026, 987654]) {
       const clubs = previewD2Clubs(seed)
       expect(duplicates(clubs.map((club) => [club.name, club.roster])), `seed ${seed}`).toEqual([])
-      const signatures = clubs.map((club) => club.roster.filter((player) => player.era !== 'random'))
-      for (const stars of signatures) expect(stars).toHaveLength(1)
-      expect(new Set(signatures.map((stars) => stars[0].id)).size).toBe(40)
-      // 招牌球员不当门将。
-      for (const stars of signatures) expect(stars[0].positions.GK).toBeLessThan(70)
+      for (const club of clubs) expect(club.roster.filter((player) => player.era !== 'random'), `seed ${seed} ${club.name}`).toHaveLength(0)
     }
   })
 
@@ -74,22 +70,20 @@ describe('同一个人只出现一次', () => {
     expect(total).toBeGreaterThan(600)
   })
 
-  it('招牌球员调走后，原来的球队名单里不再有他，球星总数不变', () => {
+  it('二级开局不送球星，球星总数不变', () => {
     const game = createWorldGame(9, previewD2Clubs(9)[5].id)
-    const signature = game.roster.find((player) => player.era !== 'random')!
-    const holders = game.world!.clubs.filter((club) => club.starPlayerIds.includes(signature.id))
-    expect(holders.map((club) => club.id)).toEqual(['player'])
+    expect(game.roster.filter((player) => player.era !== 'random')).toHaveLength(0)
     expect(game.world!.clubs.reduce((sum, club) => sum + club.starPlayerIds.length, 0)).toBe(100)
     expect(game.freeStars).toHaveLength(250)
     expect(game.reserveStars).toHaveLength(150)
   })
 
-  it('联机时不同账号的招牌球员不同，名单也不同', () => {
+  it('联机时不同账号的名单不同，也没有重复的人，开局没有球星', () => {
     const shared = createOwnerlessWorld(5)
     const ids = shared.world.clubs.filter((club) => club.tier === 'division2').slice(0, 4).map((club) => club.id)
     const games = ids.map((id) => createWorldGameFromWorld(shared.world, id, 5, Date.now(), shared.freeStars, shared.reserveStars))
-    const signatures = games.map((game) => game.roster.find((player) => player.era !== 'random')!.id)
-    expect(new Set(signatures).size).toBe(ids.length)
+    for (const game of games) expect(game.roster.filter((player) => player.era !== 'random')).toHaveLength(0)
+    expect(new Set(games.map((game) => game.roster.map((player) => player.name).join('|'))).size).toBe(ids.length)
     expect(duplicates(games.map((game, index): [string, Player[]] => [ids[index], game.roster]))).toEqual([])
   })
 
@@ -113,7 +107,8 @@ describe('同一个人只出现一次', () => {
   it('旧存档的名单没清掉时，重建球队也不会让玩家已有的球星再出现', () => {
     const game = createWorldGame(9)
     const world = game.world!
-    const signature = game.roster.find((player) => player.era !== 'random')!
+    const signature = game.freeStars.find((player) => player.era !== 'random')!
+    game.roster.push(signature)
     // 模拟旧存档：球星在玩家手里，同一联赛的 AI 球队名单里也有他。
     const rival = world.clubs.find((club) => club.id === game.aiTeams[0].id)!
     rival.starPlayerIds = [signature.id]
@@ -145,6 +140,14 @@ describe('旧存档清理', () => {
     return game
   }
 
+  /** 二级开局没有球星：从自由球员里挑一名放进玩家阵容，模拟玩家后来签下的球星。 */
+  function signStar(game: GameState): Player {
+    const star = game.freeStars.find((player) => player.era !== 'random' && player.positions.GK < 70)!
+    game.freeStars = game.freeStars.filter((player) => player.id !== star.id)
+    game.roster.push(star)
+    return star
+  }
+
   it('AI 球队之间撞名的改名字，属性不变', () => {
     const game = oldSave()
     const original = game.aiTeams[0].players.find((player) => player.era === 'random')!
@@ -173,7 +176,7 @@ describe('旧存档清理', () => {
 
   it('AI 球队里和玩家重复的球星换成随机球员，阵容还是合法的', () => {
     const game = oldSave()
-    const signature = game.roster.find((player) => player.era !== 'random')!
+    const signature = signStar(game)
     const team = game.aiTeams[0]
     const index = team.players.findIndex((player) => primary(player) === primary(signature))
     const slotId = team.players[index].id
@@ -192,7 +195,7 @@ describe('旧存档清理', () => {
 
   it('自由球员里和玩家重复的球星被移除；世界名单也清掉', () => {
     const game = oldSave()
-    const signature = game.roster.find((player) => player.era !== 'random')!
+    const signature = signStar(game)
     game.freeStars.push(structuredClone(signature))
     const club = game.world!.clubs.find((item) => item.tier === 'division1')!
     club.starPlayerIds.push(signature.id)

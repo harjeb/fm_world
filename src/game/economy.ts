@@ -1,4 +1,5 @@
 import type { EconomyState, FacilityId, GameState, TierId } from './types.ts'
+import { opponentRankShare } from './club-rating.ts'
 export type { EconomyState, FacilityId } from './types.ts'
 
 /** 每个等级拆成 5 个阶段，所以五个等级一共 25 个阶段。 */
@@ -181,13 +182,32 @@ export function projectedRoundIncome(economy: EconomyState, tier: TierId | undef
     + ids.reduce((sum, id) => sum + facilityRoundIncome(economy, id), 0)
 }
 
-/** 真实联赛赛果决定球迷变化，进球多/赢得多涨得更快；不让异常大比分刷爆经济。 */
-export function fansAfterResult(fans: number, scored: number, conceded: number): number {
+/** 输球掉球迷的力度：输给联赛里最强的一队只掉一点，输给最弱的一队掉得最多。 */
+export const LOSS_WEIGHT_VS_STRONGEST = 0.1
+export const LOSS_WEIGHT_VS_WEAKEST = 1.6
+
+/** rankShare：对手评分排位，0 最强、1 最弱。 */
+export function lossWeightByRank(rankShare: number): number {
+  const share = Math.max(0, Math.min(1, rankShare))
+  return LOSS_WEIGHT_VS_STRONGEST + (LOSS_WEIGHT_VS_WEAKEST - LOSS_WEIGHT_VS_STRONGEST) * share
+}
+
+/**
+ * 真实联赛赛果决定球迷变化：赢球涨、平局基本不动、输球会掉。
+ * 涨跌都带一部分按现有球迷数的比例，所以球迷越多输一场掉得越多；
+ * 输球的力度再乘 lossWeight（见 lossWeightByRank）：输给强队情有可原，输给弱队球迷才真生气。
+ * 一支只能赢三分之一的球队球迷大致持平，常输的球队会一路流失。
+ * 进球多/赢得多涨得更快、输得惨掉得更多；比分按 8 球、净胜 4 球封顶，不让异常大比分刷爆经济。
+ */
+export function fansAfterResult(fans: number, scored: number, conceded: number, lossWeight = 1): number {
   const goals = Math.min(8, scored)
   const against = Math.min(8, conceded)
-  const resultBonus = scored > conceded ? 100 : scored === conceded ? 40 : 0
-  const gain = 40 + Math.floor(fans * 0.035) + goals * 40 + (goals - against) * 30 + resultBonus
-  return Math.max(200, Math.min(MAX_FANS, Math.round(fans + gain)))
+  const margin = Math.min(4, Math.abs(goals - against))
+  let change: number
+  if (scored > conceded) change = 60 + fans * 0.03 + goals * 30 + margin * 30
+  else if (scored === conceded) change = goals * 15
+  else change = -(40 + fans * (0.025 + margin * 0.005)) * Math.max(0, lossWeight)
+  return Math.max(200, Math.min(MAX_FANS, Math.round(fans + change)))
 }
 
 export function upgradeFacility(game: GameState, id: FacilityId): { ok: boolean; error?: string } {
@@ -226,7 +246,10 @@ export function awardRoundIncome(game: GameState, round: number): number {
   const scored = fixture ? (fixture.homeId === 'player' ? fixture.score!.home : fixture.score!.away) : 0
   const conceded = fixture ? (fixture.homeId === 'player' ? fixture.score!.away : fixture.score!.home) : 0
   const oldFans = economy.fans
-  const nextFans = fixture ? fansAfterResult(oldFans, scored, conceded) : oldFans
+  // 对手越弱，输球掉得越多；对手评分排位未知（旧存档、数据缺失）时按中性力度算。
+  const opponentId = fixture ? (fixture.homeId === 'player' ? fixture.awayId : fixture.homeId) : undefined
+  const rankShare = opponentId ? opponentRankShare(game, opponentId) : null
+  const nextFans = fixture ? fansAfterResult(oldFans, scored, conceded, rankShare === null ? 1 : lossWeightByRank(rankShare)) : oldFans
   const won = !!fixture && scored > conceded
   const income = projectedRoundIncome({ ...economy, fans: nextFans }, game.season.tier) + Math.min(8, scored) * GOAL_INCOME_BONUS +
     (won ? LEAGUE_WIN_BONUS + Math.floor(nextFans * 0.35) : 0)

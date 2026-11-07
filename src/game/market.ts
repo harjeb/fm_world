@@ -6,7 +6,7 @@ export { VALUE_AT_CA_205, VALUE_GROWTH_PER_CA, VALUE_CAP, playerMarketValue } fr
 import { autoFillLineup, repairLineup, validateLineup } from './squad.ts'
 import { wageForPlayer } from './world.ts'
 import { derivedRng, splitSeed } from './rng.ts'
-import { closeFinishedTraining, playerCards } from './cards.ts'
+import { closeFinishedTraining, destroyPlayerCards, playerCards } from './cards.ts'
 import { negotiationDemands, negotiationFailure, negotiationRoll, negotiationTerms, type NegotiationAnswers, type NegotiationDemands } from './negotiation.ts'
 import { isOnMarketToday } from './market-window.ts'
 
@@ -258,7 +258,7 @@ export function listPlayer(game: GameState, playerId: string, price: number): Ma
   if (roster.length < 10) return fail('阵容必须保留至少 10 人')
   const repaired = repairLineup(roster, game.lineup)
   if (!validateLineup(roster, repaired.lineup).valid) return fail('挂牌后无法组成合法阵容')
-  // 培养刚结束的新卡已在库存；他的卡都留在库存，离队期间不能装备，回队后可以继续用。
+  // 培养刚结束的新卡已在库存；挂牌期间卡先留着（撤牌回队还能用），真卖出去时才全部销毁。
   closeFinishedTraining(game, playerId)
   game.roster = roster
   game.lineup = repaired.lineup
@@ -308,7 +308,11 @@ export function settleMarket(game: GameState, round: number): number {
     soldIds.add(listing.player.id)
   }
   economy.balance += proceeds
-  for (const listing of sold) listing.player.contract = undefined
+  // 卖出去就是卖出去：他练出来的卡全部销毁，人回到原始属性，买回来也是白板。
+  for (const listing of sold) {
+    listing.player.contract = undefined
+    destroyPlayerCards(game, listing.player)
+  }
   game.freeStars.push(...sold.map(l => l.player))
   market.listings = market.listings.filter(l => !soldIds.has(l.player.id))
   market.lastSettledRound = round

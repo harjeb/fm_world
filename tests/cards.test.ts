@@ -3,7 +3,7 @@ import { confirmTraining, discardTraining, equipPlayerCard, keepTraining, remove
 import { cardsOf, ensureCards, equippedCard, playerCards } from '../src/game/cards.ts'
 import { eventById } from '../src/game/data/events.ts'
 import { FORMATIONS } from '../src/game/data/formations.ts'
-import { bestMarketValue, buyFreeAgent, listPlayer, playerMarketValue, settleMarket, suggestedPrice } from '../src/game/market.ts'
+import { bestMarketValue, buyFreeAgent, cancelListing, listPlayer, playerMarketValue, settleMarket, suggestedPrice } from '../src/game/market.ts'
 import { teamInputFromLineup } from '../src/game/match/setup.ts'
 import { toMatchPlayer } from '../src/game/match/team.ts'
 import { validateLineup } from '../src/game/squad.ts'
@@ -223,26 +223,42 @@ describe('球员卡库存', () => {
     expect(player.skills).toEqual(skills)
   })
 
-  it('球员离队时卡留在库存；回队后装备关系还在', () => {
+  it('挂牌期间卡留在库存，撤牌回队装备关系还在；真卖出去就全部销毁', () => {
     const game = createInitialGame(21)
     const inLineup = new Set([...game.lineup.starters.map((item) => item.playerId), ...game.lineup.bench])
     const player = game.roster.find((item) => !inLineup.has(item.id))!
     finishTraining(game, player.id, 716)
     const [card] = playerCards(game, player.id)
     confirmTraining(game, player.id)
+    expect(player.equippedCardId).toBe(card.id)
     expect(listPlayer(game, player.id, suggestedPrice(game, player))).toEqual({ ok: true })
-    settleMarket(game, game.season.round)
+    // 还没成交：卡还在库存，不能装备；撤牌回队后装备关系还在。
     expect(game.roster.some((item) => item.id === player.id)).toBe(false)
     expect(playerCards(game, player.id)).toHaveLength(1)
     expect(equipPlayerCard(game, player.id, card.id).ok).toBe(false)
-    economyOf(game).balance = 100_000_000
-    expect(buyFreeAgent(game, player.id).ok).toBe(true)
+    expect(cancelListing(game, player.id)).toEqual({ ok: true })
     const back = game.roster.find((item) => item.id === player.id)!
     expect(equippedCard(game, back)?.id).toBe(card.id)
     expect(back.attrs).toEqual(card.attrs)
+    // 再挂牌并成交：他的卡全部销毁，人回到原始属性，买回来也是白板。
+    expect(listPlayer(game, player.id, suggestedPrice(game, back))).toEqual({ ok: true })
+    settleMarket(game, game.season.round)
+    expect(game.roster.some((item) => item.id === player.id)).toBe(false)
+    expect(playerCards(game, player.id)).toHaveLength(0)
+    expect(cardsOf(game).some((item) => item.id === card.id)).toBe(false)
+    const gone = game.freeStars.find((item) => item.id === player.id)!
+    expect(gone.equippedCardId).toBeUndefined()
+    expect(gone.attrs).toEqual(gone.baseAttrs)
+    expect(gone.version).toBe(0)
+    economyOf(game).balance = 100_000_000
+    expect(buyFreeAgent(game, player.id).ok).toBe(true)
+    const rebought = game.roster.find((item) => item.id === player.id)!
+    expect(playerCards(game, player.id)).toHaveLength(0)
+    expect(rebought.equippedCardId).toBeUndefined()
+    expect(rebought.attrs).toEqual(rebought.baseAttrs)
   })
 
-  it('估值按他最好的一张卡算，不看现在装备哪张；买回也用同一个数，来回倒卖不赚钱', () => {
+  it('估值按他最好的一张卡算，不看现在装备哪张；卖出后卡销毁，买回按原始身价', () => {
     const game = createInitialGame(24)
     const inLineup = new Set([...game.lineup.starters.map((item) => item.playerId), ...game.lineup.bench])
     const player = game.roster.find((item) => !inLineup.has(item.id))!
@@ -262,15 +278,14 @@ describe('球员卡库存', () => {
     const price = suggestedPrice(game, player)
     expect(listPlayer(game, player.id, price)).toEqual({ ok: true })
     expect(settleMarket(game, game.season.round)).toBe(price)
-    // 离队带走的是当时装备的属性（这里是原始属性），卡留在库存。
+    // 卖出去后卡全部销毁，人回到原始属性；买回来按他现在（原始）的身价计价。
     const gone = game.freeStars.find((item) => item.id === player.id)!
     expect(gone.attrs).toEqual(gone.baseAttrs)
-    expect(playerCards(game, player.id)).toHaveLength(1)
-    // 买回按最好的卡计价：一买一卖净亏一成。先补足余额，避免新身价把账户卡住。
+    expect(playerCards(game, player.id)).toHaveLength(0)
+    expect(bestMarketValue(game, gone)).toBe(baseValue)
     economyOf(game).balance = best * 2
     expect(buyFreeAgent(game, player.id)).toEqual({ ok: true })
-    expect(economyOf(game).balance).toBe(best * 2 - best)
-    expect(economyOf(game).balance).toBeLessThan(best * 2)
+    expect(economyOf(game).balance).toBe(best * 2 - baseValue)
   })
 
   it('旧存档：已确认的成品和待确认的候选都进库存，重复处理不会多出来', () => {

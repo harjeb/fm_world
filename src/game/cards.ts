@@ -190,6 +190,20 @@ export function deleteCard(game: GameState, cardId: string): CardOutcome {
 }
 
 /**
+ * 球员被卖走：他的所有卡一并销毁，人也回到没培养过的原始属性。
+ * 只删卡不还原的话，他身上装备着的成品还在，等于卡带着人走了。
+ */
+export function destroyPlayerCards(game: GameState, player: Player): number {
+  const cards = cardsOf(game)
+  const kept = cards.filter((card) => card.playerId !== player.id)
+  wear(player, baseBuild(player), null)
+  delete game.candidates[player.id]
+  delete game.training[player.id]
+  game.cards = kept
+  return cards.length - kept.length
+}
+
+/**
  * 补齐旧存档，并处理卡被删后球员才回队的情况：
  * 球员身上已确认的培养成果收进库存并视为已装备，等待确认的候选也收进库存。
  */

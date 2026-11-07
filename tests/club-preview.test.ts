@@ -30,12 +30,10 @@ describe('选队预览', () => {
     }
   })
 
-  it('每支队的名单不一样，招牌球员也不全一样', () => {
+  it('每支队的名单不一样，二级球队开局没有真实球星', () => {
     const firstNames = new Set(clubs.map((club) => club.roster[0].name))
     expect(firstNames.size).toBeGreaterThan(35)
-    const signatures = clubs.map((club) => club.roster.filter((player) => player.era !== 'random'))
-    for (const stars of signatures) expect(stars).toHaveLength(1)
-    expect(new Set(signatures.map((stars) => stars[0].id)).size).toBeGreaterThan(8)
+    for (const club of clubs) expect(club.roster.filter((player) => player.era !== 'random'), club.name).toHaveLength(0)
   })
 
   it('同一个种子预览结果不变；换种子就变', () => {
@@ -43,16 +41,15 @@ describe('选队预览', () => {
     expect(shape(previewD2Clubs(seed + 1)[5].roster)).not.toEqual(shape(clubs[5].roster))
   })
 
-  it('调剂招牌球员后球星总数不变', () => {
+  it('接管二级队不送球星，世界里的球星总数不变', () => {
     for (const id of [clubs[0].id, clubs[30].id]) {
       const game = createWorldGame(seed, id)
+      expect(game.roster.filter((player) => player.era !== 'random')).toHaveLength(0)
+      expect(game.world!.clubs.find((club) => club.id === 'player')!.starPlayerIds).toEqual([])
       const clubStars = game.world!.clubs.reduce((sum, club) => sum + club.starPlayerIds.length, 0)
       expect(clubStars).toBe(100)
       expect(game.freeStars).toHaveLength(250)
       expect(game.reserveStars).toHaveLength(150)
-      const signature = game.roster.find((player) => player.era !== 'random')!
-      const holders = game.world!.clubs.filter((club) => club.starPlayerIds.includes(signature.id))
-      expect(holders.map((club) => club.id)).toEqual(['player'])
     }
   })
 
