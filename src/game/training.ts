@@ -254,34 +254,54 @@ function moodGains(session: TrainingSession, gains: Partial<Record<AttrKey, numb
 }
 
 /** 培养品质的倍数：只乘主属性/隐藏属性的基础值，不乘建筑和队友加成。 */
-const QUALITY_MULTIPLIER = { plain: 0.7, success: 1, great: 1.3, perfect: 1.6 } as const
+const QUALITY_MULTIPLIER = { failure: 0, plain: 0.7, success: 1, great: 1.3, perfect: 1.6 } as const
 /** 体力（100 − 已消耗的疲劳）达到这个值就不会出“一般”；低于它，每低一点“一般”的概率就升一点。 */
 export const PLAIN_FREE_STAMINA = 60
-/** 体力降到 0 时“一般”的概率上限；其余是成功。 */
-export const PLAIN_MAX_CHANCE = 0.8
-/** 大成功、完美成功的概率固定，和体力无关。 */
+/** “一般”的概率上限：体力 30 以下不再继续升高，把余量让给“失败”。 */
+export const PLAIN_MAX_CHANCE = 0.4
+/** 大成功、完美成功的概率；体力 30 及以下直接关掉。 */
 export const GREAT_CHANCE = 0.1
 export const PERFECT_CHANCE = 0.02
+/** 体力 30 及以下不再有大成功/完美，并开始出现“失败”（不涨属性）。 */
+export const FAILURE_STAMINA = 30
+/** 刚好 30 体力时的失败概率。 */
+export const FAILURE_BASE_CHANCE = 0.05
+/** 体力 0 时的失败概率。 */
+export const FAILURE_MAX_CHANCE = 0.5
 /** 主属性的基础值每次在 ±10% 内浮动（隐藏属性不浮动）。 */
 export const GAIN_SPREAD = 0.1
 
-/** 这个体力下出“一般”的概率：≥ 60 为 0，往下线性升到 0 体力时的 80%。 */
+/** 这个体力下出“一般”的概率：≥ 60 为 0，往下线性升到 30 体力时的 40%，之后不再升高。 */
 export function plainChance(stamina: number): number {
   if (!(stamina < PLAIN_FREE_STAMINA)) return 0
   return Math.min(PLAIN_MAX_CHANCE, (PLAIN_FREE_STAMINA - Math.max(0, stamina)) / PLAIN_FREE_STAMINA * PLAIN_MAX_CHANCE)
 }
 
+/** 这个体力下出“失败”的概率：≥ 30 为 0，30 体力 5%，线性升到 0 体力时的 50%。 */
+export function failureChance(stamina: number): number {
+  if (!(stamina <= FAILURE_STAMINA)) return 0
+  const low = (FAILURE_STAMINA - Math.max(0, stamina)) / FAILURE_STAMINA
+  return Math.min(FAILURE_MAX_CHANCE, FAILURE_BASE_CHANCE + (FAILURE_MAX_CHANCE - FAILURE_BASE_CHANCE) * low)
+}
+
 /**
  * 这次培养的品质。同一次行动只掷一个骰子（由球员的培养种子和第几次行动决定），
- * 所以换课程不能重抽；骰子落在哪一档只看当前体力：大成功、完美成功各占固定一段，
- * “一般”只在体力不足时出现，其余是成功。
+ * 所以换课程不能重抽；骰子落在哪一档只看当前体力：
+ * 体力 30 以上才有大成功/完美成功；体力 30 及以下会出现失败（×0），一般最多 40%，
+ * 其余是成功。低体力时失败和一般一起挤压成功，逼着玩家安排休息。
  */
 export function trainingQuality(session: TrainingSession): { label: string; multiplier: number } {
   const roll = derivedRng(session.seed, 'training-quality', session.playerId, session.action + 1).float()
   const stamina = 100 - session.fatigue
-  if (roll >= 1 - PERFECT_CHANCE) return { label: '完美成功', multiplier: QUALITY_MULTIPLIER.perfect }
-  if (roll >= 1 - PERFECT_CHANCE - GREAT_CHANCE) return { label: '大成功', multiplier: QUALITY_MULTIPLIER.great }
-  if (roll < plainChance(stamina)) return { label: '一般', multiplier: QUALITY_MULTIPLIER.plain }
+  const failure = failureChance(stamina)
+  const plain = plainChance(stamina)
+  const canCrit = stamina > FAILURE_STAMINA
+  const perfect = canCrit ? PERFECT_CHANCE : 0
+  const great = canCrit ? GREAT_CHANCE : 0
+  if (roll < failure) return { label: '失败', multiplier: QUALITY_MULTIPLIER.failure }
+  if (roll >= 1 - perfect) return { label: '完美成功', multiplier: QUALITY_MULTIPLIER.perfect }
+  if (roll >= 1 - perfect - great) return { label: '大成功', multiplier: QUALITY_MULTIPLIER.great }
+  if (roll < failure + plain) return { label: '一般', multiplier: QUALITY_MULTIPLIER.plain }
   return { label: '成功', multiplier: QUALITY_MULTIPLIER.success }
 }
 
@@ -295,6 +315,8 @@ function gainSpread(session: TrainingSession, key: AttrKey): number {
 }
 
 function actionGains(session: TrainingSession, gains: Partial<Record<AttrKey, number>>, multiplier: number, teammates: number) {
+  // 失败：这次行动没有任何属性成长（队友、设施、心情加成也一并免谈）。
+  if (!(multiplier > 0)) return applyTrainingGains(session, {})
   const gk = candidateIsGk(session)
   const scaled = scaleAuthoredGains(gains, gk)
   // 主属性的基础值先浮动 ±10%，再乘品质，最后加队友；隐藏属性不浮动。

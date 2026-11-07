@@ -4,7 +4,7 @@ import { POSITION_LABELS } from '../../game/data/attributes.ts'
 import { inheritanceChances, validateInheritance } from '../../game/inheritance.ts'
 import { autoTrainingConfig, previewTraining } from '../../game/actions.ts'
 import { displayCA, initialDisplayCA, mainAttrsFor } from '../../game/rating.ts'
-import { branchProbability, eventChance, eventGrowthScale, GAIN_SPREAD, GREAT_CHANCE, PERFECT_CHANCE, plainChance, PLAIN_FREE_STAMINA, planTraining, trainingActionsTotal, TRAINING_ACTION_INFO, TRAINING_ENERGY_COST, weekOfAction, type TrainingRequest } from '../../game/training.ts'
+import { branchProbability, eventChance, eventGrowthScale, FAILURE_STAMINA, failureChance, GAIN_SPREAD, GREAT_CHANCE, PERFECT_CHANCE, plainChance, PLAIN_FREE_STAMINA, planTraining, trainingActionsTotal, TRAINING_ACTION_INFO, TRAINING_ENERGY_COST, weekOfAction, type TrainingRequest } from '../../game/training.ts'
 import { trainingDate, trainingOptions, type TrainingActivityId } from '../../game/training-calendar.ts'
 import { baseBuild, playerCards } from '../../game/cards.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
@@ -316,6 +316,7 @@ function previewBox(session: TrainingSession, plan: ReturnType<typeof planTraini
       <div class="preview-cell training-stamina-preview"><span>训练体力</span><b>${100 - session.fatigue} → ${100 - Math.max(0, Math.min(100, session.fatigue + plan.fatigue))}</b></div>
       ${plan.quality ? `<div class="preview-cell training-quality"><span>品质</span><b>${esc(plan.quality.label)} ×${plan.quality.multiplier}</b></div>` : ''}
     </div>
+    ${plan.quality?.label === '失败' ? '<p class="warn-text small">这次培养失败了：不涨任何属性，也不加队友/设施加成。</p>' : ''}
     ${plan.note ? `<p class="hint">${esc(plan.note)}</p>` : ''}
   </div>`
 }
@@ -380,7 +381,7 @@ function calendarActionPanel(session: TrainingSession): string {
         ${plan ? previewBox(session, plan as ReturnType<typeof planTraining>, isGk) : ''}
         ${preview.error ? `<p class="warn-text training-error small" role="alert">${esc(preview.error)}</p>` : ''}
         <button class="btn primary wide" data-action="training-execute" ${preview.error || !plan ? 'disabled' : ''}>${preview.error || !plan ? '无法执行' : `${icon('play', 14)}执行行动`}</button>
-        <p class="hint">品质：成功 ×1 / 大成功 ${Math.round(GREAT_CHANCE * 100)}% ×1.3 / 完美成功 ${Math.round(PERFECT_CHANCE * 100)}% ×1.6；体力 ${PLAIN_FREE_STAMINA} 以上不会出“一般”，低于它才会出一般 ×0.7（当前体力 ${Math.round(100 - session.fatigue)}，一般概率 ${Math.round(plainChance(100 - session.fatigue) * 100)}%）。主属性基础值每次 ±${Math.round(GAIN_SPREAD * 100)}% 浮动，隐藏属性不浮动；品质和浮动在同一行动固定，不因切换项目重抽。</p>
+        <p class="hint">品质：成功 ×1 / 大成功 ${Math.round(GREAT_CHANCE * 100)}% ×1.3 / 完美成功 ${Math.round(PERFECT_CHANCE * 100)}% ×1.6；体力 ${PLAIN_FREE_STAMINA} 以上不会出“一般”，低于它才会出一般 ×0.7；体力 ${FAILURE_STAMINA} 及以下不再有大成功/完美，并会出现失败（不涨属性）。当前体力 ${Math.round(100 - session.fatigue)}：一般 ${Math.round(plainChance(100 - session.fatigue) * 100)}%、失败 ${Math.round(failureChance(100 - session.fatigue) * 100)}%。主属性基础值每次 ±${Math.round(GAIN_SPREAD * 100)}% 浮动，隐藏属性不浮动；品质和浮动在同一行动固定，不因切换项目重抽。</p>
       </div>
     </div>`, { aside: `<span class="muted small">行动 ${session.action + 1}/${trainingActionsTotal(session)}</span>`, className: 'action-panel' })
 }
@@ -415,7 +416,7 @@ function legacyActionPanel(session: TrainingSession): string {
         ${previewBox(session, plan, isGk)}
         ${error ? `<p class="warn-text training-error small" role="alert">${esc(error)}</p>` : ''}
         <button class="btn primary wide" data-action="training-execute" ${error ? 'disabled' : ''}>${error ? '无法执行' : `${icon('play', 14)}执行行动`}</button>
-        <p class="hint training-quality-probabilities">培养不消耗金币；开始时扣除 30 精力。品质：成功 ×1 / 大成功 ${Math.round(GREAT_CHANCE * 100)}% ×1.3 / 完美成功 ${Math.round(PERFECT_CHANCE * 100)}% ×1.6；体力 ${PLAIN_FREE_STAMINA} 以上不会出“一般”，低于 ${PLAIN_FREE_STAMINA} 时才会出一般 ×0.7（你现在体力 ${Math.round(100 - session.fatigue)}，一般概率 ${Math.round(plainChance(100 - session.fatigue) * 100)}%）。主属性的基础值每次在 ±${Math.round(GAIN_SPREAD * 100)}% 内浮动，隐藏属性不浮动；品质只影响基础成长。同一课程行动的品质和浮动都固定，切换选择不能重抽。</p>
+        <p class="hint training-quality-probabilities">培养不消耗金币；开始时扣除 30 精力。品质：成功 ×1 / 大成功 ${Math.round(GREAT_CHANCE * 100)}% ×1.3 / 完美成功 ${Math.round(PERFECT_CHANCE * 100)}% ×1.6；体力 ${PLAIN_FREE_STAMINA} 以上不会出“一般”，低于 ${PLAIN_FREE_STAMINA} 时才会出一般 ×0.7；体力 ${FAILURE_STAMINA} 及以下不再有大成功/完美，并会出现失败（不涨属性）。你现在体力 ${Math.round(100 - session.fatigue)}：一般 ${Math.round(plainChance(100 - session.fatigue) * 100)}%、失败 ${Math.round(failureChance(100 - session.fatigue) * 100)}%。主属性的基础值每次在 ±${Math.round(GAIN_SPREAD * 100)}% 内浮动，隐藏属性不浮动；品质只影响基础成长。同一课程行动的品质和浮动都固定，切换选择不能重抽。</p>
       </div>
     </div>`, { aside: `<span class="muted small">行动 ${session.action + 1}/${trainingActionsTotal(session)}</span>`, className: 'action-panel' })
 }

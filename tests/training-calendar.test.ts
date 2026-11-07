@@ -176,8 +176,14 @@ describe('calendar training', () => {
     const s = game.training[ids[0]]
     s.action = 8
     s.fatigue = 100
+    // 体力 0 时有一半概率失败（失败不涨属性）；这里挑一个不失败的种子验证“不耗体力也照常有成长”。
+    for (let seed = 0; seed < 100; seed++) {
+      s.seed = seed
+      if (previewTraining(game, ids[0], activity('match')).plan!.quality!.label !== '失败') break
+    }
     const plan = previewTraining(game, ids[0], activity('match')).plan!
     expect(plan.fatigue).toBe(0)
+    expect(plan.quality!.label).not.toBe('失败')
     expect(Object.values(plan.gains).some((value) => (value ?? 0) > 0)).toBe(true)
     expect(trainingAction(game, ids[0], activity('match')).ok).toBe(true)
     expect(s.fatigue).toBe(100)

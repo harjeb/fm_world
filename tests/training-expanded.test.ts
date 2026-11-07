@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createInitialGame, loadGame, saveGame } from '../src/game/state.ts'
 import { previewTraining, startTraining, trainingAction, trainingEventChoice } from '../src/game/actions.ts'
 import { EVENTS, eventById } from '../src/game/data/events.ts'
-import { createTrainingSession, eligibleEvents, plainChance } from '../src/game/training.ts'
+import { createTrainingSession, eligibleEvents, failureChance, plainChance } from '../src/game/training.ts'
 import { economyOf } from '../src/game/economy.ts'
 import { displayEventHint } from '../src/ui/format.ts'
 import type { GameState, TrainingSession } from '../src/game/types.ts'
@@ -169,7 +169,8 @@ describe('expanded training courses', () => {
     expect(plainChance(100)).toBe(0)
     expect(plainChance(59)).toBeGreaterThan(0)
     expect(plainChance(30)).toBeGreaterThan(plainChance(50))
-    expect(plainChance(0)).toBeCloseTo(0.8)
+    // 体力 30 以下“一般”不再升高，把余量让给失败。
+    expect(plainChance(0)).toBeCloseTo(0.4)
     const { game, players, sessions } = setup()
     const seen = new Map<string, number>()
     const share = (fatigue: number) => {
@@ -183,11 +184,49 @@ describe('expanded training courses', () => {
       }
       return (label: string) => (counts[label] ?? 0) / 4096
     }
-    const half = share(70)  // 体力 30
+    const half = share(70)  // 体力 30：没有大成功/完美，开始有 5% 失败
     expect(Math.abs(half('一般') - plainChance(30))).toBeLessThan(0.03)
-    expect(Math.abs(half('大成功') - 0.1)).toBeLessThan(0.02)
-    expect(Math.abs(half('完美成功') - 0.02)).toBeLessThan(0.01)
-    expect(Object.fromEntries(seen)).toEqual({ '一般': 0.7, '成功': 1, '大成功': 1.3, '完美成功': 1.6 })
+    expect(half('大成功')).toBe(0)
+    expect(half('完美成功')).toBe(0)
+    expect(Math.abs(half('失败') - failureChance(30))).toBeLessThan(0.02)
+    expect(Object.fromEntries(seen)).toEqual({ '一般': 0.7, '成功': 1, '失败': 0 })
+  })
+
+  it('体力 30 及以下没有大成功/完美，失败随体力下降变多，且失败不涨任何属性', () => {
+    expect(failureChance(30)).toBeCloseTo(0.05)
+    expect(failureChance(15)).toBeGreaterThan(failureChance(30))
+    expect(failureChance(0)).toBeCloseTo(0.5)
+    expect(failureChance(31)).toBe(0)
+    const { game, players, sessions } = setup()
+    const session = sessions[0]
+    // 专项训练要 12 点体力，最高只能带着 88 疲劳开练（体力 12）。
+    session.fatigue = 88
+    const counts: Record<string, number> = {}
+    for (let seed = 0; seed < 4096; seed++) {
+      session.seed = seed
+      const quality = preview(game, players[0].id, drill).plan!.quality!
+      counts[quality.label] = (counts[quality.label] ?? 0) + 1
+    }
+    expect(counts['大成功']).toBeUndefined()
+    expect(counts['完美成功']).toBeUndefined()
+    expect(Math.abs(counts['失败'] / 4096 - failureChance(12))).toBeLessThan(0.03)
+    expect(Math.abs(counts['一般'] / 4096 - plainChance(12))).toBeLessThan(0.03)
+    expect(counts['失败'] + counts['一般'] + counts['成功']).toBe(4096)
+
+    // 找一个会失败的种子，真跑一次：属性、CA、日志都不涨。
+    let failedSeed = -1
+    for (let seed = 0; seed < 200 && failedSeed < 0; seed++) {
+      session.seed = seed
+      if (preview(game, players[0].id, drill).plan!.quality!.label === '失败') failedSeed = seed
+    }
+    expect(failedSeed).toBeGreaterThanOrEqual(0)
+    session.seed = failedSeed
+    const attrsBefore = { ...session.candidate.attrs }
+    const result = act(game, players[0].id, drill)
+    expect(result.ok).toBe(true)
+    expect(session.candidate.attrs).toEqual(attrsBefore)
+    expect(session.log.at(-1)?.title).toContain('失败')
+    expect(session.log.at(-1)?.gains).toEqual({})
   })
 
   it('主属性的基础值每次在 ±10% 内浮动，隐藏属性不浮动，同一次行动预览和结算一致', () => {
