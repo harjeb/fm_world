@@ -22,7 +22,10 @@
     "balance": "tsx scripts/balance.ts",
     "mcp": "tsx mcp/index.ts",
     "fm:import": "tsx scripts/import-fm.ts",
-    "traits:gen": "tsx scripts/generate-star-traits.ts"
+    "traits:gen": "tsx scripts/generate-star-traits.ts",
+    "typecheck": "tsc --noEmit",
+    "build:site": "vite build",
+    "build:safe": "bash scripts/build-safe.sh"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
