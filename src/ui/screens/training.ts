@@ -4,7 +4,7 @@ import { POSITION_LABELS } from '../../game/data/attributes.ts'
 import { inheritanceChances, validateInheritance } from '../../game/inheritance.ts'
 import { autoTrainingConfig, previewTraining } from '../../game/actions.ts'
 import { displayCA, initialDisplayCA, mainAttrsFor } from '../../game/rating.ts'
-import { branchProbability, eventChance, eventGrowthScale, planTraining, trainingActionsTotal, TRAINING_ACTION_INFO, TRAINING_ENERGY_COST, weekOfAction, type TrainingRequest } from '../../game/training.ts'
+import { branchProbability, eventChance, eventGrowthScale, GAIN_SPREAD, GREAT_CHANCE, PERFECT_CHANCE, plainChance, PLAIN_FREE_STAMINA, planTraining, trainingActionsTotal, TRAINING_ACTION_INFO, TRAINING_ENERGY_COST, weekOfAction, type TrainingRequest } from '../../game/training.ts'
 import { trainingDate, trainingOptions, type TrainingActivityId } from '../../game/training-calendar.ts'
 import { baseBuild, playerCards } from '../../game/cards.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
@@ -415,7 +415,7 @@ function legacyActionPanel(session: TrainingSession): string {
         ${previewBox(session, plan, isGk)}
         ${error ? `<p class="warn-text training-error small" role="alert">${esc(error)}</p>` : ''}
         <button class="btn primary wide" data-action="training-execute" ${error ? 'disabled' : ''}>${error ? '无法执行' : `${icon('play', 14)}执行行动`}</button>
-        <p class="hint training-quality-probabilities">培养不消耗金币；开始时扣除 30 精力。专项、配合、队内比赛品质：一般 50% ×0.7 / 成功 30% ×1 / 大成功 15% ×1.3 / 完美成功 5% ×1.6；仅影响基础成长。同一课程行动的品质固定，切换选择不能重抽。</p>
+        <p class="hint training-quality-probabilities">培养不消耗金币；开始时扣除 30 精力。品质：成功 ×1 / 大成功 ${Math.round(GREAT_CHANCE * 100)}% ×1.3 / 完美成功 ${Math.round(PERFECT_CHANCE * 100)}% ×1.6；体力 ${PLAIN_FREE_STAMINA} 以上不会出“一般”，低于 ${PLAIN_FREE_STAMINA} 时才会出一般 ×0.7（你现在体力 ${Math.round(100 - session.fatigue)}，一般概率 ${Math.round(plainChance(100 - session.fatigue) * 100)}%）。主属性的基础值每次在 ±${Math.round(GAIN_SPREAD * 100)}% 内浮动，隐藏属性不浮动；品质只影响基础成长。同一课程行动的品质和浮动都固定，切换选择不能重抽。</p>
       </div>
     </div>`, { aside: `<span class="muted small">行动 ${session.action + 1}/${trainingActionsTotal(session)}</span>`, className: 'action-panel' })
 }

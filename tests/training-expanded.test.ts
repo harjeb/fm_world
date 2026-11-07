@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createInitialGame, loadGame, saveGame } from '../src/game/state.ts'
 import { previewTraining, startTraining, trainingAction, trainingEventChoice } from '../src/game/actions.ts'
 import { EVENTS, eventById } from '../src/game/data/events.ts'
-import { createTrainingSession, eligibleEvents } from '../src/game/training.ts'
+import { createTrainingSession, eligibleEvents, plainChance } from '../src/game/training.ts'
 import { economyOf } from '../src/game/economy.ts'
 import { displayEventHint } from '../src/ui/format.ts'
 import type { GameState, TrainingSession } from '../src/game/types.ts'
@@ -147,20 +147,81 @@ describe('expanded training courses', () => {
     expect(({ '一般': 0.7, '成功': 1, '大成功': 1.3, '完美成功': 1.6 } as Record<string, number>)[plans[0].quality!.label]).toBe(plans[0].quality!.multiplier)
   })
 
-  it('exposes all four quality tiers in a fixed deterministic seed sweep', () => {
+  it('体力 60 以上不出一般，大成功 10%、完美成功 2%，其余是成功', () => {
+    const { game, players, sessions } = setup()
+    for (const fatigue of [0, 20, 40]) {
+      sessions[0].fatigue = fatigue
+      const counts: Record<string, number> = {}
+      for (let seed = 0; seed < 4096; seed++) {
+        sessions[0].seed = seed
+        const quality = preview(game, players[0].id, drill).plan!.quality!
+        counts[quality.label] = (counts[quality.label] ?? 0) + 1
+      }
+      expect(counts['一般'], `fatigue ${fatigue}`).toBeUndefined()
+      expect(Math.abs(counts['大成功'] / 4096 - 0.1), `fatigue ${fatigue}`).toBeLessThan(0.02)
+      expect(Math.abs(counts['完美成功'] / 4096 - 0.02), `fatigue ${fatigue}`).toBeLessThan(0.01)
+      expect(Math.abs(counts['成功'] / 4096 - 0.88), `fatigue ${fatigue}`).toBeLessThan(0.03)
+    }
+  })
+
+  it('体力低于 60 才会出一般，越低越多，大成功和完美成功的概率不变', () => {
+    expect(plainChance(60)).toBe(0)
+    expect(plainChance(100)).toBe(0)
+    expect(plainChance(59)).toBeGreaterThan(0)
+    expect(plainChance(30)).toBeGreaterThan(plainChance(50))
+    expect(plainChance(0)).toBeCloseTo(0.8)
     const { game, players, sessions } = setup()
     const seen = new Map<string, number>()
-    const counts: Record<string, number> = {}
-    for (let seed = 0; seed < 2048; seed++) {
-      sessions[0].seed = seed
-      const quality = preview(game, players[0].id, drill).plan!.quality!
-      seen.set(quality.label, quality.multiplier)
-      counts[quality.label] = (counts[quality.label] ?? 0) + 1
+    const share = (fatigue: number) => {
+      sessions[0].fatigue = fatigue
+      const counts: Record<string, number> = {}
+      for (let seed = 0; seed < 4096; seed++) {
+        sessions[0].seed = seed
+        const quality = preview(game, players[0].id, drill).plan!.quality!
+        counts[quality.label] = (counts[quality.label] ?? 0) + 1
+        seen.set(quality.label, quality.multiplier)
+      }
+      return (label: string) => (counts[label] ?? 0) / 4096
     }
+    const half = share(70)  // 体力 30
+    expect(Math.abs(half('一般') - plainChance(30))).toBeLessThan(0.03)
+    expect(Math.abs(half('大成功') - 0.1)).toBeLessThan(0.02)
+    expect(Math.abs(half('完美成功') - 0.02)).toBeLessThan(0.01)
     expect(Object.fromEntries(seen)).toEqual({ '一般': 0.7, '成功': 1, '大成功': 1.3, '完美成功': 1.6 })
-    for (const [label, probability] of Object.entries({ '一般': 0.5, '成功': 0.3, '大成功': 0.15, '完美成功': 0.05 })) {
-      expect(Math.abs(counts[label] / 2048 - probability)).toBeLessThan(0.03)
+  })
+
+  it('主属性的基础值每次在 ±10% 内浮动，隐藏属性不浮动，同一次行动预览和结算一致', () => {
+    const { game, players, sessions } = setup()
+    delete sessions[0].facilityLevels
+    const request = { kind: 'drill', attr: 'speed' } as const
+    const ratios: number[] = []
+    for (let seed = 0; seed < 600; seed++) {
+      sessions[0].seed = seed
+      const plan = preview(game, players[0].id, request).plan!
+      // 专项训练：主属性 speed 的基础值是 1 或 2 点（×15），再乘品质。
+      const base = plan.gains.speed! / plan.quality!.multiplier
+      ratios.push(base / 15)
     }
+    const spread = ratios.map(value => value / Math.round(value))
+    expect(Math.min(...spread)).toBeGreaterThanOrEqual(0.9 - 1e-9)
+    expect(Math.max(...spread)).toBeLessThanOrEqual(1.1 + 1e-9)
+    expect(Math.min(...spread)).toBeLessThan(0.95)
+    expect(Math.max(...spread)).toBeGreaterThan(1.05)
+    // 隐藏属性（配合 teamwork）不浮动：除以品质倍数后每个种子都一样；主属性（传球）则各不相同。
+    const hidden = new Set<number>()
+    const main = new Set<number>()
+    for (let seed = 0; seed < 200; seed++) {
+      sessions[0].seed = seed
+      const plan = preview(game, players[0].id, combo).plan!
+      hidden.add(Math.round(plan.gains.teamwork! / plan.quality!.multiplier * 1e6))
+      main.add(Math.round(plan.gains.passing! / plan.quality!.multiplier * 1e3))
+    }
+    expect(hidden.size).toBe(1)
+    expect(main.size).toBeGreaterThan(20)
+    // 同一次行动换课程也不重抽：浮动只由培养种子、行动序号和属性决定。
+    sessions[0].seed = 77
+    const a = preview(game, players[0].id, request).plan!
+    expect(preview(game, players[0].id, request).plan).toEqual(a)
   })
 
   it.each(courses)('preview agrees with execution for $kind and charges the specified fatigue', request => {

@@ -253,24 +253,53 @@ function moodGains(session: TrainingSession, gains: Partial<Record<AttrKey, numb
   return Object.fromEntries((Object.entries(gains) as [AttrKey, number][]).map(([key, value]) => [key, value > 0 ? value * 0.5 : value]))
 }
 
-const TRAINING_QUALITIES = [
-  { label: '一般', multiplier: 0.7, probability: 0.5 },
-  { label: '成功', multiplier: 1, probability: 0.3 },
-  { label: '大成功', multiplier: 1.3, probability: 0.15 },
-  { label: '完美成功', multiplier: 1.6, probability: 0.05 },
-] as const
+/** 培养品质的倍数：只乘主属性/隐藏属性的基础值，不乘建筑和队友加成。 */
+const QUALITY_MULTIPLIER = { plain: 0.7, success: 1, great: 1.3, perfect: 1.6 } as const
+/** 体力（100 − 已消耗的疲劳）达到这个值就不会出“一般”；低于它，每低一点“一般”的概率就升一点。 */
+export const PLAIN_FREE_STAMINA = 60
+/** 体力降到 0 时“一般”的概率上限；其余是成功。 */
+export const PLAIN_MAX_CHANCE = 0.8
+/** 大成功、完美成功的概率固定，和体力无关。 */
+export const GREAT_CHANCE = 0.1
+export const PERFECT_CHANCE = 0.02
+/** 主属性的基础值每次在 ±10% 内浮动（隐藏属性不浮动）。 */
+export const GAIN_SPREAD = 0.1
 
-function trainingQuality(session: TrainingSession): { label: string; multiplier: number } {
-  const rng = derivedRng(session.seed, 'training-quality', session.playerId, session.action + 1)
-  const tier = rng.weighted(TRAINING_QUALITIES, TRAINING_QUALITIES.map(item => item.probability))
-  return { label: tier.label, multiplier: tier.multiplier }
+/** 这个体力下出“一般”的概率：≥ 60 为 0，往下线性升到 0 体力时的 80%。 */
+export function plainChance(stamina: number): number {
+  if (!(stamina < PLAIN_FREE_STAMINA)) return 0
+  return Math.min(PLAIN_MAX_CHANCE, (PLAIN_FREE_STAMINA - Math.max(0, stamina)) / PLAIN_FREE_STAMINA * PLAIN_MAX_CHANCE)
+}
+
+/**
+ * 这次培养的品质。同一次行动只掷一个骰子（由球员的培养种子和第几次行动决定），
+ * 所以换课程不能重抽；骰子落在哪一档只看当前体力：大成功、完美成功各占固定一段，
+ * “一般”只在体力不足时出现，其余是成功。
+ */
+export function trainingQuality(session: TrainingSession): { label: string; multiplier: number } {
+  const roll = derivedRng(session.seed, 'training-quality', session.playerId, session.action + 1).float()
+  const stamina = 100 - session.fatigue
+  if (roll >= 1 - PERFECT_CHANCE) return { label: '完美成功', multiplier: QUALITY_MULTIPLIER.perfect }
+  if (roll >= 1 - PERFECT_CHANCE - GREAT_CHANCE) return { label: '大成功', multiplier: QUALITY_MULTIPLIER.great }
+  if (roll < plainChance(stamina)) return { label: '一般', multiplier: QUALITY_MULTIPLIER.plain }
+  return { label: '成功', multiplier: QUALITY_MULTIPLIER.success }
+}
+
+/**
+ * 主属性基础值的浮动系数（0.9–1.1）。由培养种子、第几次行动和属性决定：
+ * 预览和实际结算一致，换课程也不能重抽。
+ */
+function gainSpread(session: TrainingSession, key: AttrKey): number {
+  const roll = derivedRng(session.seed, 'training-gain-spread', session.playerId, session.action + 1, key).float()
+  return 1 + (roll * 2 - 1) * GAIN_SPREAD
 }
 
 function actionGains(session: TrainingSession, gains: Partial<Record<AttrKey, number>>, multiplier: number, teammates: number) {
   const gk = candidateIsGk(session)
   const scaled = scaleAuthoredGains(gains, gk)
+  // 主属性的基础值先浮动 ±10%，再乘品质，最后加队友；隐藏属性不浮动。
   const withTeam = Object.fromEntries((Object.entries(scaled) as [AttrKey, number][]).map(([key, value]) =>
-    [key, value > 0 ? value * multiplier + 2 * teammates * attrMax(key, gk) / MAIN_ATTR_MAX : value]))
+    [key, value > 0 ? value * (isMainAttr(key, gk) ? gainSpread(session, key) : 1) * multiplier + 2 * teammates * attrMax(key, gk) / MAIN_ATTR_MAX : value]))
   return applyTrainingGains(session, moodGains(session, facilityGains(session, withTeam), session.action + 1))
 }
 
