@@ -1,5 +1,5 @@
 import { economyOf } from './economy.ts'
-import { SQUAD_LIMIT, bestMarketValue, joinRoster, playerMarketValue, transferWindowOpen } from './market.ts'
+import { bestMarketValue, joinRoster, playerMarketValue, transferWindowOpen } from './market.ts'
 import type { GameState, Player } from './types.ts'
 
 /**
@@ -97,7 +97,6 @@ export function placeBid(market: FreeMarket, game: GameState, accountId: string,
   if (game.roster.some((item) => item.id === playerId)) return fail('他已经在你的阵容里')
   const auction = market.auctions.find((item) => item.playerId === playerId)
   if (auction && leadingBid(auction).accountId === accountId) return fail('你已经是最高出价')
-  if (game.roster.length + leadingCount(market.auctions, accountId, playerId) >= SQUAD_LIMIT) return fail(`阵容已满（最多 ${SQUAD_LIMIT} 人，正在领先的竞拍也算）`)
   // 自己练过这名球员时估值按最好的卡算，免得低价卖掉再低价竞拍回来。
   const minimum = Math.max(minimumBid(player, auction), bestMarketValue(game, player))
   if (amount < minimum) return fail(`出价至少 ${minimum.toLocaleString()}`)
@@ -143,7 +142,7 @@ export function settleAuctions(market: FreeMarket, gameOf: (accountId: string) =
       const clubId = aiClubIdOf(bid.accountId)
       if (clubId) return !!ai && ai.balance(clubId) >= bid.amount && ai.canSign(clubId)
       const game = gameOf(bid.accountId)
-      return !!game && economyOf(game).balance >= bid.amount && game.roster.length < SQUAD_LIMIT
+      return !!game && economyOf(game).balance >= bid.amount
     })
     const busy = eligible && !isAIBid(eligible.accountId) ? gameOf(eligible.accountId)?.activeMatch : undefined
     if (busy && !busy.context.isLeague) continue

@@ -32,7 +32,7 @@ describe('服务器上的电脑球队竞拍', () => {
     const auth = { Authorization: `Bearer ${reg.token}` }
     type Entry = { player: { id: string; ca: number }; price: number }
     const view = await agentState(base, auth) as { game: { market: { freeAgents: Entry[] } } }
-    const target = [...view.game.market.freeAgents].sort((a, b) => b.player.ca - a.player.ca)[0]
+    const target = [...view.game.market.freeAgents].sort((a, b) => a.price - b.price)[0]
     const placed = await fetch(`${base}/api/market/bid`, {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
@@ -66,7 +66,7 @@ describe('服务器上的电脑球队竞拍', () => {
     })).json() as { token: string }
     const auth = { Authorization: `Bearer ${reg.token}` }
     const view = await agentState(base, auth) as { game: { market: { freeAgents: { player: { id: string }; price: number }[] }, economy: { balance: number } } }
-    const target = view.game.market.freeAgents[0]
+    const target = [...view.game.market.freeAgents].sort((a, b) => a.price - b.price)[0]
     const balance = view.game.economy.balance
     const placed = await fetch(`${base}/api/market/bid`, {
       method: 'POST',

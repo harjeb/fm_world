@@ -2,6 +2,8 @@ import { caOf, costAttrs } from './ca.ts'
 import { MAX_FANS, STAGES_PER_LEVEL, facilityLevel, facilityStageChance, facilityUpgradeCost, projectedRoundIncome } from './economy.ts'
 import { ROUND_GAME_DAYS } from './calendar.ts'
 import { derivedRng, splitSeed } from './rng.ts'
+import { playerMarketValue } from './pricing.ts'
+import { isOnMarketToday } from './market-window.ts'
 import { attrMax, attrRating } from './scale.ts'
 import { ALL_ATTRIBUTES, type AICard, type AIClubState, type AITeam, type AttrKey, type Attributes, type FacilityId, type GameState, type Player, type TierId, type WorldClub, type WorldState } from './types.ts'
 import { repairLineup, validateLineup } from './squad.ts'
@@ -34,9 +36,9 @@ type TierProfile = {
 }
 
 const TIER_PROFILE: Record<TierId, TierProfile> = {
-  champions: { balance: 420_000, fans: 44_000, stage: [12, 18], reserve: 160_000, overpay: 1.2, perDay: [5, 7] },
-  division1: { balance: 210_000, fans: 17_000, stage: [8, 13], reserve: 80_000, overpay: 1.1, perDay: [2, 3] },
-  division2: { balance: 95_000, fans: 6_000, stage: [3, 7], reserve: 35_000, overpay: 1.0, perDay: [1, 1] },
+  champions: { balance: 12_000_000, fans: 44_000, stage: [12, 18], reserve: 3_000_000, overpay: 1.2, perDay: [5, 7] },
+  division1: { balance: 6_000_000, fans: 17_000, stage: [8, 13], reserve: 1_500_000, overpay: 1.1, perDay: [2, 3] },
+  division2: { balance: 2_500_000, fans: 6_000, stage: [3, 7], reserve: 600_000, overpay: 1.0, perDay: [1, 1] },
 }
 
 export const aiTierProfile = (tier: TierId): TierProfile => TIER_PROFILE[tier]
@@ -47,13 +49,11 @@ const AI_CA_PER_SESSION = 0.5
 export const AI_SQUAD_LIMIT = 22
 /** 一个赛季最多攒下几个外来球员，免得存档越滚越大。 */
 const AI_SIGNING_LIMIT = 6
-const AI_BALANCE_CAP = 4_000_000
+const AI_BALANCE_CAP = 60_000_000
 
+/** 电脑球队眼里的身价：和市场估值同一份曲线，出价才不会总是低于起拍价。 */
 export function playerValue(player: Pick<Player, 'attrs' | 'positions'>): number {
-  if (!player?.attrs || !player?.positions) return 0
-  const gk = player.positions.GK > 0
-  const values = ALL_ATTRIBUTES.map((key) => attrRating(key, player.attrs[key], gk))
-  return Math.max(1, Math.round(values.reduce((sum, value) => sum + value, 0) / values.length * 1000))
+  return playerMarketValue(player)
 }
 
 export function playerCa(player: Pick<Player, 'attrs' | 'positions'>): number {
@@ -415,12 +415,16 @@ export function recordAISigning(state: AIClubState, player: Player, amount: numb
  * 自由市场也会被电脑球队盯上：比本队同位置强、或者性价比高就签走。
  * 只在池子还厚的时候动手，免得玩家一进市场发现没人可签。
  */
-export function aiSignFreeAgents(game: { world?: WorldState; aiClubs?: Record<string, AIClubState>; aiTeams?: AITeam[]; freeStars: Player[]; seed: number }, round: number): number {
+export function aiSignFreeAgents(game: { world?: WorldState; createdAt?: number; aiClubs?: Record<string, AIClubState>; aiTeams?: AITeam[]; freeStars: Player[]; seed: number }, round: number, now = Date.now()): number {
   if (!game.world || !game.aiClubs || !game.aiTeams?.length) return 0
   if (Object.keys(game.aiClubs).length === 0) return 0
   if (game.freeStars.length <= 24) return 0
   const rng = derivedRng(splitSeed(game.seed, 'ai-poach'), round)
-  const targets = [...game.freeStars].sort((a, b) => playerCa(b) - playerCa(a)).slice(0, 12)
+  const anchor = { world: game.world, createdAt: game.createdAt ?? now }
+  const targets = game.freeStars
+    .filter((player) => isOnMarketToday(anchor, player, now))
+    .sort((a, b) => playerCa(b) - playerCa(a))
+    .slice(0, 12)
   let signed = 0
   for (const player of targets) {
     if (signed >= 2) break

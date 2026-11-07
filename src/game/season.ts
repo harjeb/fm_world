@@ -3,6 +3,8 @@ import { splitSeed } from './rng.ts'
 import { buildMatchEngineForGame, createMatchRecord, fixtureScorers, simulateAIvsAIState } from './match/setup.ts'
 import { MatchEngine } from './match/engine.ts'
 import { ENERGY_RECOVERY_PER_GAME_DAY } from './training.ts'
+import { awardSeasonPrize } from './economy.ts'
+import { squadLimitError } from './market.ts'
 import { GAME_DAY_MS, ROUND_GAME_DAYS, ROUND_MS, elapsedGameDays, gameDayOfRound, kickoffAtForRound, seasonEndAt } from './calendar.ts'
 import { recordMatchInjuries } from './injury.ts'
 import { awardRoundIncome, economyOf } from './economy.ts'
@@ -183,6 +185,8 @@ export function updateSeasonTable(game: GameState): void {
     game.season.playerFinish = game.season.table.findIndex((row) => row.teamId === PLAYER_TEAM_ID) + 1
     // 常规赛一结束就把升级杯算好，赛后休整期间世界页能看到赛果。
     ensurePromotionPlayoff(game)
+    // 排名奖金只发一次，靠 economy.prizeSeason 去重。
+    awardSeasonPrize(game)
   }
 }
 
@@ -449,6 +453,8 @@ export function advanceSeasonRound(game: GameState, now = Date.now()): { ok: boo
 export function startLeagueMatch(game: GameState, now = Date.now()): { ok: boolean; error?: string; context?: MatchContext } {
   if (game.activeMatch) return { ok: false, error: '已有进行中的比赛' }
   if (game.season.finished) return { ok: false, error: '赛季已经结束' }
+  const overLimit = squadLimitError(game)
+  if (overLimit) return { ok: false, error: overLimit }
   const fixture = playerFixture(game)
   if (!fixture) return { ok: false, error: '本轮没有你的比赛' }
   if (fixture.played) return { ok: false, error: '本轮比赛已经完成' }
@@ -488,6 +494,8 @@ export function startChallengeAgainstTeam(
   now = Date.now(),
 ): { ok: boolean; error?: string; context?: MatchContext } {
   if (game.activeMatch) return { ok: false, error: '已有进行中的比赛' }
+  const overLimit = squadLimitError(game)
+  if (overLimit) return { ok: false, error: overLimit }
   const context: MatchContext = {
     isLeague: false,
     opponentId: ai.id,
@@ -511,6 +519,8 @@ export function startChallengeAgainstTeam(
 
 export function startChallenge(game: GameState, aiId: string, now = Date.now()): { ok: boolean; error?: string; context?: MatchContext } {
   if (game.activeMatch) return { ok: false, error: '已有进行中的比赛' }
+  const overLimit = squadLimitError(game)
+  if (overLimit) return { ok: false, error: overLimit }
   const ai = game.aiTeams.find((team) => team.id === aiId)
   if (!ai) return { ok: false, error: '找不到对手' }
   const context: MatchContext = {

@@ -6,7 +6,7 @@ import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
 import { AUCTION_DURATION_MS, AUCTION_EXTEND_MS, absorbFreeAgents, committedFunds, leadingBid, minimumBid, placeBid, settleAuctions, type FreeMarket } from '../src/game/auction.ts'
 import { economyOf } from '../src/game/economy.ts'
-import { SQUAD_LIMIT, playerMarketValue, releasePlayer } from '../src/game/market.ts'
+import { SQUAD_LIMIT, playerMarketValue, releasePlayer, squadLimitError } from '../src/game/market.ts'
 import { createWorldGame } from '../src/game/world.ts'
 import type { GameState } from '../src/game/types.ts'
 
@@ -83,14 +83,14 @@ describe('竞拍规则', () => {
     expect(placeBid(market, a, 'a', other.id, playerMarketValue(other), 2).ok).toBe(true)
   })
 
-  it('阵容满了不能出价；正在领先的竞拍也占名额', () => {
+  it('签人可以超编，超出 25 人时由开赛前的阵容检查拦下', () => {
     const { market, a, player, value } = setup()
     const other = market.pool[1]
     const spare = structuredClone(a.roster[0])
-    while (a.roster.length < SQUAD_LIMIT - 1) a.roster.push({ ...structuredClone(spare), id: `extra-${a.roster.length}` })
+    while (a.roster.length < SQUAD_LIMIT + 1) a.roster.push({ ...structuredClone(spare), id: `extra-${a.roster.length}` })
+    economyOf(a).balance = Math.max(value, playerMarketValue(other)) * 2
     expect(placeBid(market, a, 'a', player.id, value, 0).ok).toBe(true)
-    const blocked = placeBid(market, a, 'a', other.id, playerMarketValue(other), 0)
-    expect(blocked).toMatchObject({ ok: false, error: expect.stringContaining('阵容已满') })
+    expect(squadLimitError(a)).toContain('超过')
   })
 
   it('无效出价和不在市场的球员都被拒绝，转会窗关闭时也不能出价', () => {
@@ -160,6 +160,7 @@ describe('竞拍规则', () => {
     expect(placeBid(market, a, 'a', player.id, value, 0).ok).toBe(false)
     const strong = playerMarketValue(a.cards![0])
     expect(strong).toBeGreaterThan(value)
+    economyOf(a).balance = strong * 2
     expect(placeBid(market, a, 'a', player.id, strong, 0).ok).toBe(true)
   })
 
@@ -249,7 +250,9 @@ describe('全服自由市场', () => {
     expect(one.game.freeStars).toEqual([])
     expect(two.game.freeStars).toEqual([])
     const market = await getMarket(base)
-    expect(market.pool).toHaveLength(250)
+    // 球星只在挂牌日出现，所以看到的是 250 人里的一个子集。
+    expect(market.pool.length).toBeGreaterThan(0)
+    expect(market.pool.length).toBeLessThanOrEqual(250)
     expect(market.auctions).toEqual([])
   })
 
@@ -259,7 +262,8 @@ describe('全服自由市场', () => {
     const one = await register(base, 'alpha')
     const two = await register(base, 'bravo')
     const { pool } = await getMarket(base)
-    const player = pool[0]
+    const cheapest = [...pool].sort((a, b) => playerMarketValue(a) - playerMarketValue(b))
+    const player = cheapest[0]
     const value = playerMarketValue(player)
 
     expect((await bid(base, one.headers, player.id, value)).status).toBe(200)
@@ -347,16 +351,18 @@ describe('全服自由市场', () => {
     const first = await start(() => clock)
     const one = await register(first.base, 'alpha')
     const { pool } = await getMarket(first.base)
-    await bid(first.base, one.headers, pool[0].id, playerMarketValue(pool[0]))
+    const cheapest = [...pool].sort((a, b) => playerMarketValue(a) - playerMarketValue(b))[0]
+    await bid(first.base, one.headers, cheapest.id, playerMarketValue(cheapest))
+    const before = (await getMarket(first.base)).pool.length
     servers.splice(0).forEach((server) => server.close())
     const second = await start(() => clock, first.dir)
     let market = await getMarket(second.base)
     expect(market.auctions).toHaveLength(1)
-    expect(market.pool).toHaveLength(250)
+    expect(market.pool.length).toBe(before)
     clock += AUCTION_DURATION_MS + 1
     market = await getMarket(second.base)
     expect(market.auctions).toEqual([])
-    expect(market.pool).toHaveLength(249)
+    expect(market.pool.length).toBe(before - 1)
   })
 
   it('老账号里各有一份自由球员时，并进全服市场，已经被人买走的不再出现', async () => {
@@ -374,7 +380,7 @@ describe('全服自由市场', () => {
     const second = await start(() => clock, first.dir)
     const market = await getMarket(second.base)
     expect(market.pool.some((item) => item.id === pool[0].id)).toBe(false)
-    expect(market.pool).toHaveLength(249)
+    expect(market.pool.length).toBeLessThanOrEqual(250)
     const again = await fetch(`${second.base}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'alpha', password: 'secret123' }) })
     const logged = await again.json() as { game: GameState }
     expect(logged.game.freeStars).toEqual([])
@@ -387,8 +393,8 @@ describe('全服自由市场', () => {
     const { token } = await (await fetch(`${base}/api/agent/token`, { method: 'POST', headers: one.headers })).json() as { token: string }
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
     const state = await (await fetch(`${base}/api/agent/state`, { headers })).json() as { game: { market: { freeAgents: { player: { id: string }; price: number }[]; auctions: unknown[] } } }
-    expect(state.game.market.freeAgents).toHaveLength(250)
-    const target = state.game.market.freeAgents[0]
+    expect(state.game.market.freeAgents.length).toBeGreaterThan(0)
+    const target = [...state.game.market.freeAgents].sort((a, b) => a.price - b.price)[0]
     const refused = await fetch(`${base}/api/agent/action`, { method: 'POST', headers, body: JSON.stringify({ action: 'buy_free_agent', playerId: target.player.id }) })
     expect(refused.status).toBe(400)
     const placed = await fetch(`${base}/api/agent/action`, { method: 'POST', headers, body: JSON.stringify({ action: 'bid_free_agent', playerId: target.player.id, amount: target.price }) })

@@ -1,23 +1,21 @@
-import { ALL_ATTRIBUTES, type GameState, type Player } from './types.ts'
+import { type AITeam, type GameState, type Player } from './types.ts'
 import { economyOf } from './economy.ts'
-import { attrMax, attrRating } from './scale.ts'
+import { caOf } from './ca.ts'
+import { playerMarketValue } from './pricing.ts'
+export { VALUE_AT_CA_205, VALUE_GROWTH_PER_CA, VALUE_CAP, playerMarketValue } from './pricing.ts'
 import { autoFillLineup, repairLineup, validateLineup } from './squad.ts'
 import { wageForPlayer } from './world.ts'
-import { derivedRng } from './rng.ts'
+import { derivedRng, splitSeed } from './rng.ts'
 import { closeFinishedTraining, playerCards } from './cards.ts'
+import { negotiationDemands, negotiationFailure, negotiationRoll, negotiationTerms, type NegotiationAnswers, type NegotiationDemands } from './negotiation.ts'
+import { isOnMarketToday, nextMarketDayLabel } from './market-window.ts'
 
 type Market = NonNullable<GameState['market']>
 type Listing = Market['listings'][number]
 export type MarketOutcome = { ok: boolean; error?: string }
 
-/** A deterministic local NPC price based on the player's current attributes. */
-export function playerMarketValue(player: Pick<Player, 'attrs' | 'positions'>): number {
-  if (!player || !player.positions || !player.attrs) return 0
-  const gk = player.positions.GK > 0
-  if (ALL_ATTRIBUTES.some(key => !Number.isFinite(player.attrs[key]) || player.attrs[key] < 0 || player.attrs[key] > attrMax(key, gk))) return 0
-  const values = ALL_ATTRIBUTES.map(key => attrRating(key, player.attrs[key], gk))
-  return Math.max(1, Math.round(values.reduce((a, b) => a + b, 0) / values.length * 1000))
-}
+/** 从 AI 球队买人的默认溢价倍数（谈判的底价就是它）。 */
+export const CLUB_BUYOUT_RATIO = 1.5
 
 /**
  * 这名球员的市场估值：按他身上的属性和他所有球员卡里最好的一套算。
@@ -28,7 +26,7 @@ export function bestMarketValue(game: Pick<GameState, 'cards'>, player: Player):
 }
 
 /** 本地 NPC 买家的预算上限：一轮最多花这么多，避免无脑倒卖把游戏刷成印钞机。 */
-export const NPC_ROUND_BUDGET = 120_000
+export const NPC_ROUND_BUDGET = 3_000_000
 /** 一轮最多成交几笔（再多也没人接盘）。 */
 export const NPC_MAX_DEALS = 3
 /** 买家一口价最高出到估值的九成：卖人就是折价，倒卖不产生利润。 */
@@ -102,6 +100,122 @@ function uniquePlayers(game: GameState, market: Market | undefined): boolean {
   return true
 }
 
+/** 自由球员的底价就是估值。 */
+export function freeAgentAsking(game: Pick<GameState, 'cards'>, player: Player): number {
+  return bestMarketValue(game, player)
+}
+
+/** 从 AI 球队买人的底价：估值 1.5 倍。 */
+export function clubAsking(game: Pick<GameState, 'cards'>, player: Player): number {
+  return Math.round(bestMarketValue(game, player) * CLUB_BUYOUT_RATIO)
+}
+
+/** 阵容上限：签人不拦，开赛前必须裁到 25 人以内。 */
+export function squadLimitError(game: Pick<GameState, 'roster'>): string | null {
+  if (game.roster.length <= SQUAD_LIMIT) return null
+  return `阵容有 ${game.roster.length} 人，超过 ${SQUAD_LIMIT} 人上限：请先裁掉 ${game.roster.length - SQUAD_LIMIT} 人才能进入比赛`
+}
+
+export type NegotiationOutcome = MarketOutcome & {
+  chance?: number
+  reasons?: string[]
+  asks?: { value: number; asking: number; demands: NegotiationDemands }
+}
+
+export type { NegotiationAnswers, NegotiationDemands } from './negotiation.ts'
+
+function completeSigning(game: GameState, player: Player, fee: number): void {
+  const economy = economyOf(game)
+  economy.balance -= fee
+  game.roster.push(player)
+  assignContract(game, player)
+}
+
+function negotiate(
+  game: GameState,
+  player: Player,
+  offer: number,
+  answers: NegotiationAnswers,
+  asking: number,
+  demandSeed: number,
+): NegotiationOutcome {
+  const value = bestMarketValue(game, player)
+  if (!positive(asking) || !positive(value)) return fail('球员数据无效')
+  if (!Number.isSafeInteger(offer) || offer <= 0) return fail('报价必须是正整数')
+  const economy = economyOf(game)
+  if (!economy || !validBalance(economy.balance)) return fail('余额数据无效')
+  const demands = negotiationDemands({ seed: game.seed, world: game.world, season: game.season }, player)
+  const clubTier = game.season?.tier ?? 'division2'
+  const terms = negotiationTerms({ demands, value, asking, offer, answers, clubTier, clubId: 'player' })
+  const asks = { value, asking, demands }
+  if (terms.chance <= 0) return { ok: false, error: terms.reasons[0] ?? '对方不感兴趣', chance: 0, reasons: terms.reasons, asks }
+  if (!negotiationRoll(demandSeed, player, offer, answers, terms.chance)) {
+    return {
+      ok: false,
+      error: negotiationFailure({ demands, value, asking, offer, answers, clubTier, clubId: 'player' }, terms),
+      chance: terms.chance,
+      reasons: terms.reasons,
+      asks,
+    }
+  }
+  if (economy.balance < offer) return { ok: false, error: '余额不足，谈成了也付不起', chance: terms.chance, reasons: terms.reasons, asks }
+  return { ok: true, chance: terms.chance, reasons: terms.reasons, asks }
+}
+
+/**
+ * 单机/联机通用：谈判签下自由球员。报价可以高于底价，给的钱越多成功率越高；
+ * 但球员自己想去别的队、或要求更高的联赛级别时，光加钱未必够。
+ */
+export function signFreeAgent(
+  game: GameState,
+  playerId: string,
+  offer: number,
+  answers: NegotiationAnswers,
+): NegotiationOutcome {
+  if (game.activeMatch) return fail('比赛进行中不能交易')
+  const market = game.market
+  if (!validMarket(market) || !uniquePlayers(game, market)) return fail('市场数据无效或球员重复')
+  const player = game.freeStars.find(p => p.id === playerId)
+  if (!player) return fail('球员不存在')
+  if (!transferWindowOpen(game)) return fail('转会窗口已关闭')
+  if (!isOnMarketToday(game, player)) return fail(`${player.name} 这个月不在市场，${nextMarketDayLabel(game, player)}再来看看`)
+  const asking = freeAgentAsking(game, player)
+  const result = negotiate(game, player, offer, answers, asking, game.seed)
+  if (!result.ok) return result
+  if (!positive(asking)) return fail('无效的价格')
+  completeSigning(game, player, offer)
+  game.freeStars = game.freeStars.filter(p => p.id !== playerId)
+  return result
+}
+
+/** 单机/联机通用：向 AI 球队谈判买人。 */
+export function signClubPlayer(
+  game: GameState,
+  clubId: string,
+  playerId: string,
+  offer: number,
+  answers: NegotiationAnswers,
+): NegotiationOutcome {
+  if (game.activeMatch) return fail('比赛进行中不能交易')
+  if (!transferWindowOpen(game)) return fail('转会窗口已关闭')
+  const team = game.aiTeams.find((item) => item.id === clubId)
+  const player = team?.players.find((item) => item.id === playerId)
+  if (!team || !player) return fail('球员不在该球队')
+  const asking = clubAsking(game, player)
+  const result = negotiate(game, player, offer, answers, asking, game.seed)
+  if (!result.ok) return result
+  completeSigning(game, player, offer)
+  team.players = team.players.filter((item) => item.id !== playerId)
+  team.starPlayerIds = team.starPlayerIds.filter((id) => id !== playerId)
+  team.playerNames = team.playerNames.filter((name) => name !== player.name)
+  const worldClub = game.world?.clubs.find((club) => club.id === clubId)
+  if (worldClub) worldClub.starPlayerIds = worldClub.starPlayerIds.filter((id) => id !== playerId)
+  const repaired = repairLineup(team.players, team.lineup)
+  if (validateLineup(team.players, repaired.lineup).valid) team.lineup = repaired.lineup
+  return result
+}
+
+/** 直接按底价成交（跳过谈判）：AI 和内部流程用。 */
 export function buyFreeAgent(game: GameState, playerId: string): MarketOutcome {
   if (game.activeMatch) return fail('比赛进行中不能交易')
   const market = game.market
@@ -111,14 +225,11 @@ export function buyFreeAgent(game: GameState, playerId: string): MarketOutcome {
   const price = bestMarketValue(game, player)
   if (!positive(price)) return fail('无效的价格')
   if (!transferWindowOpen(game)) return fail('转会窗口已关闭')
-  if (game.world && game.roster.length >= SQUAD_LIMIT) return fail('阵容已满（最多 25 人）')
   const economy = economyOf(game)
   if (!economy || !validBalance(economy.balance)) return fail('余额数据无效')
   if (economy.balance < price) return fail('余额不足')
-  economy.balance -= price
+  completeSigning(game, player, price)
   game.freeStars = game.freeStars.filter(p => p.id !== playerId)
-  game.roster.push(player)
-  assignContract(game, player)
   return { ok: true }
 }
 
@@ -203,17 +314,17 @@ export function settleMarket(game: GameState, round: number): number {
 }
 
 
+/** 直接按底价成交（跳过谈判）：AI 和内部流程用。 */
 export function buyFromClub(game: GameState, clubId: string, playerId: string): MarketOutcome {
   if (game.activeMatch) return fail('比赛进行中不能交易')
   if (!transferWindowOpen(game)) return fail('转会窗口已关闭')
-  if (game.world && game.roster.length >= SQUAD_LIMIT) return fail('阵容已满（最多 25 人）')
   const team = game.aiTeams.find((item) => item.id === clubId)
   const player = team?.players.find((item) => item.id === playerId)
   if (!team || !player) return fail('球员不在该球队')
-  const price = Math.round(bestMarketValue(game, player) * 1.5)
+  const price = clubAsking(game, player)
   const economy = economyOf(game)
   if (!validBalance(economy.balance) || economy.balance < price) return fail('余额不足')
-  economy.balance -= price
+  completeSigning(game, player, price)
   team.players = team.players.filter((item) => item.id !== playerId)
   team.starPlayerIds = team.starPlayerIds.filter((id) => id !== playerId)
   team.playerNames = team.playerNames.filter((name) => name !== player.name)
@@ -222,9 +333,44 @@ export function buyFromClub(game: GameState, clubId: string, playerId: string): 
   if (worldClub) worldClub.starPlayerIds = worldClub.starPlayerIds.filter((id) => id !== playerId)
   const repaired = repairLineup(team.players, team.lineup)
   if (validateLineup(team.players, repaired.lineup).valid) team.lineup = repaired.lineup
-  game.roster.push(player)
-  assignContract(game, player)
   return { ok: true }
+}
+
+/**
+ * 各队的随机球员也会进入市场：每轮从 AI 阵容里挑 1-3 名边缘球员挂牌，
+ * 自由市场里的普通球员保持在 24 人以内，免得把真球星挤没。
+ */
+export function refreshClubMarket(game: GameState, round: number): number {
+  if (!game.world || !game.aiTeams?.length) return 0
+  const listed = game.freeStars.filter((player) => !player.starKey).length
+  if (listed >= 24) return 0
+  const rng = derivedRng(splitSeed(game.seed, 'club-market'), round)
+  const candidates: { team: AITeam; player: Player; ca: number }[] = []
+  for (const team of game.aiTeams) {
+    if (team.players.length <= 16) continue
+    for (const player of team.players) {
+      if (player.starKey) continue
+      candidates.push({ team, player, ca: caOf(player.attrs, player.positions.GK > 0) })
+    }
+  }
+  if (!candidates.length) return 0
+  // 边缘球员先上：CA 低的更容易被摆上货架。
+  candidates.sort((a, b) => a.ca - b.ca || a.player.id.localeCompare(b.player.id))
+  const pool = candidates.slice(0, Math.max(6, Math.ceil(candidates.length * 0.35)))
+  const want = Math.min(1 + rng.int(3), 24 - listed)
+  let moved = 0
+  for (let guard = 0; guard < 12 && moved < want; guard++) {
+    const pick = pool.splice(rng.int(pool.length), 1)[0]
+    if (!pick) break
+    if (game.freeStars.some((item) => item.id === pick.player.id)) continue
+    pick.team.players = pick.team.players.filter((item) => item.id !== pick.player.id)
+    pick.player.contract = undefined
+    game.freeStars.push(pick.player)
+    const repaired = repairLineup(pick.team.players, pick.team.lineup)
+    if (validateLineup(pick.team.players, repaired.lineup).valid) pick.team.lineup = repaired.lineup
+    moved += 1
+  }
+  return moved
 }
 
 export function renewContract(game: GameState, playerId: string, years = 2): MarketOutcome {

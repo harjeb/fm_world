@@ -117,8 +117,9 @@ describe('电脑球队的经营节奏', () => {
     const poor = state(aiTierProfile('division2').reserve + 200, 'division2')
     const poorBefore = poor.economy.balance
     const result = advanceAIClub(poor, { id: base.aiTeams[0].id, tier: 'division2' }, base.aiTeams[0], 1, 3)
-    expect(result.upgrades).toBe(0)
-    expect(poor.economy.balance).toBeGreaterThan(poorBefore)
+    expect(result.upgrades).toBeLessThanOrEqual(1)
+    // 无论如何都不能把留底的钱花掉。
+    expect(poor.economy.balance).toBeGreaterThanOrEqual(aiTierProfile('division2').reserve)
   })
 
   it('给服务器用时不改当季名单，只把成长记进卡片', () => {
@@ -138,7 +139,7 @@ describe('电脑球队抢人', () => {
   it('同位置有明显更好的选择就出手，出价不超过可用资金的四成', () => {
     const base = game()
     const team = base.aiTeams[0]
-    const ai = state(420_000, 'champions')
+    const ai = state(80_000_000, 'champions')
     const star = scale(team.players.find((player) => primaryPosition(player) !== 'GK')!, 1.6)
     const value = playerValue(star)
     const tier = aiTierProfile('champions')
@@ -163,7 +164,7 @@ describe('电脑球队抢人', () => {
   it('对手出到自己出不起的价就放手，不恶意抬价', () => {
     const base = game()
     const team = base.aiTeams[0]
-    const ai = state(420_000, 'champions')
+    const ai = state(80_000_000, 'champions')
     const star = scale(team.players[5], 1.6)
     const value = playerValue(star)
     const spendable = ai.economy.balance - aiTierProfile('champions').reserve
@@ -235,7 +236,7 @@ describe('竞拍里的电脑球队', () => {
     expect(bid.ok).toBe(true)
     expect(market.auctions[0].bids[0].accountId).toBe(`${AI_BID_PREFIX}d1n_01`)
 
-    const ai = state(500_000, 'division1')
+    const ai = state(8_000_000, 'division1')
     let signed: { clubId: string; player: Player; amount: number } | null = null
     const results = settleAuctions(market, () => undefined, 1000 + 10 * 60 * 1000, {
       balance: (clubId) => (clubId === 'd1n_01' ? ai.economy.balance : 0),
@@ -248,7 +249,7 @@ describe('竞拍里的电脑球队', () => {
     expect(results).toHaveLength(1)
     expect(results[0].winnerId).toBe(`${AI_BID_PREFIX}d1n_01`)
     expect(signed).toMatchObject({ clubId: 'd1n_01', amount: value })
-    expect(ai.economy.balance).toBe(500_000 - value)
+    expect(ai.economy.balance).toBe(8_000_000 - value)
     expect(market.pool.some((item) => item.id === player.id)).toBe(false)
   })
 

@@ -3,6 +3,23 @@ import { loadGame, saveGame } from '../game/state.ts'
 import { createWorldGame, type ClubPreview } from '../game/world.ts'
 import { restoreActiveEngine } from '../game/actions.ts'
 import type { MatchEngine } from '../game/match/engine.ts'
+import type { SeasonGoal, SquadRole } from '../game/negotiation.ts'
+
+/** 谈判弹窗的状态：报价和承诺放在这里，成功率每次重绘时重算。 */
+export type NegotiationDraft = {
+  kind: 'free' | 'club' | 'bid'
+  playerId: string
+  clubId?: string
+  asking: number
+  value: number
+  offer: number
+  goal: SeasonGoal
+  role: SquadRole
+  /** 上一次失败的原因，显示在弹窗里。 */
+  message?: string
+  /** 上一次掷骰的成功率，失败后用来说明“当时是 62%”。 */
+  lastChance?: number
+}
 import type { TrainingActionId } from '../game/training.ts'
 import type { TrainingActivityId } from '../game/training-calendar.ts'
 
@@ -53,6 +70,8 @@ export type UIState = {
   /** 球员详情里“本赛季 / 生涯”数据选项卡。 */
   playerStatsTab: 'season' | 'career'
   reviewId: string | null
+  /** 正在进行的球员谈判（自由球员 / AI 球队买人 / 联机竞拍）。 */
+  negotiation: NegotiationDraft | null
   notice: string
   matchPlaying: boolean
   matchSpeed: number
@@ -124,6 +143,7 @@ export const ui: UIState = {
   clubViewPlayerId: null,
   playerStatsTab: 'season',
   reviewId: null,
+  negotiation: null,
   notice: '',
   matchPlaying: false,
   matchSpeed: 2700,

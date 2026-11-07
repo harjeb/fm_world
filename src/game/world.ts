@@ -797,8 +797,9 @@ export function d2ClubChoices(): { id: string; name: string; enName?: string; co
 }
 
 export function wageForPlayer(player: Player): number {
+  // 身价涨到十万–千万级之后，工资也跟着走：CA 205 约 950/轮，270 约 9000/轮，292 约 2 万/轮。
   const ca = caOf(player.attrs, player.positions.GK > 0)
-  return Math.max(100, Math.round(ca * 4))
+  return Math.max(500, Math.round(800 * Math.pow(1.035, ca - 200) / 50) * 50)
 }
 
 export function syncPlayerDivision(game: GameState): void {

@@ -741,6 +741,10 @@ export type EconomyState = {
   fans: number
   /** 最近一次结算的实际收入，供俱乐部界面显示。 */
   lastRoundIncome?: number
+  /** 已经发过排名奖金的赛季序号；防止重复发放。 */
+  prizeSeason?: number
+  /** 最近一次拿到的排名奖金。 */
+  lastPrize?: number
   lastFanChange?: number
   /** 设施用的是“阶段”数值（1–25）；2 表示已从旧的 1–5 等级迁移过；3 加了心理/战术两座设施。 */
   stageVersion?: number

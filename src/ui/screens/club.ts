@@ -92,7 +92,7 @@ function contractsTab(): string {
 export function renderClub(): string {
   const economy = economyOf(game)
   const wages = game.roster.reduce((sum, player) => sum + (player.contract?.wage ?? 0), 0)
-  const income = projectedRoundIncome(economy)
+  const income = projectedRoundIncome(economy, game.season.tier)
   const wagesDue = game.world && game.world.seasonIndex <= 1 ? 0 : wages
   const net = income - wagesDue
   const body = ui.clubTab === 'contracts' ? contractsTab() : facilitiesTab()

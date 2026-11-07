@@ -3,6 +3,7 @@ import { transferWindowOpen } from '../../game/market.ts'
 import { FORMATIONS } from '../../game/data/formations.ts'
 import { PLAYER_TEAM_ID, matchdayCountdown, playerFixture, seasonRoundLabel, teamName } from '../../game/season.ts'
 import { validateLineup } from '../../game/squad.ts'
+import { SQUAD_LIMIT } from '../../game/market.ts'
 import { trainingActionsTotal } from '../../game/training.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
 import { isOnlineMode } from '../../online.ts'
@@ -132,6 +133,9 @@ function inboxItems(): InboxItem[] {
   const items: InboxItem[] = []
   const check = validateLineup(game.roster, game.lineup)
   if (!check.valid) items.push({ tone: 'bad', icon: 'alert', title: '阵容不合法', detail: check.errors[0] ?? '', attrs: 'data-nav="lineup"' })
+  if (game.roster.length > SQUAD_LIMIT) {
+    items.push({ tone: 'bad', icon: 'alert', title: `阵容超编 ${game.roster.length} / ${SQUAD_LIMIT}`, detail: `裁掉 ${game.roster.length - SQUAD_LIMIT} 人才能进入比赛。`, attrs: 'data-nav="transfer"' })
+  }
   const inLineup = new Set([...game.lineup.starters.map((starter) => starter.playerId), ...game.lineup.bench])
   for (const id of Object.keys(game.suspensions ?? {})) {
     const player = game.roster.find((item) => item.id === id)

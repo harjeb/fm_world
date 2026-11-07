@@ -1,4 +1,4 @@
-import type { AttrKey, GameState, Lineup, MatchMentality, Position, RoleId, SkillId, Tactics } from '../game/types.ts'
+import type { AttrKey, GameState, Lineup, MatchMentality, Player, Position, RoleId, SkillId, Tactics } from '../game/types.ts'
 import { clearSave, saveGame, upgradeLegacySignatures } from '../game/state.ts'
 import { createWorldGame, previewD2Clubs } from '../game/world.ts'
 import { friendlyStepMs } from './match-timing.ts'
@@ -41,7 +41,9 @@ import { displayClock } from '../game/match/time.ts'
 import { emptyAutoSubs } from '../game/match/management.ts'
 import { upgradeFacility, type FacilityId } from '../game/economy.ts'
 import { leadingBid, type Auction, type AuctionResult } from '../game/auction.ts'
-import { buyFreeAgent, buyFromClub, cancelListing, listPlayer, releasePlayer, renewContract } from '../game/market.ts'
+import { bestMarketValue, cancelListing, clubAsking, freeAgentAsking, listPlayer, playerMarketValue, refreshClubMarket, releasePlayer, renewContract, signClubPlayer, signFreeAgent } from '../game/market.ts'
+import { minimumBid } from '../game/auction.ts'
+import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
 import { bidOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, marketState, nextWorldSeasonOnline, onlineState, publicConfig, refreshPublicWorld, registerOnline, revokeAgentTokenOnline, serverNow, setRemoteGameHandler, subscribeMarket, subscribeOnline } from '../online.ts'
 import { cardName } from './components.ts'
 import { clockText, countdownText, esc, pct } from './format.ts'
@@ -58,7 +60,7 @@ import { renderHome } from './screens/home.ts'
 import { renderInventory } from './screens/inventory.ts'
 import { parseLineupTarget, renderLineup, selectedSlotTarget } from './screens/lineup.ts'
 import { renderMatch } from './screens/match.ts'
-import { renderAccountOverlay, renderDetailOverlay, renderNewGameOverlay } from './screens/overlays.ts'
+import { renderAccountOverlay, renderDetailOverlay, renderNegotiationOverlay, renderNewGameOverlay } from './screens/overlays.ts'
 import { renderClubOverlay } from './club-view.ts'
 import { renderReview } from './screens/review.ts'
 import { renderSeason } from './screens/season.ts'
@@ -210,6 +212,7 @@ function render(): void {
     </div>
     ${renderBootGate()}
     ${renderDetailOverlay()}
+    ${renderNegotiationOverlay()}
     ${renderClubOverlay()}
     ${renderAccountOverlay()}
     ${renderNewGameOverlay()}
@@ -291,6 +294,8 @@ function openFinishedLeague(previous: NonNullable<GameState['activeMatch']>): vo
   ui.screen = 'review'
   ui.matchEngine = null
   ui.coachPanel = false
+  // 单机：联赛比赛按现实时间走完，同样把这一轮的市场补充做掉。
+  if (record.isLeague && !isOnlineMode()) refreshClubMarket(game, record.round ?? game.season.round)
   ui.notice = '联赛比赛已结束。'
 }
 
@@ -466,6 +471,8 @@ function completeMatch(): void {
   const record = finishMatch(game, engine)
   ui.coachPanel = false
   if (record) {
+    // 单机：一轮结束后，各队的边缘球员会进入自由市场（联机市场由服务器维护）。
+    if (record.isLeague && !isOnlineMode()) refreshClubMarket(game, record.round ?? game.season.round)
     resetReplay(record.id)
     replay.index = (record.commentary ?? record.keyEvents).length
     ui.reviewId = record.id
@@ -560,6 +567,42 @@ function applyLineup(): void {
   ui.autoSubsDraft = structuredClone(game.autoSubs ?? emptyAutoSubs())
   ui.notice = '阵容与自动换人规则已保存。'
   render()
+}
+
+/** 打开谈判弹窗：底价、估值和默认报价都在这里算好。 */
+function openNegotiation(kind: 'free' | 'club' | 'bid', playerId: string, clubId?: string): void {
+  const player = kind === 'bid'
+    ? marketState.pool.find((item) => item.id === playerId)
+    : kind === 'free'
+      ? game.freeStars.find((item) => item.id === playerId)
+      : game.aiTeams.find((team) => team.id === clubId)?.players.find((item) => item.id === playerId)
+  if (!player) {
+    showNotice('找不到这名球员。')
+    return
+  }
+  const value = Math.max(1, Math.round(playerMarketValue(player)))
+  const auction = kind === 'bid' ? marketState.auctions.find((item) => item.playerId === playerId) : undefined
+  const asking = kind === 'free'
+    ? freeAgentAsking(game, player)
+    : kind === 'club'
+      ? clubAsking(game, player)
+      : Math.max(askingFloor(player, auction), value)
+  ui.negotiation = {
+    kind,
+    playerId,
+    clubId,
+    asking,
+    value,
+    offer: asking,
+    goal: 'promotion',
+    role: 'first-team',
+  }
+  render()
+}
+
+function askingFloor(player: Player, auction: ReturnType<typeof marketState.auctions.find>): number {
+  if (!auction) return bestMarketValue(game, player)
+  return minimumBid(player, auction)
 }
 
 function autoFillLineupDraft(): Lineup {
@@ -736,13 +779,54 @@ document.addEventListener('click', async (event) => {
     }
     case 'auction-bid': {
       if (!playerId) break
-      const input = actionEl.parentElement?.querySelector<HTMLInputElement>('[data-bid-amount]')
-      const amount = input ? input.valueAsNumber : Number(actionEl.dataset.amount)
-      try {
-        await bidOnline(playerId, amount)
-        showNotice('出价成功。')
-      } catch (error) {
-        showNotice(error instanceof Error ? error.message : '出价失败')
+      openNegotiation('bid', playerId)
+      break
+    }
+    case 'nego-goal':
+      if (!ui.negotiation) break
+      ui.negotiation.goal = (actionEl.dataset.goal as SeasonGoal) ?? ui.negotiation.goal
+      ui.negotiation.message = undefined
+      render()
+      break
+    case 'nego-role':
+      if (!ui.negotiation) break
+      ui.negotiation.role = (actionEl.dataset.role as SquadRole) ?? ui.negotiation.role
+      ui.negotiation.message = undefined
+      render()
+      break
+    case 'nego-cancel':
+      ui.negotiation = null
+      render()
+      break
+    case 'nego-confirm': {
+      const draft = ui.negotiation
+      if (!draft) break
+      const player = [...game.roster, ...game.freeStars, ...game.aiTeams.flatMap((team) => team.players), ...marketState.pool].find((item) => item.id === draft.playerId)
+      if (!player) { ui.negotiation = null; render(); break }
+      if (draft.kind === 'bid') {
+        try {
+          await bidOnline(draft.playerId, draft.offer)
+          ui.negotiation = null
+          showNotice(`出价 ${draft.offer.toLocaleString()} 成功。`)
+        } catch (error) {
+          draft.message = error instanceof Error ? error.message : '出价失败'
+          render()
+        }
+        break
+      }
+      const result = draft.kind === 'free'
+        ? signFreeAgent(game, draft.playerId, draft.offer, { goal: draft.goal, role: draft.role })
+        : signClubPlayer(game, draft.clubId ?? '', draft.playerId, draft.offer, { goal: draft.goal, role: draft.role })
+      if (result.ok) {
+        ui.negotiation = null
+        ui.lineupDraft = null
+        ui.autoSubsDraft = null
+        persist()
+        showNotice(`谈成了：${player.name} 加盟，花费 ${draft.offer.toLocaleString()}。`)
+      } else {
+        draft.message = result.error ?? '谈判失败'
+        draft.lastChance = result.chance
+        render()
       }
       break
     }
@@ -752,16 +836,22 @@ document.addEventListener('click', async (event) => {
       break
     case 'club-list':
     case 'club-cancel':
-    case 'club-buy':
-    case 'club-buy-ai': {
+    case 'club-list':
+    case 'club-cancel': {
       if (!playerId) break
       const input = actionEl.parentElement?.querySelector<HTMLInputElement>('[data-club-price]')
       const price = input?.valueAsNumber ?? NaN
-      const result = action === 'club-list' ? listPlayer(game, playerId, price) : action === 'club-cancel' ? cancelListing(game, playerId) : action === 'club-buy-ai' ? buyFromClub(game, actionEl.dataset.team ?? '', playerId) : buyFreeAgent(game, playerId)
+      const result = action === 'club-list' ? listPlayer(game, playerId, price) : cancelListing(game, playerId)
       if (result.ok) persist()
-      showNotice(result.ok ? (action === 'club-list' ? '已挂牌，等待下一轮结算。' : action === 'club-cancel' ? '已取消挂牌。' : action === 'club-buy-ai' ? '已从 AI 球队买入。' : '已签入球员。') : `交易失败：${result.error ?? '未知错误'}`)
+      showNotice(result.ok ? (action === 'club-list' ? '已挂牌，等待下一轮结算。' : '已取消挂牌。') : `交易失败：${result.error ?? '未知错误'}`)
       break
     }
+    case 'club-buy':
+      if (playerId) openNegotiation('free', playerId)
+      break
+    case 'club-buy-ai':
+      if (playerId) openNegotiation('club', playerId, actionEl.dataset.team ?? '')
+      break
     case 'contract-renew': {
       if (!playerId) break
       const result = renewContract(game, playerId, 2)
@@ -1299,6 +1389,14 @@ document.addEventListener('change', (event) => {
     equipFromUI(target.dataset.cardPlayer, target.value || null)
     return
   }
+  if (target.dataset.negoOffer !== undefined && ui.negotiation) {
+    const raw = (target as HTMLInputElement).valueAsNumber
+    const offer = Math.max(ui.negotiation.asking, Number.isFinite(raw) ? Math.round(raw) : ui.negotiation.asking)
+    ui.negotiation.offer = offer
+    ui.negotiation.message = undefined
+    render()
+    return
+  }
   if (target.dataset.movePlayer) {
     const destination = parseLineupTarget(target.value)
     if (destination) moveInDraft(target.dataset.movePlayer, destination)
@@ -1476,6 +1574,7 @@ function autoAdvanceSeason(): void {
   if (isOnlineMode() || game.activeMatch || game.season.finished) return
   const result = catchUpSeason(game)
   if (result.advanced <= 0) return
+  refreshClubMarket(game, Math.max(1, game.season.round - 1))
   ui.notice = `已自动结算 ${result.advanced} 轮比赛。`
   persist()
   render()

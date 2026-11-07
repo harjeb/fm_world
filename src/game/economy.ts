@@ -1,4 +1,4 @@
-import type { EconomyState, FacilityId, GameState } from './types.ts'
+import type { EconomyState, FacilityId, GameState, TierId } from './types.ts'
 export type { EconomyState, FacilityId } from './types.ts'
 
 /** 每个等级拆成 5 个阶段，所以五个等级一共 25 个阶段。 */
@@ -10,9 +10,35 @@ export const FACILITY_STAGE_VERSION = 3
 
 export const STARTING_FANS = 1200
 export const MAX_FANS = 150000
+export const STARTING_BALANCE = 2_000_000
 export const BASE_ROUND_INCOME = 1500
 export const LEAGUE_WIN_BONUS = 1000
 export const GOAL_INCOME_BONUS = 500
+
+/**
+ * 转播/联赛分成：级别越高每轮越多。球员身价现在是十万到千万级，
+ * 光靠门票和设施收入买不起人，所以按级别给一笔固定分成。
+ */
+export const TIER_ROUND_INCOME: Record<TierId, number> = {
+  champions: 600_000,
+  division1: 150_000,
+  division2: 30_000,
+}
+
+/** 赛季排名奖金：第一名的金额，按名次逐位衰减。 */
+export const SEASON_PRIZE_TOP: Record<TierId, number> = {
+  champions: 20_000_000,
+  division1: 6_000_000,
+  division2: 600_000,
+}
+export const SEASON_PRIZE_DECAY = 0.87
+
+/** 第 rank 名的赛季奖金（每赛季只发一次）。 */
+export function seasonPrize(tier: TierId | undefined, rank: number): number {
+  if (!Number.isSafeInteger(rank) || rank < 1) return 0
+  const top = SEASON_PRIZE_TOP[tier ?? 'division2'] ?? SEASON_PRIZE_TOP.division2
+  return Math.round(top * Math.pow(SEASON_PRIZE_DECAY, Math.min(19, rank - 1)))
+}
 
 export const FACILITIES: Record<FacilityId, { label: string; baseCost: number; incomePerLevel: number }> = {
   stadium: { label: '球场', baseCost: 18000, incomePerLevel: 5000 },
@@ -102,7 +128,7 @@ export function economyOf(game: GameState): EconomyState {
       completed++
     }
     game.economy = {
-      balance: 100000,
+      balance: STARTING_BALANCE,
       fans: STARTING_FANS,
       stageVersion: FACILITY_STAGE_VERSION,
       stadium: STARTING_FACILITY_STAGE,
@@ -141,8 +167,9 @@ export function facilityRoundIncome(economy: EconomyState, id: FacilityId): numb
 }
 
 /** 尚未踢本轮比赛时的预计收入；进球及赢球奖金结算时另加。 */
-export function projectedRoundIncome(economy: EconomyState): number {
-  return Math.round(BASE_ROUND_INCOME + economy.fans * 2) + ids.reduce((sum, id) => sum + facilityRoundIncome(economy, id), 0)
+export function projectedRoundIncome(economy: EconomyState, tier: TierId | undefined = 'division2'): number {
+  return Math.round(BASE_ROUND_INCOME + economy.fans * 2 + (TIER_ROUND_INCOME[tier ?? 'division2'] ?? 0))
+    + ids.reduce((sum, id) => sum + facilityRoundIncome(economy, id), 0)
 }
 
 /** 真实联赛赛果决定球迷变化，进球多/赢得多涨得更快；不让异常大比分刷爆经济。 */
@@ -166,6 +193,20 @@ export function upgradeFacility(game: GameState, id: FacilityId): { ok: boolean;
   return { ok: true }
 }
 
+/** 赛季排名奖金：常规赛结束、名次确定后发放一次。 */
+export function awardSeasonPrize(game: GameState): number {
+  const season = game.season
+  if (!season?.finished || !Number.isSafeInteger(season.playerFinish ?? 0) || !(season.playerFinish! > 0)) return 0
+  const economy = economyOf(game)
+  if (economy.prizeSeason === season.index) return 0
+  const amount = seasonPrize(season.tier ?? 'division2', season.playerFinish!)
+  if (!Number.isSafeInteger(economy.balance + amount)) return 0
+  economy.balance += amount
+  economy.prizeSeason = season.index
+  economy.lastPrize = amount
+  return amount
+}
+
 /** Call once for each completed round, in increasing order. Skipped rounds are not paid retroactively. */
 export function awardRoundIncome(game: GameState, round: number): number {
   const economy = economyOf(game)
@@ -178,7 +219,7 @@ export function awardRoundIncome(game: GameState, round: number): number {
   const oldFans = economy.fans
   const nextFans = fixture ? fansAfterResult(oldFans, scored, conceded) : oldFans
   const won = !!fixture && scored > conceded
-  const income = projectedRoundIncome({ ...economy, fans: nextFans }) + Math.min(8, scored) * GOAL_INCOME_BONUS +
+  const income = projectedRoundIncome({ ...economy, fans: nextFans }, game.season.tier) + Math.min(8, scored) * GOAL_INCOME_BONUS +
     (won ? LEAGUE_WIN_BONUS + Math.floor(nextFans * 0.35) : 0)
   if (!Number.isSafeInteger(economy.balance + income)) return 0
   economy.balance += income

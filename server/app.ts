@@ -19,6 +19,7 @@ import { advanceLeagueRealtime } from '../src/game/realtime.ts'
 import { validateAutoSubPlan } from '../src/game/match/management.ts'
 import type { GameState, PlayerCard } from '../src/game/types.ts'
 import { absorbFreeAgents, aiClubIdOf, leadingBid, minimumBid, placeAIBid, placeBid, settleAuctions, type AIBidder, type Auction, type AuctionResult, type BidResult, type FreeMarket } from '../src/game/auction.ts'
+import { isOnMarketToday } from '../src/game/market-window.ts'
 import { AI_SQUAD_LIMIT, advanceAIClub, aiBidFor, createAIClub, playerValue, recordAISigning, seedAIClubs } from '../src/game/ai-club.ts'
 import { agentView, applyAgentAction, playerView } from './agent.ts'
 
@@ -459,6 +460,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (typeof playerId !== 'string' || !playerId) return { ok: false, error: '无效的球员 ID' }
     if (account.game.activeMatch && !account.game.activeMatch.context.isLeague) return { ok: false, error: '比赛进行中不能出价' }
     settleDueAuctions()
+    const player = market.pool.find((item) => item.id === playerId)
+    const alreadyBidding = market.auctions.some((item) => item.playerId === playerId)
+    if (player && !alreadyBidding && !isOnMarketToday({ world: account.game.world, createdAt: account.game.createdAt }, player)) {
+      return { ok: false, error: `${player.name} 这个月不在市场，${'等挂牌日再来'}` }
+    }
     const result = placeBid(market, account.game, account.id, playerId, Number(amount), now())
     if (result.ok) {
       persistMarket()
@@ -754,7 +760,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
   /** 给 Agent 看的自由市场：全服的球员池和正在进行的竞拍。 */
   function withSharedMarket<T extends { market: { freeAgents: unknown[] } }>(view: T, account: Account): T {
-    view.market.freeAgents = market.pool.map((player) => {
+    const anchor = { world: account.game.world, createdAt: account.game.createdAt }
+    const onAuctionNow = (id: string) => market.auctions.some((item) => item.playerId === id)
+    view.market.freeAgents = market.pool.filter((player) => onAuctionNow(player.id) || isOnMarketToday(anchor, player)).map((player) => {
       const auction = market.auctions.find((item) => item.playerId === player.id)
       return {
         player: playerView(player, account.game, now()),
@@ -805,7 +813,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     /* 自由市场全服可见，不用登录也能看。 */
     if (url.pathname === '/api/market' && req.method === 'GET') {
       settleDueAuctions()
-      json(res, 200, { ...marketPayload(), pool: market.pool })
+      const anchor = { world: sharedWorld.world, createdAt: sharedWorld.world.calendarStartAt ?? now() }
+      const onAuction = (id: string) => market.auctions.some((item) => item.playerId === id)
+      json(res, 200, { ...marketPayload(), pool: market.pool.filter((player) => onAuction(player.id) || isOnMarketToday(anchor, player)) })
       return
     }
 

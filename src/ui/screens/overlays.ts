@@ -6,6 +6,8 @@ import { attrRating, initialDisplayCA, mainAttrsFor } from '../../game/rating.ts
 import { MAIN_FIELD_ATTRS, MAIN_GK_ATTRS } from '../../game/scale.ts'
 import type { ClubPreview } from '../../game/world.ts'
 import { onlineState, publicConfig } from '../../online.ts'
+import { economyOf } from '../../game/economy.ts'
+import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, TIER_LABELS, negotiationDemands, negotiationTerms, type SeasonGoal, type SquadRole } from '../../game/negotiation.ts'
 import { CA_STOPS, attrHeadCell, attributeRadar, attrHeat, caHeat, cardName, cardRoute, countryLabel, crest, eraLabel, findAnyPlayer, heatLegend, icon, injuryLabel, mainAttrs, meter, positionMap, posBadge, primaryPosition, skillGroups, skillTag, tag, traitLabel } from '../components.ts'
 import { attrLabel, esc, playerCA, trainingLogText } from '../format.ts'
 import { game, ui } from '../state.ts'
@@ -267,4 +269,70 @@ export function renderNewGameOverlay(): string {
       </div>
     </div>
   `
+}
+
+/**
+ * 球员谈判：他会问你赛季目标和队内位置，也可能直说要去的球队或要求的联赛级别。
+ * 报价越高成功率越高，但级别/下家这种硬条件光靠钱很难抹平。
+ */
+export function renderNegotiationOverlay(): string {
+  const draft = ui.negotiation
+  if (!draft) return ''
+  const player = findAnyPlayer(draft.playerId)
+  if (!player) return ''
+  const demands = negotiationDemands(game, player)
+  const tier = game.season.tier ?? 'division2'
+  const terms = negotiationTerms({
+    demands,
+    value: draft.value,
+    asking: draft.asking,
+    offer: draft.offer,
+    answers: { goal: draft.goal, role: draft.role },
+    clubTier: tier,
+    clubId: 'player',
+  })
+  const chance = Math.round(terms.chance * 1000) / 10
+  const clubNameOf = (id: string) => game.world?.clubs.find((club) => club.id === id)?.name ?? game.aiTeams.find((team) => team.id === id)?.name ?? id
+  const source = draft.kind === 'free' ? '自由球员' : draft.kind === 'bid' ? '全服竞拍' : `来自 ${clubNameOf(draft.clubId ?? '')}`
+  const goalButtons = (Object.keys(SEASON_GOAL_LABELS) as SeasonGoal[]).map((goal) =>
+    `<button class="btn small ${draft.goal === goal ? 'primary' : 'ghost'}" data-action="nego-goal" data-goal="${goal}">${SEASON_GOAL_LABELS[goal]}</button>`).join('')
+  const roleButtons = (Object.keys(SQUAD_ROLE_LABELS) as SquadRole[]).map((role) =>
+    `<button class="btn small ${draft.role === role ? 'primary' : 'ghost'}" data-action="nego-role" data-role="${role}">${SQUAD_ROLE_LABELS[role]}</button>`).join('')
+  const demandsLine = [
+    `他想听到的目标：<b>${SEASON_GOAL_LABELS[demands.goal]}</b>`,
+    `他要求的定位：<b>${SQUAD_ROLE_LABELS[demands.role]}</b>`,
+  ].join(' · ')
+  const hardLines = [
+    demands.wantsClubId && demands.wantsClubId !== 'player' ? `<p class="warn-text small">${icon('flag', 13)} 他直说了更想去 <b>${esc(demands.wantsClubName ?? '')}</b>，除非报价高出一大截。</p>` : '',
+    demands.minTier ? `<p class="warn-text small">${icon('star', 13)} 他要求至少踢 <b>${TIER_LABELS[demands.minTier]}</b>（你现在是 ${TIER_LABELS[tier]}）。</p>` : '',
+  ].join('')
+  const reasons = terms.reasons.map((line) => `<li>${esc(line)}</li>`).join('')
+  const canPay = economyOf(game).balance >= draft.offer
+  return `
+    <div class="overlay" data-action="nego-cancel">
+      <div class="modal nego-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="球员谈判">
+        <button class="modal-close" data-action="nego-cancel" aria-label="关闭">${icon('close', 16)}</button>
+        <div class="kicker">球员谈判 · ${esc(source)}</div>
+        <h1>${esc(player.name)} <small>${posBadge(primaryPosition(player))} CA ${playerCA(player).toFixed(0)}</small></h1>
+        <p class="hint">${demandsLine}</p>
+        ${hardLines}
+        <div class="nego-answers">
+          <div class="form-row"><label>你的赛季目标</label><div class="seg wrap">${goalButtons}</div></div>
+          <div class="form-row"><label>你给他的位置</label><div class="seg wrap">${roleButtons}</div></div>
+        </div>
+        <div class="form-row"><label for="nego-offer">报价（底价 ${draft.asking.toLocaleString()}，余额 ${economyOf(game).balance.toLocaleString()}）</label>
+          <input id="nego-offer" type="number" min="${draft.asking}" step="1000" value="${draft.offer}" data-nego-offer></div>
+        <div class="nego-chance ${chance >= 70 ? 'good' : chance >= 35 ? 'warn' : 'bad'}">
+          <span>谈判成功率</span><b>${chance.toFixed(1)}%</b><span class="nego-bar"><i style="width:${Math.min(100, chance)}%"></i></span>
+        </div>
+        <ul class="nego-reasons">${reasons}</ul>
+        ${draft.message ? `<p class="warn-text">${esc(draft.message)}</p>` : ''}
+        ${!canPay ? '<p class="warn-text small">余额不够这个报价。</p>' : ''}
+        <div class="btn-row">
+          <button class="btn primary" data-action="nego-confirm" ${canPay ? '' : 'disabled'}>${draft.kind === 'bid' ? '确认出价' : '确认谈判'}</button>
+          <button class="btn ghost" data-action="nego-cancel">再想想</button>
+        </div>
+        <p class="hint">同一份报价 + 同一组回答，结果固定；换报价或换个承诺才会重新掷骰。</p>
+      </div>
+    </div>`
 }

@@ -196,7 +196,8 @@ describe('服务器共享世界', () => {
     const market = await (await fetch(`${base}/api/market`)).json() as any
     for (const id of retiredIds) {
       expect(market.pool.some((player: any) => player.id === id)).toBe(false)
-      expect(market.pool.filter((player: any) => player.starKey === id && player.id.startsWith('regen-'))).toHaveLength(1)
+      // 重生球星如果今天不在挂牌窗口里就不会出现在可见市场，但绝不能出现两个。
+      expect(market.pool.filter((player: any) => player.starKey === id && player.id.startsWith('regen-')).length).toBeLessThanOrEqual(1)
     }
     expect(new Set(market.pool.map((player: any) => player.id)).size).toBe(market.pool.length)
   }, 20_000)

@@ -15,7 +15,7 @@ describe('economy', () => {
     const game = oldSave()
     const e = economyOf(game)
     expect(e).toEqual({
-      balance: 100000, fans: STARTING_FANS, stageVersion: 3,
+      balance: 2_000_000, fans: STARTING_FANS, stageVersion: 3,
       stadium: startStage, academy: startStage, medical: startStage, shop: startStage, sponsor: startStage,
       psychology: startStage, tactics: startStage,
       lastIncomeRound: 0,
@@ -67,7 +67,7 @@ describe('economy', () => {
   it('upgrades one stage at a time and runs out of money', () => {
     const game = oldSave()
     const e = economyOf(game)
-    expect(e.balance).toBe(100000)
+    e.balance = 100000
     let spent = 0
     let stages = 0
     while (upgradeFacility(game, 'stadium').ok) {
@@ -125,7 +125,7 @@ describe('economy', () => {
     expect(economyOf(game).fans).toBe(nextFans)
     expect(economyOf(game).lastFanChange).toBe(nextFans - STARTING_FANS)
     expect(awardRoundIncome(game, 1)).toBe(0)
-    expect(economyOf(game).balance).toBe(100000 + expected)
+    expect(economyOf(game).balance).toBe(2_000_000 + expected)
   })
 
   it('does not pay skipped wins retroactively and rejects overflow atomically', () => {
@@ -138,11 +138,11 @@ describe('economy', () => {
     expect(e.lastIncomeRound).toBe(0)
     expect(e.balance).toBe(Number.MAX_SAFE_INTEGER - 5000)
     expect(e.fans).toBe(STARTING_FANS)
-    e.balance = 100000
+    e.balance = 2_000_000
     const income = awardRoundIncome(game, 2)
     expect(income).toBeGreaterThan(projectedRoundIncome({ ...e, fans: STARTING_FANS }))
     expect(awardRoundIncome(game, 1)).toBe(0)
-    expect(e.balance).toBe(100000 + income)
+    expect(e.balance).toBe(2_000_000 + income)
   })
 
   it('fans and income accelerate with score, while invalid scores never grow fans', () => {
@@ -155,10 +155,10 @@ describe('economy', () => {
     // 1 级第 1 阶段只有满额的 1/5，球迷 1200 时收入很低。
     expect(facilityRoundIncome(e, 'stadium')).toBe(240)
     const opening = projectedRoundIncome(e)
-    expect(opening).toBe(1500 + STARTING_FANS * 2 + 240 + 144 + 192)
+    expect(opening).toBe(30_000 + 1500 + STARTING_FANS * 2 + 240 + 144 + 192)
     e.fans = 12000
     expect(facilityRoundIncome(e, 'stadium')).toBe(2400)
-    expect(projectedRoundIncome(e)).toBeGreaterThan(opening * 5)
+    expect(projectedRoundIncome(e) - 30_000).toBeGreaterThan((opening - 30_000) * 5)
   })
 
   it('migrates old saves by converting levels into stages', () => {
