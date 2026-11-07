@@ -101,6 +101,14 @@ function slotPlayerOptions(slot: FormationSlot, role: RoleId, draft: Lineup, for
   }).join('')}`
 }
 
+/** 场上球员的两个关键数字：位置熟练度和当前比赛体能。 */
+function slotMeta(player: Player, position: Position): string {
+  const proficiency = Math.round(player.positions[position])
+  const condition = Math.round(player.condition ?? 100)
+  const tone = condition >= 70 ? 'ok' : condition >= 40 ? 'warn-text' : 'down'
+  return `<small class="slot-meta"><span title="位置熟练度：这名球员踢这个位置的熟练程度">熟练 ${proficiency}</span><span class="slot-sep">·</span><span class="${tone}" title="当前比赛体能，比赛开始时映射为初始体力">体能 ${condition}</span></small>`
+}
+
 function slotCard(slot: FormationSlot, draft: Lineup, formation: FormationDef, selectedId: string | null, color: string): string {
   const starter = draft.starters.find((item) => item.slotId === slot.id)
   const player = playerOf(starter?.playerId)
@@ -112,10 +120,13 @@ function slotCard(slot: FormationSlot, draft: Lineup, formation: FormationDef, s
   const warn = player && (player.positions[slot.position] < 65 || injuryUntil(game, player) || game.suspensions?.[player.id])
   const selected = selectedId === slot.id
   const hint = `${slot.label}：拖动圆点把球员摆到任意位置（松手保存）；选中后用方向键微调；点击圆点在右侧球员表里选人`
-  return `<div class="slot ${selected ? 'selected' : ''} ${player ? '' : 'vacant'} ${warn ? 'warn' : ''} ${custom ? 'custom-pos' : ''}" style="left:${left.toFixed(1)}%;top:${top.toFixed(1)}%" data-drop="${slotTarget(slot.id)}" data-key="${slot.id}">
+  // 靠近底线的位置（门将）把文字翻到圆点上方，别被球场的 overflow 裁掉。
+  const flip = top > 74
+  return `<div class="slot ${flip ? 'flip' : ''} ${selected ? 'selected' : ''} ${player ? '' : 'vacant'} ${warn ? 'warn' : ''} ${custom ? 'custom-pos' : ''}" style="left:${left.toFixed(1)}%;top:${top.toFixed(1)}%" data-drop="${slotTarget(slot.id)}" data-key="${slot.id}">
     <div class="slot-dot" role="button" tabindex="0" aria-pressed="${selected}" data-pos-slot="${slot.id}" data-action="lineup-slot" data-slot="${slot.id}" ${player ? `style="background:${esc(color)};color:${inkOn(color)}"` : ''} aria-label="${esc(hint)}" title="${esc(hint)}">${player ? effectiveFit(player, role, slot.position).toFixed(0) : icon('plus', 13)}</div>
     ${player ? pick(esc(ROLES[role]?.label ?? ''), `<select data-lineup-role="${slot.id}" aria-label="${esc(slot.label)}职责">${roleOptions(slot.position, role)}</select>`, 'slot-role') : ''}
     ${pick(esc(player ? shortName(player.name) : slot.label), `<select data-slot-player="${slot.id}" aria-label="${esc(slot.label)}球员">${slotPlayerOptions(slot, role, draft, formation, player?.id)}</select>`, 'slot-player')}
+    ${player ? slotMeta(player, slot.position) : ''}
   </div>`
 }
 
