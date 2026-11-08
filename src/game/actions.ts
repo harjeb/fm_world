@@ -42,35 +42,26 @@ export function startTraining(game: GameState, playerId: string, seed?: number):
   return { ok: true }
 }
 
-/** 开局选定训练小队：主练球员 + 6 名队友（必须有一名门将），所有人同日程推进。 */
+/** 开局选定 6 名陪练队友：只给主角加成长、不消耗精力；交流赛/队内赛用他们陪练。 */
 export function startTrainingSquad(
   game: GameState,
   playerId: string,
   partnerIds: string[],
   seed?: number,
 ): { ok: boolean; error?: string } {
-  const ids = [playerId, ...partnerIds.filter((id) => id !== playerId)]
-  if (partnerIds.some((id) => id === playerId)) return { ok: false, error: '队友不能包含自己' }
-  if (new Set(partnerIds).size !== partnerIds.length) return { ok: false, error: '队友不能重复' }
-  if (ids.length > 7) return { ok: false, error: '训练小队最多 7 人（你 + 6 名队友）' }
-  const players = ids.map((id) => game.roster.find((player) => player.id === id))
-  if (players.some((player) => !player)) return { ok: false, error: '队友不在阵容里' }
-  if (!players.some((player) => player!.positions.GK > 0)) return { ok: false, error: '训练小队需要至少 1 名门将' }
-  for (const player of players) {
-    const running = game.training[player!.id]
-    if (running && !running.completed) return { ok: false, error: `${player!.name} 已有一轮培养` }
-    if ((player!.energy ?? 100) < TRAINING_ENERGY_COST) return { ok: false, error: `${player!.name} 精力不足` }
-    if (game.activeMatch) return { ok: false, error: '比赛进行中不能开始培养' }
+  const unique = [...new Set(partnerIds.filter((id) => id !== playerId))]
+  if (unique.length !== partnerIds.filter((id) => id !== playerId).length) return { ok: false, error: '队友不能重复' }
+  if (unique.length > 6) return { ok: false, error: '陪练队友最多 6 人' }
+  const player = game.roster.find((item) => item.id === playerId)
+  if (!player) return { ok: false, error: '球员不存在' }
+  const partners = unique.map((id) => game.roster.find((item) => item.id === id))
+  if (partners.some((item) => !item)) return { ok: false, error: '队友不在阵容里' }
+  if (unique.length && !(player.positions.GK > 0 || partners.some((item) => item!.positions.GK > 0))) {
+    return { ok: false, error: '陪练阵容需要至少 1 名门将' }
   }
-  const sharedSeed = seed ?? newTrainingSeed(game, playerId)
-  for (const player of players) {
-    const result = startTraining(game, player!.id, sharedSeed)
-    if (!result.ok) return result
-  }
-  for (const player of players) {
-    const session = game.training[player!.id]
-    session.partnerIds = ids.filter((id) => id !== player!.id)
-  }
+  const result = startTraining(game, playerId, seed)
+  if (!result.ok) return result
+  game.training[playerId].partnerIds = unique
   saveGame(game)
   return { ok: true }
 }
@@ -102,9 +93,10 @@ function prepareTraining(game: GameState, playerId: string, request: TrainingReq
     if (participant.action >= trainingActionsTotal(participant)) return { error: '本轮培养的时段已用完', completed: id === playerId }
     if (participant.action !== session.action || participant.scheduleVersion !== session.scheduleVersion || (session.scheduleVersion === 1 && participant.scheduleSeed !== session.scheduleSeed)) return { error: '队友培养日程或行动进度不一致' }
     // Plan and execute on clones: neither preview nor a failed group action may mutate live state.
-    const plan = planTraining(structuredClone(participant), request, mentor, ids.length - 1)
+    const support = participant.partnerIds?.length ?? 0
+    const plan = planTraining(structuredClone(participant), request, mentor, Math.max(ids.length - 1, support))
     if (plan.invalid) return { error: plan.note ?? '无法执行此培养行动' }
-    const trial = performTrainingAction(structuredClone(participant), request, mentor, ids.length - 1)
+    const trial = performTrainingAction(structuredClone(participant), request, mentor, Math.max(ids.length - 1, support))
     if (!trial.ok) return { error: trial.error, completed: id === playerId ? trial.completed : false }
     if (id === playerId) primaryPlan = plan
   }
@@ -145,22 +137,11 @@ export function previewTraining(game: GameState, playerId: string, request: Trai
   return error ? { error } : { plan }
 }
 
-function squadGroupAllowed(session: TrainingSession, request: TrainingRequest): boolean {
-  if (request.kind === 'drill' || request.kind === 'combo' || request.kind === 'match') return true
-  if (request.kind !== 'activity') return false
-  return !!trainingOptions(session).find((item) => item.id === request.activityId)?.group
-}
-
 export function trainingAction(game: GameState, playerId: string, request: TrainingRequest): PerformResult {
   const current = game.training[playerId]
-  const squad = current?.partnerIds ?? []
-  // 记下执行前的行动序号：个人项目结算后主练者已经 +1，队友还停在这个序号上。
-  const actionBefore = current?.action ?? 0
-  // 小队有进度时：组队项目自动带上全部队友；个人项目让队友同步休息，保证下一次还能组队。
-  const groupWithSquad = squad.length > 0 && squadGroupAllowed(current!, request)
-  const effective: TrainingRequest = groupWithSquad
-    ? ({ ...request, teammateIds: squad } as TrainingRequest)
-    : request
+  // 陪练队友只按人数给主角加成长，不参与行动、不消耗精力、不涨属性。
+  const support = current?.partnerIds?.length ?? 0
+  const effective: TrainingRequest = support > 0 ? ({ ...request, teammateIds: undefined } as TrainingRequest) : request
   const prepared = prepareTraining(game, playerId, effective)
   if (prepared.error || !prepared.ids) return { ok: false, error: prepared.error, completed: prepared.completed ?? false }
   const mentor = trainingMentor(game, effective)
@@ -173,11 +154,10 @@ export function trainingAction(game: GameState, playerId: string, request: Train
     }
   }
   const staged = prepared.ids.map((id) => structuredClone(game.training[id]))
-  const squadMode = squad.length > 0
   let primaryResult: PerformResult | undefined
   for (let i = 0; i < staged.length; i++) {
-    // 小队里主练者正常触发事件，队友静默；手动组队（无小队）保持原行为。
-    const result = performTrainingAction(staged[i], effective, mentor, staged.length - 1, { silent: squadMode && i > 0 })
+    // 陪练小队固定按人数加成长；手动组队（Agent/旧流程）仍按实际参与的队友数。
+    const result = performTrainingAction(staged[i], effective, mentor, Math.max(staged.length - 1, support))
     if (!result.ok) return result
     if (exchange) {
       const session = staged[i]
@@ -192,21 +172,6 @@ export function trainingAction(game: GameState, playerId: string, request: Train
   for (let i = 0; i < staged.length; i++) {
     Object.assign(game.training[prepared.ids[i]], staged[i])
     syncCandidate(game, prepared.ids[i])
-  }
-  // 小队做个人项目（位置/传承/导师/休息等）时，其他 6 人同步休息，保持行动进度一致。
-  if (squadMode && !groupWithSquad && primaryResult?.ok) {
-    for (const partnerId of squad) {
-      const partner = game.training[partnerId]
-      if (!partner || partner.completed || partner.action !== actionBefore) continue
-      const clone = structuredClone(partner)
-      const restRequest: TrainingRequest = clone.scheduleVersion === 1
-        ? { kind: 'activity', activityId: 'rest' }
-        : { kind: 'rest' }
-      const rested = performTrainingAction(clone, restRequest, undefined, 0, { silent: true })
-      if (!rested.ok) continue
-      Object.assign(partner, clone)
-      syncCandidate(game, partnerId)
-    }
   }
   saveGame(game)
   return exchange ? { ...primaryResult!, exchange } : primaryResult!

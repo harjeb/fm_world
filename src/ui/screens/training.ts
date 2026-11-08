@@ -170,10 +170,9 @@ function attrCompareTable(current: Player, candidate: Player): string {
   return `<table class="dt"><thead><tr><th>属性</th><th class="num">当前</th><th class="num">新卡</th><th class="num">变化</th></tr></thead><tbody>${rows}</tbody></table>`
 }
 
+/** 陪练队友：不消耗精力、不涨属性，只要在阵容里就能选。 */
 function squadCandidates(player: Player): Player[] {
-  return game.roster.filter((item) => item.id !== player.id
-    && !(game.training[item.id] && !game.training[item.id].completed)
-    && (item.energy ?? 100) >= TRAINING_ENERGY_COST)
+  return game.roster.filter((item) => item.id !== player.id)
 }
 
 function renderTrainingStart(player: Player): string {
@@ -188,10 +187,10 @@ function renderTrainingStart(player: Player): string {
   const squadHint = picked.length === 0
     ? '不选队友就是单练。'
     : !hasKeeper
-      ? '小队里至少要有 1 名门将（你自己是门将也可以）。'
+      ? '陪练阵容里至少要有 1 名门将（你自己是门将也可以）。'
       : picked.length < 6
-        ? `还需要 ${6 - picked.length} 名队友才能组成 7 人小队。`
-        : '7 人小队已就绪：每时段全员参加，交流赛/队内赛也用这套阵容。'
+        ? `还需要 ${6 - picked.length} 名队友才能凑满 6 人陪练。`
+        : '6 名陪练已就绪：只给主角加成长，他们自己不消耗精力、不涨属性。'
   return `<div class="grid two">
     ${panel(esc(player.name), `
       <div class="tile-grid">
@@ -199,13 +198,13 @@ function renderTrainingStart(player: Player): string {
         ${tile('精力', String(Math.round(energy)), `开始消耗 ${TRAINING_ENERGY_COST}`)}
       </div>
       <p class="hint">每轮都从原始属性开始，结束后产出一张新卡进入库存，和之前的卡互不影响。培养不消耗金币；开始一轮消耗 <b>${TRAINING_ENERGY_COST}</b> 点精力，比赛日推进时恢复。设施提供额外成长（按阶段概率触发，每个等级第 5 阶段必定触发），主属性最高 1500；设施阶段在开始时锁定，升级从下一次培养生效。</p>
-      ${panel('训练小队', `
-        <p class="hint">开局时选定其他 6 名队友（合计 7 人，必须含 1 名门将）。选定后整轮不能换人；每时段小队全员参加，个人项目时其余队友同步休息，交流赛/队内赛也用这 7 人。</p>
-        <div class="squad-picker">${candidates.map((mate) => `<label class="check-field"><input type="checkbox" data-training-squad="${esc(mate.id)}" ${picked.includes(mate.id) ? 'checked' : ''}${picked.length >= 6 && !picked.includes(mate.id) ? ' disabled' : ''}><span>${posBadge(primaryPosition(mate))} ${esc(mate.name)} · CA ${playerCA(mate).toFixed(0)} · 精力 ${Math.round(mate.energy ?? 100)}</span></label>`).join('') || '<span class="muted small">没有可选的队友（需要不在培养中且精力 ≥ ' + TRAINING_ENERGY_COST + '）。</span>'}</div>
+      ${panel('陪练队友', `
+        <p class="hint">开局时选定其他 6 名队友作为陪练（合计 7 人，必须含 1 名门将）。他们只给主角加成长（每名队友、每个正成长主属性 +2），自己不消耗精力、不生成球员卡；交流赛/队内赛用这 7 人踢。整轮不能换人。</p>
+        <div class="squad-picker">${candidates.map((mate) => `<label class="check-field"><input type="checkbox" data-training-squad="${esc(mate.id)}" ${picked.includes(mate.id) ? 'checked' : ''}${picked.length >= 6 && !picked.includes(mate.id) ? ' disabled' : ''}><span>${posBadge(primaryPosition(mate))} ${esc(mate.name)} · CA ${playerCA(mate).toFixed(0)}</span></label>`).join('') || '<span class="muted small">阵容里没有其他球员。</span>'}</div>
         <p class="hint ${picked.length && !hasKeeper ? 'warn-text' : ''}">已选 ${picked.length} / 6 · ${squadHint}</p>
       `, { className: 'squad-panel' })}
       <div class="btn-row">
-        <button class="btn primary" data-action="start-training-squad" data-player="${esc(player.id)}" ${enough && (picked.length === 0 || squadReady) ? '' : 'disabled'}>${enough ? `${icon('play', 14)}${picked.length ? '开始小队培养' : '开始培养'}` : '精力不足，等待恢复'}</button>
+        <button class="btn primary" data-action="start-training-squad" data-player="${esc(player.id)}" ${enough && (picked.length === 0 || squadReady) ? '' : 'disabled'}>${enough ? `${icon('play', 14)}${picked.length ? '带陪练开始培养' : '开始培养'}` : '精力不足，等待恢复'}</button>
       </div>
     `, { className: 'training-start', aside: posBadge(primaryPosition(player)) })}
     ${panel('培养起点：原始属性', `<div class="radar-pair">${attributeRadar(base)}<div>${attrList(base)}</div></div>`)}
@@ -351,9 +350,9 @@ function squadRoster(session: TrainingSession): string {
   const ids = session.partnerIds ?? []
   if (!ids.length) return ''
   const players = ids.map((id) => game.roster.find((item) => item.id === id)).filter((item): item is Player => !!item)
-  return `<div class="training-teammates"><span class="field-title">训练小队（每时段全员参加，整轮不能换人）</span>
-    <div class="check-grid">${players.map((mate) => `<span class="check-field muted"><span>${posBadge(primaryPosition(mate))} ${esc(mate.name)} · 体力 ${Math.round(100 - (game.training[mate.id]?.fatigue ?? 0))}</span></span>`).join('')}</div>
-    <p class="hint">个人项目（位置、传承、导师等）时其他队友同步休息，保证下一时段还能一起练；交流赛和队内赛用这 7 人。</p>
+  return `<div class="training-teammates"><span class="field-title">陪练队友（整轮固定，只给主角加成长）</span>
+    <div class="check-grid">${players.map((mate) => `<span class="check-field muted"><span>${posBadge(primaryPosition(mate))} ${esc(mate.name)}</span></span>`).join('')}</div>
+    <p class="hint">他们不消耗精力、不生成球员卡；交流赛和队内赛用这 7 人踢。</p>
   </div>`
 }
 

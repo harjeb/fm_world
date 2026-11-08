@@ -74,10 +74,9 @@ export function trainingOptions(session: TrainingSession): TrainingActivity[] {
   if (date.day === 1 && date.slot === '上午') return [EXCHANGE]
   if (date.day === 5) return [date.slot === '上午' ? MATCH : MATCH_DAY_REST]
   const rng = derivedRng(session.scheduleSeed ?? session.seed, 'training-schedule', date.week, date.day)
-  // 训练小队用同一份外场候选池：门将也跟着小队上同样的课（有门将收益就用门将收益），
-  // 否则门将和外场的每日随机选项不同，根本没法一起练。单人培养时门将仍用专属池。
-  const squad = !!session.partnerIds?.length
-  const source = !squad && session.candidate && isGoalkeeper(session.candidate) ? GK_ACTIVITIES : ACTIVITIES
+  // 门将换成专属候选池；外场球员仍用原来的项目表，随机结果不变。
+  // 旧测试会传只有日历字段的假会话，没有候选球员时按外场处理。
+  const source = session.candidate && isGoalkeeper(session.candidate) ? GK_ACTIVITIES : ACTIVITIES
   const pool = source.filter(item => item.id !== 'mentor')
   const chosen: TrainingActivity[] = []
   for (let i = 0; i < 4; i++) chosen.push(pool.splice(rng.int(pool.length), 1)[0])
