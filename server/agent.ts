@@ -42,7 +42,7 @@ import {
   startNextSeasonAction,
   startSingleChallenge,
   startTraining,
-  startTrainingSquad,
+  startTrainingWithSupport,
   syncActiveEngine,
   trainingAction,
   trainingEventChoice,
@@ -478,10 +478,8 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       return { ...result, result }
     }
     case 'start_training': {
-      const partnerIds = Array.isArray(body.partnerIds) ? body.partnerIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0) : []
-      const result = partnerIds.length
-        ? startTrainingSquad(game, text(body.playerId), partnerIds)
-        : startTraining(game, text(body.playerId))
+      // 陪练队友由系统自动挑 6 个（含门将），不再由调用方指定。
+      const result = startTrainingWithSupport(game, text(body.playerId))
       return { ...result, result }
     }
     case 'preview_training': {

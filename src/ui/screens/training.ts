@@ -170,27 +170,10 @@ function attrCompareTable(current: Player, candidate: Player): string {
   return `<table class="dt"><thead><tr><th>属性</th><th class="num">当前</th><th class="num">新卡</th><th class="num">变化</th></tr></thead><tbody>${rows}</tbody></table>`
 }
 
-/** 陪练队友：不消耗精力、不涨属性，只要在阵容里就能选。 */
-function squadCandidates(player: Player): Player[] {
-  return game.roster.filter((item) => item.id !== player.id)
-}
-
 function renderTrainingStart(player: Player): string {
   const energy = player.energy ?? 100
   const enough = energy >= TRAINING_ENERGY_COST
   const base = { ...baseBuild(player) }
-  const candidates = enough ? squadCandidates(player) : []
-  const picked = ui.trainingSquadIds.filter((id) => candidates.some((item) => item.id === id))
-  const pickedPlayers = picked.map((id) => candidates.find((item) => item.id === id)!)
-  const hasKeeper = player.positions.GK > 0 || pickedPlayers.some((item) => item.positions.GK > 0)
-  const squadReady = picked.length === 6 && hasKeeper
-  const squadHint = picked.length === 0
-    ? '不选队友就是单练。'
-    : !hasKeeper
-      ? '陪练阵容里至少要有 1 名门将（你自己是门将也可以）。'
-      : picked.length < 6
-        ? `还需要 ${6 - picked.length} 名队友才能凑满 6 人陪练。`
-        : '6 名陪练已就绪：只给主角加成长，他们自己不消耗精力、不涨属性。'
   return `<div class="grid two">
     ${panel(esc(player.name), `
       <div class="tile-grid">
@@ -199,12 +182,10 @@ function renderTrainingStart(player: Player): string {
       </div>
       <p class="hint">每轮都从原始属性开始，结束后产出一张新卡进入库存，和之前的卡互不影响。培养不消耗金币；开始一轮消耗 <b>${TRAINING_ENERGY_COST}</b> 点精力，比赛日推进时恢复。设施提供额外成长（按阶段概率触发，每个等级第 5 阶段必定触发），主属性最高 1500；设施阶段在开始时锁定，升级从下一次培养生效。</p>
       ${panel('陪练队友', `
-        <p class="hint">开局时选定其他 6 名队友作为陪练（合计 7 人，必须含 1 名门将）。他们只给主角加成长（每名队友、每个正成长主属性 +2），自己不消耗精力、不生成球员卡；交流赛/队内赛用这 7 人踢。整轮不能换人。</p>
-        <div class="squad-picker">${candidates.map((mate) => `<label class="check-field"><input type="checkbox" data-training-squad="${esc(mate.id)}" ${picked.includes(mate.id) ? 'checked' : ''}${picked.length >= 6 && !picked.includes(mate.id) ? ' disabled' : ''}><span>${posBadge(primaryPosition(mate))} ${esc(mate.name)} · CA ${playerCA(mate).toFixed(0)}</span></label>`).join('') || '<span class="muted small">阵容里没有其他球员。</span>'}</div>
-        <p class="hint ${picked.length && !hasKeeper ? 'warn-text' : ''}">已选 ${picked.length} / 6 · ${squadHint}</p>
+        <p class="hint">每轮开始时系统自动挑 6 名陪练（合计 7 人：你自己 + 其他位置各一名，外场球员会带一名其他门将）。他们只给主角加成长（每名陪练、每个正成长主属性 +2），不消耗精力、不生成球员卡、不涨属性；交流赛/队内赛用这 7 人踢。这 6 人整轮固定，培养结束后下一轮重新随机。</p>
       `, { className: 'squad-panel' })}
       <div class="btn-row">
-        <button class="btn primary" data-action="start-training-squad" data-player="${esc(player.id)}" ${enough && (picked.length === 0 || squadReady) ? '' : 'disabled'}>${enough ? `${icon('play', 14)}${picked.length ? '带陪练开始培养' : '开始培养'}` : '精力不足，等待恢复'}</button>
+        <button class="btn primary" data-action="start-training" data-player="${esc(player.id)}" ${enough ? '' : 'disabled'}>${enough ? `${icon('play', 14)}开始培养（系统配 6 名陪练）` : '精力不足，等待恢复'}</button>
       </div>
     `, { className: 'training-start', aside: posBadge(primaryPosition(player)) })}
     ${panel('培养起点：原始属性', `<div class="radar-pair">${attributeRadar(base)}<div>${attrList(base)}</div></div>`)}

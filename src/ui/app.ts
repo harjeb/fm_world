@@ -19,7 +19,7 @@ import {
   simulateSeasonRound,
   startLeague,
   startLeagueOnMatchday,
-  startTrainingSquad,
+  startTrainingWithSupport,
   startNextSeasonAction,
   startChallengeWithOpponent,
   startSingleChallenge,
@@ -502,7 +502,8 @@ function openTraining(playerId: string): void {
 }
 
 function startTrainingFor(playerId: string): void {
-  const result = startTraining(game, playerId)
+  // 每轮都由系统自动挑 6 名陪练（含门将），不消耗他们的精力。
+  const result = startTrainingWithSupport(game, playerId)
   if (!result.ok) {
     showNotice(result.error ?? '无法开始培养')
     return
@@ -971,18 +972,6 @@ document.addEventListener('click', async (event) => {
     case 'start-training':
       if (playerId) startTrainingFor(playerId)
       break
-    case 'start-training-squad': {
-      if (!playerId) break
-      const squad = ui.trainingSquadIds.filter((id) => id !== playerId)
-      const result = squad.length ? startTrainingSquad(game, playerId, squad) : startTraining(game, playerId)
-      if (!result.ok) {
-        showNotice(result.error ?? '无法开始培养')
-        break
-      }
-      ui.trainingSquadIds = []
-      openTraining(playerId)
-      break
-    }
     case 'open-training':
       if (playerId) openTraining(playerId)
       break
@@ -1425,15 +1414,6 @@ document.addEventListener('change', (event) => {
     const index = Number(target.dataset.benchPlayer)
     if (target.value) moveInDraft(target.value, { benchIndex: index })
     else updateLineupDraft((draft) => { draft.bench.splice(index, 1) })
-    return
-  }
-  if (target.dataset.trainingSquad) {
-    const id = target.dataset.trainingSquad
-    const checked = (target as HTMLInputElement).checked
-    ui.trainingSquadIds = checked
-      ? [...new Set([...ui.trainingSquadIds, id])].slice(0, 6)
-      : ui.trainingSquadIds.filter((item) => item !== id)
-    render()
     return
   }
   if (target.dataset.trainingTeammate !== undefined) {

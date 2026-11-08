@@ -1,4 +1,4 @@
-import { ALL_ATTRIBUTES, type AITeam, type AttrKey, type Attributes, type AutoSubPlan, type EventDef, type EventEffect, type EventOption, type GameState, type Lineup, type MatchMentality, type MatchRecord, type TrainingAutoConfig, type TrainingExchange, type TrainingSession } from './types.ts'
+import { ALL_ATTRIBUTES, type AITeam, type AttrKey, type Attributes, type AutoSubPlan, type EventDef, type EventEffect, type EventOption, type GameState, type Lineup, type MatchMentality, type MatchRecord, type Player, type Position, type TrainingAutoConfig, type TrainingExchange, type TrainingSession } from './types.ts'
 import type { MatchEngine } from './match/engine.ts'
 import { MatchEngine as Engine } from './match/engine.ts'
 import type { MatchState } from './match/types.ts'
@@ -8,6 +8,8 @@ import { newTrainingSeed, saveGame } from './state.ts'
 import { nextSeasonCountdown } from './season.ts'
 import { seasonEndAt } from './calendar.ts'
 import { autoFillLineup, validateLineup } from './squad.ts'
+import { FORMATIONS } from './data/formations.ts'
+import { positionMultiplier } from './ca.ts'
 import { advanceSeasonRound, finishActiveMatch, skipToMatchday, startChallenge, startChallengeAgainstTeam, startLeagueMatch, startNextSeason } from './season.ts'
 import { cachedOwnerlessTeams } from './world.ts'
 import { emptyAutoSubs, validateAutoSubPlan } from './match/management.ts'
@@ -42,26 +44,73 @@ export function startTraining(game: GameState, playerId: string, seed?: number):
   return { ok: true }
 }
 
-/** 开局选定 6 名陪练队友：只给主角加成长、不消耗精力；交流赛/队内赛用他们陪练。 */
-export function startTrainingSquad(
+const SUPPORT_SIZE = 6
+
+function primaryPositionOf(player: Player): Position {
+  return (['GK', 'CB', 'W', 'CM', 'ST'] as Position[])
+    .sort((a, b) => player.positions[b] - player.positions[a])[0] ?? 'CM'
+}
+
+/**
+ * 系统给主角自动挑 6 名陪练：按当前阵型的其他位置各挑一个，
+ * 同一位置优先熟练度高的人，但只在排名靠前的几个人里随机选，保证每轮不完全一样。
+ * 主角是门将时只挑外场；主角是外场时必带 1 名其他门将。
+ */
+export function pickSupportPartners(
   game: GameState,
   playerId: string,
-  partnerIds: string[],
-  seed?: number,
-): { ok: boolean; error?: string } {
-  const unique = [...new Set(partnerIds.filter((id) => id !== playerId))]
-  if (unique.length !== partnerIds.filter((id) => id !== playerId).length) return { ok: false, error: '队友不能重复' }
-  if (unique.length > 6) return { ok: false, error: '陪练队友最多 6 人' }
+  seed: number,
+): string[] | null {
   const player = game.roster.find((item) => item.id === playerId)
-  if (!player) return { ok: false, error: '球员不存在' }
-  const partners = unique.map((id) => game.roster.find((item) => item.id === id))
-  if (partners.some((item) => !item)) return { ok: false, error: '队友不在阵容里' }
-  if (unique.length && !(player.positions.GK > 0 || partners.some((item) => item!.positions.GK > 0))) {
-    return { ok: false, error: '陪练阵容需要至少 1 名门将' }
+  if (!player) return null
+  const pool = game.roster.filter((item) => item.id !== playerId)
+  if (pool.length < SUPPORT_SIZE) return null
+  const keeperCandidates = pool.filter((item) => item.positions.GK > 0)
+  if (player.positions.GK === 0 && keeperCandidates.length === 0) return null
+
+  const formation = FORMATIONS[game.lineup.formationId]
+  const outfield = formation.slots.filter((slot) => slot.position !== 'GK').map((slot) => slot.position)
+  let needs: Position[]
+  if (player.positions.GK > 0) {
+    needs = [...outfield]
+  } else {
+    const primary = primaryPositionOf(player)
+    const rest = [...outfield]
+    const same = rest.indexOf(primary)
+    if (same >= 0) rest.splice(same, 1)
+    needs = ['GK', ...rest]
   }
-  const result = startTraining(game, playerId, seed)
+  // 门将位置优先从真正的门将里挑，绝不拿外场球员凑。
+  const rng = derivedRng(seed, 'support-partners', playerId)
+  const chosen: string[] = []
+  const poolIds = new Set(pool.map((item) => item.id))
+  for (const position of needs.slice(0, SUPPORT_SIZE)) {
+    const candidates = pool.filter((item) => poolIds.has(item.id) && !chosen.includes(item.id)
+      && (position === 'GK' ? item.positions.GK > 0 : item.positions.GK === 0))
+      .map((item) => ({ item, score: item.positions[position] * positionMultiplier(item.positions[position]) }))
+      .sort((a, b) => b.score - a.score || a.item.id.localeCompare(b.item.id))
+    if (!candidates.length) continue
+    const top = candidates.slice(0, Math.min(5, candidates.length))
+    chosen.push(top[rng.int(top.length)].item.id)
+  }
+  // 位置凑不齐时用剩下的人补齐（门将位置仍优先真门将）。
+  const fillers = pool.filter((item) => !chosen.includes(item.id))
+  while (chosen.length < SUPPORT_SIZE && fillers.length) {
+    chosen.push(fillers.splice(rng.int(fillers.length), 1)[0].id)
+  }
+  return chosen.length === SUPPORT_SIZE ? chosen : null
+}
+
+/** 开始一轮带陪练的培养：系统自动选 6 人，陪练不消耗精力、不涨属性。 */
+export function startTrainingWithSupport(game: GameState, playerId: string, seed?: number): { ok: boolean; error?: string } {
+  const running = game.training[playerId]
+  if (running && !running.completed) return { ok: false, error: '该球员已有一轮培养' }
+  const trainingSeed = seed ?? newTrainingSeed(game, playerId)
+  const partners = pickSupportPartners(game, playerId, trainingSeed)
+  if (!partners) return { ok: false, error: '陪练队友不足：需要 6 名其他球员，外场球员还要有至少 1 名其他门将' }
+  const result = startTraining(game, playerId, trainingSeed)
   if (!result.ok) return result
-  game.training[playerId].partnerIds = unique
+  game.training[playerId].partnerIds = partners
   saveGame(game)
   return { ok: true }
 }
@@ -141,12 +190,12 @@ export function trainingAction(game: GameState, playerId: string, request: Train
   const current = game.training[playerId]
   // 陪练队友只按人数给主角加成长，不参与行动、不消耗精力、不涨属性。
   const support = current?.partnerIds?.length ?? 0
-  const effective: TrainingRequest = support > 0 ? ({ ...request, teammateIds: undefined } as TrainingRequest) : request
-  const prepared = prepareTraining(game, playerId, effective)
+  // 显式 teammateIds（Agent/旧流程）仍然生效；没传时由系统陪练的人数提供加成。
+  const prepared = prepareTraining(game, playerId, request)
   if (prepared.error || !prepared.ids) return { ok: false, error: prepared.error, completed: prepared.completed ?? false }
-  const mentor = trainingMentor(game, effective)
+  const mentor = trainingMentor(game, request)
   let exchange: TrainingExchange | undefined
-  if (effective.kind === 'activity' && effective.activityId === 'exchange') {
+  if (request.kind === 'activity' && request.activityId === 'exchange') {
     try {
       exchange = simulateTrainingExchange(game, game.training[playerId])
     } catch (error) {
@@ -157,7 +206,7 @@ export function trainingAction(game: GameState, playerId: string, request: Train
   let primaryResult: PerformResult | undefined
   for (let i = 0; i < staged.length; i++) {
     // 陪练小队固定按人数加成长；手动组队（Agent/旧流程）仍按实际参与的队友数。
-    const result = performTrainingAction(staged[i], effective, mentor, Math.max(staged.length - 1, support))
+    const result = performTrainingAction(staged[i], request, mentor, Math.max(staged.length - 1, support))
     if (!result.ok) return result
     if (exchange) {
       const session = staged[i]
