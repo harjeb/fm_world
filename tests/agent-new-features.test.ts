@@ -36,7 +36,7 @@ describe('agent economy, market and training', () => {
     const action = applyAgentAction(game, { action: 'training_action', playerId: player.id, request: { kind: 'activity', activityId: trainingOptions(session)[0].id } })
     expect(action.ok).toBe(true)
     const pending = agentView(game).trainingSessions[0].pendingEvent!
-    expect(pending.options[0].hint).toContain('第一脚触球 +0.5')
+    expect(pending.options[0].hint).toContain('第一脚触球 +2')
     expect((action.result as { event: unknown }).event).toEqual(pending)
     expect(JSON.stringify(action.result)).not.toContain('"effect"')
     const result = applyAgentAction(game, { action: 'training_event_choice', playerId: player.id, optionId: 'passing' })

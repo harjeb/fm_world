@@ -260,7 +260,7 @@ function matchSummary(record: GameState['matchHistory'][number]) {
 function eventView(session: TrainingSession, event: EventDef) {
   const gk = session.candidate.positions.GK > 0
   return {
-    id: event.id, title: event.title, category: event.category, mainline: !!event.mainline, text: event.text,
+    id: event.id, title: event.title, category: event.category, mainline: event.category === 'mainline', text: event.text,
     hintNote: session.scheduleVersion === 1 ? '提示为基础成长；低落情绪可能使正向属性成长减少 50%。' : null,
     options: event.options.map((option) => ({
       id: option.id, label: option.label, hint: displayEventHint(option.hint, gk, eventGrowthScale(session)),

@@ -22,7 +22,7 @@ import { FACILITY_STAGE_VERSION, MAX_FACILITY_LEVEL, MAX_FACILITY_STAGE, STAGES_
 import { addTrainedCard, closeFinishedTraining, deleteCard, equipCard } from './cards.ts'
 import { attrLimit, attrMax, attrRating, MAIN_ATTR_MAX, displayGain, isMainAttr, scaleAuthoredGains } from './rating.ts'
 import { inheritanceChances, mentorSkill, validateInheritance } from './inheritance.ts'
-import { trainingDate, trainingLowMood, trainingOptions, type TrainingActivityId } from './training-calendar.ts'
+import { partnerAssignment, trainingDate, trainingLowMood, trainingOptions, type TrainingActivityId } from './training-calendar.ts'
 
 export const ACTIONS_PER_ROUTE = 30
 export const ACTIONS_PER_WEEK = 3
@@ -31,7 +31,13 @@ export function trainingActionsTotal(session: TrainingSession): number {
   return session.actionsTotal ?? 18
 }
 
+/** 事件给的属性成长是事件数据里写的数值乘这个系数：新培养曾是 ×0.5，现在整体放大 4 倍（×2）。旧课程不变。 */
 export function eventGrowthScale(session: TrainingSession): number {
+  return session.actionsTotal === undefined ? 1 : 2
+}
+
+/** 导师复盘（没有额外事件时）的决策成长，保持原来的 ×0.5，不跟事件一起放大。 */
+function mentorReviewScale(session: TrainingSession): number {
   return session.actionsTotal === undefined ? 1 : 0.5
 }
 
@@ -325,7 +331,26 @@ function actionGains(session: TrainingSession, gains: Partial<Record<AttrKey, nu
   return applyTrainingGains(session, moodGains(session, facilityGains(session, withTeam), session.action + 1))
 }
 
-export function planTraining(session: TrainingSession, request: TrainingRequest, mentor?: Player, teammateCount = 0): TrainingPlan {
+/** 站在“恢复”上的每名陪练额外恢复的训练体力（比练其他项目时每人带来的成长更大一些）。 */
+export const REST_PARTNER_RECOVERY = 4
+
+/**
+ * 这次行动有几名陪练站在所选项目上。日历课程里 6 名陪练每个时段随机分到各个选项，
+ * 选了哪个选项才拿哪个选项上的人；旧课程没有日历，仍然全员加成。
+ */
+export function partnersAt(session: TrainingSession, request: TrainingRequest): number {
+  const total = session.partnerIds?.length ?? 0
+  if (!total) return 0
+  if (session.scheduleVersion !== 1) return total
+  if (request.kind !== 'activity') return 0
+  return partnerAssignment(session)[request.activityId]?.length ?? 0
+}
+
+/**
+ * 预览：hideQuality 为 true 时按“成功”档算成长，不泄露这一次掷出的品质（界面在执行后才揭晓）。
+ * 真正结算始终不传它。
+ */
+export function planTraining(session: TrainingSession, request: TrainingRequest, mentor?: Player, teammateCount = 0, hideQuality = false): TrainingPlan {
   const before = caOf(session.candidate.attrs, candidateIsGk(session))
   if (session.scheduleVersion === 1) {
     if (session.completed || session.action >= trainingActionsTotal(session)) return emptyPlan('课程', '本轮培养已经结束。', before)
@@ -339,21 +364,21 @@ export function planTraining(session: TrainingSession, request: TrainingRequest,
       activity.id === 'rest' ? { kind: 'rest' } : activity.id === 'mentor' ? { kind: 'mentor' } :
       activity.id === 'match' || activity.id === 'exchange' ? { kind: 'match' } : undefined
     if (legacy) {
-      const plan = planLegacyTraining(session, legacy, mentor, teammateCount)
+      const plan = planLegacyTraining(session, legacy, mentor, teammateCount, hideQuality)
       return { ...plan, label: activity.label, text: activity.desc, ...(activity.noRecovery ? { fatigue: 0, note: undefined } : {}) }
     }
     const cost = activity.cost!
     if (session.fatigue + cost > 100) return emptyPlan(activity.label, `训练体力不足，需要 ${cost} 点，请先休息。`, before)
-    const quality = trainingQuality(session)
+    const quality = hideQuality ? { label: '成功', multiplier: QUALITY_MULTIPLIER.success } : trainingQuality(session)
     const gains = candidateIsGk(session) ? activity.goalkeeperGains ?? activity.gains! : activity.gains!
     const result = actionGains(session, gains, quality.multiplier, teammateCount)
     return { kind: 'activity', label: activity.label, text: activity.desc, gains: result.actual, fatigue: cost, energyCost: 0, error: false, quality, caBefore: result.caBefore, caAfter: result.caAfter, scale: result.scale, cappedByCeiling: result.cappedByCeiling, cappedByPa: result.cappedByPa, note: result.cappedByCeiling ? '部分属性已达各自上限' : undefined }
   }
   if (request.kind === 'activity') return emptyPlan('培养', '旧课程不支持日历项目。', before)
-  return planLegacyTraining(session, request, mentor, teammateCount)
+  return planLegacyTraining(session, request, mentor, teammateCount, hideQuality)
 }
 
-function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingRequest, { kind: 'activity' }>, mentor?: Player, teammateCount = 0): TrainingPlan {
+function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingRequest, { kind: 'activity' }>, mentor?: Player, teammateCount = 0, hideQuality = false): TrainingPlan {
   const nextAction = session.action + 1
   const isGk = candidateIsGk(session)
   const before = caOf(session.candidate.attrs, isGk)
@@ -381,7 +406,7 @@ function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingR
     const related = relatedOptions.length > 0 && rng.chance(0.55 + professionalism / 500) ? rng.pick(relatedOptions) : null
     const gains: Partial<Record<AttrKey, number>> = { [attr]: mainGain }
     if (related) gains[related] = 1
-    const quality = trainingQuality(session)
+    const quality = hideQuality ? { label: '成功', multiplier: QUALITY_MULTIPLIER.success } : trainingQuality(session)
     const result = actionGains(session, gains, quality.multiplier, teammateCount)
     const fatigue = 12
     const noteParts: string[] = []
@@ -417,7 +442,7 @@ function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingR
       [second]: 0.5 + rng.int(2) * 0.5,
       [third]: 0.5,
     }
-    const quality = trainingQuality(session)
+    const quality = hideQuality ? { label: '成功', multiplier: QUALITY_MULTIPLIER.success } : trainingQuality(session)
     const result = actionGains(session, gains, quality.multiplier, teammateCount)
     return {
       kind: 'combo',
@@ -439,7 +464,7 @@ function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingR
   if (request.kind === 'match') {
     const key: AttrKey = isGk ? 'reflexes' : 'speed'
     const gains: Partial<Record<AttrKey, number>> = { passing: 2, [key]: 2, teamwork: 1 }
-    const quality = trainingQuality(session)
+    const quality = hideQuality ? { label: '成功', multiplier: QUALITY_MULTIPLIER.success } : trainingQuality(session)
     const result = actionGains(session, gains, quality.multiplier, teammateCount)
     return {
       kind: 'match', label: '队内比赛', text: '高强度队内比赛，综合练习传球与身体或扑救。',
@@ -492,12 +517,14 @@ function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingR
     return { kind: 'protection', label: `伤病防护 · ${SKILLS[skill].name}`, text: `学习${SKILLS[skill].name}。`, gains: {}, fatigue: 8, energyCost: 0, error: false, caBefore: before, caAfter: before, scale: 1, cappedByCeiling: false, cappedByPa: false }
   }
   if (request.kind === 'rest') {
+    // 站在恢复上的陪练：每人多恢复一点训练体力。
+    const recovery = 30 + REST_PARTNER_RECOVERY * teammateCount
     return {
       kind: 'rest',
       label: '休息',
       text: '主动恢复，降低培养期疲劳。',
       gains: {},
-      fatigue: -30,
+      fatigue: -recovery,
       energyCost: 0,
       error: false,
       caBefore: before,
@@ -505,7 +532,7 @@ function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingR
       scale: 1,
       cappedByCeiling: false,
       cappedByPa: false,
-      note: `疲劳 ${Math.round(session.fatigue)} → ${Math.round(Math.max(0, session.fatigue - 30))}`,
+      note: `疲劳 ${Math.round(session.fatigue)} → ${Math.round(Math.max(0, session.fatigue - recovery))}`,
     }
   }
   if (request.kind !== 'mentor') return emptyPlan('培养', '无效的培养行动。', before)
@@ -607,15 +634,16 @@ export function guaranteedEvent(session: TrainingSession, action = session.actio
   const eligible = eligibleEvents(session, action)
   const mainline = eligible.find((event) => event.mainline && (event.id === 'main_graduation' ? trainingActionsTotal(session) : event.trigger.minAction) === action)
   if (mainline) return mainline
-  const priority = eligible
-    .filter((event) => event.priority)
+  // 事件链不再“一满足条件就必出”：平时和普通事件一样靠概率抽，只有到了最迟期限才强制出现（公开的路线保障）。
+  const overdue = eligible
+    .filter((event) => event.trigger.latestAction !== undefined && action >= event.trigger.latestAction)
     .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0) || (b.stage ?? 0) - (a.stage ?? 0))
-  const top = priority[0]
-  if (top && (top.priority ?? 0) >= 6) return top
-  const latest = eligible.find((event) => event.trigger.latestAction !== undefined && action >= event.trigger.latestAction)
-  if (latest) return latest
+  if (overdue.length) return overdue[0]
   return null
 }
+
+/** 没有保底事件时，每次行动后出现事件的概率。保底事件（主线、路线入口等）仍是 100%。 */
+export const EVENT_BASE_CHANCE = 0.1
 
 export function pickEvent(session: TrainingSession, force = false): EventDef | null {
   const action = session.action
@@ -627,10 +655,10 @@ export function pickEvent(session: TrainingSession, force = false): EventDef | n
     eligible.sort((a, b) => b.weight - a.weight)
     return eligible[0]
   }
+  // 先掷“这次行动有没有事件”，再按权重从候选里选具体哪个；两个骰子都由种子和行动序号决定，读档不重抽。
+  if (derivedRng(session.seed, 'event-trigger', session.playerId, action).float() >= EVENT_BASE_CHANCE) return null
   const rng = derivedRng(session.seed, 'event-select', session.playerId, action)
-  const items: (EventDef | null)[] = [...eligible, null]
-  const weights = [...eligible.map((event) => eventWeight(session, event)), 24]
-  return rng.weighted(items, weights)
+  return rng.weighted(eligible, eligible.map((event) => eventWeight(session, event)))
 }
 
 function eventWeight(session: TrainingSession, event: EventDef): number {
@@ -640,9 +668,7 @@ function eventWeight(session: TrainingSession, event: EventDef): number {
 
 export function eventChance(session: TrainingSession, action = session.action): number {
   if (guaranteedEvent(session, action)) return 1
-  const eligible = eligibleEvents(session, action).filter((event) => !event.mainline)
-  const total = eligible.reduce((sum, event) => sum + eventWeight(session, event), 0) + 24
-  return eligible.length === 0 ? 0 : total > 0 ? eligible.reduce((sum, event) => sum + eventWeight(session, event), 0) / total : 0
+  return eligibleEvents(session, action).some((event) => !event.mainline) ? EVENT_BASE_CHANCE : 0
 }
 
 export type PerformResult = {
@@ -769,7 +795,7 @@ export function performTrainingAction(session: TrainingSession, request: Trainin
   }
   if (mentorAction) {
     const isGk = candidateIsGk(session)
-    const result = applyTrainingGains(session, moodGains(session, facilityGains(session, scaleAuthoredGains({ decisions: eventGrowthScale(session) }, isGk)), session.action))
+    const result = applyTrainingGains(session, moodGains(session, facilityGains(session, scaleAuthoredGains({ decisions: mentorReviewScale(session) }, isGk)), session.action))
     session.candidate.attrs = result.attrs
     session.log.push({
       action: session.action,

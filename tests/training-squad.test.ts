@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
 import { pickSupportPartners, startTraining, startTrainingWithSupport, trainingAction, previewTraining } from '../src/game/actions.ts'
-import { trainingOptions } from '../src/game/training-calendar.ts'
+import { partnerAssignment, trainingOptions } from '../src/game/training-calendar.ts'
+import { REST_PARTNER_RECOVERY } from '../src/game/training.ts'
 import { EVENTS } from '../src/game/data/events.ts'
 import type { TrainingSession } from '../src/game/types.ts'
 
@@ -72,26 +73,92 @@ describe('系统自动陪练', () => {
     expect(game.training[main.id].partnerIds).toEqual(fixed)
   })
 
-  it('陪练加成：比单练每次多约 +12 点，主角拿成长、陪练不变', () => {
+  it('6 名陪练每个时段随机分到各个选项，合计恰好 6 人，刷新不重抽', () => {
+    const game = createInitialGame(777)
+    const main = game.roster.find((player) => player.positions.GK === 0)!
+    expect(startTrainingWithSupport(game, main.id).ok).toBe(true)
+    const session = game.training[main.id]
+    const seen = new Set<string>()
+    let restHadPartners = false
+    let someOptionEmpty = false
+    for (const action of [1, 2, 3, 4, 5, 6, 7, 10, 11, 12, 13]) {
+      session.action = action
+      const options = trainingOptions(session)
+      const assignment = partnerAssignment(session)
+      expect(Object.keys(assignment).sort()).toEqual(options.map((item) => item.id).sort())
+      const placed = Object.values(assignment).flat()
+      expect(placed).toHaveLength(6)
+      expect([...placed].sort()).toEqual([...session.partnerIds!].sort())
+      expect(partnerAssignment(session)).toEqual(assignment)
+      seen.add(JSON.stringify(assignment))
+      if (assignment.rest.length > 0) restHadPartners = true
+      if (Object.values(assignment).some((ids) => ids.length === 0)) someOptionEmpty = true
+    }
+    expect(seen.size).toBeGreaterThan(5)
+    expect(restHadPartners).toBe(true)
+    expect(someOptionEmpty).toBe(true)
+  })
+
+  it('周一交流赛、周五队内比赛只有一个选项，6 人全在上面', () => {
+    const game = createInitialGame(778)
+    const main = game.roster.find((player) => player.positions.GK === 0)!
+    expect(startTrainingWithSupport(game, main.id).ok).toBe(true)
+    const session = game.training[main.id]
+    session.action = 0
+    expect(partnerAssignment(session).exchange).toHaveLength(6)
+    session.action = 8
+    expect(partnerAssignment(session).match).toHaveLength(6)
+  })
+
+  it('陪练加成只来自站在所选项目上的人：有人就多长，没人就和单练一样', () => {
     const game = createInitialGame(777)
     const main = game.roster.find((player) => player.positions.GK === 0)!
     expect(startTrainingWithSupport(game, main.id).ok).toBe(true)
     const session = game.training[main.id]
     suppress(session)
-    session.action = 1
-    const offered = trainingOptions(session).find((item) => (item.cost ?? 0) > 0 && item.group)!
-    const course = activity(offered.id)
-    const withSupport = previewTraining(game, main.id, course).plan!
-    const partners = session.partnerIds!
-    const partnerAttrs = partners.map((id) => ({ ...game.roster.find((p) => p.id === id)!.attrs }))
-    session.partnerIds = []
-    const solo = previewTraining(game, main.id, course).plan!
-    expect(sum(withSupport.gains) - sum(solo.gains)).toBeGreaterThan(10)
-    session.partnerIds = partners
-    const result = trainingAction(game, main.id, course)
-    expect(result.ok, result.error).toBe(true)
-    expect(sum(session.log.at(-1)?.gains as Record<string, number>)).toBeGreaterThan(0)
-    partners.forEach((id, index) => {
+    let withPartner = 0
+    let withoutPartner = 0
+    for (const action of [2, 3, 4, 5, 6, 7, 10, 11, 12, 13]) {
+      session.action = action
+      const assignment = partnerAssignment(session)
+      for (const offered of trainingOptions(session).filter((item) => item.cost && item.gains)) {
+        const course = activity(offered.id)
+        const partners = session.partnerIds!
+        const supported = previewTraining(game, main.id, course).plan!
+        session.partnerIds = []
+        const solo = previewTraining(game, main.id, course).plan!
+        session.partnerIds = partners
+        if (assignment[offered.id].length > 0) {
+          expect(sum(supported.gains)).toBeGreaterThan(sum(solo.gains))
+          withPartner++
+        } else {
+          expect(supported.gains).toEqual(solo.gains)
+          withoutPartner++
+        }
+      }
+    }
+    expect(withPartner).toBeGreaterThan(0)
+    expect(withoutPartner).toBeGreaterThan(0)
+  })
+
+  it('站在恢复上的陪练每人多恢复训练体力；执行后陪练自己不变', () => {
+    const game = createInitialGame(779)
+    const main = game.roster.find((player) => player.positions.GK === 0)!
+    expect(startTrainingWithSupport(game, main.id).ok).toBe(true)
+    const session = game.training[main.id]
+    suppress(session)
+    session.fatigue = 80
+    let action = 2
+    while (action < 14 && partnerAssignment({ ...session, action }).rest.length === 0) action++
+    session.action = action
+    const onRest = partnerAssignment(session).rest
+    expect(onRest.length).toBeGreaterThan(0)
+    const plan = previewTraining(game, main.id, activity('rest')).plan!
+    expect(plan.fatigue).toBe(-(30 + REST_PARTNER_RECOVERY * onRest.length))
+    const partnerAttrs = session.partnerIds!.map((id) => ({ ...game.roster.find((p) => p.id === id)!.attrs }))
+    expect(trainingAction(game, main.id, activity('rest')).ok).toBe(true)
+    expect(game.training[main.id].fatigue).toBe(Math.max(0, 80 - 30 - REST_PARTNER_RECOVERY * onRest.length))
+    session.partnerIds!.forEach((id, index) => {
       expect(game.training[id]).toBeUndefined()
       expect(game.roster.find((p) => p.id === id)!.attrs).toEqual(partnerAttrs[index])
     })

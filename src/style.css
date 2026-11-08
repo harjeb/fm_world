@@ -306,14 +306,15 @@ h3:first-child { margin-top: 0; }
 .dt .sorted { color: var(--accent); }
 .sort-mark { font-size: 8px; margin-left: 3px; vertical-align: 1px; }
 /* 两张球员表共用同一套列宽，门将表和外场表的列才对得齐。 */
-.dt.squad { table-layout: fixed; min-width: 1150px; }
+.dt.squad { table-layout: fixed; min-width: 1190px; }
 .dt.squad th, .dt.squad td { overflow: hidden; }
 .dt.squad th:nth-child(1) { width: 50px; }
 .dt.squad th:nth-child(2) { width: 150px; }
 .dt.squad th:nth-child(3) { width: 38px; }
 .dt.squad th:nth-child(4) { width: 62px; }
 .dt.squad th:nth-child(5) { width: 54px; }
-.dt.squad th:nth-child(6) { width: 52px; }
+/* 球员卡列放的是下拉框（最小 56px）加左右内边距，太窄会被 overflow: hidden 裁掉。 */
+.dt.squad th:nth-child(6) { width: 92px; }
 /* 属性列按类名定宽，外场 7 项和门将 6 项都能对齐，也不会把“速度/爆发”撑成双宽。 */
 .dt.squad .ca-col { width: 54px; }
 .dt.squad .attr-col { width: 48px; }
@@ -549,12 +550,13 @@ h3:first-child { margin-top: 0; }
 .activity-list { display: grid; gap: 3px; align-content: start; }
 .activity {
   display: flex; align-items: center; justify-content: space-between; gap: 6px; height: 32px; padding: 0 9px;
-  background: var(--panel-2); border: 1px solid transparent; border-radius: var(--radius); color: var(--text-2);
+  background: var(--panel-2); border: 1px solid var(--act-color, transparent); border-radius: var(--radius); color: var(--text-2);
 }
 .activity b { font-weight: 500; white-space: nowrap; }
 .activity small { font: 400 11.5px var(--font-num); white-space: nowrap; }
 .activity:hover { background: var(--hover); color: var(--text); }
-.activity.active { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+/* 边框颜色代表这项训练主要练哪项属性；选中时用同色加粗并淡淡铺底。 */
+.activity.active { background: color-mix(in srgb, var(--act-color, var(--accent)) 18%, var(--panel-2)); box-shadow: inset 0 0 0 1px var(--act-color, var(--accent)); color: var(--text); }
 .action-detail { min-width: 0; }
 .action-desc { color: var(--text-2); margin-bottom: 8px; }
 .preview { margin: 10px 0; padding: 9px 10px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); }
@@ -1205,3 +1207,37 @@ circle.pm-5 { fill: var(--h6); }
 .nego-chance.bad .nego-bar { color: var(--bad); }
 .nego-reasons { margin: 4px 0 10px; padding-left: 18px; color: var(--text-2); font-size: 12px; }
 .nego-reasons li { margin: 2px 0; }
+
+/* ---------- 培养品质弹出：执行行动后在屏幕中央停留约 2 秒 ---------- */
+.quality-popup {
+  position: fixed; left: 50%; top: 38%; z-index: 90; transform: translate(-50%, -50%);
+  padding: 6px 28px; font-size: 44px; font-weight: 800; letter-spacing: 6px; white-space: nowrap;
+  color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45), 0 0 18px var(--glow, rgba(255, 255, 255, 0.5));
+  pointer-events: none; animation: quality-pop 2s ease-out forwards;
+}
+.quality-popup.q-ok { --glow: rgba(52, 211, 153, 0.7); color: #d8fbe9; font-size: 34px; }
+.quality-popup.q-plain { --glow: rgba(148, 163, 184, 0.6); color: #cbd5e1; font-size: 30px; }
+.quality-popup.q-fail { --glow: rgba(239, 68, 68, 0.75); color: #fecaca; font-size: 38px; }
+.quality-popup.q-great { --glow: rgba(250, 204, 21, 0.85); color: #fde68a; font-size: 52px; }
+.quality-popup.q-perfect { --glow: rgba(244, 114, 182, 0.9); color: #fff3b0; font-size: 60px; }
+@keyframes quality-pop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  12% { opacity: 1; transform: translate(-50%, -50%) scale(1.25); }
+  22% { transform: translate(-50%, -50%) scale(1); }
+  80% { opacity: 1; transform: translate(-50%, -62%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -72%) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .quality-popup { animation: quality-fade 2s linear forwards; }
+  @keyframes quality-fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+}
+
+/* ---------- 选项上的陪练人数徽标 ---------- */
+.act-right { display: inline-flex; align-items: center; gap: 6px; }
+.act-mates {
+  display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
+  background: var(--raised); border: 1px solid var(--line-2); color: var(--text); font: 600 11px var(--font-num); cursor: help;
+}
+
+/* 属性名带上自己的颜色：左边一条色块，文字用同色。 */
+.dt td.attr-name { color: var(--attr-color, var(--text-2)); font-weight: 500; box-shadow: inset 3px 0 0 var(--attr-color, transparent); padding-left: 10px; }

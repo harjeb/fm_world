@@ -4,12 +4,12 @@ import { POSITION_LABELS } from '../../game/data/attributes.ts'
 import { inheritanceChances, validateInheritance } from '../../game/inheritance.ts'
 import { autoTrainingConfig, previewTraining } from '../../game/actions.ts'
 import { displayCA, initialDisplayCA, mainAttrsFor } from '../../game/rating.ts'
-import { branchProbability, eventChance, eventGrowthScale, FAILURE_STAMINA, failureChance, GAIN_SPREAD, GREAT_CHANCE, PERFECT_CHANCE, plainChance, PLAIN_FREE_STAMINA, planTraining, trainingActionsTotal, TRAINING_ACTION_INFO, TRAINING_ENERGY_COST, weekOfAction, type TrainingRequest } from '../../game/training.ts'
-import { trainingDate, trainingOptions, type TrainingActivityId } from '../../game/training-calendar.ts'
+import { branchProbability, eventChance, eventGrowthScale, planTraining, REST_PARTNER_RECOVERY, trainingActionsTotal, TRAINING_ACTION_INFO, TRAINING_ENERGY_COST, weekOfAction, type TrainingRequest } from '../../game/training.ts'
+import { partnerAssignment, trainingDate, trainingOptions, type TrainingActivityId } from '../../game/training-calendar.ts'
 import { baseBuild, playerCards } from '../../game/cards.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
 import { getSkillTier } from '../../game/inheritance.ts'
-import { attributeRadar, attrHeat, caHeat, cardName, cardSelect, icon, mainAttrs, meter, pageHead, panel, posBadge, primaryPosition, skillGroups, skillTierLabel, tag, tile, traitLabel } from '../components.ts'
+import { activityColor, attrColor, attributeRadar, attrHeat, caHeat, cardName, cardSelect, icon, mainAttrs, meter, pageHead, panel, posBadge, primaryPosition, skillGroups, skillTierLabel, tag, tile, traitLabel } from '../components.ts'
 import { attrLabel, attrValue, caDelta, displayEventHint, esc, gainText, pct, playerCA, positionLabel, skillName, trainingLogText } from '../format.ts'
 import { game, ui } from '../state.ts'
 
@@ -98,7 +98,6 @@ export function renderTraining(): string {
     ${pageHead({
       kicker: '培养',
       title: '培养角色卡',
-      sub: '每天上午、下午各练一次，一共 15 天；每周一上午交流赛，周五上午队内比赛、下午休息。每轮结束产出一张球员卡进入库存，原来的卡不会消失。',
       actions: playerSelect(),
     })}
     ${sessionStrip()}
@@ -141,7 +140,6 @@ function autoTrainingPanel(player: Player | null | undefined): string {
       <div class="seg"><button class="${config.mode === 'priority' ? 'active' : ''}" data-action="training-auto-mode" data-mode="priority">属性优先</button><button class="${config.mode === 'targets' ? 'active' : ''}" data-action="training-auto-mode" data-mode="targets">最低目标</button></div>
       ${state}
     </div>
-    <p class="hint">自动培养按<b>起点属性</b>计算——每轮培养都从原始属性重新开始，和现在装备的球员卡无关（括号里同时标出当前卡，方便对比）。属性优先：按下面的顺序练，顶到个人上限就换下一个。最低目标：先把低于目标的主属性补到目标，差距最大的先练；全部达标后休息或安排位置/传承。只在当天日历提供的项目里选择。${config.enabled ? '' : ' 当前设置为停用，自动按钮仍可手动使用。'}</p>
     <div class="grid two">
       <div>
         <div class="field-title">属性优先级</div>
@@ -157,7 +155,6 @@ function autoTrainingPanel(player: Player | null | undefined): string {
       <button class="btn primary" data-action="training-auto-step" data-player="${player ? esc(player.id) : ''}" ${player ? '' : 'disabled'}>${icon('play', 14)}自动进行一步</button>
       <button class="btn" data-action="training-auto-run" data-player="${player ? esc(player.id) : ''}" ${player ? '' : 'disabled'}>自动跑完本轮培养</button>
     </div>
-    <p class="hint">遇到事件会按目标属性收益自动选择选项；精力不足时给出提示，不会自动开始新一轮培养。</p>
   `, { aside: '<span class="muted small">设置保存在存档里</span>' })
 }
 
@@ -165,7 +162,7 @@ function attrCompareTable(current: Player, candidate: Player): string {
   const gk = current.positions.GK > 0
   const rows = mainAttrsFor(gk).map((key) => {
     const delta = candidate.attrs[key] - current.attrs[key]
-    return `<tr><td class="dim">${attrLabel(key)}</td><td class="num">${attrHeat(current.attrs[key])}</td><td class="num">${attrHeat(candidate.attrs[key])}</td><td class="num ${delta > 0 ? 'up' : delta < 0 ? 'down' : 'dim'}">${delta > 0 ? '+' : ''}${delta.toFixed(1)}</td></tr>`
+    return `<tr><td class="attr-name" style="--attr-color:${attrColor(key)}">${attrLabel(key)}</td><td class="num">${attrHeat(current.attrs[key])}</td><td class="num">${attrHeat(candidate.attrs[key])}</td><td class="num ${delta > 0 ? 'up' : delta < 0 ? 'down' : 'dim'}">${delta > 0 ? '+' : ''}${delta.toFixed(1)}</td></tr>`
   }).join('')
   return `<table class="dt"><thead><tr><th>属性</th><th class="num">当前</th><th class="num">新卡</th><th class="num">变化</th></tr></thead><tbody>${rows}</tbody></table>`
 }
@@ -180,20 +177,16 @@ function renderTrainingStart(player: Player): string {
         ${tile('当前 CA', playerCA(player).toFixed(1), `原始 ${initialDisplayCA(player).toFixed(1)}`)}
         ${tile('精力', String(Math.round(energy)), `开始消耗 ${TRAINING_ENERGY_COST}`)}
       </div>
-      <p class="hint">每轮都从原始属性开始，结束后产出一张新卡进入库存，和之前的卡互不影响。培养不消耗金币；开始一轮消耗 <b>${TRAINING_ENERGY_COST}</b> 点精力，比赛日推进时恢复。设施提供额外成长（按阶段概率触发，每个等级第 5 阶段必定触发），主属性最高 1500；设施阶段在开始时锁定，升级从下一次培养生效。</p>
-      ${panel('陪练队友', `
-        <p class="hint">每轮开始时系统自动挑 6 名陪练（合计 7 人：你自己 + 其他位置各一名，外场球员会带一名其他门将）。他们只给主角加成长（每名陪练、每个正成长主属性 +2），不消耗精力、不生成球员卡、不涨属性；交流赛/队内赛用这 7 人踢。这 6 人整轮固定，培养结束后下一轮重新随机。</p>
-      `, { className: 'squad-panel' })}
       <div class="btn-row">
-        <button class="btn primary" data-action="start-training" data-player="${esc(player.id)}" ${enough ? '' : 'disabled'}>${enough ? `${icon('play', 14)}开始培养（系统配 6 名陪练）` : '精力不足，等待恢复'}</button>
+        <button class="btn primary" data-action="start-training" data-player="${esc(player.id)}" ${enough ? '' : 'disabled'}>${enough ? `${icon('play', 14)}开始培养` : '精力不足，等待恢复'}</button>
       </div>
     `, { className: 'training-start', aside: posBadge(primaryPosition(player)) })}
-    ${panel('培养起点：原始属性', `<div class="radar-pair">${attributeRadar(base)}<div>${attrList(base)}</div></div>`)}
+    ${panel('培养起点：原始属性', `<div class="radar-pair">${attributeRadar(base, undefined, 208, true)}<div>${attrList(base)}</div></div>`)}
   </div>`
 }
 
 function attrList(player: Pick<Player, 'attrs' | 'positions'>): string {
-  return `<table class="dt plain"><tbody>${mainAttrs(player).map((key) => `<tr><td class="dim">${attrLabel(key)}</td><td class="num">${attrHeat(player.attrs[key])}</td></tr>`).join('')}</tbody></table>`
+  return `<table class="dt plain"><tbody>${mainAttrs(player).map((key) => `<tr><td class="attr-name" style="--attr-color:${attrColor(key)}">${attrLabel(key)}</td><td class="num">${attrHeat(player.attrs[key])}</td></tr>`).join('')}</tbody></table>`
 }
 
 function renderTrainingPlayer(player: Player): string {
@@ -216,13 +209,12 @@ function renderTrainingPlayer(player: Player): string {
       </div>
       <div class="train-side">
         ${panel('当前与培养中', `
-          <div class="radar-block">${attributeRadar(cand, player)}
+          <div class="radar-block">${attributeRadar(cand, player, 208, true)}
             <div class="legend radar-legend"><span class="legend-item"><i class="swatch radar-swatch-base"></i>当前</span><span class="legend-item"><i class="swatch radar-swatch-top"></i>培养中</span></div>
           </div>
           ${currentSession.completed || candidate ? '' : `${attrCompareTable(player, cand)}<div class="side-skills">${skillGroups(cand)}</div>`}
         `, { aside: `<span class="muted small">CA ${playerCA(player).toFixed(1)} → ${playerCA(cand).toFixed(1)}</span>` })}
         ${currentSession.scheduleVersion === 1 && currentSession.exchangeMatches?.length ? panel('交流赛记录', `<div class="rows">${currentSession.exchangeMatches.map((match) => `<div class="row-line"><span>第 ${match.week} 周 · ${esc(match.opponentName)}</span><b>${match.homeScore}:${match.awayScore}</b><span class="form f-${match.result === 'win' ? 'W' : match.result === 'loss' ? 'L' : 'D'}">${{ win: '胜', draw: '平', loss: '负' }[match.result]}</span></div>`).join('')}</div>`, { flush: true }) : ''}
-        ${panel('培养规则', `<p class="hint">设施加成按本轮开始时的阶段快照计算；每个等级的第 5 阶段必定触发，等级内其余阶段概率从该等级下限线性上升；升级从下一次培养生效；已有快照的课程下一行动使用新规则，旧培养若无设施快照则没有建筑加成。每项主属性有各自上限，练到该属性的上限即停。CA 是综合能力参考值（0–1500），不是培养上限；比赛使用各项属性。</p>`)}
       </div>
     </div>
   `
@@ -319,10 +311,23 @@ function previewBox(session: TrainingSession, plan: ReturnType<typeof planTraini
       <div class="preview-cell wide"><span>属性成长</span><b class="${gainText(plan.gains, isGk) ? 'up' : ''}">${gainText(plan.gains, isGk) || '—'}</b></div>
       <div class="preview-cell"><span>CA</span><b>${displayCA(plan.caBefore).toFixed(1)} → ${displayCA(plan.caAfter).toFixed(1)}</b></div>
       <div class="preview-cell training-stamina-preview"><span>训练体力</span><b>${100 - session.fatigue} → ${100 - Math.max(0, Math.min(100, session.fatigue + plan.fatigue))}</b></div>
-      ${plan.quality ? `<div class="preview-cell training-quality"><span>品质</span><b>${esc(plan.quality.label)} ×${plan.quality.multiplier}</b></div>` : ''}
     </div>
-    ${plan.quality?.label === '失败' ? '<p class="warn-text small">这次培养失败了：不涨任何属性，也不加队友/设施加成。</p>' : ''}
     ${plan.note ? `<p class="hint">${esc(plan.note)}</p>` : ''}
+  </div>`
+}
+
+/** 这个选项上有哪些陪练（每个时段 6 人随机分到各个选项）。 */
+function optionPartners(session: TrainingSession, optionId: string): Player[] {
+  return (partnerAssignment(session)[optionId] ?? [])
+    .map((id) => game.roster.find((item) => item.id === id))
+    .filter((item): item is Player => !!item)
+}
+
+function optionPartnerList(session: TrainingSession, optionId: string): string {
+  if (!session.partnerIds?.length) return ''
+  const players = optionPartners(session, optionId)
+  return `<div class="training-teammates"><span class="field-title">本项陪练 ${players.length}/${session.partnerIds.length}</span>
+    <div class="check-grid">${players.map((mate) => `<span class="check-field muted"><span>${posBadge(primaryPosition(mate))} ${esc(mate.name)}</span></span>`).join('') || '<span class="muted small">无</span>'}</div>
   </div>`
 }
 
@@ -333,14 +338,12 @@ function squadRoster(session: TrainingSession): string {
   const players = ids.map((id) => game.roster.find((item) => item.id === id)).filter((item): item is Player => !!item)
   return `<div class="training-teammates"><span class="field-title">陪练队友（整轮固定，只给主角加成长）</span>
     <div class="check-grid">${players.map((mate) => `<span class="check-field muted"><span>${posBadge(primaryPosition(mate))} ${esc(mate.name)}</span></span>`).join('')}</div>
-    <p class="hint">他们不消耗精力、不生成球员卡；交流赛和队内赛用这 7 人踢。</p>
   </div>`
 }
 
 function teammatePicker(teammates: Player[]): string {
   return `<div class="training-teammates"><span class="field-title">共同训练队友</span>
     <div class="check-grid">${teammates.map((mate) => `<label class="check-field"><input type="checkbox" data-training-teammate="${esc(mate.id)}" value="${esc(mate.id)}" ${ui.trainingTeammateIds.includes(mate.id) ? 'checked' : ''}><span>${esc(mate.name)} · 体力 ${Math.round(100 - game.training[mate.id].fatigue)}</span></label>`).join('') || '<span class="muted small">暂无可选队友。</span>'}</div>
-    <p class="hint">可选择同进度且无待处理事件的培养队友；每名其他队友使正成长主属性额外 +2，隐藏属性按比例缩放，设施加成另计。各自消耗训练体力、独立触发事件。</p>
   </div>`
 }
 
@@ -367,6 +370,19 @@ function resolveMentor(session: TrainingSession): { mentors: Player[]; mentor: P
   return { mentors, mentor }
 }
 
+/** 选项按钮上的陪练人数徽标，悬停看名字。 */
+function activityMates(session: TrainingSession, optionId: string): string {
+  const players = optionPartners(session, optionId)
+  if (!players.length) return ''
+  return `<span class="act-mates" title="${esc(`陪练：${players.map((mate) => mate.name).join('、')}`)}">${players.length}</span>`
+}
+
+/** 恢复上站着陪练时，显示加成后的恢复量。 */
+function activityStamina(session: TrainingSession, item: { id: string; stamina: string; noRecovery?: boolean }): string {
+  if (item.id !== 'rest' || item.noRecovery) return item.stamina
+  return `+${30 + REST_PARTNER_RECOVERY * optionPartners(session, item.id).length}`
+}
+
 function calendarActionPanel(session: TrainingSession): string {
   const options = trainingOptions(session)
   const selected = options.find((item) => item.id === ui.trainingActivity) ?? options[0]
@@ -379,25 +395,23 @@ function calendarActionPanel(session: TrainingSession): string {
   }
   const { mentors, mentor } = resolveMentor(session)
   const request = buildTrainingRequest()
-  const preview = previewTraining(game, session.playerId, request)
+  const preview = previewTraining(game, session.playerId, request, true)
   const plan = preview.plan
   const date = trainingDate(session.action + 1)
   const lowMood = date.day <= 3 && (session.lowMoodWeeks ?? []).includes(date.week)
   const teammates = eligibleTrainingTeammates(session)
   return panel(`第 ${date.week} 周 · ${date.dayLabel} ${date.slot}`, `<div class="action-layout">
       <div class="activity-list" role="group" aria-label="训练项目">
-        ${options.map((item) => `<button class="activity ${item.id === selected.id ? 'active' : ''}" data-training-activity="${esc(item.id)}"><b>${esc(item.label)}</b><small class="${item.stamina.startsWith('+') ? 'up' : 'muted'}">${esc(item.stamina)}</small></button>`).join('')}
+        ${options.map((item) => `<button class="activity ${item.id === selected.id ? 'active' : ''}" style="--act-color:${activityColor(isGk ? item.goalkeeperGains ?? item.gains : item.gains, isGk)}" data-training-activity="${esc(item.id)}"><b>${esc(item.label)}</b><span class="act-right">${activityMates(session, item.id)}<small class="${item.stamina.startsWith('+') ? 'up' : 'muted'}">${esc(activityStamina(session, item))}</small></span></button>`).join('')}
       </div>
       <div class="action-detail">
         ${lowMood ? '<p class="warn-text small">低落情绪：本周一至周三成长 -50%。</p>' : ''}
-        <p class="action-desc">${esc(selected.desc)}</p>
         ${selected.parameters === 'position' ? positionField(session, isGk) : ''}
         ${selected.parameters === 'inherit' ? inheritFields(session, mentors, mentor) : ''}
-        ${session.partnerIds?.length ? squadRoster(session) : selected.group ? teammatePicker(teammates) : ''}
+        ${session.partnerIds?.length ? optionPartnerList(session, selected.id) : selected.group ? teammatePicker(teammates) : ''}
         ${plan ? previewBox(session, plan as ReturnType<typeof planTraining>, isGk) : ''}
         ${preview.error ? `<p class="warn-text training-error small" role="alert">${esc(preview.error)}</p>` : ''}
         <button class="btn primary wide" data-action="training-execute" ${preview.error || !plan ? 'disabled' : ''}>${preview.error || !plan ? '无法执行' : `${icon('play', 14)}执行行动`}</button>
-        <p class="hint">品质：成功 ×1 / 大成功 ${Math.round(GREAT_CHANCE * 100)}% ×1.3 / 完美成功 ${Math.round(PERFECT_CHANCE * 100)}% ×1.6；体力 ${PLAIN_FREE_STAMINA} 以上不会出“一般”，低于它才会出一般 ×0.7；体力 ${FAILURE_STAMINA} 及以下不再有大成功/完美，并会出现失败（不涨属性）。当前体力 ${Math.round(100 - session.fatigue)}：一般 ${Math.round(plainChance(100 - session.fatigue) * 100)}%、失败 ${Math.round(failureChance(100 - session.fatigue) * 100)}%。主属性基础值每次 ±${Math.round(GAIN_SPREAD * 100)}% 浮动，隐藏属性不浮动；品质和浮动在同一行动固定，不因切换项目重抽。</p>
       </div>
     </div>`, { aside: `<span class="muted small">行动 ${session.action + 1}/${trainingActionsTotal(session)}</span>`, className: 'action-panel' })
 }
@@ -411,8 +425,8 @@ function legacyActionPanel(session: TrainingSession): string {
     else if (ui.trainingPosition === 'GK') ui.trainingPosition = 'CM'
   }
   const request = buildTrainingRequest()
-  const preview = previewTraining(game, session.playerId, request)
-  const plan = preview.plan ?? planTraining(session, request, mentor)
+  const preview = previewTraining(game, session.playerId, request, true)
+  const plan = preview.plan ?? planTraining(session, request, mentor, 0, true)
   const error = preview.error
   const teammates = eligibleTrainingTeammates(session)
   const groupAction = ui.trainingKind === 'drill' || ui.trainingKind === 'combo' || ui.trainingKind === 'match'
@@ -422,7 +436,6 @@ function legacyActionPanel(session: TrainingSession): string {
         ${TRAINING_ACTION_INFO.map((item) => `<button class="activity ${ui.trainingKind === item.id ? 'active' : ''}" data-training-kind="${item.id}"><b>${item.label}</b><small class="${staminaText(item.id).startsWith('+') ? 'up' : 'muted'}">${staminaText(item.id)}</small></button>`).join('')}
       </div>
       <div class="action-detail">
-        <p class="action-desc">${esc(TRAINING_ACTION_INFO.find((item) => item.id === ui.trainingKind)?.desc ?? '')}</p>
         ${ui.trainingKind === 'drill' ? `<div class="attr-picker">${mainAttrsFor(isGk).map((key) => `<button class="attr-chip ${ui.trainingAttr === key ? 'active' : ''}" data-training-attr="${key}"><span>${attrLabel(key)}</span><b>${attrValue(session.candidate, key).toFixed(0)}</b></button>`).join('')}</div>` : ''}
         ${ui.trainingKind === 'combo' ? `<div class="seg"><button class="${ui.trainingCombo === 'attack' ? 'active' : ''}" data-training-combo="attack">进攻配合</button><button class="${ui.trainingCombo === 'defense' ? 'active' : ''}" data-training-combo="defense">防守配合</button></div>` : ''}
         ${ui.trainingKind === 'position' ? positionField(session, isGk) : ''}
@@ -432,14 +445,12 @@ function legacyActionPanel(session: TrainingSession): string {
         ${previewBox(session, plan, isGk)}
         ${error ? `<p class="warn-text training-error small" role="alert">${esc(error)}</p>` : ''}
         <button class="btn primary wide" data-action="training-execute" ${error ? 'disabled' : ''}>${error ? '无法执行' : `${icon('play', 14)}执行行动`}</button>
-        <p class="hint training-quality-probabilities">培养不消耗金币；开始时扣除 30 精力。品质：成功 ×1 / 大成功 ${Math.round(GREAT_CHANCE * 100)}% ×1.3 / 完美成功 ${Math.round(PERFECT_CHANCE * 100)}% ×1.6；体力 ${PLAIN_FREE_STAMINA} 以上不会出“一般”，低于 ${PLAIN_FREE_STAMINA} 时才会出一般 ×0.7；体力 ${FAILURE_STAMINA} 及以下不再有大成功/完美，并会出现失败（不涨属性）。你现在体力 ${Math.round(100 - session.fatigue)}：一般 ${Math.round(plainChance(100 - session.fatigue) * 100)}%、失败 ${Math.round(failureChance(100 - session.fatigue) * 100)}%。主属性的基础值每次在 ±${Math.round(GAIN_SPREAD * 100)}% 内浮动，隐藏属性不浮动；品质只影响基础成长。同一课程行动的品质和浮动都固定，切换选择不能重抽。</p>
       </div>
     </div>`, { aside: `<span class="muted small">行动 ${session.action + 1}/${trainingActionsTotal(session)}</span>`, className: 'action-panel' })
 }
 
 function eventPanel(session: TrainingSession, event: NonNullable<ReturnType<typeof eventById>>): string {
   const isGk = session.candidate.positions.GK > 0
-  const lowMood = session.scheduleVersion === 1 && (session.lowMoodWeeks ?? []).includes(trainingDate(session.pendingEventAction ?? session.action).week) && trainingDate(session.pendingEventAction ?? session.action).day <= 3
   return panel(esc(event.title), `
     <p class="event-text">${esc(event.text)}</p>
     <div class="options">
@@ -452,8 +463,7 @@ function eventPanel(session: TrainingSession, event: NonNullable<ReturnType<type
         </button>`
       }).join('')}
     </div>
-    <p class="hint">选项列出的属性成长为基础值，不含设施加成；${lowMood ? '低落情绪会使属性成长减少 50%；' : ''}接近各自上限时实际成长可能较少。随机结果展示概率并立即保存。</p>
-  `, { className: 'event-panel', aside: tag(event.mainline ? '主线' : event.category === 'chain' ? `事件链 ${event.stage}/3` : '训练事件', event.mainline ? 'gold' : '') })
+  `, { className: 'event-panel', aside: tag(event.category === 'mainline' ? '主线' : event.category === 'chain' ? `事件链 ${event.stage}/3` : '训练事件', event.category === 'mainline' ? 'gold' : '') })
 }
 
 function candidatePanel(current: Player, cand: Player, session: TrainingSession): string {

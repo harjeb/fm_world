@@ -511,11 +511,29 @@ function startTrainingFor(playerId: string): void {
   openTraining(playerId)
 }
 
+/** 手游式的品质提示：在屏幕中央弹出一个大字，约 2 秒后淡出（不进 render，不会被重绘打断）。 */
+const QUALITY_POPUP_CLASS: Record<string, string> = { 完美成功: 'perfect', 大成功: 'great', 成功: 'ok', 一般: 'plain', 失败: 'fail' }
+function showQualityPopup(label: string): void {
+  document.querySelector('.quality-popup')?.remove()
+  const el = document.createElement('div')
+  el.className = `quality-popup q-${QUALITY_POPUP_CLASS[label] ?? 'ok'}`
+  el.setAttribute('role', 'status')
+  el.textContent = label
+  document.body.append(el)
+  window.setTimeout(() => el.remove(), 2000)
+}
+
 function executeTraining(): void {
   if (!ui.trainingPlayerId) return
-  const result = trainingAction(game, ui.trainingPlayerId, buildTrainingRequest())
+  const playerId = ui.trainingPlayerId
+  const actionNumber = (game.training[playerId]?.action ?? 0) + 1
+  const result = trainingAction(game, playerId, buildTrainingRequest())
   if (!result.ok) showNotice(result.error ?? '行动失败')
   else {
+    // 品质只在执行后揭晓：从刚写入的培养日志里读出这一次的品质。
+    const entry = game.training[playerId]?.log.find((item) => item.kind === 'action' && item.action === actionNumber)
+    const quality = entry ? /（([^（）]+)）$/.exec(entry.title)?.[1] : undefined
+    if (quality && quality in QUALITY_POPUP_CLASS) showQualityPopup(quality)
     ui.trainingTeammateIds = []
     ui.notice = result.exchange ? `交流赛：${result.exchange.homeScore}:${result.exchange.awayScore} 对 ${result.exchange.opponentName} · ${{ win: '胜', draw: '平', loss: '负' }[result.exchange.result]}` : result.event ? `触发事件：${result.event.title}` : '行动完成。'
   }

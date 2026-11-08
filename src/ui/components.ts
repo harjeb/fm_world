@@ -9,6 +9,7 @@ import { skillCapacity, skillCategory } from '../game/data/skills.ts'
 import { getSkillTier } from '../game/inheritance.ts'
 import { injuryUntil } from '../game/injury.ts'
 import { attrRating, initialDisplayCA, mainAttrsFor } from '../game/rating.ts'
+import { isMainAttr } from '../game/scale.ts'
 import { PLAYER_TEAM_ID, teamName } from '../game/season.ts'
 import { marketState } from '../online.ts'
 import { esc, playerCA, positionClass, positionLabel, skillName, traitName } from './format.ts'
@@ -208,6 +209,37 @@ export function skillGroups(player: Pick<Player, 'skills' | 'skillTiers'>): stri
   }).join('')
 }
 
+/* ---------- 属性配色 ---------- */
+
+/** 7 项外场主属性各一种颜色；隐藏属性、门将专属属性和没有主属性成长的项目一律银色。 */
+export const ATTR_COLORS: Partial<Record<AttrKey, string>> = {
+  passing: '#4ea1ff',
+  shooting: '#ff5d5d',
+  dribbling: '#ff9f43',
+  tackling: '#b57bff',
+  strength: '#f5d04a',
+  speed: '#3ddc84',
+  acceleration: '#2dd4d4',
+}
+export const ATTR_SILVER = '#b4bcc8'
+
+/** 单个属性的颜色：7 项外场主属性各有一种，其余（隐藏属性、门将专属属性）是银色。 */
+export function attrColor(key: AttrKey): string {
+  return ATTR_COLORS[key] ?? ATTR_SILVER
+}
+
+/** 训练项目的颜色：取它成长最多的那项主属性（并列取先列出的）对应的颜色，没有就是银色。 */
+export function activityColor(gains: Partial<Record<AttrKey, number>> | undefined, gk: boolean): string {
+  let best: AttrKey | undefined
+  let bestGain = 0
+  for (const [key, value] of Object.entries(gains ?? {}) as [AttrKey, number][]) {
+    if (!isMainAttr(key, gk) || !(value > bestGain)) continue
+    best = key
+    bestGain = value
+  }
+  return (best && ATTR_COLORS[best]) || ATTR_SILVER
+}
+
 /* ---------- 球员卡 ---------- */
 
 export function cardName(card: Pick<PlayerCard, 'serial' | 'customName'>): string {
@@ -369,7 +401,7 @@ const RADAR_FIELD: AttrKey[] = ['shooting', 'dribbling', 'speed', 'acceleration'
 const RADAR_GK: AttrKey[] = ['reflexes', 'handling', 'composure', 'passing', 'rushing', 'oneOnOne']
 
 /** 六项主属性的六边形。第二名球员（候选）叠加成第二个多边形，用图例说明。 */
-export function attributeRadar(player: { attrs: Partial<Attributes>; positions: Player['positions'] }, compare?: { attrs: Partial<Attributes>; positions: Player['positions'] }, size = 208): string {
+export function attributeRadar(player: { attrs: Partial<Attributes>; positions: Player['positions'] }, compare?: { attrs: Partial<Attributes>; positions: Player['positions'] }, size = 208, colored = false): string {
   const gk = player.positions.GK > 0
   const keys = gk ? RADAR_GK : RADAR_FIELD
   const center = size / 2
@@ -388,11 +420,11 @@ export function attributeRadar(player: { attrs: Partial<Attributes>; positions: 
   const labels = keys.map((key, index) => {
     const [x, y] = point(index, 1.2)
     const anchor = Math.abs(x - center) < 4 ? 'middle' : x > center ? 'start' : 'end'
-    return `<text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="${anchor}" class="radar-label">${esc(ATTR_META[key].label)}</text>`
+    return `<text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="${anchor}" class="radar-label"${colored ? ` style="fill:${attrColor(key)}"` : ''}>${esc(ATTR_META[key].label)}</text>`
   }).join('')
-  const dots = (target: { attrs: Partial<Attributes> }, cls: string) => keys.map((_, index) => {
+  const dots = (target: { attrs: Partial<Attributes> }, cls: string) => keys.map((key, index) => {
     const [x, y] = point(index, scaleOf(target)(index))
-    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" class="${cls}"/>`
+    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" class="${cls}"${colored ? ` style="fill:${attrColor(key)}"` : ''}/>`
   }).join('')
   const base = compare ?? player
   const top = compare ? player : null

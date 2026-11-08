@@ -83,6 +83,20 @@ export function trainingOptions(session: TrainingSession): TrainingActivity[] {
   return [...chosen, ACTIVITIES.find(item => item.id === 'mentor')!, REST]
 }
 
+/**
+ * 这一时段 6 名陪练各自随机站到哪个选项上（含“恢复”）：每人独立随机，合计恰好是全部陪练，
+ * 有的选项可能一个都没有。只看种子和第几次行动，刷新、读档、切换选项都不会重抽。
+ */
+export function partnerAssignment(session: TrainingSession): Record<string, string[]> {
+  const options = trainingOptions(session)
+  const assignment: Record<string, string[]> = Object.fromEntries(options.map((item) => [item.id, [] as string[]]))
+  const ids = session.partnerIds ?? []
+  if (!options.length || !ids.length) return assignment
+  const rng = derivedRng(session.scheduleSeed ?? session.seed, 'training-partner-slots', session.action + 1)
+  for (const id of ids) assignment[options[rng.int(options.length)].id].push(id)
+  return assignment
+}
+
 export function trainingLowMood(session: TrainingSession, action: number): boolean {
   const date = trainingDate(action)
   return session.scheduleVersion === 1 && date.day <= 3 && (session.lowMoodWeeks ?? []).includes(date.week)

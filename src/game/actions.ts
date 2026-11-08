@@ -2,14 +2,14 @@ import { ALL_ATTRIBUTES, type AITeam, type AttrKey, type Attributes, type AutoSu
 import type { MatchEngine } from './match/engine.ts'
 import { MatchEngine as Engine } from './match/engine.ts'
 import type { MatchState } from './match/types.ts'
-import { branchProbability, createTrainingSession, planTraining, performTrainingAction, trainingActionsTotal, resolveTrainingEvent, confirmCandidate, discardCandidate, keepCandidate, TRAINING_ENERGY_COST, type PerformResult, type ResolveResult, type TrainingRequest, type TrainingPlan } from './training.ts'
+import { branchProbability, createTrainingSession, partnersAt, planTraining, performTrainingAction, trainingActionsTotal, resolveTrainingEvent, confirmCandidate, discardCandidate, keepCandidate, TRAINING_ENERGY_COST, type PerformResult, type ResolveResult, type TrainingRequest, type TrainingPlan } from './training.ts'
 import { addTrainedCard, closeFinishedTraining, deleteCard, equipCard, untrainedPlayer, type CardOutcome } from './cards.ts'
 import { newTrainingSeed, saveGame } from './state.ts'
 import { nextSeasonCountdown } from './season.ts'
 import { seasonEndAt } from './calendar.ts'
 import { autoFillLineup, validateLineup } from './squad.ts'
 import { FORMATIONS } from './data/formations.ts'
-import { positionMultiplier } from './ca.ts'
+import { caOf, positionMultiplier } from './ca.ts'
 import { advanceSeasonRound, finishActiveMatch, skipToMatchday, startChallenge, startChallengeAgainstTeam, startLeagueMatch, startNextSeason } from './season.ts'
 import { cachedOwnerlessTeams } from './world.ts'
 import { emptyAutoSubs, validateAutoSubPlan } from './match/management.ts'
@@ -120,7 +120,7 @@ function trainingMentor(game: GameState, request: TrainingRequest) {
     ? game.roster.find(item => item.id === request.mentorId) : undefined
 }
 
-function prepareTraining(game: GameState, playerId: string, request: TrainingRequest): { plan?: TrainingPlan; error?: string; completed?: boolean; ids?: string[] } {
+function prepareTraining(game: GameState, playerId: string, request: TrainingRequest, hideQuality = false): { plan?: TrainingPlan; error?: string; completed?: boolean; ids?: string[] } {
   const session = game.training[playerId]
   if (!session) return { error: '没有进行中的培养', completed: false }
   const rawIds = (request as TrainingRequest & { teammateIds?: unknown }).teammateIds
@@ -142,8 +142,8 @@ function prepareTraining(game: GameState, playerId: string, request: TrainingReq
     if (participant.action >= trainingActionsTotal(participant)) return { error: '本轮培养的时段已用完', completed: id === playerId }
     if (participant.action !== session.action || participant.scheduleVersion !== session.scheduleVersion || (session.scheduleVersion === 1 && participant.scheduleSeed !== session.scheduleSeed)) return { error: '队友培养日程或行动进度不一致' }
     // Plan and execute on clones: neither preview nor a failed group action may mutate live state.
-    const support = participant.partnerIds?.length ?? 0
-    const plan = planTraining(structuredClone(participant), request, mentor, Math.max(ids.length - 1, support))
+    const support = partnersAt(participant, request)
+    const plan = planTraining(structuredClone(participant), request, mentor, Math.max(ids.length - 1, support), hideQuality)
     if (plan.invalid) return { error: plan.note ?? '无法执行此培养行动' }
     const trial = performTrainingAction(structuredClone(participant), request, mentor, Math.max(ids.length - 1, support))
     if (!trial.ok) return { error: trial.error, completed: id === playerId ? trial.completed : false }
@@ -157,10 +157,48 @@ function prepareTraining(game: GameState, playerId: string, request: TrainingReq
   return { plan: primaryPlan, ids }
 }
 
+/** 交流赛对手相对我方实力的比例：第一周弱 15%，第二周持平，第三周强 10%（之后沿用最后一周）。 */
+export const EXCHANGE_STRENGTH_RATIOS = [0.85, 1, 1.1] as const
+
+/** 首发平均 CA：球队“排名实力”的口径（和选队界面的“首发平均 CA”一致）。 */
+export function startersAverageCA(players: Player[], lineup: Lineup): number {
+  const starters = lineup.starters
+    .map((slot) => players.find((player) => player.id === slot.playerId))
+    .filter((player): player is Player => !!player)
+  if (!starters.length) return 0
+  return starters.reduce((sum, player) => sum + caOf(player.attrs, isGoalkeeper(player)), 0) / starters.length
+}
+
+/** 基础卡版本的球员：属性、位置、性格、技能都回到没装备任何球员卡时的样子。 */
+function baseCardPlayer(player: Player): Player {
+  return {
+    ...player,
+    attrs: { ...(player.baseAttrs ?? player.attrs) },
+    positions: { ...(player.basePositions ?? player.positions) },
+    personality: { ...(player.basePersonality ?? player.personality) },
+    skills: [...(player.baseSkills ?? player.skills)],
+    skillTiers: player.baseSkillTiers ?? player.skillTiers,
+    equippedCardId: undefined,
+    version: 0,
+  }
+}
+
+/** 按周挑对手：目标实力 = 我方首发平均 CA × 当周比例，选基础卡强度最接近目标的球队；已经打过的尽量不重复。 */
+export function pickExchangeOpponent(teams: AITeam[], ownStrength: number, week: number, faced: string[] = []): AITeam {
+  const ratio = EXCHANGE_STRENGTH_RATIOS[Math.min(Math.max(week, 1), EXCHANGE_STRENGTH_RATIOS.length) - 1]
+  const target = ownStrength * ratio
+  const based = teams.map((team) => {
+    const players = team.players.map(baseCardPlayer)
+    return { team: { ...team, players }, strength: startersAverageCA(players, team.lineup) }
+  })
+  const fresh = based.filter((item) => !faced.includes(item.team.id))
+  const pool = fresh.length ? fresh : based
+  return pool.sort((x, y) => Math.abs(x.strength - target) - Math.abs(y.strength - target) || x.team.id.localeCompare(y.team.id))[0].team
+}
+
 function simulateTrainingExchange(game: GameState, session: TrainingSession): TrainingExchange {
   const week = trainingDate(session.action + 1).week
   const scheduleSeed = session.scheduleSeed ?? session.seed
-  const opponent = derivedRng(scheduleSeed, 'training-exchange-opponent', week).pick(game.aiTeams)
   // 小队培养时交流赛就用这 7 个人（含门将）当前装备的属性，不用保存的首发。
   const squad = [session.playerId, ...(session.partnerIds ?? [])]
     .map((id) => game.roster.find((player) => player.id === id))
@@ -174,6 +212,8 @@ function simulateTrainingExchange(game: GameState, session: TrainingSession): Tr
       lineup = auto
     }
   }
+  // 对手按排名接近：我方首发平均 CA（含这名培养球员当前的 CA）乘当周比例，对手一律用基础卡属性。
+  const opponent = pickExchangeOpponent(game.aiTeams, startersAverageCA(roster, lineup), week, (session.exchangeMatches ?? []).map((match) => match.opponentId))
   const home = teamInputFromLineup(roster, lineup, { id: 'player', name: game.clubName, color: '#34d399', accent: '#052e1b' })
   if (game.autoSubs) home.autoSubs = structuredClone(game.autoSubs)
   const engine = new Engine({ seed: splitSeed(scheduleSeed, `training-exchange-${week}`), home, away: teamInputFromAI(opponent), knockout: false })
@@ -181,15 +221,15 @@ function simulateTrainingExchange(game: GameState, session: TrainingSession): Tr
   return { week, opponentId: opponent.id, opponentName: opponent.name, homeScore: score.home, awayScore: score.away, result: score.home > score.away ? 'win' : score.home < score.away ? 'loss' : 'draw' }
 }
 
-export function previewTraining(game: GameState, playerId: string, request: TrainingRequest): { plan?: TrainingPlan; error?: string } {
-  const { plan, error } = prepareTraining(game, playerId, request)
+export function previewTraining(game: GameState, playerId: string, request: TrainingRequest, hideQuality = false): { plan?: TrainingPlan; error?: string } {
+  const { plan, error } = prepareTraining(game, playerId, request, hideQuality)
   return error ? { error } : { plan }
 }
 
 export function trainingAction(game: GameState, playerId: string, request: TrainingRequest): PerformResult {
   const current = game.training[playerId]
   // 陪练队友只按人数给主角加成长，不参与行动、不消耗精力、不涨属性。
-  const support = current?.partnerIds?.length ?? 0
+  const support = current ? partnersAt(current, request) : 0
   // 显式 teammateIds（Agent/旧流程）仍然生效；没传时由系统陪练的人数提供加成。
   const prepared = prepareTraining(game, playerId, request)
   if (prepared.error || !prepared.ids) return { ok: false, error: prepared.error, completed: prepared.completed ?? false }

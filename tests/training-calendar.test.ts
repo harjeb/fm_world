@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
-import { previewTraining, startTraining, trainingAction, trainingEventChoice } from '../src/game/actions.ts'
+import { pickExchangeOpponent, previewTraining, startersAverageCA, startTraining, trainingAction, trainingEventChoice } from '../src/game/actions.ts'
 import { planTraining } from '../src/game/training.ts'
 import { trainingDate, trainingLowMood, trainingOptions, type TrainingActivityId } from '../src/game/training-calendar.ts'
 import { EVENTS, eventById } from '../src/game/data/events.ts'
@@ -132,7 +132,7 @@ describe('calendar training', () => {
     const { game, ids } = setup(2)
     const s = game.training[ids[0]]
     const seed = s.scheduleSeed!
-    const opponent = derivedRng(seed, 'training-exchange-opponent', 1).pick(game.aiTeams)
+    const opponent = pickExchangeOpponent(game.aiTeams, startersAverageCA(game.roster, game.lineup), 1)
     const home = teamInputFromLineup(game.roster, game.lineup, { id: 'player', name: game.clubName, color: '#34d399', accent: '#052e1b' })
     if (game.autoSubs) home.autoSubs = structuredClone(game.autoSubs)
     const engine = new MatchEngine({ seed: splitSeed(seed, 'training-exchange-1'), home, away: teamInputFromAI(opponent), knockout: false })

@@ -55,10 +55,10 @@ export const EVENTS: EventDef[] = [
     id: 'main_test1',
     title: '阶段测验 · 第六次',
     category: 'mainline',
-    mainline: true,
-    weight: 100,
+    // 阶段测验不再必出：在窗口内和其他事件一起靠概率抽。
+    weight: 40,
     ...once,
-    trigger: { minAction: 6, maxAction: 6 },
+    trigger: { minAction: 5, maxAction: 14 },
     text: '两周一次的阶段测验到了。测验不占训练行动，但教练只给一次机会，成绩会影响后面的训练安排。',
     options: [
       {
@@ -95,10 +95,9 @@ export const EVENTS: EventDef[] = [
     id: 'main_test2',
     title: '阶段测验 · 第十二次',
     category: 'mainline',
-    mainline: true,
-    weight: 100,
+    weight: 40,
     ...once,
-    trigger: { minAction: 12, maxAction: 12 },
+    trigger: { minAction: 12, maxAction: 24 },
     text: '这次测验会决定教练接下来把你放在哪个位置、哪条路线上。',
     options: [
       {

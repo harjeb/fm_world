@@ -1,9 +1,9 @@
 import type { Player } from '../../game/types.ts'
 import { economyOf } from '../../game/economy.ts'
-import { AUCTION_DURATION_MS, AUCTION_EXTEND_MS, AUCTION_MIN_RAISE, committedFunds, leadingBid, minimumBid } from '../../game/auction.ts'
+import { AUCTION_EXTEND_MS, committedFunds, leadingBid, minimumBid } from '../../game/auction.ts'
 import { traitEffectText } from '../../game/data/skill-effects.ts'
 import { traitNameOf } from '../../game/data/star-traits.ts'
-import { NPC_MAX_DEALS, NPC_ROUND_BUDGET, SQUAD_LIMIT, bestMarketValue, clubAsking, freeAgentAsking, saleChance, suggestedPrice, transferWindowOpen } from '../../game/market.ts'
+import { SQUAD_LIMIT, bestMarketValue, clubAsking, freeAgentAsking, saleChance, suggestedPrice, transferWindowOpen } from '../../game/market.ts'
 import { isOnMarketToday } from '../../game/market-window.ts'
 import { caHeat, clubName, countryLabel, emptyState, icon, pageHead, panel, posBadge, primaryPosition, tag, traitLabel } from '../components.ts'
 import { countdownText, esc, playerCA } from '../format.ts'
@@ -58,14 +58,6 @@ function marketTab(): string {
         ${panel('出售球员', sell, { flush: true })}
       </div>
       <div class="dash-col">
-        ${panel('挂牌规则', `<ul class="rule-list">
-          <li>${icon('coin', 13)}挂牌后球员离开阵容；结算时买家只按估值折价收购：不高于建议价（估值的 90%）必定成交，越接近估值越难卖，高于估值的要价会被直接拒绝。</li>
-          <li>${icon('clock', 13)}每轮最多成交 ${NPC_MAX_DEALS} 笔、买家总预算 ${NPC_ROUND_BUDGET.toLocaleString()}。</li>
-          <li>${icon('cards', 13)}估值按球员最好的一张卡计算，不看现在装备哪张。挂牌卖出去时他的卡会全部销毁、人回到原始属性；撤牌或解约则保留球员卡。</li>
-          <li>${icon('alert', 13)}挂牌须保留至少 10 人和合法阵容；培养中的球员不能挂牌；比赛中不能交易，赛季结束后不能新挂牌。</li>
-          <li>${icon('swap', 13)}买人要谈判：答应他的赛季目标和位置、把报价抬到底价以上，成功率才会上来。球星只肯去冠军联赛、或者心里有别的下家时，加钱也未必够。</li>
-          <li>${icon('academy', 13)}阵容上限 ${SQUAD_LIMIT} 人：签人可以超编，但开赛前必须裁掉多余的人，否则无法进入比赛。</li>
-        </ul>`)}
         ${panel('从 AI 球队买人', `<div class="table-scroll"><table class="dt"><thead><tr><th>球队</th><th>位置</th><th>球员</th><th class="num">CA</th><th class="num">价格</th><th></th></tr></thead><tbody>${buyRows}</tbody></table></div>`, { flush: true })}
       </div>
     </div>`
@@ -117,7 +109,6 @@ function auctionTab(): string {
   }).join('')
   const logRows = marketState.log.slice(0, 8).map((item) => `<li>${item.club ? `<b>${esc(item.club)}</b> 以 ${item.amount.toLocaleString()} 签下 ${esc(item.playerName)}` : `${esc(item.playerName)} 流拍，回到市场`}</li>`).join('')
   return `
-    <p class="hint auction-rules">全服共用一个自由市场。第一个出价开始 ${AUCTION_DURATION_MS / 60_000} 分钟倒计时，其他人可以加价（每次至少 ${AUCTION_MIN_RAISE * 100}%）；最后 ${AUCTION_EXTEND_MS / 60_000} 分钟有人加价，倒计时回到 ${AUCTION_EXTEND_MS / 60_000} 分钟。时间到时最高价者得。其他俱乐部的电脑教练也会盯着抢手货，觉得值就会跟价。领先的出价会占用余额，你现在可用 <b>${available.toLocaleString()}</b>。</p>
     ${running.length ? panel(`竞拍中 <small>${running.length}</small>`, `<div class="table-scroll"><table class="dt auction-table"><thead><tr><th>位置</th><th>球员</th><th class="num">龄</th><th class="num">CA</th><th>特性</th><th class="num">当前价</th><th>领先</th><th class="num">倒计时</th><th class="num">出价</th></tr></thead><tbody>${auctionRows}</tbody></table></div>`, { flush: true }) : ''}
     ${panel(`自由球员 <small>${agents.length}</small>`, `
       <div class="toolbar in-panel">

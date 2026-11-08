@@ -115,7 +115,7 @@ describe('expanded training courses', () => {
     expect(player.energy).toBe(70)
   })
 
-  it('halves new event base gains while retaining facility bonuses and old course values', () => {
+  it('new courses give 2x the authored event gains (4x the old 0.5x) while retaining facility bonuses and old course values', () => {
     const { game, players, sessions } = setup()
     const id = players[0].id
     const current = sessions[0]
@@ -126,11 +126,11 @@ describe('expanded training courses', () => {
     const a = trainingEventChoice(game, id, 'passing')
     game.training[id] = legacy
     const b = trainingEventChoice(game, id, 'passing')
-    expect(a.gains!.passing).toBeCloseTo(15 + 7)
+    expect(a.gains!.passing).toBeCloseTo(60 + 7)
     expect(b.gains!.passing).toBeCloseTo(30 + 7)
-    expect(a.gains!.firstTouch).toBeCloseTo(0.5 + 7 * 20 / 1500)
+    expect(a.gains!.firstTouch).toBeCloseTo(2 + 7 * 20 / 1500)
     expect(b.gains!.firstTouch).toBeCloseTo(1 + 7 * 20 / 1500)
-    expect(displayEventHint('传球 +2，第一脚触球 +1', false, 0.5)).toBe('传球 +15，第一脚触球 +0.5')
+    expect(displayEventHint('传球 +2，第一脚触球 +1', false, 2)).toBe('传球 +60，第一脚触球 +2')
   })
 
   it('uses one deterministic quality per player and action across all course requests', () => {
