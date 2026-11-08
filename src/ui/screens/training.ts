@@ -170,10 +170,28 @@ function attrCompareTable(current: Player, candidate: Player): string {
   return `<table class="dt"><thead><tr><th>属性</th><th class="num">当前</th><th class="num">新卡</th><th class="num">变化</th></tr></thead><tbody>${rows}</tbody></table>`
 }
 
+function squadCandidates(player: Player): Player[] {
+  return game.roster.filter((item) => item.id !== player.id
+    && !(game.training[item.id] && !game.training[item.id].completed)
+    && (item.energy ?? 100) >= TRAINING_ENERGY_COST)
+}
+
 function renderTrainingStart(player: Player): string {
   const energy = player.energy ?? 100
   const enough = energy >= TRAINING_ENERGY_COST
   const base = { ...baseBuild(player) }
+  const candidates = enough ? squadCandidates(player) : []
+  const picked = ui.trainingSquadIds.filter((id) => candidates.some((item) => item.id === id))
+  const pickedPlayers = picked.map((id) => candidates.find((item) => item.id === id)!)
+  const hasKeeper = player.positions.GK > 0 || pickedPlayers.some((item) => item.positions.GK > 0)
+  const squadReady = picked.length === 6 && hasKeeper
+  const squadHint = picked.length === 0
+    ? '不选队友就是单练。'
+    : !hasKeeper
+      ? '小队里至少要有 1 名门将（你自己是门将也可以）。'
+      : picked.length < 6
+        ? `还需要 ${6 - picked.length} 名队友才能组成 7 人小队。`
+        : '7 人小队已就绪：每时段全员参加，交流赛/队内赛也用这套阵容。'
   return `<div class="grid two">
     ${panel(esc(player.name), `
       <div class="tile-grid">
@@ -181,7 +199,14 @@ function renderTrainingStart(player: Player): string {
         ${tile('精力', String(Math.round(energy)), `开始消耗 ${TRAINING_ENERGY_COST}`)}
       </div>
       <p class="hint">每轮都从原始属性开始，结束后产出一张新卡进入库存，和之前的卡互不影响。培养不消耗金币；开始一轮消耗 <b>${TRAINING_ENERGY_COST}</b> 点精力，比赛日推进时恢复。设施提供额外成长（按阶段概率触发，每个等级第 5 阶段必定触发），主属性最高 1500；设施阶段在开始时锁定，升级从下一次培养生效。</p>
-      <button class="btn primary" data-action="start-training" data-player="${esc(player.id)}" ${enough ? '' : 'disabled'}>${enough ? `${icon('play', 14)}开始培养` : '精力不足，等待恢复'}</button>
+      ${panel('训练小队', `
+        <p class="hint">开局时选定其他 6 名队友（合计 7 人，必须含 1 名门将）。选定后整轮不能换人；每时段小队全员参加，个人项目时其余队友同步休息，交流赛/队内赛也用这 7 人。</p>
+        <div class="squad-picker">${candidates.map((mate) => `<label class="check-field"><input type="checkbox" data-training-squad="${esc(mate.id)}" ${picked.includes(mate.id) ? 'checked' : ''}${picked.length >= 6 && !picked.includes(mate.id) ? ' disabled' : ''}><span>${posBadge(primaryPosition(mate))} ${esc(mate.name)} · CA ${playerCA(mate).toFixed(0)} · 精力 ${Math.round(mate.energy ?? 100)}</span></label>`).join('') || '<span class="muted small">没有可选的队友（需要不在培养中且精力 ≥ ' + TRAINING_ENERGY_COST + '）。</span>'}</div>
+        <p class="hint ${picked.length && !hasKeeper ? 'warn-text' : ''}">已选 ${picked.length} / 6 · ${squadHint}</p>
+      `, { className: 'squad-panel' })}
+      <div class="btn-row">
+        <button class="btn primary" data-action="start-training-squad" data-player="${esc(player.id)}" ${enough && (picked.length === 0 || squadReady) ? '' : 'disabled'}>${enough ? `${icon('play', 14)}${picked.length ? '开始小队培养' : '开始培养'}` : '精力不足，等待恢复'}</button>
+      </div>
     `, { className: 'training-start', aside: posBadge(primaryPosition(player)) })}
     ${panel('培养起点：原始属性', `<div class="radar-pair">${attributeRadar(base)}<div>${attrList(base)}</div></div>`)}
   </div>`
@@ -321,6 +346,17 @@ function previewBox(session: TrainingSession, plan: ReturnType<typeof planTraini
   </div>`
 }
 
+/** 小队模式：显示固定阵容，不能再临时勾人。 */
+function squadRoster(session: TrainingSession): string {
+  const ids = session.partnerIds ?? []
+  if (!ids.length) return ''
+  const players = ids.map((id) => game.roster.find((item) => item.id === id)).filter((item): item is Player => !!item)
+  return `<div class="training-teammates"><span class="field-title">训练小队（每时段全员参加，整轮不能换人）</span>
+    <div class="check-grid">${players.map((mate) => `<span class="check-field muted"><span>${posBadge(primaryPosition(mate))} ${esc(mate.name)} · 体力 ${Math.round(100 - (game.training[mate.id]?.fatigue ?? 0))}</span></span>`).join('')}</div>
+    <p class="hint">个人项目（位置、传承、导师等）时其他队友同步休息，保证下一时段还能一起练；交流赛和队内赛用这 7 人。</p>
+  </div>`
+}
+
 function teammatePicker(teammates: Player[]): string {
   return `<div class="training-teammates"><span class="field-title">共同训练队友</span>
     <div class="check-grid">${teammates.map((mate) => `<label class="check-field"><input type="checkbox" data-training-teammate="${esc(mate.id)}" value="${esc(mate.id)}" ${ui.trainingTeammateIds.includes(mate.id) ? 'checked' : ''}><span>${esc(mate.name)} · 体力 ${Math.round(100 - game.training[mate.id].fatigue)}</span></label>`).join('') || '<span class="muted small">暂无可选队友。</span>'}</div>
@@ -377,7 +413,7 @@ function calendarActionPanel(session: TrainingSession): string {
         <p class="action-desc">${esc(selected.desc)}</p>
         ${selected.parameters === 'position' ? positionField(session, isGk) : ''}
         ${selected.parameters === 'inherit' ? inheritFields(session, mentors, mentor) : ''}
-        ${selected.group ? teammatePicker(teammates) : ''}
+        ${session.partnerIds?.length ? squadRoster(session) : selected.group ? teammatePicker(teammates) : ''}
         ${plan ? previewBox(session, plan as ReturnType<typeof planTraining>, isGk) : ''}
         ${preview.error ? `<p class="warn-text training-error small" role="alert">${esc(preview.error)}</p>` : ''}
         <button class="btn primary wide" data-action="training-execute" ${preview.error || !plan ? 'disabled' : ''}>${preview.error || !plan ? '无法执行' : `${icon('play', 14)}执行行动`}</button>
@@ -412,7 +448,7 @@ function legacyActionPanel(session: TrainingSession): string {
         ${ui.trainingKind === 'position' ? positionField(session, isGk) : ''}
         ${ui.trainingKind === 'protection' ? `<div class="form-row"><label for="training-protection">防护方向</label><select id="training-protection"><option value="prevention" ${ui.trainingProtection === 'prevention' ? 'selected' : ''}>伤病预防</option><option value="resilience" ${ui.trainingProtection === 'resilience' ? 'selected' : ''}>伤病韧性</option></select></div>` : ''}
         ${ui.trainingKind === 'inherit' ? inheritFields(session, mentors, mentor) : ''}
-        ${groupAction ? teammatePicker(teammates) : ''}
+        ${session.partnerIds?.length ? squadRoster(session) : groupAction ? teammatePicker(teammates) : ''}
         ${previewBox(session, plan, isGk)}
         ${error ? `<p class="warn-text training-error small" role="alert">${esc(error)}</p>` : ''}
         <button class="btn primary wide" data-action="training-execute" ${error ? 'disabled' : ''}>${error ? '无法执行' : `${icon('play', 14)}执行行动`}</button>

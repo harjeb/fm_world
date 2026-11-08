@@ -654,7 +654,7 @@ export type PerformResult = {
 }
 
 /** Applies a session action only; callers must simulate and persist calendar exchange results via trainingAction. */
-export function performTrainingAction(session: TrainingSession, request: TrainingRequest, mentor?: Player, teammateCount = 0): PerformResult {
+export function performTrainingAction(session: TrainingSession, request: TrainingRequest, mentor?: Player, teammateCount = 0, options: { silent?: boolean } = {}): PerformResult {
   if (session.completed) return { ok: false, error: '本轮培养已经结束', completed: true }
   if (session.pendingEventId) return { ok: false, error: '请先处理当前事件', completed: false }
   if (session.action >= trainingActionsTotal(session)) return { ok: false, error: '本轮培养的时段已用完', completed: true }
@@ -760,7 +760,8 @@ export function performTrainingAction(session: TrainingSession, request: Trainin
   session.fatigue = Math.max(0, Math.min(100, session.fatigue + plan.fatigue))
   session.action += 1
   const mentorAction = request.kind === 'mentor' || (request.kind === 'activity' && request.activityId === 'mentor')
-  const event = pickEvent(session, mentorAction)
+  // 小队里只有主练的球员触发事件；队友静默推进，免得攒一堆没人处理的事件卡住下一时段。
+  const event = options.silent ? null : pickEvent(session, mentorAction)
   if (event) {
     session.pendingEventId = event.id
     session.pendingEventAction = session.action

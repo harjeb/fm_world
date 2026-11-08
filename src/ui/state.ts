@@ -56,6 +56,8 @@ export type UIState = {
   trainingKind: TrainingActionId
   trainingActivity: TrainingActivityId | null
   trainingTeammateIds: string[]
+  /** 开局训练小队（最多 6 名队友，需含门将）；只在培养页选人时使用。 */
+  trainingSquadIds: string[]
   trainingAttr: AttrKey
   trainingCombo: 'attack' | 'defense'
   trainingPosition: Position
@@ -132,6 +134,7 @@ export const ui: UIState = {
   trainingKind: 'drill',
   trainingActivity: null,
   trainingTeammateIds: [],
+  trainingSquadIds: [],
   trainingAttr: 'passing',
   trainingProtection: 'prevention',
   trainingMentorId: '',

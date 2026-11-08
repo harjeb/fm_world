@@ -42,6 +42,39 @@ export function startTraining(game: GameState, playerId: string, seed?: number):
   return { ok: true }
 }
 
+/** 开局选定训练小队：主练球员 + 6 名队友（必须有一名门将），所有人同日程推进。 */
+export function startTrainingSquad(
+  game: GameState,
+  playerId: string,
+  partnerIds: string[],
+  seed?: number,
+): { ok: boolean; error?: string } {
+  const ids = [playerId, ...partnerIds.filter((id) => id !== playerId)]
+  if (partnerIds.some((id) => id === playerId)) return { ok: false, error: '队友不能包含自己' }
+  if (new Set(partnerIds).size !== partnerIds.length) return { ok: false, error: '队友不能重复' }
+  if (ids.length > 7) return { ok: false, error: '训练小队最多 7 人（你 + 6 名队友）' }
+  const players = ids.map((id) => game.roster.find((player) => player.id === id))
+  if (players.some((player) => !player)) return { ok: false, error: '队友不在阵容里' }
+  if (!players.some((player) => player!.positions.GK > 0)) return { ok: false, error: '训练小队需要至少 1 名门将' }
+  for (const player of players) {
+    const running = game.training[player!.id]
+    if (running && !running.completed) return { ok: false, error: `${player!.name} 已有一轮培养` }
+    if ((player!.energy ?? 100) < TRAINING_ENERGY_COST) return { ok: false, error: `${player!.name} 精力不足` }
+    if (game.activeMatch) return { ok: false, error: '比赛进行中不能开始培养' }
+  }
+  const sharedSeed = seed ?? newTrainingSeed(game, playerId)
+  for (const player of players) {
+    const result = startTraining(game, player!.id, sharedSeed)
+    if (!result.ok) return result
+  }
+  for (const player of players) {
+    const session = game.training[player!.id]
+    session.partnerIds = ids.filter((id) => id !== player!.id)
+  }
+  saveGame(game)
+  return { ok: true }
+}
+
 function trainingMentor(game: GameState, request: TrainingRequest) {
   return request.kind === 'inherit' || (request.kind === 'activity' && request.activityId === 'inherit')
     ? game.roster.find(item => item.id === request.mentorId) : undefined
@@ -87,7 +120,20 @@ function simulateTrainingExchange(game: GameState, session: TrainingSession): Tr
   const week = trainingDate(session.action + 1).week
   const scheduleSeed = session.scheduleSeed ?? session.seed
   const opponent = derivedRng(scheduleSeed, 'training-exchange-opponent', week).pick(game.aiTeams)
-  const home = teamInputFromLineup(game.roster, game.lineup, { id: 'player', name: game.clubName, color: '#34d399', accent: '#052e1b' })
+  // 小队培养时交流赛就用这 7 个人（含门将）当前装备的属性，不用保存的首发。
+  const squad = [session.playerId, ...(session.partnerIds ?? [])]
+    .map((id) => game.roster.find((player) => player.id === id))
+    .filter((player): player is NonNullable<typeof player> => !!player)
+  let roster = game.roster
+  let lineup = game.lineup
+  if (squad.length === 7) {
+    const auto = autoFillLineup(squad, game.lineup.formationId, game.lineup.tactics)
+    if (validateLineup(squad, auto).valid) {
+      roster = squad
+      lineup = auto
+    }
+  }
+  const home = teamInputFromLineup(roster, lineup, { id: 'player', name: game.clubName, color: '#34d399', accent: '#052e1b' })
   if (game.autoSubs) home.autoSubs = structuredClone(game.autoSubs)
   const engine = new Engine({ seed: splitSeed(scheduleSeed, `training-exchange-${week}`), home, away: teamInputFromAI(opponent), knockout: false })
   const score = engine.simulate().score
@@ -99,12 +145,27 @@ export function previewTraining(game: GameState, playerId: string, request: Trai
   return error ? { error } : { plan }
 }
 
+function squadGroupAllowed(session: TrainingSession, request: TrainingRequest): boolean {
+  if (request.kind === 'drill' || request.kind === 'combo' || request.kind === 'match') return true
+  if (request.kind !== 'activity') return false
+  return !!trainingOptions(session).find((item) => item.id === request.activityId)?.group
+}
+
 export function trainingAction(game: GameState, playerId: string, request: TrainingRequest): PerformResult {
-  const prepared = prepareTraining(game, playerId, request)
+  const current = game.training[playerId]
+  const squad = current?.partnerIds ?? []
+  // 记下执行前的行动序号：个人项目结算后主练者已经 +1，队友还停在这个序号上。
+  const actionBefore = current?.action ?? 0
+  // 小队有进度时：组队项目自动带上全部队友；个人项目让队友同步休息，保证下一次还能组队。
+  const groupWithSquad = squad.length > 0 && squadGroupAllowed(current!, request)
+  const effective: TrainingRequest = groupWithSquad
+    ? ({ ...request, teammateIds: squad } as TrainingRequest)
+    : request
+  const prepared = prepareTraining(game, playerId, effective)
   if (prepared.error || !prepared.ids) return { ok: false, error: prepared.error, completed: prepared.completed ?? false }
-  const mentor = trainingMentor(game, request)
+  const mentor = trainingMentor(game, effective)
   let exchange: TrainingExchange | undefined
-  if (request.kind === 'activity' && request.activityId === 'exchange') {
+  if (effective.kind === 'activity' && effective.activityId === 'exchange') {
     try {
       exchange = simulateTrainingExchange(game, game.training[playerId])
     } catch (error) {
@@ -112,9 +173,11 @@ export function trainingAction(game: GameState, playerId: string, request: Train
     }
   }
   const staged = prepared.ids.map((id) => structuredClone(game.training[id]))
+  const squadMode = squad.length > 0
   let primaryResult: PerformResult | undefined
   for (let i = 0; i < staged.length; i++) {
-    const result = performTrainingAction(staged[i], request, mentor, staged.length - 1)
+    // 小队里主练者正常触发事件，队友静默；手动组队（无小队）保持原行为。
+    const result = performTrainingAction(staged[i], effective, mentor, staged.length - 1, { silent: squadMode && i > 0 })
     if (!result.ok) return result
     if (exchange) {
       const session = staged[i]
@@ -129,6 +192,21 @@ export function trainingAction(game: GameState, playerId: string, request: Train
   for (let i = 0; i < staged.length; i++) {
     Object.assign(game.training[prepared.ids[i]], staged[i])
     syncCandidate(game, prepared.ids[i])
+  }
+  // 小队做个人项目（位置/传承/导师/休息等）时，其他 6 人同步休息，保持行动进度一致。
+  if (squadMode && !groupWithSquad && primaryResult?.ok) {
+    for (const partnerId of squad) {
+      const partner = game.training[partnerId]
+      if (!partner || partner.completed || partner.action !== actionBefore) continue
+      const clone = structuredClone(partner)
+      const restRequest: TrainingRequest = clone.scheduleVersion === 1
+        ? { kind: 'activity', activityId: 'rest' }
+        : { kind: 'rest' }
+      const rested = performTrainingAction(clone, restRequest, undefined, 0, { silent: true })
+      if (!rested.ok) continue
+      Object.assign(partner, clone)
+      syncCandidate(game, partnerId)
+    }
   }
   saveGame(game)
   return exchange ? { ...primaryResult!, exchange } : primaryResult!

@@ -42,6 +42,7 @@ import {
   startNextSeasonAction,
   startSingleChallenge,
   startTraining,
+  startTrainingSquad,
   syncActiveEngine,
   trainingAction,
   trainingEventChoice,
@@ -477,7 +478,10 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       return { ...result, result }
     }
     case 'start_training': {
-      const result = startTraining(game, text(body.playerId))
+      const partnerIds = Array.isArray(body.partnerIds) ? body.partnerIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0) : []
+      const result = partnerIds.length
+        ? startTrainingSquad(game, text(body.playerId), partnerIds)
+        : startTraining(game, text(body.playerId))
       return { ...result, result }
     }
     case 'preview_training': {

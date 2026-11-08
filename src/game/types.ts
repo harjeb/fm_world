@@ -348,6 +348,8 @@ export type TrainingExchange = {
 export type TrainingSession = {
   /** 无此字段的旧课程继续使用旧行动规则。 */
   scheduleVersion?: 1
+  /** 训练小队：开局选定的其他 6 名队友；有它时全队每时段一起推进。 */
+  partnerIds?: string[]
   scheduleSeed?: number
   lowMoodWeeks?: number[]
   exchangeMatches?: TrainingExchange[]
