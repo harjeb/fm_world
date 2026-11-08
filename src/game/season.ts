@@ -472,7 +472,7 @@ export function startLeagueMatch(game: GameState, now = Date.now()): { ok: boole
     seed: splitSeed(game.season.seed, `league-${game.season.round}-${ai.id}`),
     homeAway: fixture.homeId === PLAYER_TEAM_ID ? 'home' : 'away',
     durationSeconds: LEAGUE_MATCH_SECONDS,
-    offside: game.settings?.offside ?? true,
+    offside: true,
   }
   const engine = buildMatchEngineForGame(game, context, ai, now)
   game.activeMatch = {
@@ -503,7 +503,7 @@ export function startChallengeAgainstTeam(
     seed,
     homeAway: 'home',
     durationSeconds: LEAGUE_MATCH_SECONDS,
-    offside: game.settings?.offside ?? true,
+    offside: true,
   }
   const engine = buildMatchEngineForGame(game, context, ai, now)
   game.activeMatch = {
@@ -530,7 +530,7 @@ export function startChallenge(game: GameState, aiId: string, now = Date.now()):
     seed: splitSeed(game.seed, `friendly-${ai.id}-${game.challengeHistory.length}`),
     homeAway: 'home',
     durationSeconds: LEAGUE_MATCH_SECONDS,
-    offside: game.settings?.offside ?? true,
+    offside: true,
   }
   const engine = buildMatchEngineForGame(game, context, ai, now)
   game.activeMatch = {

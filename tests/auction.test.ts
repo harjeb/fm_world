@@ -152,16 +152,14 @@ describe('竞拍规则', () => {
     expect(settleAuctions(market, (id) => games[id], AUCTION_DURATION_MS)).toHaveLength(1)
   })
 
-  it('自己练过的球员，起拍价按最好的卡算，不能低价卖掉再低价买回', () => {
+  it('身价只看原始属性：自己练出来的卡不抬高起拍价，也就没有“练一轮高价卖掉再低价买回”的套利', () => {
     const { market, a } = setup()
     const player = market.pool.find((item) => item.positions.GK === 0)!
     const value = playerMarketValue(player)
     a.cards = [{ id: 'c', serial: 1, playerId: player.id, attrs: { ...player.attrs, passing: 1500, shooting: 1500, dribbling: 1500 }, positions: player.positions } as never]
-    expect(placeBid(market, a, 'a', player.id, value, 0).ok).toBe(false)
-    const strong = playerMarketValue(a.cards![0])
-    expect(strong).toBeGreaterThan(value)
-    economyOf(a).balance = strong * 2
-    expect(placeBid(market, a, 'a', player.id, strong, 0).ok).toBe(true)
+    expect(playerMarketValue(a.cards![0])).toBeGreaterThan(value)
+    // 卡再强，起拍价还是原始身价
+    expect(placeBid(market, a, 'a', player.id, value, 0).ok).toBe(true)
   })
 
   it('账号放出来的球员进市场；已经在市场或被别人签走的不重复', () => {

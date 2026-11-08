@@ -3,6 +3,7 @@ import { ALL_ATTRIBUTES, type AIClubState, type Player } from '../src/game/types
 import {
   AI_SQUAD_LIMIT,
   advanceAIClub,
+  advanceAIClubs,
   aiBidFor,
   aiClubOf,
   aiSignFreeAgents,
@@ -19,7 +20,7 @@ import {
 import { AI_BID_PREFIX, placeAIBid, settleAuctions, type FreeMarket } from '../src/game/auction.ts'
 import { facilityUpgradeCost, facilityLevel, projectedRoundIncome } from '../src/game/economy.ts'
 import { ROUND_GAME_DAYS } from '../src/game/calendar.ts'
-import { createWorldGame } from '../src/game/world.ts'
+import { cachedOwnerlessTeams, createWorldGame } from '../src/game/world.ts'
 
 const game = () => createWorldGame(2024)
 
@@ -74,6 +75,29 @@ describe('电脑球队账本', () => {
     ai.cards['3'] = { rating: playerCa(best), attrs: { ...best.attrs } }
     expect(equipAICards(ai, team.players)).toBe(true)
     expect(playerCa(team.players[3])).toBeGreaterThan(playerCa(best) - 1)
+  })
+})
+
+describe('单机后台培养所有联赛', () => {
+  it('其他联赛的球队没有存档名单，也会按轮练账本里的卡，所有球队都随时间变强', () => {
+    const base = game()
+    const own = new Set(base.aiTeams.map((team) => team.id))
+    const others = base.world!.clubs.filter((club) => !club.isPlayer && !own.has(club.id)).map((club) => club.id)
+    expect(others.length).toBeGreaterThan(30)
+    expect(advanceAIClubs(base, 6)).toBe(true)
+    const trained = others.filter((id) => (base.aiClubs![id]?.trained ?? 0) > 0)
+    expect(trained.length).toBeGreaterThan(others.length * 0.8)
+    // 练出来的是账本里的卡：至少有一些卡的评分高于复原名单里该球员的原始 CA
+    const teams = cachedOwnerlessTeams(base.world!, base.seed)
+    let stronger = 0
+    for (const id of trained) {
+      const squad = teams[id].players
+      for (const [slot, card] of Object.entries(base.aiClubs![id].cards)) {
+        const player = squad[Number(slot)]
+        if (player && card.rating > playerCa({ attrs: player.baseAttrs, positions: player.positions }) + 1) stronger += 1
+      }
+    }
+    expect(stronger).toBeGreaterThan(20)
   })
 })
 

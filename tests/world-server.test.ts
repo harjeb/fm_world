@@ -88,6 +88,11 @@ describe('服务器共享世界', () => {
     const { base } = await start(() => clock)
     const a = await register(base, 'ai_cards_a')
     const teams = async () => (await (await fetch(`${base}/api/world/teams`, { headers: auth(a.token) })).json()) as { clubs: { id: string; tier: string; managed?: boolean; facilities?: Record<string, number>; players: { ca: number; baseCa?: number }[] }[] }
+    // 每支球队（含全部联赛）都有 RANK：首发 CA 之和。
+    for (const club of (await teams()).clubs as { id: string; rating?: number }[]) {
+      expect(club.rating, `${club.id} 缺少 RANK`).toBeTypeOf('number')
+      expect(club.rating!).toBeGreaterThan(0)
+    }
     const gains = (snapshot: Awaited<ReturnType<typeof teams>>) => {
       const result: Record<string, { gain: number; players: number }> = {}
       for (const club of snapshot.clubs) {

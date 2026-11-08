@@ -1,7 +1,7 @@
 import type { FormationId, Lineup, Player, Position, RoleId, Tactics, TacticPreset } from './types.ts'
 import { FORMATIONS } from './data/formations.ts'
 import { ROLES, ROLES_BY_POSITION, roleFit } from './data/roles.ts'
-import { positionMultiplier } from './ca.ts'
+import { PLAYABLE_PROFICIENCY, caOf, positionMultiplier } from './ca.ts'
 
 /** 替补席位数。比赛中最多换 3 次是另一条规则，不受它影响。 */
 export const BENCH_SIZE = 5
@@ -51,7 +51,7 @@ export function autoFillLineup(
     let bestScore = -Infinity
     // 优先用学过这个位置的球员；实在没有，才让别的位置顶上（熟练度 0，属性折损最多）。
     const free = roster.filter((player) => !used.has(player.id))
-    const learned = free.filter((player) => player.positions[slot.position] > 0)
+    const learned = free.filter((player) => player.positions[slot.position] >= PLAYABLE_PROFICIENCY)
     for (const player of learned.length ? learned : free) {
       const multiplier = positionMultiplier(player.positions[slot.position])
       for (const role of ROLES_BY_POSITION[slot.position]) {
@@ -68,8 +68,20 @@ export function autoFillLineup(
       starters.push({ slotId: slot.id, playerId: bestPlayer.id, role: bestRole })
     }
   }
-  const bench: string[] = []
   const remaining = roster.filter((player) => !used.has(player.id))
+  const bench = buildBench(remaining)
+  return {
+    formationId,
+    starters,
+    bench,
+    tactics: tactics ?? { ...formation.defaultTactics },
+    ...preservedExtras(previous ?? rememberedExtras(roster), formationId),
+  }
+}
+
+/** 从没上首发的人里挑替补：门将、后卫、前锋各一个，再补中场和边路，让替补尽量覆盖所有位置。 */
+function buildBench(remaining: Player[]): string[] {
+  const bench: string[] = []
   const gk = remaining.find((player) => player.positions.GK > 0)
   if (gk) bench.push(gk.id)
   const defender = remaining
@@ -83,7 +95,7 @@ export function autoFillLineup(
   // 后两席给中场和边路，让替补尽量覆盖所有位置；没人学过就挑外场里最合适的。
   const cover = (position: Position, score: (player: Player) => number) => {
     const free = remaining.filter((player) => !bench.includes(player.id) && player.positions.GK <= 0)
-    const learned = free.filter((player) => player.positions[position] >= 40)
+    const learned = free.filter((player) => player.positions[position] >= PLAYABLE_PROFICIENCY)
     const best = [...(learned.length ? learned : free)].sort((a, b) => score(b) - score(a))[0]
     if (best) bench.push(best.id)
   }
@@ -93,12 +105,171 @@ export function autoFillLineup(
     if (bench.length >= BENCH_SIZE) break
     if (!bench.includes(player.id)) bench.push(player.id)
   }
+  return bench
+}
+
+/* ---------------------------------------------------------------- 战术页的自动分配 */
+
+/**
+ * 战术页“自动填充”的三种方式：
+ * best 按 CA 和位置熟练度排最强阵容（体能只作很小的参考）；
+ * half 先排最强阵容，再把体力最差的约一半主力换成体力更好的替补；
+ * full 整套轮换：每个位置换上本赛季上场最少的那批人。
+ */
+export type AutoAssignMode = 'best' | 'half' | 'full'
+
+export type AutoAssignContext = {
+  /** 比赛体能 0–100。 */
+  condition: (player: Player) => number
+  /** 本赛季已上场分钟。 */
+  minutes: (player: Player) => number
+  /** 停赛的人不能首发，能不用就不用。 */
+  suspended?: (player: Player) => boolean
+  /** 带伤上场有效能力降低 30%。 */
+  injured?: (player: Player) => boolean
+}
+
+/** 一名球员放在某个位置、担任某个职责的得分：CA 和职责适配度各占一部分，再乘位置熟练度。 */
+function assignScore(player: Player, position: Position, role: RoleId, staminaWeight: number, context: AutoAssignContext): number {
+  const gk = player.positions.GK > 0
+  const fit = roleFit(player.attrs, role, gk)
+  const ca = caOf(player.attrs, gk) / 5
+  let score = (0.6 * fit + 0.4 * ca) * positionMultiplier(player.positions[position])
+  const condition = Math.max(0, Math.min(100, context.condition(player)))
+  score *= 1 - staminaWeight + (staminaWeight * condition) / 100
+  if (context.injured?.(player)) score *= 0.7
+  return score
+}
+
+function bestRoleFor(player: Player, position: Position, defaultRole: RoleId, staminaWeight: number, context: AutoAssignContext): { role: RoleId; score: number } {
+  let best = defaultRole
+  let bestScore = -Infinity
+  for (const role of ROLES_BY_POSITION[position]) {
+    const score = assignScore(player, position, role, staminaWeight, context)
+    if (score > bestScore) {
+      bestScore = score
+      best = role
+    }
+  }
+  return { role: best, score: bestScore }
+}
+
+/** 一个位置的候选人：优先用可踢这个位置的（熟练度 ≥ 80），实在没有才让别的位置顶上；停赛的能不用就不用。 */
+function candidatesFor(free: Player[], position: Position, context: AutoAssignContext): Player[] {
+  const available = free.filter((player) => !context.suspended?.(player))
+  const pool = available.length ? available : free
+  const learned = pool.filter((player) => player.positions[position] >= PLAYABLE_PROFICIENCY)
+  return learned.length ? learned : pool
+}
+
+export function autoAssignLineup(
+  roster: Player[],
+  formationId: FormationId,
+  tactics: Tactics | undefined,
+  previous: Lineup | undefined,
+  mode: AutoAssignMode,
+  context: AutoAssignContext,
+): Lineup {
+  const formation = FORMATIONS[formationId]
+  const orderedSlots = [...formation.slots].sort((a, b) => (a.position === 'GK' ? -1 : b.position === 'GK' ? 1 : 0))
+  const used = new Set<string>()
+  const starters = [] as Lineup['starters']
+
+  if (mode === 'full') {
+    // 整套轮换：每个位置挑本赛季上场最少的人（体力太差的先不考虑），并列时看得分。
+    for (const slot of orderedSlots) {
+      const free = roster.filter((player) => !used.has(player.id))
+      const all = candidatesFor(free, slot.position, context)
+      const rested = all.filter((player) => context.condition(player) >= 30)
+      const pool = rested.length ? rested : all
+      let chosen: Player | null = null
+      let chosenRole: RoleId = slot.defaultRole
+      let chosenMinutes = Infinity
+      let chosenScore = -Infinity
+      for (const player of pool) {
+        const minutes = context.minutes(player)
+        const { role, score } = bestRoleFor(player, slot.position, slot.defaultRole, 0.08, context)
+        if (minutes < chosenMinutes || (minutes === chosenMinutes && score > chosenScore)) {
+          chosen = player
+          chosenRole = role
+          chosenMinutes = minutes
+          chosenScore = score
+        }
+      }
+      if (chosen) {
+        used.add(chosen.id)
+        starters.push({ slotId: slot.id, playerId: chosen.id, role: chosenRole })
+      }
+    }
+  } else {
+    // 最强阵容：CA 和位置熟练度优先，体能只占很小的权重。
+    for (const slot of orderedSlots) {
+      const free = roster.filter((player) => !used.has(player.id))
+      let chosen: Player | null = null
+      let chosenRole: RoleId = slot.defaultRole
+      let chosenScore = -Infinity
+      for (const player of candidatesFor(free, slot.position, context)) {
+        const { role, score } = bestRoleFor(player, slot.position, slot.defaultRole, 0.08, context)
+        if (score > chosenScore) {
+          chosen = player
+          chosenRole = role
+          chosenScore = score
+        }
+      }
+      if (chosen) {
+        used.add(chosen.id)
+        starters.push({ slotId: slot.id, playerId: chosen.id, role: chosenRole })
+      }
+    }
+    if (mode === 'half') rotateTiredStarters(roster, starters, used, formation.slots, context)
+  }
+
+  const remaining = roster.filter((player) => !used.has(player.id))
   return {
     formationId,
     starters,
-    bench,
+    bench: buildBench(remaining),
     tactics: tactics ?? { ...formation.defaultTactics },
     ...preservedExtras(previous ?? rememberedExtras(roster), formationId),
+  }
+}
+
+/** 部分轮换：把体力最差的约一半主力换成同位置体力更好的替补；没有更新鲜的人就不换。 */
+function rotateTiredStarters(
+  roster: Player[],
+  starters: Lineup['starters'],
+  used: Set<string>,
+  slots: (typeof FORMATIONS)[FormationId]['slots'],
+  context: AutoAssignContext,
+): void {
+  const byId = new Map(roster.map((player) => [player.id, player]))
+  const target = Math.round(starters.length / 2)
+  const hasBackupKeeper = roster.some((player) => !used.has(player.id) && player.positions.GK > 0)
+  const tired = starters
+    .map((starter) => ({ starter, player: byId.get(starter.playerId)!, slot: slots.find((slot) => slot.id === starter.slotId)! }))
+    .filter((item) => item.player && item.slot && (item.slot.position !== 'GK' || hasBackupKeeper))
+    .sort((a, b) => context.condition(a.player) - context.condition(b.player))
+    .slice(0, target)
+  for (const item of tired) {
+    const free = roster.filter((player) => !used.has(player.id) && context.condition(player) > context.condition(item.player))
+    const pool = candidatesFor(free, item.slot.position, context).filter((player) => player.positions[item.slot.position] >= PLAYABLE_PROFICIENCY)
+    let chosen: Player | null = null
+    let chosenRole: RoleId = item.starter.role
+    let chosenScore = -Infinity
+    for (const player of pool) {
+      // 体力权重大：就是要把体力多的替补顶上去。
+      const { role, score } = bestRoleFor(player, item.slot.position, item.slot.defaultRole, 0.6, context)
+      if (score > chosenScore) {
+        chosen = player
+        chosenRole = role
+        chosenScore = score
+      }
+    }
+    if (!chosen) continue
+    used.delete(item.player.id)
+    used.add(chosen.id)
+    item.starter.playerId = chosen.id
+    item.starter.role = chosenRole
   }
 }
 

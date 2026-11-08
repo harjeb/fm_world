@@ -14,11 +14,11 @@ function suppressEvents(session: TrainingSession) {
   session.eventCounts = Object.fromEntries(EVENTS.map(event => [event.id, 1000]))
 }
 
-function setup(count = 1) {
+function setup(count = 1, stage = 5, overrides: Partial<Record<'stadium' | 'academy' | 'medical' | 'shop' | 'sponsor' | 'psychology' | 'tactics', number>> = {}) {
   const game = createInitialGame(410)
   // 满 1 级（第 5 阶段）保证设施加成 100% 触发，便于比较确定数值。
   const economy = economyOf(game)
-  for (const id of ['stadium', 'academy', 'medical', 'shop', 'sponsor', 'psychology', 'tactics'] as const) economy[id] = 5
+  for (const id of ['stadium', 'academy', 'medical', 'shop', 'sponsor', 'psychology', 'tactics'] as const) economy[id] = overrides[id] ?? stage
   const players = game.roster.filter(player => !player.positions.GK).slice(0, count)
   for (const [index, player] of players.entries()) {
     expect(startTraining(game, player.id, 120 + index).ok).toBe(true)
@@ -333,14 +333,25 @@ describe('expanded training courses', () => {
     })
   })
 
-  it('adds two raw main units per other teammate, scaled for hidden attributes', () => {
-    const { game, players } = setup(3)
+  // 每名队友给每个正成长属性加多少点 = 七座设施里最低的等级：没全到 2 级 1 点，全到 2 级 2 点……全满 5 点。
+  it.each([[5, 1], [10, 2], [15, 3], [20, 4], [25, 5]])('teammates add the lowest facility level in raw main units (all facilities at stage %i → %i per teammate)', (stage, perMate) => {
+    const { game, players } = setup(3, stage)
     const ids = players.map(player => player.id)
     const solo = preview(game, ids[0], combo).plan!
     const group = preview(game, ids[0], { ...combo, teammateIds: ids.slice(1) }).plan!
     expect(group.quality).toEqual(solo.quality)
-    expect(group.gains.passing! - solo.gains.passing!).toBeCloseTo(4)
-    expect(group.gains.teamwork! - solo.gains.teamwork!).toBeCloseTo(4 * 20 / 1500)
+    // 两名队友
+    expect(group.gains.passing! - solo.gains.passing!).toBeCloseTo(2 * perMate)
+    expect(group.gains.teamwork! - solo.gains.teamwork!).toBeCloseTo(2 * perMate * 20 / 1500)
+  })
+
+  it('one lagging facility holds the teammate bonus back to its level', () => {
+    // 其余设施都满 5 级，只有医疗中心还在 1 级第 1 阶段 → 每名队友只加 1 点。
+    const { game, players } = setup(3, 25, { medical: 1 })
+    const ids = players.map(player => player.id)
+    const solo = preview(game, ids[0], combo).plan!
+    const group = preview(game, ids[0], { ...combo, teammateIds: ids.slice(1) }).plan!
+    expect(group.gains.passing! - solo.gains.passing!).toBeCloseTo(2 * 1)
   })
 
   it.each(['missing', 'self', 'duplicate', 'no-session', 'stale', 'pending', 'stamina', 'off-roster', 'unsupported'])('rejects %s participants without changing anyone', problem => {

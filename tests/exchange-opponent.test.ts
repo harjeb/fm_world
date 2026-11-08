@@ -13,27 +13,29 @@ function stubLocalStorage(): void {
   })
 }
 
-/** 独立算法：这支队首发的基础卡平均 CA。 */
-function baseStrength(team: AITeam): number {
-  const starters = team.lineup.starters.map((slot) => team.players.find((player) => player.id === slot.playerId)!)
-  return starters.reduce((sum, player) => sum + caOf(player.baseAttrs ?? player.attrs, player.positions.GK > 0), 0) / starters.length
+/** 独立算法：这支队首发的基础卡RANK（首发 CA 之和）。 */
+function baseRating(team: AITeam): number {
+  return team.lineup.starters
+    .map((slot) => team.players.find((player) => player.id === slot.playerId)!)
+    .reduce((sum, player) => sum + caOf(player.baseAttrs ?? player.attrs, player.positions.GK > 0), 0)
 }
 
-describe('交流赛对手按实力挑选', () => {
+describe('交流赛对手按RANK挑选', () => {
   beforeEach(stubLocalStorage)
 
-  it('每周的目标是我方实力 × 0.85 / 1.00 / 1.10，选基础卡强度最接近的球队', () => {
+  it('每周的目标是我方RANK × 0.85 / 1.00 / 1.10，选基础卡RANK最接近的球队', () => {
     expect(EXCHANGE_STRENGTH_RATIOS).toEqual([0.85, 1, 1.1])
     const game = createInitialGame(321)
-    const strengths = game.aiTeams.map((team) => baseStrength(team))
-    const mid = [...strengths].sort((a, b) => a - b)[Math.floor(strengths.length / 2)]
+    const ratings = game.aiTeams.map((team) => baseRating(team))
+    const mid = [...ratings].sort((a, b) => a - b)[Math.floor(ratings.length / 2)]
     for (const [index, ratio] of EXCHANGE_STRENGTH_RATIOS.entries()) {
       const picked = pickExchangeOpponent(game.aiTeams, mid, index + 1)
-      const best = Math.min(...strengths.map((value) => Math.abs(value - mid * ratio)))
-      expect(Math.abs(baseStrength(picked) - mid * ratio)).toBeCloseTo(best, 6)
+      const best = Math.min(...ratings.map((value) => Math.abs(value - mid * ratio)))
+      expect(Math.abs(picked.rating - mid * ratio)).toBeCloseTo(best, 6)
+      expect(picked.rating).toBeCloseTo(baseRating(picked.team), 6)
     }
     // 第三周之后沿用最后一周的比例
-    expect(pickExchangeOpponent(game.aiTeams, mid, 5).id).toBe(pickExchangeOpponent(game.aiTeams, mid, 3).id)
+    expect(pickExchangeOpponent(game.aiTeams, mid, 5).team.id).toBe(pickExchangeOpponent(game.aiTeams, mid, 3).team.id)
   })
 
   it('对手一律用基础卡属性，不带已装备的球员卡', () => {
@@ -42,7 +44,7 @@ describe('交流赛对手按实力挑选', () => {
     const victim = team.players[0]
     victim.attrs = Object.fromEntries(Object.keys(victim.attrs).map((key) => [key, 1400])) as typeof victim.attrs
     victim.equippedCardId = 'card-fake'
-    const picked = pickExchangeOpponent([team], 600, 2)
+    const picked = pickExchangeOpponent([team], 600, 2).team
     const used = picked.players.find((player) => player.id === victim.id)!
     expect(used.attrs).toEqual(victim.baseAttrs)
     expect(used.equippedCardId).toBeUndefined()
@@ -52,14 +54,14 @@ describe('交流赛对手按实力挑选', () => {
 
   it('已经打过的对手尽量不重复；全打过才允许重复', () => {
     const game = createInitialGame(323)
-    const first = pickExchangeOpponent(game.aiTeams, 700, 2)
-    const second = pickExchangeOpponent(game.aiTeams, 700, 2, [first.id])
+    const first = pickExchangeOpponent(game.aiTeams, 12000, 2).team
+    const second = pickExchangeOpponent(game.aiTeams, 12000, 2, [first.id]).team
     expect(second.id).not.toBe(first.id)
     const all = game.aiTeams.map((team) => team.id)
-    expect(all).toContain(pickExchangeOpponent(game.aiTeams, 700, 2, all).id)
+    expect(all).toContain(pickExchangeOpponent(game.aiTeams, 12000, 2, all).team.id)
   })
 
-  it('培养里的交流赛会按周换成不同实力的对手', () => {
+  it('培养里的交流赛会记下双方RANK，且对手来自本联赛', () => {
     const game = createInitialGame(324)
     const main = game.roster.find((player) => player.positions.GK === 0)!
     expect(startTrainingWithSupport(game, main.id).ok).toBe(true)
@@ -72,5 +74,9 @@ describe('交流赛对手按实力挑选', () => {
     expect(result.ok, result.error).toBe(true)
     expect(result.exchange?.week).toBe(1)
     expect(game.aiTeams.some((team) => team.id === result.exchange!.opponentId)).toBe(true)
+    expect(result.exchange!.ownRating).toBeGreaterThan(0)
+    expect(result.exchange!.opponentRating).toBeGreaterThan(0)
+    // 第 1 周对手RANK应低于我方（目标是 85%）
+    expect(session.log.at(-1)!.text).toContain('RANK')
   })
 })

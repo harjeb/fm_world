@@ -4,7 +4,7 @@ import type { Fixture, GameState } from '../src/game/types'
 
 // Model separate 38-round seasons, not a single season with N fixtures.
 // Reset the income cursor at the boundary, as round numbers restart each season.
-function simulate(winEvery: number, seasons = 6): number | undefined {
+function simulate(winEvery: number, seasons = 20): number | undefined {
   const game = { season: { fixtures: [] } } as unknown as GameState
   const economy = economyOf(game)
   let maxed: number | undefined

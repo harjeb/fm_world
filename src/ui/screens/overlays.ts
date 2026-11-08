@@ -50,7 +50,6 @@ function statsBlock(player: Player): string {
       ${own ? `<button class="tab ${ui.playerStatsTab === 'career' ? 'active' : ''}" data-player-stats-tab="career">生涯</button>` : ''}
     </div>
     <dl class="facts">${rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>
-    ${own ? '' : '<p class="hint">其他球队只公开本赛季的进球与助攻；完整数据需要等他加入你的球队。</p>'}
   </section>`
 }
 
@@ -113,7 +112,6 @@ export function renderDetailOverlay(): string {
             <h3>主属性（0–1500）${owned ? `<small>${worn ? esc(cardName(worn)) : '原始属性'}</small>` : ''}</h3>
             ${attributeRadar(player)}
             ${attrGroups}
-            <p class="hint">隐藏属性不公开数值，只通过事件、配合或测验成长。</p>
           </section>
           <section class="profile-col">
             <h3>位置熟练度</h3>
@@ -131,7 +129,7 @@ export function renderDetailOverlay(): string {
             <div class="profile-meters">
               <div><span>比赛体能</span>${meter(player.condition ?? 100)}</div>
               <div><span>训练精力</span>${meter(player.energy ?? 100)}</div>
-            </div>` : '<p class="hint">其他球队的实时体能与训练精力不公开。</p>'}
+            </div>` : ''}
             <h3>性格</h3>
             <div class="profile-meters">${personality.map(([label, value]) => `<div><span>${label}</span><span class="meter-wrap"><span class="meter neutral"><i style="width:${Math.max(0, Math.min(100, value))}%"></i></span><span class="meter-value">${Math.round(value)}</span></span></div>`).join('')}</div>
             ${owned ? (session || candidate
@@ -249,20 +247,21 @@ export function renderNewGameOverlay(): string {
     <h3>${label}</h3>
     <div class="pick-grid">${picks.filter((club) => club.conference === conference).sort((a, b) => startersCA(b) - startersCA(a)).map((club) => `<button class="pick-club ${club.id === selected?.id ? 'active' : ''}" data-action="newgame-pick" data-club="${esc(club.id)}" data-key="${esc(club.id)}">${crest({ name: club.name, color: club.color }, 22)}<span class="pick-club-name"><b>${esc(club.name)}</b>${club.enName ? `<small>${esc(club.enName)}</small>` : ''}</span><span class="pick-club-ca">${caHeat(startersCA(club))}</span></button>`).join('')}</div>
   </div>`
+  const required = ui.newGameRequired
   return `
-    <div class="overlay" data-action="newgame-close">
+    <div class="overlay" ${required ? '' : 'data-action="newgame-close"'}>
       <div class="modal newgame-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="开始新游戏">
-        <button class="modal-close" data-action="newgame-close" aria-label="关闭">${icon('close', 16)}</button>
-        <div class="kicker">开始新游戏</div>
+        ${required ? '' : `<button class="modal-close" data-action="newgame-close" aria-label="关闭">${icon('close', 16)}</button>`}
+        <div class="kicker">${required ? '离线模式' : '开始新游戏'}</div>
         <h1>选择要接管的二级联赛球队</h1>
-        <div class="banner bad compact">${icon('alert', 15)}<span>开始新游戏会覆盖当前存档，无法撤销。</span></div>
+        ${required ? '' : `<div class="banner bad compact">${icon('alert', 15)}<span>开始新游戏会覆盖当前存档，无法撤销。</span></div>`}
         <div class="pick-layout">
           <div class="pick-list">${column('north', '北区')}${column('south', '南区')}</div>
           ${selected ? pickDetail(selected) : ''}
         </div>
         <div class="btn-row modal-actions">
-          <button class="btn" data-action="newgame-close">取消</button>
-          <button class="btn primary" data-action="newgame-confirm" ${selected ? '' : 'disabled'}>${selected ? `接管${esc(selected.name)}，覆盖存档并开始` : '覆盖存档并开始'}</button>
+          ${required ? '' : '<button class="btn" data-action="newgame-close">取消</button>'}
+          <button class="btn primary" data-action="newgame-confirm" ${selected ? '' : 'disabled'}>${selected ? `接管${esc(selected.name)}${required ? '并开始' : '，覆盖存档并开始'}` : required ? '开始' : '覆盖存档并开始'}</button>
         </div>
       </div>
     </div>

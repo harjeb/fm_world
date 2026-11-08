@@ -1,5 +1,5 @@
 import type { AttrKey, AutoSubPlan, GameState, Lineup, Position, SkillId } from '../game/types.ts'
-import { loadGame, saveGame } from '../game/state.ts'
+import { loadGame, saveGame, setTeamPickPending } from '../game/state.ts'
 import { createWorldGame, type ClubPreview } from '../game/world.ts'
 import { restoreActiveEngine } from '../game/actions.ts'
 import type { MatchEngine } from '../game/match/engine.ts'
@@ -85,12 +85,18 @@ export type UIState = {
   coachPauseUsed: boolean
   lineupDraft: Lineup | null
   lineupSlot: string | null
+  /** 战术页“自动填充”用哪种方式：最强阵容 / 部分轮换 / 全部轮换。 */
+  lineupAutoMode: 'best' | 'half' | 'full'
   autoSubsDraft: AutoSubPlan | null
   completing: boolean
   accountOpen: boolean
+  /** 自动策略弹窗（针对当前选中的培养球员）。 */
+  autoStrategyOpen: boolean
   authMode: 'login' | 'register'
   turnstileToken: string
   newGameOpen: boolean
+  /** 第一次进离线模式的选队：必须选完才能继续，不能取消。 */
+  newGameRequired: boolean
   newGameClubId: string | null
   /** 选队界面看到的名单和确认后开局用的是同一个种子。 */
   newGamePreview: { seed: number; clubs: ClubPreview[] } | null
@@ -101,7 +107,11 @@ const SAVE_SCREEN: Screen[] = ['club', 'transfer', 'home', 'academy', 'inventory
 const saved = loadGame()
 /** 当前存档。其他模块通过 live binding 读到最新值，替换时用 setGame。 */
 export let game: GameState = saved ?? createWorldGame()
-if (!saved) saveGame(game)
+if (!saved) {
+  saveGame(game)
+  // 这支球队是系统随手分的：玩家选离线模式时会先让他自己挑一支。
+  setTeamPickPending(true)
+}
 
 export function setGame(next: GameState): void {
   game = next
@@ -155,12 +165,15 @@ export const ui: UIState = {
   coachPauseUsed: false,
   lineupDraft: null,
   lineupSlot: null,
+  lineupAutoMode: 'best',
   autoSubsDraft: null,
   completing: false,
   accountOpen: false,
+  autoStrategyOpen: false,
   authMode: 'login',
   turnstileToken: '',
   newGameOpen: false,
+  newGameRequired: false,
   newGameClubId: null,
   newGamePreview: null,
 }

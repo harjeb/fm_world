@@ -1,9 +1,11 @@
 import type { AttrKey, GameState, Lineup, MatchMentality, Player, Position, RoleId, SkillId, Tactics } from '../game/types.ts'
-import { clearSave, saveGame, upgradeLegacySignatures } from '../game/state.ts'
+import { clearSave, saveGame, setTeamPickPending, teamPickPending, upgradeLegacySignatures } from '../game/state.ts'
 import { createWorldGame, previewD2Clubs } from '../game/world.ts'
 import { friendlyStepMs } from './match-timing.ts'
 import {
   autoTrainingConfig,
+  autoTrainingRunnable,
+  defaultAutoPriority,
   autoTrainingStep,
   changeMatchTactics,
   confirmTraining,
@@ -14,7 +16,7 @@ import {
   makeSubstitution,
   removePlayerCard,
   restoreActiveEngine,
-  runAutoTraining,
+  setAutoTrainingConfig,
   setLineup,
   simulateSeasonRound,
   startLeague,
@@ -32,7 +34,9 @@ import {
 } from '../game/actions.ts'
 import type { TrainingActionId } from '../game/training.ts'
 import type { TrainingActivityId } from '../game/training-calendar.ts'
-import { autoFillLineup, clearStarter, movePlayer, type LineupTarget } from '../game/squad.ts'
+import { autoAssignLineup, autoFillLineup, clearStarter, movePlayer, type LineupTarget } from '../game/squad.ts'
+import { seasonStats } from '../game/player-stats.ts'
+import { injuryUntil } from '../game/injury.ts'
 import { ensureCards, playerCards } from '../game/cards.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeStarTraits } from '../game/names.ts'
 import { catchUpSeason, skipToPostseasonEnd } from '../game/season.ts'
@@ -66,7 +70,7 @@ import { renderClubOverlay } from './club-view.ts'
 import { renderReview } from './screens/review.ts'
 import { renderSeason } from './screens/season.ts'
 import { renderSidebar, renderTopbar } from './screens/shell.ts'
-import { buildTrainingRequest, renderTraining } from './screens/training.ts'
+import { buildTrainingRequest, renderAutoStrategyOverlay, renderTraining } from './screens/training.ts'
 import { renderWorld } from './screens/world.ts'
 
 const app = document.getElementById('app')!
@@ -216,6 +220,7 @@ function render(): void {
     ${renderNegotiationOverlay()}
     ${renderClubOverlay()}
     ${renderAccountOverlay()}
+    ${renderAutoStrategyOverlay()}
     ${renderNewGameOverlay()}
     ${ui.notice ? `<div class="toast" data-action="dismiss-notice" role="status">${icon('info', 15)}<span class="toast-text">${esc(ui.notice)}</span><span class="toast-close">${icon('close', 13)}</span></div>` : ''}
   `)
@@ -229,6 +234,7 @@ function render(): void {
   }
   syncNoticeTimer()
   syncTooltip()
+  syncAutoTraining()
   if (ui.screen === 'match') {
     drawPitch()
     ensureTimer()
@@ -523,6 +529,23 @@ function showQualityPopup(label: string): void {
   window.setTimeout(() => el.remove(), 2000)
 }
 
+/** 从刚写入的培养日志里读出这一次行动的品质并弹出提示；休息等没有品质的行动不弹。 */
+function popupQualityOf(playerId: string, actionNumber: number): void {
+  const entry = game.training[playerId]?.log.find((item) => item.kind === 'action' && item.action === actionNumber)
+  const quality = entry ? /（([^（）]+)）$/.exec(entry.title)?.[1] : undefined
+  if (quality && quality in QUALITY_POPUP_CLASS) showQualityPopup(quality)
+}
+
+/** 打开选队弹窗；required 表示第一次进离线模式，必须选完才能继续。 */
+function openNewGamePicker(required: boolean): void {
+  const seed = Math.floor(Math.random() * 0x7fffffff)
+  const clubs = previewD2Clubs(seed)
+  ui.newGamePreview = { seed, clubs }
+  ui.newGameClubId = clubs[0]?.id ?? null
+  ui.newGameRequired = required
+  ui.newGameOpen = true
+}
+
 function executeTraining(): void {
   if (!ui.trainingPlayerId) return
   const playerId = ui.trainingPlayerId
@@ -530,13 +553,55 @@ function executeTraining(): void {
   const result = trainingAction(game, playerId, buildTrainingRequest())
   if (!result.ok) showNotice(result.error ?? '行动失败')
   else {
-    // 品质只在执行后揭晓：从刚写入的培养日志里读出这一次的品质。
-    const entry = game.training[playerId]?.log.find((item) => item.kind === 'action' && item.action === actionNumber)
-    const quality = entry ? /（([^（）]+)）$/.exec(entry.title)?.[1] : undefined
-    if (quality && quality in QUALITY_POPUP_CLASS) showQualityPopup(quality)
+    // 品质只在执行后揭晓。
+    popupQualityOf(playerId, actionNumber)
     ui.trainingTeammateIds = []
     ui.notice = result.exchange ? `交流赛：${result.exchange.homeScore}:${result.exchange.awayScore} 对 ${result.exchange.opponentName} · ${{ win: '胜', draw: '平', loss: '负' }[result.exchange.result]}` : result.event ? `触发事件：${result.event.title}` : '行动完成。'
   }
+  render()
+}
+
+/* ---------- 自动培养：开关打开后，培养页每隔一会儿自动走一步 ---------- */
+
+const AUTO_TRAIN_STEP_MS = 1600
+let autoTrainTimer: number | null = null
+
+/**
+ * 只在培养页、选中的球员开着“自动培养”且有一轮没结束的培养时才推进；
+ * 离开培养页就暂停，回来继续。不会自己开新一轮（开始新一轮要消耗精力，也要先处理新卡）。
+ */
+function syncAutoTraining(): void {
+  const id = ui.trainingPlayerId
+  const active = ui.screen === 'training' && !!id && autoTrainingConfig(game, id).autopilot === true && autoTrainingRunnable(game, id)
+  if (!active) {
+    if (autoTrainTimer !== null) window.clearTimeout(autoTrainTimer)
+    autoTrainTimer = null
+    return
+  }
+  if (autoTrainTimer !== null) return
+  autoTrainTimer = window.setTimeout(() => {
+    autoTrainTimer = null
+    tickAutoTraining()
+  }, AUTO_TRAIN_STEP_MS)
+}
+
+function tickAutoTraining(): void {
+  const id = ui.trainingPlayerId
+  if (!id || ui.screen !== 'training' || !autoTrainingConfig(game, id).autopilot || !autoTrainingRunnable(game, id)) {
+    syncAutoTraining()
+    return
+  }
+  const actionNumber = (game.training[id]?.action ?? 0) + 1
+  const step = autoTrainingStep(game, id)
+  if (!step.ok) {
+    // 走不下去（比如体力、精力或阵容问题）就把开关关掉，免得一直重试。
+    setAutoTrainingConfig(game, id, { autopilot: false })
+    ui.notice = `自动培养已暂停：${step.error ?? '无法继续'}`
+  } else {
+    if (step.kind === 'action') popupQualityOf(id, actionNumber)
+    ui.notice = `自动培养：${step.label ?? '完成一步'}${step.completed ? ' · 本轮已完成' : ''}`
+  }
+  persist()
   render()
 }
 
@@ -625,9 +690,18 @@ function askingFloor(player: Player, auction: ReturnType<typeof marketState.auct
   return minimumBid(player, auction)
 }
 
+/** 战术页自动填充：按 CA、位置熟练度和体能分配；部分轮换/全部轮换还会参考体力和本赛季出场时间。 */
 function autoFillLineupDraft(): Lineup {
   const base = ui.lineupDraft ?? game.lineup
-  return structuredClone(autoFillLineup(game.roster, base.formationId, base.tactics))
+  const minutes = new Map(game.roster.map((player) => [player.id, seasonStats(game, player.id).minutes]))
+  const now = Date.now()
+  const lineup = autoAssignLineup(game.roster, base.formationId, base.tactics, undefined, ui.lineupAutoMode, {
+    condition: (player) => player.condition ?? 100,
+    minutes: (player) => minutes.get(player.id) ?? 0,
+    suspended: (player) => !!game.suspensions?.[player.id],
+    injured: (player) => injuryUntil(game, player, now) !== null,
+  })
+  return structuredClone(lineup)
 }
 
 document.addEventListener('click', async (event) => {
@@ -937,16 +1011,11 @@ document.addEventListener('click', async (event) => {
     case 'new-game':
       if (onlineState.status === 'online') { showNotice('联机账号不能重开个人世界；请先退出账号再创建本地存档。'); break }
       if (game.activeMatch?.context.isLeague) { showNotice('联赛进行中不能开始新游戏。'); break }
-      {
-        const seed = Math.floor(Math.random() * 0x7fffffff)
-        const clubs = previewD2Clubs(seed)
-        ui.newGamePreview = { seed, clubs }
-        ui.newGameClubId = clubs[0]?.id ?? null
-        ui.newGameOpen = true
-      }
+      openNewGamePicker(false)
       render()
       break
     case 'newgame-close':
+      if (ui.newGameRequired) break
       ui.newGameOpen = false
       render()
       break
@@ -962,6 +1031,8 @@ document.addEventListener('click', async (event) => {
       ui.newGameOpen = false
       ui.newGamePreview = null
       saveGame(game)
+      setTeamPickPending(false)
+      ui.newGameRequired = false
       Object.assign(ui, { screen: 'home', trainingPlayerId: null, trainingTeammateIds: [], detailPlayerId: null, reviewId: null, lineupDraft: null, lineupSlot: null, autoSubsDraft: null, notice: '新游戏已创建。', matchEngine: null, matchPlaying: false, completing: false, coachPanel: false, seasonRound: null, worldDivision: null, worldClubId: null, worldPlayerId: null, newGameOpen: false, newGameClubId: null })
       render()
       break
@@ -1000,77 +1071,76 @@ document.addEventListener('click', async (event) => {
       if (actionEl.dataset.option) chooseEvent(actionEl.dataset.option)
       break
     case 'training-auto-mode': {
-      const config = autoTrainingConfig(game, playerId ?? ui.trainingPlayerId ?? undefined)
-      const mode = actionEl.dataset.mode === 'targets' ? 'targets' : 'priority'
-      game.trainingAuto = { ...config, mode }
+      const id = playerId ?? ui.trainingPlayerId
+      if (!id) break
+      const mode = actionEl.dataset.mode === 'targets' || actionEl.dataset.mode === 'max' ? actionEl.dataset.mode : 'priority'
+      setAutoTrainingConfig(game, id, { mode })
       persist()
-      ui.notice = mode === 'targets' ? '自动培养改为：把主属性补到最低目标。' : '自动培养改为：按属性优先级依次练满。'
+      ui.notice = mode === 'targets' ? '自动培养改为：把主属性补到最低目标。' : mode === 'max' ? '自动培养改为：每次选属性成长最多的那一项。' : '自动培养改为：按属性优先级依次练满。'
       render()
       break
     }
     case 'training-auto-priority': {
+      const id = playerId ?? ui.trainingPlayerId
+      if (!id) break
       const attr = actionEl.dataset.attr as AttrKey | undefined
-      const config = autoTrainingConfig(game, playerId ?? ui.trainingPlayerId ?? undefined)
+      const config = autoTrainingConfig(game, id)
       const index = attr ? config.priority.indexOf(attr) : -1
       const to = actionEl.dataset.dir === 'up' ? index - 1 : index + 1
       if (index >= 0 && to >= 0 && to < config.priority.length) {
         const priority = [...config.priority]
         ;[priority[index], priority[to]] = [priority[to], priority[index]]
-        game.trainingAuto = { ...config, priority }
+        setAutoTrainingConfig(game, id, { priority })
         persist()
       }
       render()
       break
     }
+    case 'training-auto-reset': {
+      const id = playerId ?? ui.trainingPlayerId
+      const player = id ? game.roster.find((item) => item.id === id) : undefined
+      if (!id || !player) break
+      setAutoTrainingConfig(game, id, { priority: defaultAutoPriority(player) })
+      persist()
+      ui.notice = '已恢复默认优先级：先练这名球员自己的 2 个主要属性。'
+      render()
+      break
+    }
     case 'training-auto-save': {
-      const config = autoTrainingConfig(game, playerId ?? ui.trainingPlayerId ?? undefined)
-      const targets: Partial<Record<AttrKey, number>> = { ...config.targets }
+      const id = playerId ?? ui.trainingPlayerId
+      if (!id) break
+      const targets: Partial<Record<AttrKey, number>> = { ...autoTrainingConfig(game, id).targets }
       document.querySelectorAll<HTMLInputElement>('input[data-auto-target]').forEach((input) => {
         const key = input.dataset.autoTarget as AttrKey | undefined
         if (!key) return
         const value = Number(input.value)
         targets[key] = Number.isFinite(value) ? Math.round(Math.max(0, Math.min(1500, value))) : 0
       })
-      game.trainingAuto = { ...config, targets }
+      setAutoTrainingConfig(game, id, { targets })
       persist()
       ui.notice = '自动培养设置已保存。'
       render()
       break
     }
-    case 'training-auto-step': {
+    case 'training-auto-toggle': {
       const id = playerId ?? ui.trainingPlayerId
-      if (!id) {
-        showNotice('请先选择球员。')
-        break
-      }
-      ui.trainingPlayerId = id
-      if (!game.trainingAuto) {
-        game.trainingAuto = autoTrainingConfig(game, id)
-        persist()
-      }
-      const step = autoTrainingStep(game, id)
-      ui.notice = step.ok ? `自动培养：${step.label ?? '完成一步'}${step.completed ? ' · 本轮已完成' : ''}` : step.error ?? '自动培养失败'
+      if (!id) break
+      const on = !autoTrainingConfig(game, id).autopilot
+      setAutoTrainingConfig(game, id, { autopilot: on })
+      persist()
+      ui.notice = on ? '已开启自动培养：后续回合会自动进行。' : '已关闭自动培养。'
       render()
       break
     }
-    case 'training-auto-run': {
-      const id = playerId ?? ui.trainingPlayerId
-      if (!id) {
-        showNotice('请先选择球员。')
-        break
-      }
-      ui.trainingPlayerId = id
-      if (!game.trainingAuto) {
-        game.trainingAuto = autoTrainingConfig(game, id)
-        persist()
-      }
-      const result = runAutoTraining(game, id)
-      ui.notice = result.ok
-        ? `自动培养执行 ${result.steps} 步${result.completed ? '，本轮培养完成' : '，本轮还没结束'}。`
-        : `自动培养中断（${result.steps} 步）：${result.error ?? '未知错误'}`
+    case 'auto-strategy-open':
+      if (playerId) ui.trainingPlayerId = playerId
+      ui.autoStrategyOpen = true
       render()
       break
-    }
+    case 'auto-strategy-close':
+      ui.autoStrategyOpen = false
+      render()
+      break
     case 'confirm-candidate':
       if (playerId) {
         const result = confirmTraining(game, playerId)
@@ -1117,7 +1187,7 @@ document.addEventListener('click', async (event) => {
     }
     case 'lineup-auto':
       ui.lineupDraft = autoFillLineupDraft()
-      ui.notice = '已自动填充，记得保存。'
+      ui.notice = `${{ best: '已按 CA 和熟练度排出最强阵容', half: '已部分轮换：体力差的约一半主力换成体力好的替补', full: '已全部轮换：换上本赛季上场最少的一批人' }[ui.lineupAutoMode]}，记得保存。`
       render()
       break
     case 'lineup-save':
@@ -1184,11 +1254,6 @@ document.addEventListener('click', async (event) => {
       }
       break
     }
-    case 'world-toggle-offside':
-      game.settings = { ...(game.settings ?? { offside: true }), offside: !(game.settings?.offside ?? true) }
-      persist()
-      showNotice(`越位规则已${game.settings.offside ? '开启' : '关闭'}。`)
-      break
     case 'skip-postseason': {
       if (isOnlineMode()) break
       const jump = skipToPostseasonEnd(game)
@@ -1278,6 +1343,8 @@ document.addEventListener('click', async (event) => {
       // 保留令牌，但这次不连服务器：不会建立 remote saver，存档只留在本机。
       ui.bootGate = false
       ui.notice = '离线模式：本次不会连接服务器。'
+      // 本地存档是系统自动建的、还没自己选过球队：先让玩家挑一支。
+      if (teamPickPending()) openNewGamePicker(true)
       render()
       break
     case 'match-coach':
@@ -1394,6 +1461,11 @@ document.addEventListener('click', async (event) => {
 
 document.addEventListener('change', (event) => {
   const target = event.target as HTMLSelectElement | HTMLInputElement
+  if (target.id === 'lineup-auto-mode') {
+    ui.lineupAutoMode = target.value === 'half' || target.value === 'full' ? target.value : 'best'
+    render()
+    return
+  }
   if (target.id === 'academy-era') {
     ui.academyEra = target.value
     persist()
@@ -1566,7 +1638,10 @@ document.addEventListener('dragend', () => {
 document.addEventListener('keydown', (event) => {
   const target = event.target as HTMLElement
   if (event.key === 'Escape') {
-    if (ui.newGameOpen) ui.newGameOpen = false
+    if (ui.newGameOpen) {
+      if (ui.newGameRequired) return
+      ui.newGameOpen = false
+    } else if (ui.autoStrategyOpen) ui.autoStrategyOpen = false
     else if (ui.accountOpen) ui.accountOpen = false
     else if (ui.detailPlayerId) ui.detailPlayerId = null
     else return

@@ -4,6 +4,8 @@ import { attrMax, attrRating } from './scale.ts'
 
 export const CA_SCALE = 1500
 export const POSITION_FLOOR = 0.6
+/** 位置熟练度达到这个数才算“可踢”这个位置；低于它不算（自动分配优先用可踢的人）。 */
+export const PLAYABLE_PROFICIENCY = 80
 
 export function isGoalkeeper(attrsOrPositions: Pick<Player, 'positions'> | { GK?: number }): boolean {
   if ('positions' in attrsOrPositions) return attrsOrPositions.positions.GK > 0

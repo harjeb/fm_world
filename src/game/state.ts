@@ -16,6 +16,26 @@ import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION, upgradeBurstAttr, upgrade
 // 游戏改名后仍沿用旧键，改了已有存档就读不到了。
 export const SAVE_KEY = 'fm-seven-a-side-save-v3'
 export const LEGACY_SAVE_KEY = 'fm-seven-a-side-save-v2'
+/** 本地存档是系统自动建的、玩家还没亲自选过球队：离线模式进来时要先让他选一支。 */
+export const TEAM_PICK_PENDING_KEY = 'fm-seven-a-side-team-pick-pending'
+
+export function teamPickPending(): boolean {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem(TEAM_PICK_PENDING_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function setTeamPickPending(pending: boolean): void {
+  try {
+    if (typeof localStorage === 'undefined') return
+    if (pending) localStorage.setItem(TEAM_PICK_PENDING_KEY, '1')
+    else localStorage.removeItem(TEAM_PICK_PENDING_KEY)
+  } catch {
+    /* 存储不可用时就当没有标记 */
+  }
+}
 export const GAME_VERSION = 3
 
 type RemoteSaver = (game: GameState) => void
@@ -108,7 +128,8 @@ export function loadGame(): GameState | null {
       parsed.reserveStars ??= []
       parsed.suspensions ??= {}
       parsed.yellowCounts ??= {}
-      parsed.settings ??= { offside: true }
+      // 越位规则固定开启：旧存档里关掉过的也改回来。
+      parsed.settings = { ...(parsed.settings ?? {}), offside: true }
     }
     const repaired = repairLoadedLineup(parsed)
     const signaturesAdded = upgradeLegacySignatures(parsed)

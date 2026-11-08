@@ -7,6 +7,7 @@ import { isOnMarketToday } from './market-window.ts'
 import { attrMax, attrRating } from './scale.ts'
 import { ALL_ATTRIBUTES, type AICard, type AIClubState, type AITeam, type AttrKey, type Attributes, type FacilityId, type GameState, type Player, type TierId, type WorldClub, type WorldState } from './types.ts'
 import { repairLineup, validateLineup } from './squad.ts'
+import { cachedOwnerlessTeams } from './world.ts'
 
 /**
  * 电脑球队的经营。
@@ -357,8 +358,8 @@ function upgradeOneFacility(state: AIClubState, tier: TierId, seed: number): num
 }
 
 /**
- * 单机推进：只推玩家所在联赛那几支队（有具体球员可练），其它联赛没有名单，
- * 赛季重建时再一起算账，避免在只有积分的队上白花时间。
+ * 单机推进：玩家所在联赛那几支队直接练名单；其它联赛的队没有存档里的名单，
+ * 就按世界种子复原一份名单当“靶子”，只练账本里的卡（不改名单），所以所有球队都会随时间变强。
  */
 export function advanceAIClubs(game: { world?: WorldState; aiTeams?: AITeam[]; aiClubs?: Record<string, AIClubState>; seed: number; season?: { round: number; index: number } }, rounds = 1): boolean {
   if (!game.world || rounds <= 0) return false
@@ -366,12 +367,14 @@ export function advanceAIClubs(game: { world?: WorldState; aiTeams?: AITeam[]; a
   if (game.aiClubs && Object.keys(game.aiClubs).length === 0) return false
   const book = (game.aiClubs ??= seedAIClubs(game.world, game.seed))
   const teams = new Map((game.aiTeams ?? []).map((team) => [team.id, team]))
+  let ownerless: Record<string, AITeam> | undefined
   for (const club of game.world.clubs) {
     if (club.isPlayer) continue
     const state = (book[club.id] ??= createAIClub(club, splitSeed(game.seed, `ai-club-${club.id}`)))
-    // 没有具体名单的队（其他分区）照样收钱、升设施，只是没有培养循环。
-    const team = teams.get(club.id)
-    advanceAIClub(state, club, team, rounds, splitSeed(game.seed, `ai-advance-${club.id}-${game.season?.round ?? 1}-${rounds}`))
+    const own = teams.get(club.id)
+    // 其他分区没有存档名单：用种子复原的名单当培养对象，只练账本里的卡，不动任何名单。
+    const team = own ?? (ownerless ??= cachedOwnerlessTeams(game.world, game.seed, game.aiClubs))[club.id]
+    advanceAIClub(state, club, team, rounds, splitSeed(game.seed, `ai-advance-${club.id}-${game.season?.round ?? 1}-${rounds}`), !!own)
   }
   return true
 }

@@ -6,7 +6,7 @@ import { inPostseason, nextSeasonCountdown } from '../../game/season.ts'
 import { ATTR_GROUPS } from '../../game/data/attributes.ts'
 import { attrRating, mainAttrsFor } from '../../game/rating.ts'
 import { publicWorld, onlineState } from '../../online.ts'
-import { clubRosterPanel, publicClubFor } from '../club-view.ts'
+import { clubRosterPanel, divisionRatings, publicClubFor } from '../club-view.ts'
 import { PLAYER_TEAM_ID } from '../../game/season.ts'
 import { attrHeat, attributeRadar, caHeat, crest, icon, leagueTable, pageHead, panel, posBadge, positionMap, primaryPosition, skillGroups, tag, traitLabel } from '../components.ts'
 import { attrLabel, esc, playerCA } from '../format.ts'
@@ -71,7 +71,7 @@ export function renderWorld(): string {
       kicker: `赛季 ${snapshot?.seasonIndex ?? world.seasonIndex} · ${world.clubs.length} 支球队`,
       title: '三级共享世界',
       sub: `冠军联赛 / 一级联赛 / 二级联赛（南北两区）。当前执教：<b>${esc(game.clubName)}</b> · ${worldTierLabel(playerClub?.tier ?? 'division2')}${playerClub?.conference ? ` · ${playerClub.conference === 'north' ? '北区' : '南区'}` : ''}。`,
-      actions: `<button class="btn ghost" data-action="world-toggle-offside">越位：${game.settings?.offside ?? true ? '开' : '关'}</button>${onlineState.status === 'online' ? '' : '<button class="btn" data-action="new-game">开始本地新游戏</button>'}`, 
+      actions: `${onlineState.status === 'online' ? '' : '<button class="btn" data-action="new-game">开始本地新游戏</button>'}`, 
     })}
     ${inPostseason(game) ? `<div class="banner info">${icon('clock', 18)}<b>赛后休整 · 还剩 ${esc(nextSeasonCountdown(game))}</b><span>升级杯正在进行；所有球队都可以约友谊赛，赛季将在休整窗口结束后自动开始。</span></div>` : ''}
     <div class="pyramid">
@@ -80,7 +80,7 @@ export function renderWorld(): string {
       <div class="pyramid-level l3">${tierButton(world, TIERS[2], activeId)}${tierButton(world, TIERS[3], activeId)}</div>
     </div>
     <div class="grid season-grid">
-      ${panel(esc(worldDivisionLabel(world, active.id)), division ? leagueTable(visibleTable, { tier: active.tier, fixtures: visibleFixtures, browseClubs: true, clubLabels }) : '<p class="muted pad">当前联赛不存在。</p>', { flush: true, aside: `<span class="muted small">点击球队查看所有球员 · ${active.note}</span>` })}
+      ${panel(esc(worldDivisionLabel(world, active.id)), division ? leagueTable(visibleTable, { tier: active.tier, fixtures: visibleFixtures, browseClubs: true, clubLabels, ratings: divisionRatings(world, visibleTable.map((row) => row.teamId)) }) : '<p class="muted pad">当前联赛不存在。</p>', { flush: true, aside: `<span class="muted small">点击球队查看所有球员 · ${active.note}</span>` })}
       <div class="dash-col">
         ${leaderPanels(division, { limit: 5 })}
         ${panel('升降级', `

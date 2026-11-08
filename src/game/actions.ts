@@ -9,7 +9,8 @@ import { nextSeasonCountdown } from './season.ts'
 import { seasonEndAt } from './calendar.ts'
 import { autoFillLineup, validateLineup } from './squad.ts'
 import { FORMATIONS } from './data/formations.ts'
-import { caOf, positionMultiplier } from './ca.ts'
+import { positionMultiplier } from './ca.ts'
+import { lineupRating } from './club-rating.ts'
 import { advanceSeasonRound, finishActiveMatch, skipToMatchday, startChallenge, startChallengeAgainstTeam, startLeagueMatch, startNextSeason } from './season.ts'
 import { cachedOwnerlessTeams } from './world.ts'
 import { emptyAutoSubs, validateAutoSubPlan } from './match/management.ts'
@@ -21,6 +22,7 @@ import { teamInputFromAI, teamInputFromLineup } from './match/setup.ts'
 import { leagueMatchClockAt } from './realtime.ts'
 import { eventById } from './data/events.ts'
 import { attrLabel } from './data/attributes.ts'
+import { keyAttrsOf } from './data/key-attrs.ts'
 import { normalizeCeilings } from './data/attr-profile.ts'
 import { isGoalkeeper } from './ca.ts'
 import { MAIN_ATTR_MAX, attrLimit, mainAttrsFor } from './rating.ts'
@@ -160,15 +162,6 @@ function prepareTraining(game: GameState, playerId: string, request: TrainingReq
 /** 交流赛对手相对我方实力的比例：第一周弱 15%，第二周持平，第三周强 10%（之后沿用最后一周）。 */
 export const EXCHANGE_STRENGTH_RATIOS = [0.85, 1, 1.1] as const
 
-/** 首发平均 CA：球队“排名实力”的口径（和选队界面的“首发平均 CA”一致）。 */
-export function startersAverageCA(players: Player[], lineup: Lineup): number {
-  const starters = lineup.starters
-    .map((slot) => players.find((player) => player.id === slot.playerId))
-    .filter((player): player is Player => !!player)
-  if (!starters.length) return 0
-  return starters.reduce((sum, player) => sum + caOf(player.attrs, isGoalkeeper(player)), 0) / starters.length
-}
-
 /** 基础卡版本的球员：属性、位置、性格、技能都回到没装备任何球员卡时的样子。 */
 function baseCardPlayer(player: Player): Player {
   return {
@@ -183,17 +176,20 @@ function baseCardPlayer(player: Player): Player {
   }
 }
 
-/** 按周挑对手：目标实力 = 我方首发平均 CA × 当周比例，选基础卡强度最接近目标的球队；已经打过的尽量不重复。 */
-export function pickExchangeOpponent(teams: AITeam[], ownStrength: number, week: number, faced: string[] = []): AITeam {
+/**
+ * 按周挑对手：目标 = 我方RANK × 当周比例，选RANK（首发 CA 之和，对手按基础卡算）最接近目标的球队；
+ * 已经打过的尽量不重复。返回的球队球员已经换成基础卡版本。
+ */
+export function pickExchangeOpponent(teams: AITeam[], ownRating: number, week: number, faced: string[] = []): { team: AITeam; rating: number } {
   const ratio = EXCHANGE_STRENGTH_RATIOS[Math.min(Math.max(week, 1), EXCHANGE_STRENGTH_RATIOS.length) - 1]
-  const target = ownStrength * ratio
+  const target = ownRating * ratio
   const based = teams.map((team) => {
     const players = team.players.map(baseCardPlayer)
-    return { team: { ...team, players }, strength: startersAverageCA(players, team.lineup) }
+    return { team: { ...team, players }, rating: lineupRating(players, team.lineup) }
   })
   const fresh = based.filter((item) => !faced.includes(item.team.id))
   const pool = fresh.length ? fresh : based
-  return pool.sort((x, y) => Math.abs(x.strength - target) - Math.abs(y.strength - target) || x.team.id.localeCompare(y.team.id))[0].team
+  return pool.sort((x, y) => Math.abs(x.rating - target) - Math.abs(y.rating - target) || x.team.id.localeCompare(y.team.id))[0]
 }
 
 function simulateTrainingExchange(game: GameState, session: TrainingSession): TrainingExchange {
@@ -212,13 +208,15 @@ function simulateTrainingExchange(game: GameState, session: TrainingSession): Tr
       lineup = auto
     }
   }
-  // 对手按排名接近：我方首发平均 CA（含这名培养球员当前的 CA）乘当周比例，对手一律用基础卡属性。
-  const opponent = pickExchangeOpponent(game.aiTeams, startersAverageCA(roster, lineup), week, (session.exchangeMatches ?? []).map((match) => match.opponentId))
+  // 对手按RANK接近：我方RANK（上场首发的 CA 之和，含这名培养球员当前的 CA）乘当周比例，对手一律用基础卡属性。
+  const ownRating = lineupRating(roster, lineup)
+  const picked = pickExchangeOpponent(game.aiTeams, ownRating, week, (session.exchangeMatches ?? []).map((match) => match.opponentId))
+  const opponent = picked.team
   const home = teamInputFromLineup(roster, lineup, { id: 'player', name: game.clubName, color: '#34d399', accent: '#052e1b' })
   if (game.autoSubs) home.autoSubs = structuredClone(game.autoSubs)
   const engine = new Engine({ seed: splitSeed(scheduleSeed, `training-exchange-${week}`), home, away: teamInputFromAI(opponent), knockout: false })
   const score = engine.simulate().score
-  return { week, opponentId: opponent.id, opponentName: opponent.name, homeScore: score.home, awayScore: score.away, result: score.home > score.away ? 'win' : score.home < score.away ? 'loss' : 'draw' }
+  return { week, opponentId: opponent.id, opponentName: opponent.name, ownRating: Math.round(ownRating), opponentRating: Math.round(picked.rating), homeScore: score.home, awayScore: score.away, result: score.home > score.away ? 'win' : score.home < score.away ? 'loss' : 'draw' }
 }
 
 export function previewTraining(game: GameState, playerId: string, request: TrainingRequest, hideQuality = false): { plan?: TrainingPlan; error?: string } {
@@ -254,7 +252,7 @@ export function trainingAction(game: GameState, playerId: string, request: Train
       session.exchangeMatches = [...(session.exchangeMatches ?? []), { ...exchange }]
       if (exchange.result === 'loss') session.lowMoodWeeks = [...new Set([...(session.lowMoodWeeks ?? []), exchange.week + 1])]
       const entry = [...session.log].reverse().find(item => item.action === session.action && item.kind === 'action')
-      if (entry) entry.text += ` 对阵 ${exchange.opponentName} ${exchange.homeScore}:${exchange.awayScore}（${{ win: '胜', draw: '平', loss: '负' }[exchange.result]}）。${exchange.result === 'loss' ? '下周一至周三心情低落，属性成长减少 50%。' : ''}`
+      if (entry) entry.text += ` 对阵 ${exchange.opponentName}（RANK ${exchange.ownRating} 对 ${exchange.opponentRating}）${exchange.homeScore}:${exchange.awayScore}（${{ win: '胜', draw: '平', loss: '负' }[exchange.result]}）。${exchange.result === 'loss' ? '下周一至周三心情低落，属性成长减少 50%。' : ''}`
     }
     if (i === 0) primaryResult = result
   }
@@ -280,6 +278,9 @@ function syncCandidate(game: GameState, playerId: string): void {
   if (session?.completed) {
     game.candidates[playerId] = structuredClone(session.candidate)
     addTrainedCard(game, session)
+    // 自动培养开关默认总是关的：一轮结束就自动关掉，下一轮需要重新打开。
+    const own = game.trainingAutoByPlayer?.[playerId]
+    if (own?.autopilot) game.trainingAutoByPlayer = { ...game.trainingAutoByPlayer, [playerId]: { ...own, autopilot: false } }
   }
 }
 
@@ -308,16 +309,40 @@ export type AutoTrainingRunResult = {
 export function autoTrainingConfig(game: GameState, playerId?: string): TrainingAutoConfig {
   const player = playerId ? game.roster.find((item) => item.id === playerId) : undefined
   const mains = mainAttrsFor(player ? isGoalkeeper(player) : false)
-  const existing = game.trainingAuto
-  const priority: AttrKey[] = [...new Set((existing?.priority ?? []).filter((key) => ALL_ATTRIBUTES.includes(key)))]
-  // 优先级里保证有这名球员的全部主属性，顺序沿用玩家设置。
+  // 每名球员各存一份；没单独设置过的用旧的全局设置当默认值。开关只认球员自己的那份。
+  const own = playerId ? game.trainingAutoByPlayer?.[playerId] : undefined
+  const existing = own ?? game.trainingAuto
+  // 玩家设置过优先级就沿用；一次都没设置过时，默认先练这名球员自己的 2 个主要属性（按他的风格），再练其余主属性。
+  const saved = (existing?.priority ?? []).filter((key) => ALL_ATTRIBUTES.includes(key))
+  const priority: AttrKey[] = [...new Set(saved.length ? saved : player ? keyAttrsOf(player) : [])]
+  // 优先级里保证有这名球员的全部主属性，顺序沿用上面的结果。
   for (const key of mains) if (!priority.includes(key)) priority.push(key)
   const targets: Partial<Record<AttrKey, number>> = {}
   for (const [key, value] of Object.entries(existing?.targets ?? {}) as [AttrKey, number | undefined][]) {
     if (!ALL_ATTRIBUTES.includes(key) || typeof value !== 'number' || !Number.isFinite(value)) continue
     targets[key] = Math.round(Math.max(0, Math.min(MAIN_ATTR_MAX, value)))
   }
-  return { enabled: existing?.enabled !== false, mode: existing?.mode === 'targets' ? 'targets' : 'priority', priority, targets }
+  return { enabled: existing?.enabled !== false, autopilot: own?.autopilot === true, mode: existing?.mode === 'targets' || existing?.mode === 'max' ? existing.mode : 'priority', priority, targets }
+}
+
+/** 这名球员的默认优先级：2 个主要属性在前，其余主属性按固定顺序接在后面。 */
+export function defaultAutoPriority(player: Player): AttrKey[] {
+  const priority: AttrKey[] = [...keyAttrsOf(player)]
+  for (const key of mainAttrsFor(isGoalkeeper(player))) if (!priority.includes(key)) priority.push(key)
+  return priority
+}
+
+/** 改某名球员的自动培养设置（策略或开关），只动他自己的那份；保存由界面负责。 */
+export function setAutoTrainingConfig(game: GameState, playerId: string, patch: Partial<TrainingAutoConfig>): TrainingAutoConfig {
+  const next = { ...autoTrainingConfig(game, playerId), ...patch }
+  game.trainingAutoByPlayer = { ...(game.trainingAutoByPlayer ?? {}), [playerId]: next }
+  return next
+}
+
+/** 开着“自动培养”时能不能继续往后走：有一轮没结束的培养就可以（不会自己开新一轮）。 */
+export function autoTrainingRunnable(game: GameState, playerId: string): boolean {
+  const session = game.training[playerId]
+  return !!session && !session.completed && !game.candidates[playerId]
 }
 
 /** 本次培养里该球员各属性还能练到多少（球员个人上限）。 */
@@ -341,6 +366,12 @@ function autoTrainingWeights(session: TrainingSession, config: TrainingAutoConfi
   const below = (key: AttrKey): boolean => attrs[key] + 0.5 < ceilings[key]
   const order = config.priority.filter((key) => mains.includes(key))
   for (const key of mains) if (!order.includes(key)) order.push(key)
+  if (config.mode === 'max') {
+    // 自动选择：项目/事件选项的得分是“能涨的属性总成长”，每次选最多的那一项；
+    // 但这名球员自己的 2 个主要属性权重是别的属性的 3 倍，所以不会为了凑数把他练歪。
+    const keys = new Set<AttrKey>(keyAttrsOf(session.candidate))
+    return ALL_ATTRIBUTES.filter((key) => below(key)).map((key) => ({ key, weight: keys.has(key) ? 3 : 1 }))
+  }
   if (config.mode === 'targets') {
     // 差距 = 目标值 - 当前值，目标超过个人上限时以实际上限为准。
     return mains
@@ -457,11 +488,12 @@ export function autoTrainingStep(game: GameState, playerId: string): AutoTrainin
     return { ok: true, completed: result.completed, kind: 'action', label: activity.label }
   }
   // 旧课程（没有日历项目）：直接练主属性，体力不够先休息。
-  const top = weights[0]
+  // 专项训练只能练主属性，自动选择模式下的隐藏属性要跳过。
+  const top = weights.find((item) => mainAttrsFor(isGoalkeeper(player)).includes(item.key))
   const request: TrainingRequest = session.fatigue + 12 > 100 ? { kind: 'rest' } : top ? { kind: 'drill', attr: top.key } : { kind: 'rest' }
   const result = trainingAction(game, playerId, request)
   if (!result.ok) return { ok: false, error: result.error ?? '自动训练失败', completed: false, kind: 'action' }
-  return { ok: true, completed: result.completed, kind: 'action', label: request.kind === 'drill' ? `专项训练 · ${attrLabel(top.key)}` : '休息' }
+  return { ok: true, completed: result.completed, kind: 'action', label: request.kind === 'drill' ? `专项训练 · ${attrLabel(request.attr)}` : '休息' }
 }
 
 /** 连续自动培养，直到本轮结束或用完步数（默认 60 步，足够跑完一整轮加事件）。 */

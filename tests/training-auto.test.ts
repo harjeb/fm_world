@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
-import { autoTrainingConfig, autoTrainingStep, runAutoTraining, startTraining } from '../src/game/actions.ts'
+import { autoTrainingConfig, defaultAutoPriority, autoTrainingRunnable, autoTrainingStep, runAutoTraining, setAutoTrainingConfig, startTraining } from '../src/game/actions.ts'
 import { trainingOptions } from '../src/game/training-calendar.ts'
 import type { AttrKey } from '../src/game/types.ts'
 import { mainAttrsFor } from '../src/game/scale.ts'
+import { keyAttrsOf, STYLE_KEY_ATTRS } from '../src/game/data/key-attrs.ts'
+import { EVENTS } from '../src/game/data/events.ts'
 
 function setup(seed = 1) {
   const game = createInitialGame(seed)
@@ -37,6 +39,121 @@ describe('自动培养', () => {
     expect(config.enabled).toBe(true)
     for (const key of mainAttrsFor(true)) expect(config.priority).toContain(key)
     expect(game.trainingAuto).toBeUndefined()
+  })
+
+  it('自动培养策略和开关按球员各存一份，互不影响；没单独设置过的沿用旧的全局设置', () => {
+    const { game, field, keeper } = setup(7)
+    expect(autoTrainingConfig(game, field.id).autopilot).toBe(false)
+    const first = field.id
+    const second = game.roster.find((player) => player.positions.GK <= 0 && player.id !== first)!.id
+    setAutoTrainingConfig(game, first, { mode: 'targets', autopilot: true, targets: { passing: 900 } })
+    expect(autoTrainingConfig(game, first)).toMatchObject({ mode: 'targets', autopilot: true, targets: { passing: 900 } })
+    // 另一名球员不受影响
+    expect(autoTrainingConfig(game, second)).toMatchObject({ mode: 'priority', autopilot: false, targets: {} })
+    // 门将的优先级补的是门将主属性
+    setAutoTrainingConfig(game, keeper.id, { mode: 'priority' })
+    expect(autoTrainingConfig(game, keeper.id).priority).toContain('reflexes')
+    // 旧的全局设置仍是没单独设置过的球员的默认值，但开关只认球员自己的
+    game.trainingAuto = { enabled: true, autopilot: true, mode: 'targets', priority: [...mainAttrsFor(false)], targets: { shooting: 800 } }
+    const third = game.roster.find((player) => player.positions.GK <= 0 && player.id !== first && player.id !== second)!.id
+    expect(autoTrainingConfig(game, third)).toMatchObject({ mode: 'targets', autopilot: false, targets: { shooting: 800 } })
+  })
+
+  it('“自动选择”模式每次都选当天加权总成长最多的项目（球员自己的 2 个主要属性权重 ×3），能跑完整轮（外场与门将）', () => {
+    for (const useGk of [false, true]) {
+      const { game, field, keeper } = setup(52)
+      const player = useGk ? keeper : field
+      setAutoTrainingConfig(game, player.id, { mode: 'max' })
+      expect(autoTrainingConfig(game, player.id).mode).toBe('max')
+      expect(startTraining(game, player.id).ok).toBe(true)
+      const session = game.training[player.id]
+      session.flags = EVENTS.map((event) => event.id)
+      session.lastEventAction = Object.fromEntries(EVENTS.map((event) => [event.id, 1000]))
+      session.eventCounts = Object.fromEntries(EVENTS.map((event) => [event.id, 1000]))
+      session.action = 2 // 周二上午：有普通课程可选
+      const keys: string[] = keyAttrsOf(player)
+      const total = (gains: Record<string, number | undefined> | undefined) => Object.entries(gains ?? {}).reduce<number>((sum, [key, value]) => sum + (value ?? 0) * (keys.includes(key) ? 3 : 1), 0)
+      const gainsOf = (item: ReturnType<typeof trainingOptions>[number]) => (useGk ? item.goalkeeperGains ?? item.gains : item.gains)
+      const best = Math.max(...trainingOptions(session).map((item) => total(gainsOf(item))))
+      const candidates = trainingOptions(session).filter((item) => total(gainsOf(item)) === best).map((item) => item.label)
+      const step = autoTrainingStep(game, player.id)
+      expect(step.ok, step.error).toBe(true)
+      expect(candidates).toContain(step.label)
+      // 并列时取当天先列出的那一项
+      expect(step.label).toBe(candidates[0])
+    }
+    const { game, field } = setup(53)
+    setAutoTrainingConfig(game, field.id, { mode: 'max' })
+    const result = runAutoTraining(game, field.id)
+    expect(result.ok, result.error).toBe(true)
+    expect(result.completed).toBe(true)
+  })
+
+  it('自动培养开关每轮结束就自动关掉（默认总是不开），不影响别的球员', () => {
+    const { game, field } = setup(54)
+    const other = game.roster.find((player) => player.positions.GK <= 0 && player.id !== field.id)!
+    setAutoTrainingConfig(game, field.id, { autopilot: true })
+    setAutoTrainingConfig(game, other.id, { autopilot: true })
+    expect(runAutoTraining(game, field.id).completed).toBe(true)
+    expect(autoTrainingConfig(game, field.id).autopilot).toBe(false)
+    expect(autoTrainingConfig(game, other.id).autopilot).toBe(true)
+  })
+
+  it('每个球员默认有 2 个主要属性（按风格），自动培养默认先练它们，不会把前锋练成传球手', () => {
+    const { game } = setup(61)
+    // 前锋风格各有不同：射术 + 速度 / 爆发 / 力量
+    expect(STYLE_KEY_ATTRS.st_finisher).toEqual(['shooting', 'speed'])
+    expect(STYLE_KEY_ATTRS.st_poacher).toEqual(['shooting', 'acceleration'])
+    expect(STYLE_KEY_ATTRS.st_target).toEqual(['shooting', 'strength'])
+    for (const player of game.roster) {
+      const keys = keyAttrsOf(player)
+      const mains = mainAttrsFor(player.positions.GK > 0)
+      expect(keys[0]).not.toBe(keys[1])
+      for (const key of keys) expect(mains, `${player.name}:${player.style}`).toContain(key)
+      // 没设置过任何东西时，默认优先级把 2 个主要属性放在最前面，其余主属性接在后面且不缺
+      const priority = autoTrainingConfig(game, player.id).priority
+      expect(priority.slice(0, 2)).toEqual(keys)
+      expect(new Set(priority)).toEqual(new Set(mains))
+      expect(defaultAutoPriority(player)).toEqual(priority)
+    }
+    // 球员自己设置过优先级就按他的；旧的全局设置也仍然生效
+    const field = game.roster.find((player) => player.positions.GK <= 0)!
+    setAutoTrainingConfig(game, field.id, { priority: ['passing', ...mainAttrsFor(false).filter((key) => key !== 'passing')] })
+    expect(autoTrainingConfig(game, field.id).priority[0]).toBe('passing')
+  })
+
+  it('默认策略跑一轮：主要属性的成长明显多于其余主属性（外场与自动选择模式都一样）', () => {
+    for (const mode of ['priority', 'max'] as const) {
+      let keyGain = 0
+      let otherGain = 0
+      let keyCount = 0
+      let otherCount = 0
+      for (let seed = 1; seed <= 12; seed++) {
+        const { game } = setup(70 + seed)
+        const player = game.roster.filter((item) => item.positions.GK <= 0)[seed % 8]
+        setAutoTrainingConfig(game, player.id, { mode })
+        expect(startTraining(game, player.id, seed).ok).toBe(true)
+        const before = { ...game.training[player.id].candidate.attrs }
+        expect(runAutoTraining(game, player.id).completed).toBe(true)
+        const cand = game.candidates[player.id]
+        const keys: string[] = keyAttrsOf(player)
+        for (const key of mainAttrsFor(false)) {
+          const gain = cand.attrs[key] - before[key]
+          if (keys.includes(key)) { keyGain += gain; keyCount++ } else { otherGain += gain; otherCount++ }
+        }
+      }
+      expect(keyGain / keyCount, mode).toBeGreaterThan((otherGain / otherCount) * 1.5)
+    }
+  })
+
+  it('只有一轮没结束的培养才会被开关继续推进，不会自己开新一轮', () => {
+    const { game, field } = setup(8)
+    setAutoTrainingConfig(game, field.id, { autopilot: true })
+    expect(autoTrainingRunnable(game, field.id)).toBe(false)
+    expect(startTraining(game, field.id).ok).toBe(true)
+    expect(autoTrainingRunnable(game, field.id)).toBe(true)
+    expect(runAutoTraining(game, field.id).completed).toBe(true)
+    expect(autoTrainingRunnable(game, field.id)).toBe(false)
   })
 
   it('能自动跑完一整轮（外场与门将），只选用当天日历提供的项目', () => {

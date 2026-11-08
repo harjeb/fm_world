@@ -1241,3 +1241,18 @@ circle.pm-5 { fill: var(--h6); }
 
 /* 属性名带上自己的颜色：左边一条色块，文字用同色。 */
 .dt td.attr-name { color: var(--attr-color, var(--text-2)); font-weight: 500; box-shadow: inset 3px 0 0 var(--attr-color, transparent); padding-left: 10px; }
+
+/* ---------- 自动培养开关与策略弹窗 ---------- */
+.train-lead { display: flex; align-items: center; gap: 12px 20px; flex-wrap: wrap; min-width: 0; }
+.train-auto { display: flex; align-items: center; gap: 8px; }
+.auto-switch { display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 9px 0 6px; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 13px; color: var(--text-2); font-size: 12.5px; }
+.auto-switch i { position: relative; width: 28px; height: 16px; border-radius: 8px; background: var(--line-2); transition: background 0.15s; }
+.auto-switch i::after { content: ''; position: absolute; left: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
+.auto-switch.on { color: var(--text); border-color: var(--accent); }
+.auto-switch.on i { background: var(--accent); }
+.auto-switch.on i::after { transform: translateX(12px); background: #10140a; }
+.auto-modal { max-width: 720px; margin-top: 6vh; }
+.auto-modal .kicker { margin-bottom: 2px; }
+.auto-modal .btn-row { margin-bottom: 8px; }
+
+.auto-mode { height: 28px; max-width: 190px; }

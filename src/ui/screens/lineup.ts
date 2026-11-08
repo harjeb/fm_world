@@ -3,7 +3,7 @@ import { playerCards } from '../../game/cards.ts'
 import { setLineup } from '../../game/actions.ts'
 import { FORMATIONS, FORMATION_LIST, TACTIC_LABELS, type FormationDef, type FormationSlot } from '../../game/data/formations.ts'
 import { ROLES, ROLES_BY_POSITION, roleFit } from '../../game/data/roles.ts'
-import { positionMultiplier } from '../../game/ca.ts'
+import { PLAYABLE_PROFICIENCY, positionMultiplier } from '../../game/ca.ts'
 import { formOf, recentAnalysis, squadForm, type PlayerForm } from '../../game/form.ts'
 import { injuryUntil } from '../../game/injury.ts'
 import { autoSubDisplaySeconds, emptyAutoSubs, validateAutoSubPlan } from '../../game/match/management.ts'
@@ -95,7 +95,7 @@ function roleOptions(position: Position, role: RoleId): string {
 
 /** 熟练度：参考图里那种很短的绿条，低于 65 变黄、低于 40 变红。 */
 function proficiencyBar(value: number): string {
-  const tone = value >= 65 ? '' : value >= 40 ? ' low' : ' bad'
+  const tone = value >= PLAYABLE_PROFICIENCY ? '' : value >= 60 ? ' low' : ' bad'
   return `<span class="prof-bar${tone}" aria-label="熟练度 ${Math.round(value)}"><i style="width:${Math.max(6, Math.min(100, value)).toFixed(0)}%"></i></span>`
 }
 
@@ -125,7 +125,7 @@ function slotCard(slot: FormationSlot, draft: Lineup, formation: FormationDef, s
   const { left, top } = boardSpot(spot.x, spot.y)
   const custom = !!draft.customPositions?.[slot.id]
   const role = starter?.role ?? slot.defaultRole
-  const warn = player && (player.positions[slot.position] < 65 || injuryUntil(game, player) || game.suspensions?.[player.id])
+  const warn = player && (player.positions[slot.position] < PLAYABLE_PROFICIENCY || injuryUntil(game, player) || game.suspensions?.[player.id])
   const selected = selectedId === slot.id
   const hint = `${slot.label}：拖动圆点把球员摆到任意位置（松手保存）；选中后用方向键微调；点击圆点在右侧球员表里选人`
   return `<div class="slot ${selected ? 'selected' : ''} ${player ? '' : 'vacant'} ${warn ? 'warn' : ''} ${custom ? 'custom-pos' : ''}" style="left:${left.toFixed(1)}%;top:${top.toFixed(1)}%" data-drop="${slotTarget(slot.id)}" data-key="${slot.id}">
@@ -273,7 +273,7 @@ function playerRow(player: Player, draft: Lineup, formation: FormationDef, selec
   const isPicked = selectedId !== null && (placement.slot?.id === selectedId || (placement.benchIndex !== undefined && benchSlotId(placement.benchIndex) === selectedId))
   const assignable = selectedId !== null && !isPicked
   const dropTarget = placement.slot ? slotTarget(placement.slot.id) : placement.benchIndex !== undefined ? benchTarget(placement.benchIndex) : 'reserve'
-  const positions = (['GK', 'CB', 'W', 'CM', 'ST'] as Position[]).filter((pos) => player.positions[pos] >= 40).sort((a, b) => player.positions[b] - player.positions[a])
+  const positions = (['GK', 'CB', 'W', 'CM', 'ST'] as Position[]).filter((pos) => player.positions[pos] >= PLAYABLE_PROFICIENCY).sort((a, b) => player.positions[b] - player.positions[a])
   const winRate = form.apps > 0 ? pct(form.wins / form.apps) : '—'
   return `<tr class="${isPicked ? 'me' : ''} ${assignable ? 'clickable' : ''}" data-key="${esc(player.id)}" data-drop="${dropTarget}" ${assignable ? `tabindex="0" data-action="lineup-assign" data-player="${esc(player.id)}"` : ''}>
     <td class="t-place ${placement.slot || placement.benchIndex !== undefined ? '' : 'reserve'}">${pick(`${posBadge(placement.slot?.position ?? primaryPosition(player))}<span>${esc(placeLabel)}</span>`, `<select data-move-player="${esc(player.id)}" aria-label="${esc(player.name)}的位置">${moveOptions(player, draft, formation)}</select>`)}</td>
@@ -322,13 +322,13 @@ function squadTable(draft: Lineup, formation: FormationDef, selectedId: string |
   return `<div class="table-scroll"><table class="dt tac-table">
     <thead><tr>
       <th>位置</th><th>球员</th>
-      <th class="num t-prof" title="当前位置的熟练度；低于 65 会明显折损属性">熟练度</th>
+      <th class="num t-prof" title="当前位置的熟练度；低于 80 不算可踢，属性会折损">熟练度</th>
       <th class="num t-cond" title="比赛体能属于球员本人，换卡不会恢复">体能</th>
       <th class="num" title="这名球员用这个职责踢这个位置的实际水平（已算位置折损）">有效</th>
       <th class="num">CA</th>
       <th class="t-role">职责</th><th>球员卡</th>
       <th title="最近 5 场联赛的表现分，由进球、拦截、传球等算出，只用于展示">近 5 场</th>
-      <th title="熟练度 40 以上的位置">可踢位置</th>
+      <th title="熟练度 80 以上的位置；低于 80 不算可踢">可踢位置</th>
       <th class="num" title="本赛季联赛出场">场</th><th class="num" title="本赛季联赛进球">球</th><th class="num" title="本赛季出场时的胜率">胜率</th>
     </tr></thead>
     <tbody>
@@ -766,7 +766,7 @@ export function renderLineup(): string {
     ${pageHead({
       title: `战术 ${dirty ? '<span class="tag gold head-tag">未保存</span>' : ''}`,
       sub: contextLine(),
-      actions: `<button class="btn ghost" data-action="world-toggle-offside">越位：${game.settings?.offside ?? true ? '开' : '关'}</button><button class="btn" data-action="lineup-auto">自动填充</button><button class="btn primary" data-action="lineup-save">${icon('check', 14)}保存阵容</button>`,
+      actions: `<select id="lineup-auto-mode" class="auto-mode" aria-label="自动填充方式"><option value="best" ${ui.lineupAutoMode === 'best' ? 'selected' : ''}>最强阵容（CA·熟练度）</option><option value="half" ${ui.lineupAutoMode === 'half' ? 'selected' : ''}>部分轮换</option><option value="full" ${ui.lineupAutoMode === 'full' ? 'selected' : ''}>全部轮换</option></select><button class="btn" data-action="lineup-auto">自动填充</button><button class="btn primary" data-action="lineup-save">${icon('check', 14)}保存阵容</button>`,
     })}
     <div class="tactics">
       <section class="panel">

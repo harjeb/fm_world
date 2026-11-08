@@ -360,13 +360,14 @@ function zoneLegend(tier: TierId | undefined): string {
   return `<div class="legend table-legend">${items.map(([zone, label]) => `<span class="legend-item"><i class="swatch zone-${zone}"></i>${label}</span>`).join('')}</div>`
 }
 
-export function leagueTable(rows: SeasonTableRow[], options: { tier?: TierId; fixtures?: Fixture[]; compact?: boolean; window?: { from: number; to: number }; browseClubs?: boolean; clubLabels?: Record<string, { name: string; color: string }> } = {}): string {
+export function leagueTable(rows: SeasonTableRow[], options: { tier?: TierId; fixtures?: Fixture[]; compact?: boolean; window?: { from: number; to: number }; browseClubs?: boolean; clubLabels?: Record<string, { name: string; color: string }>; ratings?: Map<string, number> } = {}): string {
   const from = options.window?.from ?? 0
   const to = options.window?.to ?? rows.length
   const shown = rows.slice(from, to)
   const head = options.compact
     ? '<th class="num">#</th><th>球队</th><th class="num">场</th><th class="num">净胜</th><th class="num">分</th>'
     : '<th class="num">#</th><th>球队</th><th class="num">场</th><th class="num">胜</th><th class="num">平</th><th class="num">负</th><th class="num">进</th><th class="num">失</th><th class="num">净</th><th class="num">分</th><th>近况</th>'
+  const ratingHead = options.ratings ? '<th class="num" title="首发 CA 之和">RANK</th>' : ''
   const body = shown.map((row, offset) => {
     const index = from + offset
     const diff = row.gf - row.ga
@@ -378,9 +379,9 @@ export function leagueTable(rows: SeasonTableRow[], options: { tier?: TierId; fi
     const look = options.clubLabels?.[row.teamId]
     // 积分榜里的球队名一律可点开名单（赛季页、世界页都一样）。
     const browse = `<button type="button" class="club club-btn" data-club-open="${esc(row.teamId)}" aria-label="查看${esc(look?.name ?? row.teamId)}球员">${crest(look ?? clubLook(row.teamId))}<span class="club-name">${esc(look?.name ?? clubLook(row.teamId).name)}</span></button>`
-    return `<tr class="${row.teamId === PLAYER_TEAM_ID ? 'me' : ''}"><td class="num rank ${zone ? `zone-${zone}` : ''}">${index + 1}</td><td>${browse}</td>${cells}<td class="num strong">${row.points}</td>${form}</tr>`
+    return `<tr class="${row.teamId === PLAYER_TEAM_ID ? 'me' : ''}"><td class="num rank ${zone ? `zone-${zone}` : ''}">${index + 1}</td><td>${browse}</td>${cells}${options.ratings ? `<td class="num dim">${Math.round(options.ratings.get(row.teamId) ?? 0) || ''}</td>` : ''}<td class="num strong">${row.points}</td>${form}</tr>`
   }).join('')
-  return `<div class="table-scroll"><table class="dt league"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>${options.compact ? '' : zoneLegend(options.tier)}`
+  return `<div class="table-scroll"><table class="dt league"><thead><tr>${head.replace('<th class="num">分</th>', `${ratingHead}<th class="num">分</th>`)}</tr></thead><tbody>${body}</tbody></table></div>${options.compact ? '' : zoneLegend(options.tier)}`
 }
 
 export function fixtureRow(fixture: Fixture, options: { pending?: string } = {}): string {

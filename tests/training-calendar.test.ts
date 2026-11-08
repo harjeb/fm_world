@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
-import { pickExchangeOpponent, previewTraining, startersAverageCA, startTraining, trainingAction, trainingEventChoice } from '../src/game/actions.ts'
+import { pickExchangeOpponent, previewTraining, startTraining, trainingAction, trainingEventChoice } from '../src/game/actions.ts'
 import { planTraining } from '../src/game/training.ts'
 import { trainingDate, trainingLowMood, trainingOptions, type TrainingActivityId } from '../src/game/training-calendar.ts'
 import { EVENTS, eventById } from '../src/game/data/events.ts'
@@ -8,6 +8,7 @@ import { derivedRng, splitSeed } from '../src/game/rng.ts'
 import { MatchEngine } from '../src/game/match/engine.ts'
 import { teamInputFromAI, teamInputFromLineup } from '../src/game/match/setup.ts'
 import { isMainAttr } from '../src/game/scale.ts'
+import { lineupRating } from '../src/game/club-rating.ts'
 
 function setup(count = 1) {
   const game = createInitialGame(410)
@@ -132,7 +133,9 @@ describe('calendar training', () => {
     const { game, ids } = setup(2)
     const s = game.training[ids[0]]
     const seed = s.scheduleSeed!
-    const opponent = pickExchangeOpponent(game.aiTeams, startersAverageCA(game.roster, game.lineup), 1)
+    const ownRating = lineupRating(game.roster, game.lineup)
+    const picked = pickExchangeOpponent(game.aiTeams, ownRating, 1)
+    const opponent = picked.team
     const home = teamInputFromLineup(game.roster, game.lineup, { id: 'player', name: game.clubName, color: '#34d399', accent: '#052e1b' })
     if (game.autoSubs) home.autoSubs = structuredClone(game.autoSubs)
     const engine = new MatchEngine({ seed: splitSeed(seed, 'training-exchange-1'), home, away: teamInputFromAI(opponent), knockout: false })
@@ -140,7 +143,7 @@ describe('calendar training', () => {
     const before = structuredClone(game)
     const result = trainingAction(game, ids[0], { ...activity('exchange'), teammateIds: [ids[1]] })
     expect(result.ok).toBe(true)
-    expect(result.exchange).toEqual({ week: 1, opponentId: opponent.id, opponentName: opponent.name, homeScore: score.home, awayScore: score.away, result: score.home > score.away ? 'win' : score.home < score.away ? 'loss' : 'draw' })
+    expect(result.exchange).toEqual({ week: 1, opponentId: opponent.id, opponentName: opponent.name, ownRating: Math.round(ownRating), opponentRating: Math.round(picked.rating), homeScore: score.home, awayScore: score.away, result: score.home > score.away ? 'win' : score.home < score.away ? 'loss' : 'draw' })
     expect(game.training[ids[1]].exchangeMatches).toEqual([result.exchange])
     expect(game.roster).toEqual(before.roster)
     expect(game.injuries).toEqual(before.injuries)

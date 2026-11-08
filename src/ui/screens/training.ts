@@ -9,6 +9,7 @@ import { partnerAssignment, trainingDate, trainingOptions, type TrainingActivity
 import { baseBuild, playerCards } from '../../game/cards.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
 import { getSkillTier } from '../../game/inheritance.ts'
+import { keyAttrsOf } from '../../game/data/key-attrs.ts'
 import { activityColor, attrColor, attributeRadar, attrHeat, caHeat, cardName, cardSelect, icon, mainAttrs, meter, pageHead, panel, posBadge, primaryPosition, skillGroups, skillTierLabel, tag, tile, traitLabel } from '../components.ts'
 import { attrLabel, attrValue, caDelta, displayEventHint, esc, gainText, pct, playerCA, positionLabel, skillName, trainingLogText } from '../format.ts'
 import { game, ui } from '../state.ts'
@@ -102,60 +103,65 @@ export function renderTraining(): string {
     })}
     ${sessionStrip()}
     ${selected ? renderTrainingPlayer(selected) : overviewTable()}
-    ${autoTrainingPanel(selected)}
   `
 }
 
-/** 自动培养设置面板：模式、属性优先级、最低目标和自动执行按钮。*/
-function autoTrainingPanel(player: Player | null | undefined): string {
-  // 界面不保存草稿：每次改动都由 app.ts 直接写回 game.trainingAuto 并存档。
-  const config = autoTrainingConfig(game, player?.id)
-  const mains = mainAttrsFor(player ? player.positions.GK > 0 : false)
-  const session = player ? game.training[player.id] : undefined
-  const state = !player
-    ? '<span class="muted small">先选择球员</span>'
-    : session?.completed || game.candidates[player.id]
-      ? tag('本轮已完成', 'good')
-      : session
-        ? tag(`培养中 ${session.action}/${trainingActionsTotal(session)}`, 'info')
-        : '<span class="muted small">空闲</span>'
+/** 自动培养开关 + 自动策略按钮：放在培养卡片右边，开关和策略都是按球员保存的。 */
+function autoControls(player: Player): string {
+  const config = autoTrainingConfig(game, player.id)
+  const on = config.autopilot === true
+  return `<div class="train-auto">
+    <button class="auto-switch ${on ? 'on' : ''}" role="switch" aria-checked="${on}" data-action="training-auto-toggle" data-player="${esc(player.id)}"><i></i><span>自动培养</span></button>
+    <button class="btn small" data-action="auto-strategy-open" data-player="${esc(player.id)}">自动策略</button>
+  </div>`
+}
+
+/** 自动策略弹窗：当前选中球员的模式、属性优先级和最低目标。每次改动都由 app.ts 直接写回这名球员的设置并存档。 */
+export function renderAutoStrategyOverlay(): string {
+  if (!ui.autoStrategyOpen || !ui.trainingPlayerId) return ''
+  const player = game.roster.find((item) => item.id === ui.trainingPlayerId)
+  if (!player) return ''
+  const config = autoTrainingConfig(game, player.id)
+  const mains = mainAttrsFor(player.positions.GK > 0)
+  const session = game.training[player.id]
   const priority = config.priority.filter((key) => mains.includes(key))
+  const keyAttrs = keyAttrsOf(player)
   // 每轮培养都从**原始属性**开始，自动培养也按这个起点算；
   // 这里绝不能显示当前装备的球员卡，否则玩家会以为是在现有属性上继续练。
   const priorityRows = priority.map((key, index) => {
-    const start = session?.candidate.attrs[key] ?? player?.baseAttrs?.[key] ?? player?.attrs[key] ?? 0
-    const equipped = player?.attrs[key] ?? start
-    const cardNote = Math.abs(equipped - start) > 0.5 ? `<span class="muted small"> · 当前卡 ${Math.round(equipped)}</span>` : ''
+    const start = session?.candidate.attrs[key] ?? player.baseAttrs?.[key] ?? player.attrs[key] ?? 0
     return `<div class="row-line" style="gap:8px">
-      <span style="flex:1">${index + 1}. ${attrLabel(key)} <span class="muted small">起点 ${Math.round(start)}</span>${cardNote}</span>
+      <span class="attr-name" style="flex:1;--attr-color:${attrColor(key)}">${index + 1}. ${attrLabel(key)} ${keyAttrs.includes(key) ? '<span class="tag gold">主要</span>' : ''} <span class="muted small">起点 ${Math.round(start)}</span></span>
       <button class="btn ghost" data-action="training-auto-priority" data-attr="${key}" data-dir="up" ${index === 0 ? 'disabled' : ''}>↑</button>
       <button class="btn ghost" data-action="training-auto-priority" data-attr="${key}" data-dir="down" ${index === priority.length - 1 ? 'disabled' : ''}>↓</button>
     </div>`
   }).join('')
-  const targetRows = mains.map((key) => `<div class="form-row"><label for="training-auto-target-${key}">${attrLabel(key)}</label>
+  const targetRows = mains.map((key) => `<div class="form-row"><label class="attr-name" style="--attr-color:${attrColor(key)}" for="training-auto-target-${key}">${attrLabel(key)}</label>
       <input id="training-auto-target-${key}" data-auto-target="${key}" type="number" min="0" max="1500" step="50" value="${config.targets[key] ?? 0}" style="max-width:140px">
     </div>`).join('')
-  return panel('自动培养', `
-    <div class="btn-row" style="margin-top:0">
-      <div class="seg"><button class="${config.mode === 'priority' ? 'active' : ''}" data-action="training-auto-mode" data-mode="priority">属性优先</button><button class="${config.mode === 'targets' ? 'active' : ''}" data-action="training-auto-mode" data-mode="targets">最低目标</button></div>
-      ${state}
-    </div>
-    <div class="grid two">
-      <div>
-        <div class="field-title">属性优先级</div>
-        <div class="rows">${priorityRows}</div>
+  return `
+    <div class="overlay" data-action="auto-strategy-close">
+      <div class="modal auto-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="自动策略">
+        <button class="modal-close" data-action="auto-strategy-close" aria-label="关闭">${icon('close', 16)}</button>
+        <div class="kicker">自动策略</div>
+        <h1>${esc(player.name)}</h1>
+        <div class="btn-row" style="margin-top:0">
+          <div class="seg"><button class="${config.mode === 'priority' ? 'active' : ''}" data-action="training-auto-mode" data-mode="priority">属性优先</button><button class="${config.mode === 'targets' ? 'active' : ''}" data-action="training-auto-mode" data-mode="targets">最低目标</button><button class="${config.mode === 'max' ? 'active' : ''}" data-action="training-auto-mode" data-mode="max">自动选择</button></div>
+        </div>
+        <div class="grid two">
+          <div>
+            <div class="field-title">属性优先级</div>
+            <div class="rows">${priorityRows}</div>
+            <button class="btn ghost small" data-action="training-auto-reset">恢复默认优先级</button>
+          </div>
+          <div>
+            <div class="field-title">最低目标（0–1500）</div>
+            ${targetRows}
+            <button class="btn" data-action="training-auto-save">保存目标值</button>
+          </div>
+        </div>
       </div>
-      <div>
-        <div class="field-title">最低目标（0–1500）</div>
-        ${targetRows}
-        <button class="btn" data-action="training-auto-save">保存目标值</button>
-      </div>
-    </div>
-    <div class="btn-row">
-      <button class="btn primary" data-action="training-auto-step" data-player="${player ? esc(player.id) : ''}" ${player ? '' : 'disabled'}>${icon('play', 14)}自动进行一步</button>
-      <button class="btn" data-action="training-auto-run" data-player="${player ? esc(player.id) : ''}" ${player ? '' : 'disabled'}>自动跑完本轮培养</button>
-    </div>
-  `, { aside: '<span class="muted small">设置保存在存档里</span>' })
+    </div>`
 }
 
 function attrCompareTable(current: Player, candidate: Player): string {
@@ -179,6 +185,7 @@ function renderTrainingStart(player: Player): string {
       </div>
       <div class="btn-row">
         <button class="btn primary" data-action="start-training" data-player="${esc(player.id)}" ${enough ? '' : 'disabled'}>${enough ? `${icon('play', 14)}开始培养` : '精力不足，等待恢复'}</button>
+        ${autoControls(player)}
       </div>
     `, { className: 'training-start', aside: posBadge(primaryPosition(player)) })}
     ${panel('培养起点：原始属性', `<div class="radar-pair">${attributeRadar(base, undefined, 208, true)}<div>${attrList(base)}</div></div>`)}
@@ -214,7 +221,7 @@ function renderTrainingPlayer(player: Player): string {
           </div>
           ${currentSession.completed || candidate ? '' : `${attrCompareTable(player, cand)}<div class="side-skills">${skillGroups(cand)}</div>`}
         `, { aside: `<span class="muted small">CA ${playerCA(player).toFixed(1)} → ${playerCA(cand).toFixed(1)}</span>` })}
-        ${currentSession.scheduleVersion === 1 && currentSession.exchangeMatches?.length ? panel('交流赛记录', `<div class="rows">${currentSession.exchangeMatches.map((match) => `<div class="row-line"><span>第 ${match.week} 周 · ${esc(match.opponentName)}</span><b>${match.homeScore}:${match.awayScore}</b><span class="form f-${match.result === 'win' ? 'W' : match.result === 'loss' ? 'L' : 'D'}">${{ win: '胜', draw: '平', loss: '负' }[match.result]}</span></div>`).join('')}</div>`, { flush: true }) : ''}
+        ${currentSession.scheduleVersion === 1 && currentSession.exchangeMatches?.length ? panel('交流赛记录', `<div class="rows">${currentSession.exchangeMatches.map((match) => `<div class="row-line"><span>第 ${match.week} 周 · ${esc(match.opponentName)}${match.ownRating !== undefined ? ` <small class="muted">RANK ${match.ownRating} 对 ${match.opponentRating}</small>` : ''}</span><b>${match.homeScore}:${match.awayScore}</b><span class="form f-${match.result === 'win' ? 'W' : match.result === 'loss' ? 'L' : 'D'}">${{ win: '胜', draw: '平', loss: '负' }[match.result]}</span></div>`).join('')}</div>`, { flush: true }) : ''}
       </div>
     </div>
   `
@@ -230,12 +237,15 @@ function trainingHeader(current: Player, session: TrainingSession, cand: Player)
     ? (() => { const date = trainingDate(Math.min(total, session.action + 1)); return `第 ${date.week} 周 · ${date.dayLabel} ${date.slot}` })()
     : `第 ${weekOfAction(Math.max(1, session.action))} 周`
   return `<section class="train-head">
-    <div class="train-id">
-      ${posBadge(primaryPosition(current))}
-      <div>
-        <h2>${esc(current.name)} <small>${esc(current.enName)}</small></h2>
-        <p class="muted small">${when} · 行动 ${session.action}/${total} · ${traitLabel(current.traitId)} · ${esc(route)}</p>
+    <div class="train-lead">
+      <div class="train-id">
+        ${posBadge(primaryPosition(current))}
+        <div>
+          <h2>${esc(current.name)} <small>${esc(current.enName)}</small></h2>
+          <p class="muted small">${when} · 行动 ${session.action}/${total} · ${traitLabel(current.traitId)} · ${esc(route)}</p>
+        </div>
       </div>
+      ${autoControls(current)}
     </div>
     <div class="train-stats">
       <div class="stat-box"><span>当前 CA</span><b>${playerCA(current).toFixed(1)}</b></div>

@@ -1,5 +1,6 @@
 import { PLAYER_TEAM_ID, currentRoundFixtures, inPostseason, matchdayCountdown, nextSeasonCountdown, playerFixture, teamName } from '../../game/season.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
+import { clubRatings } from '../../game/club-rating.ts'
 import { leaderPanels } from '../leaderboard.ts'
 import { gameDateOf } from '../../game/calendar.ts'
 import { isOnlineMode } from '../../online.ts'
@@ -64,7 +65,7 @@ export function renderSeason(): string {
     })}
     ${season.finished ? `<div class="banner ${inPostseason(game) ? 'info' : 'good'}">${icon(inPostseason(game) ? 'clock' : 'star', 18)}<b>${inPostseason(game) ? `赛后休整 · 还剩 ${esc(nextSeasonCountdown(game))}` : '赛季结束'}</b><span>冠军：${esc(teamName(game, season.champion ?? ''))} · 你的最终排名：第 ${season.playerFinish ?? '—'} 名${inPostseason(game) ? ' · 休整期间可以约友谊赛，升级杯正在进行' : ''}</span></div>` : ''}
     <div class="grid season-grid">
-      ${panel('积分榜', leagueTable(season.table, { tier: season.tier, fixtures: season.fixtures }), { flush: true })}
+      ${panel('积分榜', leagueTable(season.table, { tier: season.tier, fixtures: season.fixtures, ratings: clubRatings(game) }), { flush: true })}
       <div class="dash-col">
         ${panel(`第 ${viewRound} 轮赛程`, `<div class="fx-list">${roundFixtures.map((item) => fixtureRow(item)).join('') || emptyState('本轮没有比赛。')}</div>
           ${viewRound === season.round && !fixture && !season.finished ? '<p class="hint pad">本轮没有你的比赛，等待服务器结算。</p>' : ''}`, {

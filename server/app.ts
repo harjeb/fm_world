@@ -20,6 +20,7 @@ import { validateAutoSubPlan } from '../src/game/match/management.ts'
 import type { GameState, PlayerCard } from '../src/game/types.ts'
 import { absorbFreeAgents, aiClubIdOf, leadingBid, minimumBid, placeAIBid, placeBid, settleAuctions, type AIBidder, type Auction, type AuctionResult, type BidResult, type FreeMarket } from '../src/game/auction.ts'
 import { isOnMarketToday } from '../src/game/market-window.ts'
+import { lineupRating } from '../src/game/club-rating.ts'
 import { AI_SQUAD_LIMIT, advanceAIClub, aiBidFor, createAIClub, playerValue, recordAISigning, seedAIClubs } from '../src/game/ai-club.ts'
 import { agentView, applyAgentAction, playerView } from './agent.ts'
 
@@ -1031,6 +1032,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
             id: club.id, name: validOwner ? owner.game.clubName : club.name, color: club.color,
             tier: club.tier, conference: club.conference, managed: !!owner, formationId: validOwner ? owner.game.lineup.formationId : team?.formationId ?? club.formationId,
             players: (validOwner ? owner.game.roster : team?.players ?? []).map(publicPlayer),
+            // RANK：首发 CA 之和。玩家管理的球队只按身上装备的属性算，不暴露库存里的卡。
+            rating: validOwner ? Math.round(lineupRating(owner.game.roster, owner.game.lineup)) : team ? Math.round(lineupRating(team.players, team.lineup)) : undefined,
             // 电脑球队的设施公开；玩家管理的球队不公开经营数据。
             facilities: owner ? undefined : publicFacilities(sharedWorld.aiClubs?.[club.id]?.economy),
           }

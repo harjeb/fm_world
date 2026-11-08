@@ -1,4 +1,5 @@
-import type { EconomyState, FacilityId, WorldState } from '../game/types.ts'
+import type { AITeam, EconomyState, FacilityId, WorldState } from '../game/types.ts'
+import { clubRatings, lineupRating } from '../game/club-rating.ts'
 import { FACILITIES, facilityLevel, facilityStageInLevel } from '../game/economy.ts'
 import { buildOwnerlessTeams } from '../game/world.ts'
 import { ATTR_GROUPS } from '../game/data/attributes.ts'
@@ -9,6 +10,47 @@ import { attrHeat, attributeRadar, caHeat, icon, panel, posBadge, positionMap, p
 import { attrLabel, esc, playerCA } from './format.ts'
 import { tipAttrs } from './tooltip.ts'
 import { game, ui } from './state.ts'
+
+let ownerlessMemo: { key: string; teams: Record<string, AITeam> } | null = null
+
+/**
+ * 按世界种子复原的全部球队名单，并带上后台培养出来的卡（单机时 AI 账本在本地推进）。
+ * 同一轮、账本没变化时复用上次结果，免得每次渲染都重新生成上千名球员。
+ */
+export function ownerlessTeamsNow(world: WorldState): Record<string, AITeam> {
+  const book = game.aiClubs
+  const progress = Object.values(book ?? {}).reduce((sum, club) => sum + club.trained + (club.signings?.length ?? 0), 0)
+  const key = `${game.seed}|${world.seasonIndex}|${game.season?.round ?? 0}|${progress}`
+  if (ownerlessMemo?.key !== key) ownerlessMemo = { key, teams: buildOwnerlessTeams(world, game.seed, book) }
+  return ownerlessMemo.teams
+}
+
+/**
+ * 一个联赛里每支球队的 RANK（首发 CA 之和）。联机时用服务器算好的值；
+ * 单机时本联赛用真实阵容，其他联赛用复原名单（含后台培养出的卡）。
+ */
+export function divisionRatings(world: WorldState, teamIds: string[]): Map<string, number> {
+  const snapshot = onlineState.status === 'online' ? publicWorld : null
+  const ratings = new Map<string, number>()
+  if (snapshot) {
+    for (const club of snapshot.clubs) {
+      if (club.rating !== undefined) ratings.set(club.id === snapshot.ownClubId ? PLAYER_TEAM_ID : club.id, club.rating)
+    }
+    return ratings
+  }
+  const own = clubRatings(game)
+  let ownerless: Record<string, AITeam> | undefined
+  for (const id of teamIds) {
+    const known = own.get(id)
+    if (known !== undefined) {
+      ratings.set(id, known)
+      continue
+    }
+    const team = (ownerless ??= ownerlessTeamsNow(world))[id]
+    if (team) ratings.set(id, lineupRating(team.players, team.lineup))
+  }
+  return ratings
+}
 
 /** 任意界面点开一支球队时用的公开资料；联机时以服务器快照为准。 */
 export function publicClubFor(world: WorldState | undefined, id: string): WorldPublicClub | null {
@@ -21,7 +63,7 @@ export function publicClubFor(world: WorldState | undefined, id: string): WorldP
   if (!club) return null
   const roster = id === PLAYER_TEAM_ID
     ? game.roster
-    : game.aiTeams.find((item) => item.id === id)?.players ?? buildOwnerlessTeams(world, game.seed)[id]?.players ?? []
+    : game.aiTeams.find((item) => item.id === id)?.players ?? ownerlessTeamsNow(world)[id]?.players ?? []
   return {
     id,
     name: id === PLAYER_TEAM_ID ? game.clubName : club.name,

@@ -161,12 +161,18 @@ export function economyOf(game: GameState): EconomyState {
   return game.economy
 }
 
-/** 从当前阶段升到下一阶段的费用；已满级或数据无效时返回 null。 */
+/**
+ * 全部设施费用的整体倍率：原来 7 座设施从头升满合计约 2900 万，乘 1.7243 后约 5000 万。
+ * 想调整总价只改这一个数。
+ */
+export const FACILITY_COST_SCALE = 1.7243
+
+/** 从当前阶段升到下一阶段的费用（取整到百位）；已满级或数据无效时返回 null。 */
 export function facilityUpgradeCost(id: FacilityId, stage: number): number | null {
   if (!validId(id) || !whole(stage, 1, MAX_FACILITY_STAGE - 1)) return null
   const level = facilityLevel(stage)
   const multiplier = STAGE_COST_MULTIPLIER[facilityStageInLevel(stage) - 1]
-  return Math.round(FACILITIES[id].baseCost * level ** 1.8 * multiplier)
+  return Math.round(FACILITIES[id].baseCost * level ** 1.8 * multiplier * FACILITY_COST_SCALE / 100) * 100
 }
 
 /** 当前球迷规模下该设施每轮提供的收入；阶段越高收入越高，球迷越多倍率越大。 */

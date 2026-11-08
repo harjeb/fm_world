@@ -258,7 +258,7 @@ describe('球员卡库存', () => {
     expect(rebought.attrs).toEqual(rebought.baseAttrs)
   })
 
-  it('估值按他最好的一张卡算，不看现在装备哪张；卖出后卡销毁，买回按原始身价', () => {
+  it('估值只看原始属性，球员卡不影响身价；卖出后他的卡全部销毁，买回也不带卡、按原始身价', () => {
     const game = createInitialGame(24)
     const inLineup = new Set([...game.lineup.starters.map((item) => item.playerId), ...game.lineup.bench])
     const player = game.roster.find((item) => !inLineup.has(item.id))!
@@ -267,13 +267,13 @@ describe('球员卡库存', () => {
     keepTraining(game, player.id)
     const [card] = playerCards(game, player.id)
     const best = playerMarketValue(card)
+    // 卡比原始属性强得多，但身价不变（否则练一轮就能顶满封顶价、再低价买回无限刷钱）。
     expect(best).toBeGreaterThan(baseValue)
-    // 没装备最好的卡，估值也按它算；身上的属性不变。
     expect(player.equippedCardId).toBeUndefined()
-    expect(bestMarketValue(game, player)).toBe(best)
+    expect(bestMarketValue(game, player)).toBe(baseValue)
     expect(playerMarketValue(player)).toBe(baseValue)
-    expect(suggestedPrice(game, player)).toBe(Math.round(best * 0.9))
-    expect(listPlayer(game, player.id, best + 1).ok).toBe(false)
+    expect(suggestedPrice(game, player)).toBe(Math.round(baseValue * 0.9))
+    expect(listPlayer(game, player.id, baseValue + 1).ok).toBe(false)
     const balance = economyOf(game).balance
     const price = suggestedPrice(game, player)
     expect(listPlayer(game, player.id, price)).toEqual({ ok: true })
@@ -283,9 +283,16 @@ describe('球员卡库存', () => {
     expect(gone.attrs).toEqual(gone.baseAttrs)
     expect(playerCards(game, player.id)).toHaveLength(0)
     expect(bestMarketValue(game, gone)).toBe(baseValue)
-    economyOf(game).balance = best * 2
+    economyOf(game).balance = baseValue * 2
     expect(buyFreeAgent(game, player.id)).toEqual({ ok: true })
-    expect(economyOf(game).balance).toBe(best * 2 - baseValue)
+    expect(economyOf(game).balance).toBe(baseValue)
+    // 买回来不带卡：属性是原始属性，没有装备任何卡，库存里也没有他的卡。
+    const back = game.roster.find((item) => item.id === player.id)!
+    expect(back.attrs).toEqual(back.baseAttrs)
+    expect(back.equippedCardId).toBeUndefined()
+    expect(playerCards(game, player.id)).toHaveLength(0)
+    // 卖价永远低于买价：卖了再买回只会亏钱。
+    expect(price).toBeLessThan(baseValue)
   })
 
   it('旧存档：已确认的成品和待确认的候选都进库存，重复处理不会多出来', () => {

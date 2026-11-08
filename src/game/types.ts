@@ -340,6 +340,9 @@ export type TrainingExchange = {
   week: number
   opponentId: string
   opponentName: string
+  /** 开赛时双方的RANK（首发 CA 之和，对手按基础卡算）。 */
+  ownRating?: number
+  opponentRating?: number
   homeScore: number
   awayScore: number
   result: 'win' | 'draw' | 'loss'
@@ -770,7 +773,10 @@ export type GameState = {
   seed: number
   clubName: string
   /** 培养页的自动培养设置。 */
+  /** 旧存档的全局自动培养设置：没有单独设置过的球员用它当默认值。 */
   trainingAuto?: TrainingAutoConfig
+  /** 按球员保存的自动培养策略和“自动培养”开关。 */
+  trainingAutoByPlayer?: Record<string, TrainingAutoConfig>
   economy?: EconomyState
   market?: { listings: { player: Player; price: number; listedRound?: number }[]; lastSettledRound: number }
   roster: Player[]
@@ -859,7 +865,10 @@ export type ReviewRecommendation = {
 /** 自动培养：按属性优先级练，或者把主属性练到最低目标。 */
 export type TrainingAutoConfig = {
   enabled: boolean
-  mode: 'priority' | 'targets'
+  /** “自动培养”开关：打开后，这名球员正在进行的培养会自动往后走。默认关。 */
+  autopilot?: boolean
+  /** priority：按优先级练满；targets：补到最低目标；max：每次都选属性总成长最多的那一项。 */
+  mode: 'priority' | 'targets' | 'max'
   /** 属性优先级，靠前的先练。 */
   priority: AttrKey[]
   /** 最低目标（存档值 0–1500）；没达到就优先安排对应训练。 */

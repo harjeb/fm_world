@@ -6,7 +6,7 @@ export { VALUE_AT_CA_205, VALUE_GROWTH_PER_CA, VALUE_CAP, playerMarketValue } fr
 import { autoFillLineup, repairLineup, validateLineup } from './squad.ts'
 import { wageForPlayer } from './world.ts'
 import { derivedRng, splitSeed } from './rng.ts'
-import { closeFinishedTraining, destroyPlayerCards, playerCards } from './cards.ts'
+import { closeFinishedTraining, destroyPlayerCards, untrainedPlayer } from './cards.ts'
 import { negotiationDemands, negotiationFailure, negotiationRoll, negotiationTerms, type NegotiationAnswers, type NegotiationDemands } from './negotiation.ts'
 import { isOnMarketToday } from './market-window.ts'
 
@@ -18,11 +18,21 @@ export type MarketOutcome = { ok: boolean; error?: string }
 export const CLUB_BUYOUT_RATIO = 1.5
 
 /**
- * 这名球员的市场估值：按他身上的属性和他所有球员卡里最好的一套算。
- * 挂牌和买回用同一个数，所以换一张弱卡挂牌、再低价买回不会多赚钱。
+ * 这名球员的市场估值：只看他的**原始属性**，培养出来的球员卡不影响身价。
+ * 身价曲线是按原始球员（CA 约 205–300）定的，而练一轮的卡能到 CA 300–460，会直接顶满封顶价；
+ * 更要命的是卖人时卡会全部销毁、人回到原始属性，如果按卡定价，就能“练一轮 → 按卡高价卖 → 按原始属性低价买回”无限印钞。
+ * 挂牌、买回、竞拍底价都用这一个数。
  */
-export function bestMarketValue(game: Pick<GameState, 'cards'>, player: Player): number {
-  return playerCards(game, player.id).reduce((best, card) => Math.max(best, playerMarketValue(card)), playerMarketValue(player))
+export function bestMarketValue(_game: Pick<GameState, 'cards'>, player: Player): number {
+  // 身上的属性本身就无效（NaN、越界）时仍然判无效，不能靠原始属性蒙混过关。
+  if (!playerMarketValue(player)) return 0
+  return playerMarketValue({ attrs: player.baseAttrs ?? player.attrs, positions: player.basePositions ?? player.positions })
+}
+
+/** 买进来的球员以原始属性、不带卡入队：AI 球队装备的卡、别人留下的成品都不跟着人走。 */
+function arriveWithoutCards(player: Player): void {
+  Object.assign(player, untrainedPlayer(player))
+  delete player.equippedCardId
 }
 
 /** 本地 NPC 买家的预算上限：一轮最多花这么多，避免无脑倒卖把游戏刷成印钞机。 */
@@ -72,6 +82,7 @@ function assignContract(game: GameState, player: Player): void {
 
 /** 球员加入阵容并签合同。联机竞拍结算也走这里。 */
 export function joinRoster(game: GameState, player: Player): void {
+  arriveWithoutCards(player)
   game.roster.push(player)
   assignContract(game, player)
 }
@@ -127,6 +138,7 @@ export type { NegotiationAnswers, NegotiationDemands } from './negotiation.ts'
 function completeSigning(game: GameState, player: Player, fee: number): void {
   const economy = economyOf(game)
   economy.balance -= fee
+  arriveWithoutCards(player)
   game.roster.push(player)
   assignContract(game, player)
 }

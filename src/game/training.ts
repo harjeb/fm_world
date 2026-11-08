@@ -235,6 +235,18 @@ export function facilityGrowthBonus(session: TrainingSession, key: AttrKey, roll
   return stadium + bonus
 }
 
+/**
+ * 每名队友/陪练给每个正成长属性额外加多少点：取这轮开始时七座设施里**最低的等级**——
+ * 没全到 2 级是 1 点，全到 2 级后 2 点，全到 3 级后 3 点……全满级 5 点。
+ * 旧课程没有设施快照，仍按原来的 2 点。
+ */
+export function partnerBonusPerMate(session: TrainingSession): number {
+  const levels = stageSnapshot(session)
+  if (!levels) return 2
+  const lowest = Math.min(...FACILITY_IDS.map((id) => (levels[id] === undefined ? 1 : facilityLevel(levels[id]!))))
+  return Math.max(1, Math.min(MAX_FACILITY_LEVEL, lowest))
+}
+
 function trainingCeilings(session: TrainingSession): Player['ceilings'] {
   const gk = candidateIsGk(session)
   // 每个属性只练到球员自己的上限（由画像与星级决定），不再统一到 1500。
@@ -327,7 +339,7 @@ function actionGains(session: TrainingSession, gains: Partial<Record<AttrKey, nu
   const scaled = scaleAuthoredGains(gains, gk)
   // 主属性的基础值先浮动 ±10%，再乘品质，最后加队友；隐藏属性不浮动。
   const withTeam = Object.fromEntries((Object.entries(scaled) as [AttrKey, number][]).map(([key, value]) =>
-    [key, value > 0 ? value * (isMainAttr(key, gk) ? gainSpread(session, key) : 1) * multiplier + 2 * teammates * attrMax(key, gk) / MAIN_ATTR_MAX : value]))
+    [key, value > 0 ? value * (isMainAttr(key, gk) ? gainSpread(session, key) : 1) * multiplier + partnerBonusPerMate(session) * teammates * attrMax(key, gk) / MAIN_ATTR_MAX : value]))
   return applyTrainingGains(session, moodGains(session, facilityGains(session, withTeam), session.action + 1))
 }
 

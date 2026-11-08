@@ -3,6 +3,7 @@ import { POSITIONS } from '../../game/types.ts'
 import { bestMarketValue } from '../../game/market.ts'
 import { MAIN_FIELD_ATTRS, MAIN_GK_ATTRS } from '../../game/scale.ts'
 import { playerCards } from '../../game/cards.ts'
+import { PLAYABLE_PROFICIENCY } from '../../game/ca.ts'
 import { ATTR_STOPS, CA_STOPS, attrHeadCell, attrHeat, caHeat, cardSelect, countryLabel, emptyState, eraLabel, heatLegend, icon, injuryLabel, mainAttrs, meter, pageHead, panel, posBadge, primaryPosition, skillTag, skillTierLabel, tag, traitLabel } from '../components.ts'
 import { esc, playerCA, positionLabel, skillName } from '../format.ts'
 import { tipAttrs } from '../tooltip.ts'
@@ -29,7 +30,7 @@ function sortValue(player: Player, key: SquadSortKey): number | string {
 function filteredRoster(): Player[] {
   const query = ui.academySearch.trim().toLowerCase()
   const roster = game.roster.filter((player) => {
-    if (ui.academyPos !== 'ALL' && player.positions[ui.academyPos] <= 0) return false
+    if (ui.academyPos !== 'ALL' && player.positions[ui.academyPos] < PLAYABLE_PROFICIENCY) return false
     if (ui.academyEra !== 'ALL' && player.era !== ui.academyEra) return false
     if (!query) return true
     return `${player.name} ${player.enName} ${player.country}`.toLowerCase().includes(query)
