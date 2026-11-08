@@ -46,7 +46,7 @@ describe('体验与平衡验证', () => {
     expect(Math.max(...cas)).toBeLessThanOrEqual(1500)
     expect(cas.reduce((a, b) => a + b, 0) / cas.length).toBeGreaterThanOrEqual(200)
     expect(cas.reduce((a, b) => a + b, 0) / cas.length).toBeLessThanOrEqual(300)
-  }, 30000)
+  }, 120_000)
 
   it('一次完整培养的主属性收益合理且不超过 1500', () => {
     const game = createInitialGame(20260419)

@@ -138,11 +138,28 @@ describe('文字直播与进球', () => {
       expect(engine.state.finished).toBe(false)
       expect(engine.state.pendingSetPiece?.type).toBe('penalty')
       engine.step()
-      expect(engine.state.log.some((entry) => entry.type === 'penalty' && entry.text.includes('主罚点球'))).toBe(true)
+      // v3 的点球是“站上点球点”加一条带 shotChance.type = 'penalty' 的结果（进球 / 被扑 / 偏出），不再有旧引擎的“主罚点球”文字。
+      expect(engine.state.log.some((entry) => entry.type === 'setpiece' && entry.text.includes('站上点球点'))).toBe(true)
+      expect(engine.state.log.some((entry) => entry.shotChance?.type === 'penalty')).toBe(true)
+      // 补罚的点球不占比赛时钟：日志时间不倒退，下半场 / 终场的时长不会被吃掉。
+      const clocks = engine.state.log.map((entry) => entry.clock)
+      expect(clocks).toEqual([...clocks].sort((a, b) => a - b))
       expect(engine.state.stats.home.shots).toBe(1)
       if (half === 1) expect(engine.state.half).toBe(2)
       else expect(engine.state.finished || engine.state.phase === 'shootout').toBe(true)
     }
+  })
+
+  it('现实时间推进（advanceTo）遇到期末点球也会先罚完，时钟不倒退、不卡死', () => {
+    const engine = match(3)
+    engine.state.clock = 300
+    engine.state.pendingSetPiece = { type: 'penalty', teamSide: 'away', x: 12, y: 32 }
+    engine.advanceTo(330)
+    expect(engine.state.log.filter((entry) => entry.shotChance?.type === 'penalty')).toHaveLength(1)
+    expect(engine.state.half).toBe(2)
+    expect(engine.state.clock).toBeCloseTo(330, 5)
+    const clocks = engine.state.log.map((entry) => entry.clock)
+    expect(clocks).toEqual([...clocks].sort((a, b) => a - b))
   })
 
   it('左脚球员罚点球时使用惯用脚而非随机弱脚', () => {

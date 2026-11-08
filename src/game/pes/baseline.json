@@ -1,0 +1,3443 @@
+{
+  "schema": 1,
+  "note": "现有比赛引擎的基线。由 npm run pes:baseline 生成，不要手改。results 和 golden 是确定性的；timing 不参与比较。",
+  "world": {
+    "seed": 2024,
+    "startedAt": 0,
+    "durationSeconds": 900
+  },
+  "options": {
+    "knockout": false,
+    "offside": false,
+    "recordPlayback": false
+  },
+  "batches": [
+    {
+      "rules": 3,
+      "awayFactor": 1,
+      "n": 200,
+      "seed0": 7000,
+      "results": {
+        "homeWins": 73,
+        "draws": 64,
+        "awayWins": 63,
+        "goals": [
+          1.17,
+          1.085,
+          2.255
+        ],
+        "shots": [
+          10.365,
+          8.255,
+          18.62
+        ],
+        "shotsOnTarget": [
+          4.43,
+          3.56,
+          7.99
+        ],
+        "xg": [
+          1.199,
+          1.07,
+          2.269
+        ],
+        "passes": [
+          48.36,
+          57.225,
+          105.585
+        ],
+        "passesCompleted": [
+          27.055,
+          34.385,
+          61.44
+        ],
+        "passAccuracyPct": [
+          55.9,
+          60.1
+        ],
+        "tackles": [
+          4.145,
+          3.87,
+          8.015
+        ],
+        "interceptions": [
+          7.715,
+          6.355,
+          14.07
+        ],
+        "fouls": [
+          4.325,
+          4.125,
+          8.45
+        ],
+        "corners": [
+          1.05,
+          0.83,
+          1.88
+        ],
+        "yellowCards": [
+          0.455,
+          0.465,
+          0.92
+        ],
+        "redCards": [
+          0.035,
+          0.04,
+          0.075
+        ],
+        "possessionPct": [
+          47.18,
+          52.8
+        ],
+        "distanceKm": [
+          24.53,
+          24.21,
+          48.74
+        ],
+        "scoreless": 21,
+        "maxTotalGoals": 7,
+        "logTypes": {
+          "block": 1.06,
+          "contest": 59.32,
+          "dribble": 60.76,
+          "foul": 8.45,
+          "full": 1,
+          "goal": 2.255,
+          "half": 1,
+          "info": 5.78,
+          "injury": 0.34,
+          "miss": 9.57,
+          "pass": 88.76,
+          "save": 5.735,
+          "setpiece": 25.165,
+          "tackle": 8.015
+        }
+      },
+      "golden": [
+        {
+          "seed": 7000,
+          "score": [
+            0,
+            0
+          ],
+          "stats": {
+            "home": {
+              "possession": 59.6,
+              "passes": 63,
+              "passesCompleted": 38,
+              "shots": 5,
+              "shotsOnTarget": 4,
+              "goals": 0,
+              "interceptions": 7,
+              "tackles": 3,
+              "fouls": 4,
+              "corners": 1,
+              "xg": 0.7139,
+              "distance": 24170.8424,
+              "yellowCards": 1,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 40.4,
+              "passes": 34,
+              "passesCompleted": 15,
+              "shots": 9,
+              "shotsOnTarget": 1,
+              "goals": 0,
+              "interceptions": 7,
+              "tackles": 6,
+              "fouls": 3,
+              "corners": 0,
+              "xg": 1.3348,
+              "distance": 24459.0576,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 269,
+          "logHash": "1c0f9b36",
+          "logTypes": {
+            "setpiece": 18,
+            "pass": 76,
+            "contest": 63,
+            "dribble": 75,
+            "block": 2,
+            "miss": 7,
+            "save": 5,
+            "info": 5,
+            "tackle": 9,
+            "foul": 7,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7001,
+          "score": [
+            1,
+            0
+          ],
+          "stats": {
+            "home": {
+              "possession": 56.7,
+              "passes": 67,
+              "passesCompleted": 48,
+              "shots": 11,
+              "shotsOnTarget": 8,
+              "goals": 1,
+              "interceptions": 8,
+              "tackles": 5,
+              "fouls": 4,
+              "corners": 4,
+              "xg": 1.8528,
+              "distance": 23954.2665,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 43.3,
+              "passes": 40,
+              "passesCompleted": 16,
+              "shots": 8,
+              "shotsOnTarget": 1,
+              "goals": 0,
+              "interceptions": 4,
+              "tackles": 1,
+              "fouls": 5,
+              "corners": 0,
+              "xg": 0.5998,
+              "distance": 24212.5507,
+              "yellowCards": 1,
+              "redCards": 1
+            }
+          },
+          "logLength": 278,
+          "logHash": "cddcfe5a",
+          "logTypes": {
+            "setpiece": 25,
+            "pass": 90,
+            "contest": 64,
+            "dribble": 58,
+            "foul": 9,
+            "miss": 9,
+            "info": 4,
+            "save": 8,
+            "tackle": 6,
+            "injury": 1,
+            "half": 1,
+            "block": 1,
+            "goal": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7002,
+          "score": [
+            1,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 39.9,
+              "passes": 45,
+              "passesCompleted": 26,
+              "shots": 14,
+              "shotsOnTarget": 4,
+              "goals": 1,
+              "interceptions": 5,
+              "tackles": 2,
+              "fouls": 3,
+              "corners": 3,
+              "xg": 1.5282,
+              "distance": 24954.8034,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 60.1,
+              "passes": 73,
+              "passesCompleted": 55,
+              "shots": 6,
+              "shotsOnTarget": 4,
+              "goals": 1,
+              "interceptions": 3,
+              "tackles": 1,
+              "fouls": 4,
+              "corners": 1,
+              "xg": 0.8939,
+              "distance": 24067.7423,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 283,
+          "logHash": "5f97f9c5",
+          "logTypes": {
+            "setpiece": 26,
+            "pass": 106,
+            "contest": 63,
+            "dribble": 51,
+            "save": 6,
+            "goal": 2,
+            "foul": 7,
+            "miss": 11,
+            "info": 5,
+            "block": 1,
+            "tackle": 3,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7003,
+          "score": [
+            1,
+            0
+          ],
+          "stats": {
+            "home": {
+              "possession": 48.6,
+              "passes": 45,
+              "passesCompleted": 24,
+              "shots": 9,
+              "shotsOnTarget": 3,
+              "goals": 1,
+              "interceptions": 6,
+              "tackles": 2,
+              "fouls": 4,
+              "corners": 1,
+              "xg": 1.1841,
+              "distance": 24878.0829,
+              "yellowCards": 1,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 51.4,
+              "passes": 60,
+              "passesCompleted": 37,
+              "shots": 11,
+              "shotsOnTarget": 4,
+              "goals": 0,
+              "interceptions": 6,
+              "tackles": 6,
+              "fouls": 4,
+              "corners": 4,
+              "xg": 1.6136,
+              "distance": 24338.4578,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 281,
+          "logHash": "7bd278ed",
+          "logTypes": {
+            "setpiece": 26,
+            "pass": 86,
+            "contest": 66,
+            "dribble": 57,
+            "block": 3,
+            "save": 6,
+            "foul": 8,
+            "tackle": 8,
+            "info": 8,
+            "miss": 10,
+            "half": 1,
+            "goal": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7004,
+          "score": [
+            1,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 42.5,
+              "passes": 44,
+              "passesCompleted": 17,
+              "shots": 12,
+              "shotsOnTarget": 5,
+              "goals": 1,
+              "interceptions": 12,
+              "tackles": 4,
+              "fouls": 2,
+              "corners": 1,
+              "xg": 1.3316,
+              "distance": 24261.5127,
+              "yellowCards": 1,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 57.5,
+              "passes": 68,
+              "passesCompleted": 39,
+              "shots": 3,
+              "shotsOnTarget": 1,
+              "goals": 1,
+              "interceptions": 3,
+              "tackles": 2,
+              "fouls": 7,
+              "corners": 0,
+              "xg": 0.2683,
+              "distance": 23704.0983,
+              "yellowCards": 1,
+              "redCards": 0
+            }
+          },
+          "logLength": 285,
+          "logHash": "f7d545aa",
+          "logTypes": {
+            "setpiece": 23,
+            "pass": 86,
+            "contest": 74,
+            "dribble": 63,
+            "foul": 9,
+            "goal": 2,
+            "miss": 9,
+            "tackle": 6,
+            "info": 7,
+            "half": 1,
+            "save": 4,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7005,
+          "score": [
+            0,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 51.2,
+              "passes": 55,
+              "passesCompleted": 32,
+              "shots": 9,
+              "shotsOnTarget": 4,
+              "goals": 0,
+              "interceptions": 5,
+              "tackles": 6,
+              "fouls": 8,
+              "corners": 1,
+              "xg": 0.8424,
+              "distance": 24308.5837,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 48.8,
+              "passes": 54,
+              "passesCompleted": 29,
+              "shots": 6,
+              "shotsOnTarget": 3,
+              "goals": 1,
+              "interceptions": 7,
+              "tackles": 6,
+              "fouls": 3,
+              "corners": 0,
+              "xg": 0.5793,
+              "distance": 24939.0907,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 281,
+          "logHash": "a4664fa2",
+          "logTypes": {
+            "setpiece": 24,
+            "pass": 91,
+            "contest": 61,
+            "dribble": 60,
+            "save": 6,
+            "foul": 11,
+            "miss": 8,
+            "info": 5,
+            "tackle": 12,
+            "half": 1,
+            "goal": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7006,
+          "score": [
+            1,
+            3
+          ],
+          "stats": {
+            "home": {
+              "possession": 42.7,
+              "passes": 47,
+              "passesCompleted": 28,
+              "shots": 6,
+              "shotsOnTarget": 3,
+              "goals": 1,
+              "interceptions": 4,
+              "tackles": 2,
+              "fouls": 6,
+              "corners": 0,
+              "xg": 0.7499,
+              "distance": 24622.2607,
+              "yellowCards": 1,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 57.3,
+              "passes": 55,
+              "passesCompleted": 37,
+              "shots": 10,
+              "shotsOnTarget": 5,
+              "goals": 3,
+              "interceptions": 6,
+              "tackles": 5,
+              "fouls": 4,
+              "corners": 0,
+              "xg": 1.4406,
+              "distance": 24254.0686,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 275,
+          "logHash": "a3bc9c8f",
+          "logTypes": {
+            "setpiece": 24,
+            "pass": 89,
+            "contest": 52,
+            "dribble": 69,
+            "foul": 10,
+            "save": 4,
+            "goal": 4,
+            "miss": 7,
+            "tackle": 7,
+            "info": 6,
+            "half": 1,
+            "block": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7007,
+          "score": [
+            1,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 59.6,
+              "passes": 61,
+              "passesCompleted": 35,
+              "shots": 7,
+              "shotsOnTarget": 4,
+              "goals": 1,
+              "interceptions": 4,
+              "tackles": 4,
+              "fouls": 7,
+              "corners": 0,
+              "xg": 0.5756,
+              "distance": 24320.5989,
+              "yellowCards": 1,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 40.4,
+              "passes": 39,
+              "passesCompleted": 26,
+              "shots": 10,
+              "shotsOnTarget": 4,
+              "goals": 1,
+              "interceptions": 7,
+              "tackles": 5,
+              "fouls": 5,
+              "corners": 1,
+              "xg": 1.1603,
+              "distance": 24574.8932,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 280,
+          "logHash": "76ba88b5",
+          "logTypes": {
+            "setpiece": 26,
+            "pass": 89,
+            "contest": 53,
+            "miss": 8,
+            "tackle": 9,
+            "dribble": 68,
+            "foul": 12,
+            "goal": 2,
+            "save": 6,
+            "block": 1,
+            "info": 3,
+            "half": 1,
+            "injury": 1,
+            "full": 1
+          }
+        }
+      ]
+    },
+    {
+      "rules": 3,
+      "awayFactor": 0.93,
+      "n": 200,
+      "seed0": 7000,
+      "results": {
+        "homeWins": 109,
+        "draws": 45,
+        "awayWins": 46,
+        "goals": [
+          1.545,
+          0.875,
+          2.42
+        ],
+        "shots": [
+          11.435,
+          7.535,
+          18.97
+        ],
+        "shotsOnTarget": [
+          5.11,
+          3.17,
+          8.28
+        ],
+        "xg": [
+          1.461,
+          0.862,
+          2.322
+        ],
+        "passes": [
+          46.755,
+          57.93,
+          104.685
+        ],
+        "passesCompleted": [
+          26.455,
+          34.665,
+          61.12
+        ],
+        "passAccuracyPct": [
+          56.6,
+          59.8
+        ],
+        "tackles": [
+          4.51,
+          3.9,
+          8.41
+        ],
+        "interceptions": [
+          8,
+          6.08,
+          14.08
+        ],
+        "fouls": [
+          3.89,
+          4.455,
+          8.345
+        ],
+        "corners": [
+          1.125,
+          0.795,
+          1.92
+        ],
+        "yellowCards": [
+          0.37,
+          0.375,
+          0.745
+        ],
+        "redCards": [
+          0.02,
+          0.02,
+          0.04
+        ],
+        "possessionPct": [
+          47.343,
+          52.7
+        ],
+        "distanceKm": [
+          24.54,
+          23.76,
+          48.31
+        ],
+        "scoreless": 17,
+        "maxTotalGoals": 7,
+        "logTypes": {
+          "block": 0.975,
+          "contest": 58.51,
+          "dribble": 61.2,
+          "foul": 8.345,
+          "full": 1,
+          "goal": 2.42,
+          "half": 1,
+          "info": 5.745,
+          "injury": 0.37,
+          "miss": 9.715,
+          "pass": 88.62,
+          "save": 5.86,
+          "setpiece": 25.34,
+          "tackle": 8.41
+        }
+      },
+      "golden": [
+        {
+          "seed": 7000,
+          "score": [
+            2,
+            0
+          ],
+          "stats": {
+            "home": {
+              "possession": 43.9,
+              "passes": 50,
+              "passesCompleted": 22,
+              "shots": 12,
+              "shotsOnTarget": 6,
+              "goals": 2,
+              "interceptions": 9,
+              "tackles": 3,
+              "fouls": 3,
+              "corners": 1,
+              "xg": 1.2287,
+              "distance": 24279.6448,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 56.1,
+              "passes": 58,
+              "passesCompleted": 29,
+              "shots": 5,
+              "shotsOnTarget": 1,
+              "goals": 0,
+              "interceptions": 8,
+              "tackles": 4,
+              "fouls": 5,
+              "corners": 0,
+              "xg": 0.4721,
+              "distance": 23917.7402,
+              "yellowCards": 1,
+              "redCards": 0
+            }
+          },
+          "logLength": 278,
+          "logHash": "cb941f90",
+          "logTypes": {
+            "setpiece": 23,
+            "pass": 86,
+            "contest": 69,
+            "dribble": 58,
+            "foul": 8,
+            "info": 8,
+            "miss": 9,
+            "block": 1,
+            "save": 5,
+            "half": 1,
+            "tackle": 7,
+            "goal": 2,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7001,
+          "score": [
+            0,
+            0
+          ],
+          "stats": {
+            "home": {
+              "possession": 50,
+              "passes": 57,
+              "passesCompleted": 35,
+              "shots": 6,
+              "shotsOnTarget": 2,
+              "goals": 0,
+              "interceptions": 7,
+              "tackles": 4,
+              "fouls": 6,
+              "corners": 0,
+              "xg": 0.4409,
+              "distance": 24527.1367,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 50,
+              "passes": 49,
+              "passesCompleted": 30,
+              "shots": 9,
+              "shotsOnTarget": 4,
+              "goals": 0,
+              "interceptions": 13,
+              "tackles": 4,
+              "fouls": 4,
+              "corners": 1,
+              "xg": 0.9349,
+              "distance": 24386.743,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 271,
+          "logHash": "e388a6ad",
+          "logTypes": {
+            "setpiece": 21,
+            "pass": 95,
+            "contest": 41,
+            "foul": 10,
+            "dribble": 75,
+            "save": 6,
+            "info": 4,
+            "block": 1,
+            "miss": 8,
+            "tackle": 8,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7002,
+          "score": [
+            1,
+            0
+          ],
+          "stats": {
+            "home": {
+              "possession": 47.3,
+              "passes": 50,
+              "passesCompleted": 33,
+              "shots": 15,
+              "shotsOnTarget": 8,
+              "goals": 1,
+              "interceptions": 6,
+              "tackles": 4,
+              "fouls": 1,
+              "corners": 3,
+              "xg": 2.0969,
+              "distance": 24934.9171,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 52.7,
+              "passes": 62,
+              "passesCompleted": 39,
+              "shots": 2,
+              "shotsOnTarget": 0,
+              "goals": 0,
+              "interceptions": 4,
+              "tackles": 3,
+              "fouls": 6,
+              "corners": 0,
+              "xg": 0.1025,
+              "distance": 23518.2469,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 283,
+          "logHash": "ea657cec",
+          "logTypes": {
+            "setpiece": 23,
+            "pass": 97,
+            "contest": 62,
+            "dribble": 62,
+            "miss": 9,
+            "info": 6,
+            "save": 7,
+            "foul": 7,
+            "tackle": 7,
+            "half": 1,
+            "goal": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7003,
+          "score": [
+            4,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 37.5,
+              "passes": 23,
+              "passesCompleted": 10,
+              "shots": 21,
+              "shotsOnTarget": 9,
+              "goals": 4,
+              "interceptions": 17,
+              "tackles": 3,
+              "fouls": 3,
+              "corners": 3,
+              "xg": 2.9768,
+              "distance": 24917.0115,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 62.5,
+              "passes": 82,
+              "passesCompleted": 42,
+              "shots": 2,
+              "shotsOnTarget": 1,
+              "goals": 1,
+              "interceptions": 4,
+              "tackles": 3,
+              "fouls": 10,
+              "corners": 0,
+              "xg": 0.612,
+              "distance": 23110.4316,
+              "yellowCards": 2,
+              "redCards": 0
+            }
+          },
+          "logLength": 282,
+          "logHash": "7d3a4d5c",
+          "logTypes": {
+            "setpiece": 35,
+            "pass": 87,
+            "contest": 57,
+            "foul": 13,
+            "miss": 11,
+            "dribble": 54,
+            "block": 2,
+            "goal": 5,
+            "save": 5,
+            "info": 5,
+            "half": 1,
+            "tackle": 6,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7004,
+          "score": [
+            2,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 41.5,
+              "passes": 37,
+              "passesCompleted": 21,
+              "shots": 7,
+              "shotsOnTarget": 4,
+              "goals": 2,
+              "interceptions": 2,
+              "tackles": 6,
+              "fouls": 3,
+              "corners": 0,
+              "xg": 0.6812,
+              "distance": 25256.1407,
+              "yellowCards": 1,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 58.5,
+              "passes": 75,
+              "passesCompleted": 51,
+              "shots": 5,
+              "shotsOnTarget": 2,
+              "goals": 1,
+              "interceptions": 5,
+              "tackles": 2,
+              "fouls": 5,
+              "corners": 0,
+              "xg": 0.319,
+              "distance": 23570.7756,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 275,
+          "logHash": "168e1fd9",
+          "logTypes": {
+            "setpiece": 21,
+            "pass": 93,
+            "contest": 66,
+            "dribble": 60,
+            "foul": 8,
+            "save": 3,
+            "miss": 6,
+            "goal": 3,
+            "info": 5,
+            "tackle": 8,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7005,
+          "score": [
+            2,
+            2
+          ],
+          "stats": {
+            "home": {
+              "possession": 51.4,
+              "passes": 60,
+              "passesCompleted": 37,
+              "shots": 10,
+              "shotsOnTarget": 5,
+              "goals": 2,
+              "interceptions": 6,
+              "tackles": 5,
+              "fouls": 7,
+              "corners": 1,
+              "xg": 1.492,
+              "distance": 23870.6622,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 48.6,
+              "passes": 52,
+              "passesCompleted": 30,
+              "shots": 9,
+              "shotsOnTarget": 5,
+              "goals": 2,
+              "interceptions": 7,
+              "tackles": 5,
+              "fouls": 4,
+              "corners": 0,
+              "xg": 1.1791,
+              "distance": 24089.4287,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 286,
+          "logHash": "661325f3",
+          "logTypes": {
+            "setpiece": 27,
+            "pass": 91,
+            "contest": 65,
+            "dribble": 53,
+            "tackle": 10,
+            "save": 6,
+            "miss": 9,
+            "info": 8,
+            "foul": 11,
+            "goal": 4,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7006,
+          "score": [
+            2,
+            2
+          ],
+          "stats": {
+            "home": {
+              "possession": 43.5,
+              "passes": 43,
+              "passesCompleted": 26,
+              "shots": 16,
+              "shotsOnTarget": 2,
+              "goals": 2,
+              "interceptions": 9,
+              "tackles": 6,
+              "fouls": 4,
+              "corners": 0,
+              "xg": 1.4224,
+              "distance": 24829.9214,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 56.5,
+              "passes": 62,
+              "passesCompleted": 44,
+              "shots": 10,
+              "shotsOnTarget": 4,
+              "goals": 2,
+              "interceptions": 4,
+              "tackles": 3,
+              "fouls": 3,
+              "corners": 1,
+              "xg": 0.9352,
+              "distance": 23933.0614,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 279,
+          "logHash": "f7739357",
+          "logTypes": {
+            "setpiece": 30,
+            "pass": 94,
+            "contest": 46,
+            "foul": 7,
+            "dribble": 61,
+            "block": 3,
+            "miss": 17,
+            "info": 4,
+            "save": 2,
+            "goal": 4,
+            "tackle": 9,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7007,
+          "score": [
+            4,
+            3
+          ],
+          "stats": {
+            "home": {
+              "possession": 48.4,
+              "passes": 47,
+              "passesCompleted": 25,
+              "shots": 13,
+              "shotsOnTarget": 5,
+              "goals": 4,
+              "interceptions": 9,
+              "tackles": 2,
+              "fouls": 4,
+              "corners": 0,
+              "xg": 2.0941,
+              "distance": 24807.1447,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 51.6,
+              "passes": 56,
+              "passesCompleted": 28,
+              "shots": 11,
+              "shotsOnTarget": 5,
+              "goals": 3,
+              "interceptions": 7,
+              "tackles": 4,
+              "fouls": 5,
+              "corners": 0,
+              "xg": 1.3268,
+              "distance": 23295.2858,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 284,
+          "logHash": "e1d18b4a",
+          "logTypes": {
+            "setpiece": 33,
+            "pass": 84,
+            "contest": 62,
+            "miss": 14,
+            "info": 6,
+            "save": 3,
+            "dribble": 58,
+            "foul": 9,
+            "goal": 7,
+            "tackle": 6,
+            "half": 1,
+            "full": 1
+          }
+        }
+      ]
+    },
+    {
+      "rules": 3,
+      "awayFactor": 0.87,
+      "n": 200,
+      "seed0": 7000,
+      "results": {
+        "homeWins": 123,
+        "draws": 40,
+        "awayWins": 37,
+        "goals": [
+          1.755,
+          0.715,
+          2.47
+        ],
+        "shots": [
+          12.945,
+          6.215,
+          19.16
+        ],
+        "shotsOnTarget": [
+          5.795,
+          2.545,
+          8.34
+        ],
+        "xg": [
+          1.677,
+          0.696,
+          2.373
+        ],
+        "passes": [
+          41.99,
+          59.905,
+          101.895
+        ],
+        "passesCompleted": [
+          24.2,
+          36.96,
+          61.16
+        ],
+        "passAccuracyPct": [
+          57.6,
+          61.7
+        ],
+        "tackles": [
+          4.92,
+          3.595,
+          8.515
+        ],
+        "interceptions": [
+          7.985,
+          5.075,
+          13.06
+        ],
+        "fouls": [
+          3.735,
+          4.625,
+          8.36
+        ],
+        "corners": [
+          1.295,
+          0.6,
+          1.895
+        ],
+        "yellowCards": [
+          0.3,
+          0.46,
+          0.76
+        ],
+        "redCards": [
+          0.04,
+          0.03,
+          0.07
+        ],
+        "possessionPct": [
+          44.908,
+          55.1
+        ],
+        "distanceKm": [
+          24.49,
+          23.2,
+          47.7
+        ],
+        "scoreless": 16,
+        "maxTotalGoals": 9,
+        "logTypes": {
+          "block": 0.94,
+          "contest": 55.58,
+          "dribble": 63.69,
+          "foul": 8.36,
+          "full": 1,
+          "goal": 2.47,
+          "half": 1,
+          "info": 6.135,
+          "injury": 0.38,
+          "miss": 9.88,
+          "pass": 87.93,
+          "save": 5.87,
+          "setpiece": 25.495,
+          "tackle": 8.515
+        }
+      },
+      "golden": [
+        {
+          "seed": 7000,
+          "score": [
+            0,
+            0
+          ],
+          "stats": {
+            "home": {
+              "possession": 33.5,
+              "passes": 19,
+              "passesCompleted": 10,
+              "shots": 18,
+              "shotsOnTarget": 7,
+              "goals": 0,
+              "interceptions": 5,
+              "tackles": 10,
+              "fouls": 6,
+              "corners": 4,
+              "xg": 2.0228,
+              "distance": 24812.7986,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 66.5,
+              "passes": 67,
+              "passesCompleted": 45,
+              "shots": 0,
+              "shotsOnTarget": 0,
+              "goals": 0,
+              "interceptions": 0,
+              "tackles": 2,
+              "fouls": 5,
+              "corners": 0,
+              "xg": 0,
+              "distance": 22747.3317,
+              "yellowCards": 2,
+              "redCards": 0
+            }
+          },
+          "logLength": 274,
+          "logHash": "529eb88a",
+          "logTypes": {
+            "setpiece": 28,
+            "pass": 74,
+            "contest": 51,
+            "dribble": 72,
+            "info": 5,
+            "save": 7,
+            "tackle": 12,
+            "miss": 11,
+            "foul": 11,
+            "injury": 1,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7001,
+          "score": [
+            1,
+            0
+          ],
+          "stats": {
+            "home": {
+              "possession": 44.4,
+              "passes": 46,
+              "passesCompleted": 23,
+              "shots": 13,
+              "shotsOnTarget": 4,
+              "goals": 1,
+              "interceptions": 14,
+              "tackles": 3,
+              "fouls": 5,
+              "corners": 1,
+              "xg": 1.6126,
+              "distance": 24618.1269,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 55.6,
+              "passes": 72,
+              "passesCompleted": 44,
+              "shots": 4,
+              "shotsOnTarget": 1,
+              "goals": 0,
+              "interceptions": 9,
+              "tackles": 3,
+              "fouls": 3,
+              "corners": 0,
+              "xg": 0.1995,
+              "distance": 23427.8598,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 284,
+          "logHash": "8e7dac87",
+          "logTypes": {
+            "setpiece": 22,
+            "pass": 103,
+            "contest": 63,
+            "foul": 8,
+            "save": 4,
+            "info": 6,
+            "dribble": 57,
+            "block": 1,
+            "tackle": 6,
+            "miss": 11,
+            "half": 1,
+            "goal": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7002,
+          "score": [
+            0,
+            2
+          ],
+          "stats": {
+            "home": {
+              "possession": 49.1,
+              "passes": 62,
+              "passesCompleted": 43,
+              "shots": 3,
+              "shotsOnTarget": 0,
+              "goals": 0,
+              "interceptions": 3,
+              "tackles": 1,
+              "fouls": 5,
+              "corners": 0,
+              "xg": 0.8991,
+              "distance": 23982.6549,
+              "yellowCards": 1,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 50.9,
+              "passes": 38,
+              "passesCompleted": 29,
+              "shots": 18,
+              "shotsOnTarget": 7,
+              "goals": 2,
+              "interceptions": 4,
+              "tackles": 8,
+              "fouls": 0,
+              "corners": 2,
+              "xg": 1.7884,
+              "distance": 23914.1734,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 271,
+          "logHash": "e80e48e3",
+          "logTypes": {
+            "setpiece": 23,
+            "pass": 88,
+            "contest": 46,
+            "miss": 12,
+            "dribble": 69,
+            "block": 2,
+            "info": 8,
+            "tackle": 9,
+            "save": 5,
+            "goal": 2,
+            "foul": 5,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7003,
+          "score": [
+            0,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 68.4,
+              "passes": 96,
+              "passesCompleted": 61,
+              "shots": 1,
+              "shotsOnTarget": 0,
+              "goals": 0,
+              "interceptions": 5,
+              "tackles": 4,
+              "fouls": 4,
+              "corners": 0,
+              "xg": 0.0611,
+              "distance": 23591.372,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 31.6,
+              "passes": 23,
+              "passesCompleted": 14,
+              "shots": 11,
+              "shotsOnTarget": 1,
+              "goals": 1,
+              "interceptions": 11,
+              "tackles": 5,
+              "fouls": 5,
+              "corners": 0,
+              "xg": 1.443,
+              "distance": 24437.1136,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 280,
+          "logHash": "84fcf7f5",
+          "logTypes": {
+            "setpiece": 23,
+            "pass": 104,
+            "contest": 53,
+            "dribble": 62,
+            "foul": 9,
+            "miss": 11,
+            "info": 5,
+            "goal": 1,
+            "tackle": 9,
+            "half": 1,
+            "injury": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7004,
+          "score": [
+            2,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 38.5,
+              "passes": 21,
+              "passesCompleted": 11,
+              "shots": 24,
+              "shotsOnTarget": 7,
+              "goals": 2,
+              "interceptions": 13,
+              "tackles": 5,
+              "fouls": 4,
+              "corners": 1,
+              "xg": 2.5671,
+              "distance": 24581.5738,
+              "yellowCards": 1,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 61.5,
+              "passes": 82,
+              "passesCompleted": 48,
+              "shots": 3,
+              "shotsOnTarget": 1,
+              "goals": 1,
+              "interceptions": 2,
+              "tackles": 3,
+              "fouls": 6,
+              "corners": 0,
+              "xg": 0.5107,
+              "distance": 22625.1881,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 285,
+          "logHash": "126c31d3",
+          "logTypes": {
+            "setpiece": 34,
+            "pass": 83,
+            "contest": 58,
+            "dribble": 54,
+            "goal": 3,
+            "miss": 18,
+            "info": 8,
+            "foul": 10,
+            "save": 5,
+            "tackle": 8,
+            "half": 1,
+            "block": 1,
+            "injury": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7005,
+          "score": [
+            0,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 57.9,
+              "passes": 69,
+              "passesCompleted": 43,
+              "shots": 6,
+              "shotsOnTarget": 0,
+              "goals": 0,
+              "interceptions": 8,
+              "tackles": 5,
+              "fouls": 3,
+              "corners": 0,
+              "xg": 0.5706,
+              "distance": 23875.3448,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 42.1,
+              "passes": 43,
+              "passesCompleted": 20,
+              "shots": 9,
+              "shotsOnTarget": 2,
+              "goals": 1,
+              "interceptions": 10,
+              "tackles": 1,
+              "fouls": 4,
+              "corners": 0,
+              "xg": 0.5563,
+              "distance": 23433.8028,
+              "yellowCards": 1,
+              "redCards": 0
+            }
+          },
+          "logLength": 275,
+          "logHash": "4aaeb159",
+          "logTypes": {
+            "setpiece": 24,
+            "pass": 100,
+            "contest": 53,
+            "dribble": 63,
+            "foul": 7,
+            "save": 1,
+            "tackle": 6,
+            "miss": 13,
+            "half": 1,
+            "info": 5,
+            "goal": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7006,
+          "score": [
+            2,
+            0
+          ],
+          "stats": {
+            "home": {
+              "possession": 43.4,
+              "passes": 32,
+              "passesCompleted": 19,
+              "shots": 11,
+              "shotsOnTarget": 3,
+              "goals": 2,
+              "interceptions": 5,
+              "tackles": 6,
+              "fouls": 2,
+              "corners": 1,
+              "xg": 1.7808,
+              "distance": 24121.712,
+              "yellowCards": 1,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 56.6,
+              "passes": 45,
+              "passesCompleted": 33,
+              "shots": 2,
+              "shotsOnTarget": 1,
+              "goals": 0,
+              "interceptions": 2,
+              "tackles": 5,
+              "fouls": 6,
+              "corners": 1,
+              "xg": 0.2578,
+              "distance": 23328.567,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 268,
+          "logHash": "63c10c59",
+          "logTypes": {
+            "setpiece": 22,
+            "pass": 71,
+            "contest": 48,
+            "foul": 8,
+            "dribble": 88,
+            "goal": 2,
+            "tackle": 11,
+            "info": 4,
+            "miss": 8,
+            "save": 2,
+            "injury": 1,
+            "half": 1,
+            "block": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7007,
+          "score": [
+            0,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 41.2,
+              "passes": 31,
+              "passesCompleted": 21,
+              "shots": 13,
+              "shotsOnTarget": 1,
+              "goals": 0,
+              "interceptions": 10,
+              "tackles": 5,
+              "fouls": 2,
+              "corners": 1,
+              "xg": 1.3833,
+              "distance": 24659.1943,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 58.8,
+              "passes": 61,
+              "passesCompleted": 40,
+              "shots": 3,
+              "shotsOnTarget": 1,
+              "goals": 1,
+              "interceptions": 1,
+              "tackles": 4,
+              "fouls": 4,
+              "corners": 0,
+              "xg": 0.3156,
+              "distance": 23622.7974,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 268,
+          "logHash": "64de53af",
+          "logTypes": {
+            "setpiece": 23,
+            "pass": 83,
+            "contest": 45,
+            "miss": 13,
+            "dribble": 78,
+            "foul": 6,
+            "block": 1,
+            "goal": 1,
+            "info": 6,
+            "tackle": 9,
+            "save": 1,
+            "half": 1,
+            "full": 1
+          }
+        }
+      ]
+    },
+    {
+      "rules": 2,
+      "awayFactor": 1,
+      "n": 200,
+      "seed0": 7000,
+      "results": {
+        "homeWins": 83,
+        "draws": 32,
+        "awayWins": 85,
+        "goals": [
+          1.935,
+          1.975,
+          3.91
+        ],
+        "shots": [
+          12.8,
+          11.73,
+          24.53
+        ],
+        "shotsOnTarget": [
+          6.14,
+          5.92,
+          12.06
+        ],
+        "xg": [
+          1.836,
+          1.833,
+          3.669
+        ],
+        "passes": [
+          49.895,
+          56.14,
+          106.035
+        ],
+        "passesCompleted": [
+          36.8,
+          42.235,
+          79.035
+        ],
+        "passAccuracyPct": [
+          73.8,
+          75.2
+        ],
+        "tackles": [
+          1.185,
+          1.075,
+          2.26
+        ],
+        "interceptions": [
+          12.995,
+          12.34,
+          25.335
+        ],
+        "fouls": [
+          3.39,
+          3.185,
+          6.575
+        ],
+        "corners": [
+          2.26,
+          2.02,
+          4.28
+        ],
+        "yellowCards": [
+          0.28,
+          0.32,
+          0.6
+        ],
+        "redCards": [
+          0.01,
+          0.005,
+          0.015
+        ],
+        "possessionPct": [
+          47.88,
+          52.1
+        ],
+        "distanceKm": [
+          10.54,
+          10.47,
+          21.01
+        ],
+        "scoreless": 3,
+        "maxTotalGoals": 12,
+        "logTypes": {
+          "block": 2.515,
+          "contest": 11.9,
+          "dribble": 70.45,
+          "foul": 6.575,
+          "full": 1,
+          "goal": 3.91,
+          "half": 1,
+          "injury": 0.06,
+          "kickoff": 5.875,
+          "miss": 9.955,
+          "pass": 107.25,
+          "penalty": 0.015,
+          "save": 8.15,
+          "setpiece": 20.75,
+          "tackle": 2.26
+        }
+      },
+      "golden": [
+        {
+          "seed": 7000,
+          "score": [
+            1,
+            2
+          ],
+          "stats": {
+            "home": {
+              "possession": 46.8,
+              "passes": 52,
+              "passesCompleted": 37,
+              "shots": 11,
+              "shotsOnTarget": 4,
+              "goals": 1,
+              "interceptions": 10,
+              "tackles": 1,
+              "fouls": 3,
+              "corners": 2,
+              "xg": 1.3235,
+              "distance": 11265.8371,
+              "yellowCards": 1,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 53.2,
+              "passes": 43,
+              "passesCompleted": 33,
+              "shots": 17,
+              "shotsOnTarget": 5,
+              "goals": 2,
+              "interceptions": 13,
+              "tackles": 1,
+              "fouls": 8,
+              "corners": 3,
+              "xg": 2.6517,
+              "distance": 11330.2873,
+              "yellowCards": 1,
+              "redCards": 0
+            }
+          },
+          "logLength": 253,
+          "logHash": "e8d28bc0",
+          "logTypes": {
+            "kickoff": 5,
+            "pass": 97,
+            "miss": 15,
+            "setpiece": 30,
+            "goal": 3,
+            "foul": 11,
+            "contest": 12,
+            "save": 6,
+            "dribble": 65,
+            "block": 4,
+            "tackle": 2,
+            "penalty": 1,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7001,
+          "score": [
+            1,
+            2
+          ],
+          "stats": {
+            "home": {
+              "possession": 54.1,
+              "passes": 58,
+              "passesCompleted": 44,
+              "shots": 11,
+              "shotsOnTarget": 6,
+              "goals": 1,
+              "interceptions": 10,
+              "tackles": 1,
+              "fouls": 4,
+              "corners": 4,
+              "xg": 1.5663,
+              "distance": 11484.2443,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 45.9,
+              "passes": 37,
+              "passesCompleted": 25,
+              "shots": 14,
+              "shotsOnTarget": 7,
+              "goals": 2,
+              "interceptions": 12,
+              "tackles": 1,
+              "fouls": 4,
+              "corners": 2,
+              "xg": 1.7151,
+              "distance": 11265.6208,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 252,
+          "logHash": "10656391",
+          "logTypes": {
+            "kickoff": 5,
+            "pass": 96,
+            "save": 10,
+            "setpiece": 23,
+            "contest": 19,
+            "dribble": 72,
+            "foul": 8,
+            "miss": 9,
+            "block": 3,
+            "tackle": 2,
+            "goal": 3,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7002,
+          "score": [
+            0,
+            4
+          ],
+          "stats": {
+            "home": {
+              "possession": 49.6,
+              "passes": 55,
+              "passesCompleted": 43,
+              "shots": 11,
+              "shotsOnTarget": 4,
+              "goals": 0,
+              "interceptions": 9,
+              "tackles": 0,
+              "fouls": 3,
+              "corners": 0,
+              "xg": 1.4286,
+              "distance": 10262.2795,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 50.4,
+              "passes": 63,
+              "passesCompleted": 54,
+              "shots": 15,
+              "shotsOnTarget": 8,
+              "goals": 4,
+              "interceptions": 12,
+              "tackles": 1,
+              "fouls": 2,
+              "corners": 1,
+              "xg": 2.3263,
+              "distance": 10168.4831,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 255,
+          "logHash": "dcbc902c",
+          "logTypes": {
+            "kickoff": 6,
+            "pass": 119,
+            "goal": 4,
+            "dribble": 67,
+            "contest": 10,
+            "save": 8,
+            "foul": 5,
+            "setpiece": 18,
+            "block": 2,
+            "miss": 12,
+            "tackle": 1,
+            "injury": 1,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7003,
+          "score": [
+            1,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 49,
+              "passes": 56,
+              "passesCompleted": 41,
+              "shots": 13,
+              "shotsOnTarget": 6,
+              "goals": 1,
+              "interceptions": 9,
+              "tackles": 4,
+              "fouls": 5,
+              "corners": 1,
+              "xg": 2.2814,
+              "distance": 10408.8464,
+              "yellowCards": 2,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 51,
+              "passes": 44,
+              "passesCompleted": 34,
+              "shots": 12,
+              "shotsOnTarget": 4,
+              "goals": 1,
+              "interceptions": 14,
+              "tackles": 2,
+              "fouls": 3,
+              "corners": 4,
+              "xg": 1.9203,
+              "distance": 10401.1842,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 249,
+          "logHash": "7d85eb22",
+          "logTypes": {
+            "kickoff": 4,
+            "pass": 101,
+            "dribble": 66,
+            "foul": 8,
+            "setpiece": 25,
+            "contest": 12,
+            "miss": 11,
+            "block": 4,
+            "save": 8,
+            "goal": 2,
+            "tackle": 6,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7004,
+          "score": [
+            3,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 54.2,
+              "passes": 51,
+              "passesCompleted": 40,
+              "shots": 13,
+              "shotsOnTarget": 7,
+              "goals": 3,
+              "interceptions": 12,
+              "tackles": 1,
+              "fouls": 5,
+              "corners": 4,
+              "xg": 2.3251,
+              "distance": 10570.317,
+              "yellowCards": 1,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 45.8,
+              "passes": 46,
+              "passesCompleted": 34,
+              "shots": 8,
+              "shotsOnTarget": 2,
+              "goals": 1,
+              "interceptions": 11,
+              "tackles": 1,
+              "fouls": 2,
+              "corners": 0,
+              "xg": 0.6907,
+              "distance": 10316.0759,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 244,
+          "logHash": "9eed9cbb",
+          "logTypes": {
+            "kickoff": 6,
+            "pass": 98,
+            "dribble": 79,
+            "foul": 7,
+            "setpiece": 22,
+            "save": 5,
+            "contest": 7,
+            "goal": 4,
+            "tackle": 2,
+            "miss": 12,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7005,
+          "score": [
+            1,
+            3
+          ],
+          "stats": {
+            "home": {
+              "possession": 54.1,
+              "passes": 54,
+              "passesCompleted": 35,
+              "shots": 10,
+              "shotsOnTarget": 4,
+              "goals": 1,
+              "interceptions": 13,
+              "tackles": 1,
+              "fouls": 1,
+              "corners": 0,
+              "xg": 0.6748,
+              "distance": 10583.5333,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 45.9,
+              "passes": 49,
+              "passesCompleted": 36,
+              "shots": 17,
+              "shotsOnTarget": 8,
+              "goals": 3,
+              "interceptions": 18,
+              "tackles": 2,
+              "fouls": 4,
+              "corners": 4,
+              "xg": 3.5236,
+              "distance": 10383.7831,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 251,
+          "logHash": "324497d1",
+          "logTypes": {
+            "kickoff": 6,
+            "pass": 105,
+            "save": 8,
+            "setpiece": 20,
+            "contest": 12,
+            "block": 4,
+            "miss": 11,
+            "goal": 4,
+            "dribble": 71,
+            "foul": 5,
+            "half": 1,
+            "tackle": 3,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7006,
+          "score": [
+            2,
+            0
+          ],
+          "stats": {
+            "home": {
+              "possession": 45.6,
+              "passes": 42,
+              "passesCompleted": 33,
+              "shots": 17,
+              "shotsOnTarget": 10,
+              "goals": 2,
+              "interceptions": 16,
+              "tackles": 0,
+              "fouls": 7,
+              "corners": 3,
+              "xg": 2.8923,
+              "distance": 9924.6871,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 54.4,
+              "passes": 57,
+              "passesCompleted": 38,
+              "shots": 6,
+              "shotsOnTarget": 1,
+              "goals": 0,
+              "interceptions": 9,
+              "tackles": 1,
+              "fouls": 7,
+              "corners": 1,
+              "xg": 0.5159,
+              "distance": 9735.4265,
+              "yellowCards": 1,
+              "redCards": 0
+            }
+          },
+          "logLength": 249,
+          "logHash": "f3e95c25",
+          "logTypes": {
+            "kickoff": 4,
+            "pass": 100,
+            "foul": 14,
+            "setpiece": 27,
+            "save": 9,
+            "miss": 9,
+            "dribble": 70,
+            "contest": 8,
+            "block": 3,
+            "goal": 2,
+            "tackle": 1,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7007,
+          "score": [
+            1,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 44.3,
+              "passes": 38,
+              "passesCompleted": 30,
+              "shots": 17,
+              "shotsOnTarget": 6,
+              "goals": 1,
+              "interceptions": 18,
+              "tackles": 1,
+              "fouls": 3,
+              "corners": 3,
+              "xg": 2.3923,
+              "distance": 11078.577,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 55.7,
+              "passes": 71,
+              "passesCompleted": 53,
+              "shots": 3,
+              "shotsOnTarget": 2,
+              "goals": 1,
+              "interceptions": 7,
+              "tackles": 0,
+              "fouls": 4,
+              "corners": 1,
+              "xg": 0.3758,
+              "distance": 10597.3246,
+              "yellowCards": 1,
+              "redCards": 0
+            }
+          },
+          "logLength": 250,
+          "logHash": "ff9f1eb8",
+          "logTypes": {
+            "kickoff": 4,
+            "pass": 112,
+            "dribble": 70,
+            "foul": 7,
+            "setpiece": 19,
+            "block": 4,
+            "contest": 15,
+            "miss": 8,
+            "save": 6,
+            "goal": 2,
+            "half": 1,
+            "tackle": 1,
+            "full": 1
+          }
+        }
+      ]
+    },
+    {
+      "rules": 2,
+      "awayFactor": 0.93,
+      "n": 200,
+      "seed0": 7000,
+      "results": {
+        "homeWins": 107,
+        "draws": 31,
+        "awayWins": 62,
+        "goals": [
+          2.295,
+          1.745,
+          4.04
+        ],
+        "shots": [
+          14.47,
+          10.815,
+          25.285
+        ],
+        "shotsOnTarget": [
+          7.175,
+          5.15,
+          12.325
+        ],
+        "xg": [
+          2.228,
+          1.605,
+          3.833
+        ],
+        "passes": [
+          46.665,
+          58.55,
+          105.215
+        ],
+        "passesCompleted": [
+          34.36,
+          43.275,
+          77.635
+        ],
+        "passAccuracyPct": [
+          73.6,
+          73.9
+        ],
+        "tackles": [
+          1.085,
+          0.99,
+          2.075
+        ],
+        "interceptions": [
+          14.31,
+          11.505,
+          25.815
+        ],
+        "fouls": [
+          3.115,
+          3.58,
+          6.695
+        ],
+        "corners": [
+          2.52,
+          1.86,
+          4.38
+        ],
+        "yellowCards": [
+          0.3,
+          0.365,
+          0.665
+        ],
+        "redCards": [
+          0.015,
+          0.02,
+          0.035
+        ],
+        "possessionPct": [
+          46.897,
+          53.1
+        ],
+        "distanceKm": [
+          10.51,
+          10.47,
+          20.98
+        ],
+        "scoreless": 1,
+        "maxTotalGoals": 9,
+        "logTypes": {
+          "block": 2.52,
+          "contest": 11.87,
+          "dribble": 69.99,
+          "foul": 6.695,
+          "full": 1,
+          "goal": 4.04,
+          "half": 1,
+          "injury": 0.065,
+          "kickoff": 6.02,
+          "miss": 10.44,
+          "pass": 106.485,
+          "penalty": 0.02,
+          "save": 8.285,
+          "setpiece": 21.515,
+          "tackle": 2.075
+        }
+      },
+      "golden": [
+        {
+          "seed": 7000,
+          "score": [
+            1,
+            2
+          ],
+          "stats": {
+            "home": {
+              "possession": 63.4,
+              "passes": 68,
+              "passesCompleted": 51,
+              "shots": 9,
+              "shotsOnTarget": 4,
+              "goals": 1,
+              "interceptions": 6,
+              "tackles": 0,
+              "fouls": 3,
+              "corners": 2,
+              "xg": 2.1779,
+              "distance": 10796.3359,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 36.6,
+              "passes": 30,
+              "passesCompleted": 24,
+              "shots": 17,
+              "shotsOnTarget": 9,
+              "goals": 2,
+              "interceptions": 16,
+              "tackles": 2,
+              "fouls": 5,
+              "corners": 5,
+              "xg": 2.367,
+              "distance": 10953.3863,
+              "yellowCards": 1,
+              "redCards": 0
+            }
+          },
+          "logLength": 256,
+          "logHash": "fa51d8a6",
+          "logTypes": {
+            "kickoff": 5,
+            "pass": 101,
+            "miss": 10,
+            "setpiece": 25,
+            "goal": 3,
+            "foul": 8,
+            "contest": 18,
+            "save": 10,
+            "dribble": 69,
+            "block": 3,
+            "tackle": 2,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7001,
+          "score": [
+            4,
+            3
+          ],
+          "stats": {
+            "home": {
+              "possession": 55.3,
+              "passes": 51,
+              "passesCompleted": 40,
+              "shots": 19,
+              "shotsOnTarget": 12,
+              "goals": 4,
+              "interceptions": 17,
+              "tackles": 1,
+              "fouls": 3,
+              "corners": 2,
+              "xg": 2.5593,
+              "distance": 10840.8553,
+              "yellowCards": 1,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 44.7,
+              "passes": 58,
+              "passesCompleted": 40,
+              "shots": 13,
+              "shotsOnTarget": 8,
+              "goals": 3,
+              "interceptions": 9,
+              "tackles": 0,
+              "fouls": 4,
+              "corners": 2,
+              "xg": 1.4616,
+              "distance": 11207.5042,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 259,
+          "logHash": "d2f17b6b",
+          "logTypes": {
+            "kickoff": 9,
+            "pass": 111,
+            "save": 13,
+            "setpiece": 20,
+            "contest": 16,
+            "dribble": 61,
+            "foul": 7,
+            "goal": 7,
+            "miss": 8,
+            "block": 4,
+            "tackle": 1,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7002,
+          "score": [
+            4,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 46.4,
+              "passes": 41,
+              "passesCompleted": 31,
+              "shots": 17,
+              "shotsOnTarget": 13,
+              "goals": 4,
+              "interceptions": 15,
+              "tackles": 1,
+              "fouls": 4,
+              "corners": 3,
+              "xg": 2.3443,
+              "distance": 10597.0246,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 53.6,
+              "passes": 60,
+              "passesCompleted": 45,
+              "shots": 9,
+              "shotsOnTarget": 2,
+              "goals": 1,
+              "interceptions": 9,
+              "tackles": 1,
+              "fouls": 3,
+              "corners": 2,
+              "xg": 1.1658,
+              "distance": 11042.4864,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 253,
+          "logHash": "7bdf6692",
+          "logTypes": {
+            "kickoff": 7,
+            "pass": 102,
+            "goal": 5,
+            "dribble": 72,
+            "contest": 16,
+            "save": 10,
+            "setpiece": 19,
+            "miss": 7,
+            "tackle": 2,
+            "foul": 7,
+            "half": 1,
+            "block": 4,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7003,
+          "score": [
+            0,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 30.1,
+              "passes": 22,
+              "passesCompleted": 15,
+              "shots": 12,
+              "shotsOnTarget": 4,
+              "goals": 0,
+              "interceptions": 15,
+              "tackles": 1,
+              "fouls": 7,
+              "corners": 1,
+              "xg": 1.3381,
+              "distance": 9407.6134,
+              "yellowCards": 1,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 69.9,
+              "passes": 79,
+              "passesCompleted": 63,
+              "shots": 3,
+              "shotsOnTarget": 2,
+              "goals": 1,
+              "interceptions": 7,
+              "tackles": 2,
+              "fouls": 1,
+              "corners": 0,
+              "xg": 0.5746,
+              "distance": 9208.6174,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 247,
+          "logHash": "f5a7beb3",
+          "logTypes": {
+            "kickoff": 3,
+            "pass": 103,
+            "dribble": 89,
+            "foul": 8,
+            "setpiece": 15,
+            "save": 5,
+            "contest": 9,
+            "miss": 6,
+            "block": 3,
+            "half": 1,
+            "tackle": 3,
+            "goal": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7004,
+          "score": [
+            2,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 52.2,
+              "passes": 56,
+              "passesCompleted": 41,
+              "shots": 19,
+              "shotsOnTarget": 14,
+              "goals": 2,
+              "interceptions": 17,
+              "tackles": 0,
+              "fouls": 3,
+              "corners": 7,
+              "xg": 3.2695,
+              "distance": 10611.6141,
+              "yellowCards": 1,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 47.8,
+              "passes": 50,
+              "passesCompleted": 32,
+              "shots": 13,
+              "shotsOnTarget": 5,
+              "goals": 1,
+              "interceptions": 14,
+              "tackles": 1,
+              "fouls": 2,
+              "corners": 1,
+              "xg": 1.647,
+              "distance": 10569.0532,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 258,
+          "logHash": "62ba3532",
+          "logTypes": {
+            "kickoff": 5,
+            "pass": 110,
+            "dribble": 62,
+            "goal": 3,
+            "save": 16,
+            "contest": 17,
+            "setpiece": 24,
+            "miss": 11,
+            "tackle": 1,
+            "foul": 5,
+            "block": 2,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7005,
+          "score": [
+            4,
+            4
+          ],
+          "stats": {
+            "home": {
+              "possession": 35.1,
+              "passes": 27,
+              "passesCompleted": 17,
+              "shots": 24,
+              "shotsOnTarget": 14,
+              "goals": 4,
+              "interceptions": 20,
+              "tackles": 1,
+              "fouls": 2,
+              "corners": 6,
+              "xg": 4.2064,
+              "distance": 11379.4528,
+              "yellowCards": 1,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 64.9,
+              "passes": 82,
+              "passesCompleted": 61,
+              "shots": 15,
+              "shotsOnTarget": 10,
+              "goals": 4,
+              "interceptions": 9,
+              "tackles": 1,
+              "fouls": 3,
+              "corners": 5,
+              "xg": 2.8577,
+              "distance": 10949.3777,
+              "yellowCards": 1,
+              "redCards": 0
+            }
+          },
+          "logLength": 262,
+          "logHash": "6d77c23b",
+          "logTypes": {
+            "kickoff": 10,
+            "pass": 110,
+            "save": 16,
+            "setpiece": 28,
+            "contest": 17,
+            "block": 3,
+            "miss": 12,
+            "goal": 8,
+            "dribble": 49,
+            "foul": 5,
+            "tackle": 2,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7006,
+          "score": [
+            1,
+            0
+          ],
+          "stats": {
+            "home": {
+              "possession": 63.1,
+              "passes": 67,
+              "passesCompleted": 57,
+              "shots": 10,
+              "shotsOnTarget": 5,
+              "goals": 1,
+              "interceptions": 14,
+              "tackles": 0,
+              "fouls": 0,
+              "corners": 2,
+              "xg": 1.8126,
+              "distance": 9776.0095,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 36.9,
+              "passes": 46,
+              "passesCompleted": 32,
+              "shots": 5,
+              "shotsOnTarget": 2,
+              "goals": 0,
+              "interceptions": 8,
+              "tackles": 1,
+              "fouls": 6,
+              "corners": 1,
+              "xg": 0.4893,
+              "distance": 9954.0335,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 245,
+          "logHash": "3a0ba4b8",
+          "logTypes": {
+            "kickoff": 3,
+            "pass": 114,
+            "foul": 6,
+            "setpiece": 17,
+            "save": 6,
+            "dribble": 78,
+            "contest": 9,
+            "miss": 8,
+            "goal": 1,
+            "tackle": 1,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7007,
+          "score": [
+            2,
+            2
+          ],
+          "stats": {
+            "home": {
+              "possession": 44.4,
+              "passes": 42,
+              "passesCompleted": 29,
+              "shots": 20,
+              "shotsOnTarget": 6,
+              "goals": 2,
+              "interceptions": 18,
+              "tackles": 1,
+              "fouls": 4,
+              "corners": 2,
+              "xg": 2.2215,
+              "distance": 10569.7373,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 55.6,
+              "passes": 72,
+              "passesCompleted": 52,
+              "shots": 8,
+              "shotsOnTarget": 4,
+              "goals": 2,
+              "interceptions": 13,
+              "tackles": 0,
+              "fouls": 3,
+              "corners": 1,
+              "xg": 1.8056,
+              "distance": 10200.2726,
+              "yellowCards": 1,
+              "redCards": 0
+            }
+          },
+          "logLength": 256,
+          "logHash": "bf1bcd07",
+          "logTypes": {
+            "kickoff": 6,
+            "pass": 115,
+            "dribble": 62,
+            "foul": 7,
+            "setpiece": 24,
+            "block": 4,
+            "contest": 11,
+            "miss": 14,
+            "goal": 4,
+            "save": 6,
+            "tackle": 1,
+            "half": 1,
+            "full": 1
+          }
+        }
+      ]
+    },
+    {
+      "rules": 2,
+      "awayFactor": 0.87,
+      "n": 200,
+      "seed0": 7000,
+      "results": {
+        "homeWins": 134,
+        "draws": 32,
+        "awayWins": 34,
+        "goals": [
+          2.76,
+          1.03,
+          3.79
+        ],
+        "shots": [
+          17.48,
+          6.915,
+          24.395
+        ],
+        "shotsOnTarget": [
+          8.59,
+          3.235,
+          11.825
+        ],
+        "xg": [
+          2.755,
+          0.996,
+          3.751
+        ],
+        "passes": [
+          34.415,
+          71.35,
+          105.765
+        ],
+        "passesCompleted": [
+          25.985,
+          54.185,
+          80.17
+        ],
+        "passAccuracyPct": [
+          75.5,
+          75.9
+        ],
+        "tackles": [
+          0.845,
+          0.85,
+          1.695
+        ],
+        "interceptions": [
+          16.27,
+          7.84,
+          24.11
+        ],
+        "fouls": [
+          2.97,
+          3.12,
+          6.09
+        ],
+        "corners": [
+          3.375,
+          1.295,
+          4.67
+        ],
+        "yellowCards": [
+          0.31,
+          0.285,
+          0.595
+        ],
+        "redCards": [
+          0.02,
+          0.005,
+          0.025
+        ],
+        "possessionPct": [
+          39.049,
+          61
+        ],
+        "distanceKm": [
+          10.22,
+          9.97,
+          20.2
+        ],
+        "scoreless": 10,
+        "maxTotalGoals": 12,
+        "logTypes": {
+          "block": 2.665,
+          "contest": 11.9,
+          "dribble": 72.93,
+          "foul": 6.09,
+          "full": 1,
+          "goal": 3.79,
+          "half": 1,
+          "injury": 0.035,
+          "kickoff": 5.77,
+          "miss": 9.905,
+          "pass": 107.105,
+          "penalty": 0.015,
+          "save": 8.035,
+          "setpiece": 20.6,
+          "tackle": 1.695
+        }
+      },
+      "golden": [
+        {
+          "seed": 7000,
+          "score": [
+            2,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 22,
+              "passes": 9,
+              "passesCompleted": 7,
+              "shots": 24,
+              "shotsOnTarget": 8,
+              "goals": 2,
+              "interceptions": 25,
+              "tackles": 0,
+              "fouls": 3,
+              "corners": 5,
+              "xg": 3.9351,
+              "distance": 9593.2419,
+              "yellowCards": 1,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 78,
+              "passes": 96,
+              "passesCompleted": 71,
+              "shots": 2,
+              "shotsOnTarget": 1,
+              "goals": 1,
+              "interceptions": 2,
+              "tackles": 1,
+              "fouls": 3,
+              "corners": 0,
+              "xg": 0.5063,
+              "distance": 9180.8472,
+              "yellowCards": 1,
+              "redCards": 0
+            }
+          },
+          "logLength": 252,
+          "logHash": "82b3188d",
+          "logTypes": {
+            "kickoff": 5,
+            "pass": 106,
+            "miss": 14,
+            "setpiece": 25,
+            "goal": 3,
+            "foul": 6,
+            "contest": 10,
+            "save": 6,
+            "dribble": 71,
+            "block": 3,
+            "half": 1,
+            "tackle": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7001,
+          "score": [
+            2,
+            0
+          ],
+          "stats": {
+            "home": {
+              "possession": 58.1,
+              "passes": 58,
+              "passesCompleted": 43,
+              "shots": 16,
+              "shotsOnTarget": 11,
+              "goals": 2,
+              "interceptions": 15,
+              "tackles": 1,
+              "fouls": 1,
+              "corners": 2,
+              "xg": 2.3857,
+              "distance": 10277.7383,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 41.9,
+              "passes": 48,
+              "passesCompleted": 33,
+              "shots": 13,
+              "shotsOnTarget": 8,
+              "goals": 0,
+              "interceptions": 14,
+              "tackles": 1,
+              "fouls": 5,
+              "corners": 5,
+              "xg": 1.7557,
+              "distance": 10492.5401,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 253,
+          "logHash": "8bbc75bc",
+          "logTypes": {
+            "kickoff": 4,
+            "pass": 109,
+            "save": 17,
+            "setpiece": 22,
+            "contest": 12,
+            "dribble": 67,
+            "miss": 9,
+            "block": 1,
+            "foul": 6,
+            "goal": 2,
+            "half": 1,
+            "tackle": 2,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7002,
+          "score": [
+            2,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 24.2,
+              "passes": 10,
+              "passesCompleted": 7,
+              "shots": 19,
+              "shotsOnTarget": 8,
+              "goals": 2,
+              "interceptions": 16,
+              "tackles": 0,
+              "fouls": 1,
+              "corners": 6,
+              "xg": 2.9878,
+              "distance": 9149.5877,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 75.8,
+              "passes": 105,
+              "passesCompleted": 88,
+              "shots": 1,
+              "shotsOnTarget": 1,
+              "goals": 1,
+              "interceptions": 3,
+              "tackles": 2,
+              "fouls": 2,
+              "corners": 0,
+              "xg": 0.3326,
+              "distance": 8584.2807,
+              "yellowCards": 1,
+              "redCards": 0
+            }
+          },
+          "logLength": 256,
+          "logHash": "ff476ae3",
+          "logTypes": {
+            "kickoff": 5,
+            "pass": 118,
+            "goal": 3,
+            "dribble": 77,
+            "contest": 14,
+            "save": 6,
+            "setpiece": 15,
+            "block": 5,
+            "miss": 6,
+            "foul": 3,
+            "half": 1,
+            "tackle": 2,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7003,
+          "score": [
+            2,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 39.6,
+              "passes": 34,
+              "passesCompleted": 24,
+              "shots": 20,
+              "shotsOnTarget": 9,
+              "goals": 2,
+              "interceptions": 19,
+              "tackles": 1,
+              "fouls": 2,
+              "corners": 5,
+              "xg": 3.3138,
+              "distance": 10836.6022,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 60.4,
+              "passes": 80,
+              "passesCompleted": 61,
+              "shots": 7,
+              "shotsOnTarget": 3,
+              "goals": 1,
+              "interceptions": 10,
+              "tackles": 0,
+              "fouls": 6,
+              "corners": 1,
+              "xg": 0.7515,
+              "distance": 10018.504,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 257,
+          "logHash": "991c629b",
+          "logTypes": {
+            "kickoff": 5,
+            "pass": 115,
+            "dribble": 61,
+            "foul": 8,
+            "setpiece": 27,
+            "contest": 11,
+            "miss": 13,
+            "save": 9,
+            "goal": 3,
+            "tackle": 1,
+            "half": 1,
+            "block": 2,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7004,
+          "score": [
+            7,
+            2
+          ],
+          "stats": {
+            "home": {
+              "possession": 43,
+              "passes": 42,
+              "passesCompleted": 28,
+              "shots": 11,
+              "shotsOnTarget": 8,
+              "goals": 7,
+              "interceptions": 13,
+              "tackles": 0,
+              "fouls": 2,
+              "corners": 0,
+              "xg": 2.5418,
+              "distance": 10813.436,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 57,
+              "passes": 58,
+              "passesCompleted": 44,
+              "shots": 16,
+              "shotsOnTarget": 8,
+              "goals": 2,
+              "interceptions": 14,
+              "tackles": 2,
+              "fouls": 3,
+              "corners": 5,
+              "xg": 2.257,
+              "distance": 10678.3863,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 252,
+          "logHash": "ce4f5988",
+          "logTypes": {
+            "kickoff": 11,
+            "pass": 100,
+            "dribble": 78,
+            "goal": 9,
+            "foul": 5,
+            "setpiece": 16,
+            "miss": 6,
+            "save": 7,
+            "contest": 11,
+            "block": 5,
+            "half": 1,
+            "tackle": 2,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7005,
+          "score": [
+            1,
+            0
+          ],
+          "stats": {
+            "home": {
+              "possession": 52.1,
+              "passes": 49,
+              "passesCompleted": 40,
+              "shots": 18,
+              "shotsOnTarget": 9,
+              "goals": 1,
+              "interceptions": 15,
+              "tackles": 2,
+              "fouls": 2,
+              "corners": 3,
+              "xg": 2.4486,
+              "distance": 10009.0043,
+              "yellowCards": 1,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 47.9,
+              "passes": 52,
+              "passesCompleted": 37,
+              "shots": 10,
+              "shotsOnTarget": 4,
+              "goals": 0,
+              "interceptions": 9,
+              "tackles": 1,
+              "fouls": 3,
+              "corners": 4,
+              "xg": 1.1666,
+              "distance": 10233.0711,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 254,
+          "logHash": "ec1db7a5",
+          "logTypes": {
+            "kickoff": 3,
+            "pass": 103,
+            "save": 12,
+            "setpiece": 25,
+            "contest": 14,
+            "block": 1,
+            "miss": 14,
+            "dribble": 71,
+            "foul": 5,
+            "goal": 1,
+            "tackle": 3,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7006,
+          "score": [
+            3,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 53.8,
+              "passes": 70,
+              "passesCompleted": 60,
+              "shots": 12,
+              "shotsOnTarget": 7,
+              "goals": 3,
+              "interceptions": 14,
+              "tackles": 0,
+              "fouls": 3,
+              "corners": 2,
+              "xg": 1.9035,
+              "distance": 10005.5726,
+              "yellowCards": 0,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 46.2,
+              "passes": 58,
+              "passesCompleted": 43,
+              "shots": 7,
+              "shotsOnTarget": 2,
+              "goals": 1,
+              "interceptions": 10,
+              "tackles": 0,
+              "fouls": 1,
+              "corners": 0,
+              "xg": 0.7022,
+              "distance": 9509.5859,
+              "yellowCards": 0,
+              "redCards": 0
+            }
+          },
+          "logLength": 250,
+          "logHash": "15aa8a12",
+          "logTypes": {
+            "kickoff": 6,
+            "pass": 129,
+            "foul": 4,
+            "setpiece": 14,
+            "save": 5,
+            "dribble": 69,
+            "miss": 8,
+            "contest": 7,
+            "block": 2,
+            "goal": 4,
+            "half": 1,
+            "full": 1
+          }
+        },
+        {
+          "seed": 7007,
+          "score": [
+            2,
+            1
+          ],
+          "stats": {
+            "home": {
+              "possession": 40.2,
+              "passes": 34,
+              "passesCompleted": 26,
+              "shots": 17,
+              "shotsOnTarget": 8,
+              "goals": 2,
+              "interceptions": 18,
+              "tackles": 0,
+              "fouls": 2,
+              "corners": 1,
+              "xg": 2.281,
+              "distance": 10541.9069,
+              "yellowCards": 1,
+              "redCards": 0
+            },
+            "away": {
+              "possession": 59.8,
+              "passes": 71,
+              "passesCompleted": 52,
+              "shots": 5,
+              "shotsOnTarget": 2,
+              "goals": 1,
+              "interceptions": 8,
+              "tackles": 0,
+              "fouls": 7,
+              "corners": 0,
+              "xg": 0.3955,
+              "distance": 10358.8456,
+              "yellowCards": 2,
+              "redCards": 0
+            }
+          },
+          "logLength": 252,
+          "logHash": "8748e74b",
+          "logTypes": {
+            "kickoff": 5,
+            "pass": 107,
+            "dribble": 77,
+            "foul": 9,
+            "setpiece": 20,
+            "contest": 10,
+            "save": 7,
+            "miss": 10,
+            "goal": 3,
+            "block": 2,
+            "half": 1,
+            "full": 1
+          }
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "commit": "ecb6817+工作区有改动",
+    "node": "v22.23.2",
+    "note": "仅供追溯，不参与比较"
+  },
+  "timing": {
+    "v3-x1": {
+      "msPerMatch": 293
+    },
+    "v3-x0.93": {
+      "msPerMatch": 289
+    },
+    "v3-x0.87": {
+      "msPerMatch": 285
+    },
+    "v2-x1": {
+      "msPerMatch": 44
+    },
+    "v2-x0.93": {
+      "msPerMatch": 43
+    },
+    "v2-x0.87": {
+      "msPerMatch": 44
+    }
+  }
+}

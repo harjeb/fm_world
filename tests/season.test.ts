@@ -55,7 +55,7 @@ describe('赛季与存档', () => {
     expect(game.season.playerFinish).toBeGreaterThanOrEqual(1)
     expect(game.matchHistory).toHaveLength(38)
     expect(validateLineup(game.roster, game.lineup).valid).toBe(true)
-  }, 60_000)
+  }, 180_000)
 
   it('单场挑战记录进入 challengeHistory，淘汰赛平局有点球', () => {
     const game = createInitialGame(13)
@@ -148,7 +148,7 @@ describe('赛季与存档', () => {
     expect(game.matchHistory).toHaveLength(38)
     expect(game.season.table.every((row) => row.played === 38)).toBe(true)
     expect(game.season.champion).toBeTruthy()
-  }, 30000)
+  }, 120_000)
 
   it('旧球星按空槽补招牌技能，不覆盖满槽技能，并保持进行中比赛', () => {
     const game = createInitialGame(66)

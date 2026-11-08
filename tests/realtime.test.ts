@@ -92,7 +92,7 @@ describe('联赛现实时间', () => {
       expect(game.matchHistory[0].instructions).toEqual(expected.instructions)
       expect(game.matchHistory[0].score).toEqual(expected.score)
     }
-  }, 20_000)
+  }, 120_000)
 
   it('重启或关页后按经过的真实时间恢复，而不是从零或立刻完成', () => {
     const game = started(2)

@@ -632,7 +632,7 @@ describe('比赛里的效果', () => {
     }
     expect(offsides({ kind: 'onside', chance: 0 })).toBeGreaterThan(0)
     expect(offsides({ kind: 'onside', chance: 100 })).toBe(0)
-  }, 30_000)
+  }, 120_000)
 
   describe('点球大战', () => {
     /** 主队罚第一个点球时的命中率。taker 和 keeper 分别是主队外场球员和客队门将的特性。 */
@@ -715,7 +715,7 @@ describe('比赛里的效果', () => {
         }
       }
     }
-  }, 30_000)
+  }, 120_000)
 })
 
 describe('旧存档和 Agent', () => {

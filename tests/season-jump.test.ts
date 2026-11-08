@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest'
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
 import { createWorldGame } from '../src/game/world.ts'
 import { GAME_DAY_MS, ROUND_GAME_DAYS, advanceSeasonRound, dueRound, playerFixture, skipToMatchday, skipToPostseasonEnd } from '../src/game/season.ts'
@@ -34,7 +34,16 @@ function playRounds(game: ReturnType<typeof createInitialGame>, rounds: number, 
 const gameDayOf = (game: ReturnType<typeof createInitialGame>, now: number, anchor: number) => Math.floor((now - anchor) / GAME_DAY_MS)
 
 describe('跳至比赛日（离线存档）', () => {
-  beforeEach(stubLocalStorage)
+  // 测试先取 `now`，建档时又各取一次 Date.now()；毫秒一跳（并行跑全套时很常见）就差出 5e-8 个游戏日，
+  // “刚好 20 天 / 第 0 天”的断言随机失败。把时钟冻住，三处取到的是同一个值。
+  beforeEach(() => {
+    stubLocalStorage()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-03-14T08:00:00Z'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
 
   it('连踢 5 轮后点一次，日历追到第 6 轮比赛日', () => {
     const now = Date.now()

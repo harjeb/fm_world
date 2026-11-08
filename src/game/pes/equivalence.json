@@ -1,0 +1,6246 @@
+{
+ "schema": 1,
+ "note": "旧引擎的等价性语料。由 npm run pes:equiv -- --write 生成，不要手改。",
+ "results": [
+  {
+   "rules": 3,
+   "seed": 30000,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "7759765453415588"
+  },
+  {
+   "rules": 3,
+   "seed": 30001,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    3
+   ],
+   "hash": "eaa50e2c80aea9e8"
+  },
+  {
+   "rules": 3,
+   "seed": 30002,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    1
+   ],
+   "hash": "dd8321bdea0e5041"
+  },
+  {
+   "rules": 3,
+   "seed": 30003,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    4,
+    2
+   ],
+   "hash": "2fa1e9d96404cd45"
+  },
+  {
+   "rules": 3,
+   "seed": 30004,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "4cbb256833fd1094"
+  },
+  {
+   "rules": 3,
+   "seed": 30005,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "bf5406b6bba1b792"
+  },
+  {
+   "rules": 3,
+   "seed": 30006,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    3
+   ],
+   "hash": "4c09824e67325c12"
+  },
+  {
+   "rules": 3,
+   "seed": 30007,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "f37d1959963b835d"
+  },
+  {
+   "rules": 3,
+   "seed": 30008,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "a20cf252f66d9b5e"
+  },
+  {
+   "rules": 3,
+   "seed": 30009,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "47524c8379e2a7f7"
+  },
+  {
+   "rules": 3,
+   "seed": 30010,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "b3d96c8dac081081"
+  },
+  {
+   "rules": 3,
+   "seed": 30011,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "73ad8ae80f72f4ec"
+  },
+  {
+   "rules": 3,
+   "seed": 30012,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "b58eb63b5b849fff"
+  },
+  {
+   "rules": 3,
+   "seed": 30013,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "6744999035f720c4"
+  },
+  {
+   "rules": 3,
+   "seed": 30014,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "8941d1e18191951d"
+  },
+  {
+   "rules": 3,
+   "seed": 30015,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "7aabd2a7545cccc3"
+  },
+  {
+   "rules": 3,
+   "seed": 30016,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "253fad6cb44f7730"
+  },
+  {
+   "rules": 3,
+   "seed": 30017,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "163710ab570d1fb7"
+  },
+  {
+   "rules": 3,
+   "seed": 30018,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "c56865b72e7a4fe3"
+  },
+  {
+   "rules": 3,
+   "seed": 30019,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    4,
+    3
+   ],
+   "hash": "529e9a1ae2c9857e"
+  },
+  {
+   "rules": 3,
+   "seed": 30020,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "e1959713b90b1a8f"
+  },
+  {
+   "rules": 3,
+   "seed": 30021,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "ba6065107d61b774"
+  },
+  {
+   "rules": 3,
+   "seed": 30022,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "1f199006973268ca"
+  },
+  {
+   "rules": 3,
+   "seed": 30023,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "3cee4cbad211d886"
+  },
+  {
+   "rules": 3,
+   "seed": 30024,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    4
+   ],
+   "hash": "951bdd9e633dc732"
+  },
+  {
+   "rules": 3,
+   "seed": 30025,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "40e826a7f7956b63"
+  },
+  {
+   "rules": 3,
+   "seed": 30026,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "1d56b501731e0fed"
+  },
+  {
+   "rules": 3,
+   "seed": 30027,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "9ee2762c00f889e0"
+  },
+  {
+   "rules": 3,
+   "seed": 30028,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "8b9f6443184f0cc7"
+  },
+  {
+   "rules": 3,
+   "seed": 30029,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "4cc13ec2a5fc8a7e"
+  },
+  {
+   "rules": 3,
+   "seed": 30030,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "fba7d7db061606ff"
+  },
+  {
+   "rules": 3,
+   "seed": 30031,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "490b29608347da5c"
+  },
+  {
+   "rules": 3,
+   "seed": 30032,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    3
+   ],
+   "hash": "c7d56e8fd2596843"
+  },
+  {
+   "rules": 3,
+   "seed": 30033,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "24977855360c3ce9"
+  },
+  {
+   "rules": 3,
+   "seed": 30034,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "8f5a082731d4375b"
+  },
+  {
+   "rules": 3,
+   "seed": 30035,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    3
+   ],
+   "hash": "c58da02c5e31fdc8"
+  },
+  {
+   "rules": 3,
+   "seed": 30036,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "6a7f24aa4e31b126"
+  },
+  {
+   "rules": 3,
+   "seed": 30037,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    1
+   ],
+   "hash": "03c9960c0b5f80d0"
+  },
+  {
+   "rules": 3,
+   "seed": 30038,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "571c07908cb1faac"
+  },
+  {
+   "rules": 3,
+   "seed": 30039,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    2,
+    4
+   ],
+   "hash": "2781e6cd86edf8c9"
+  },
+  {
+   "rules": 3,
+   "seed": 30040,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "a00462db55c0fd87"
+  },
+  {
+   "rules": 3,
+   "seed": 30041,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "f6676c13815166d7"
+  },
+  {
+   "rules": 3,
+   "seed": 30042,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "0aff3ba02b0007b4"
+  },
+  {
+   "rules": 3,
+   "seed": 30043,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    0
+   ],
+   "hash": "2c085ee46f09a2c8"
+  },
+  {
+   "rules": 3,
+   "seed": 30044,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    3
+   ],
+   "hash": "611c6d597738b465"
+  },
+  {
+   "rules": 3,
+   "seed": 30045,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "e050c7fd219030f1"
+  },
+  {
+   "rules": 3,
+   "seed": 30046,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "087846dd6d504b01"
+  },
+  {
+   "rules": 3,
+   "seed": 30047,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    0
+   ],
+   "hash": "a263331de3f083b1"
+  },
+  {
+   "rules": 3,
+   "seed": 30048,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    4,
+    0
+   ],
+   "hash": "7b754400b67acb14"
+  },
+  {
+   "rules": 3,
+   "seed": 30049,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    1
+   ],
+   "hash": "c4e60a6f5281a593"
+  },
+  {
+   "rules": 3,
+   "seed": 30050,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    1
+   ],
+   "hash": "1cda96446e2434f0"
+  },
+  {
+   "rules": 3,
+   "seed": 30051,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "6bb9bab24024bfce"
+  },
+  {
+   "rules": 3,
+   "seed": 30052,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    3
+   ],
+   "hash": "4a5e56318e93dd85"
+  },
+  {
+   "rules": 3,
+   "seed": 30053,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    2
+   ],
+   "hash": "872bb1debbe97dba"
+  },
+  {
+   "rules": 3,
+   "seed": 30054,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "e744cb14fe570450"
+  },
+  {
+   "rules": 3,
+   "seed": 30055,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "3fccebb3b1f1b62f"
+  },
+  {
+   "rules": 3,
+   "seed": 30056,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    4
+   ],
+   "hash": "9edc07f2d97767d6"
+  },
+  {
+   "rules": 3,
+   "seed": 30057,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    4
+   ],
+   "hash": "00a7f79b56f8ba1f"
+  },
+  {
+   "rules": 3,
+   "seed": 30058,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "2481af34f1c5d948"
+  },
+  {
+   "rules": 3,
+   "seed": 30059,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "ddec2826ee512b5a"
+  },
+  {
+   "rules": 3,
+   "seed": 30060,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    4
+   ],
+   "hash": "02b9fda7ace359a3"
+  },
+  {
+   "rules": 3,
+   "seed": 30061,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "38b45dfce2e069b0"
+  },
+  {
+   "rules": 3,
+   "seed": 30062,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "86d3d5e61c8f33ba"
+  },
+  {
+   "rules": 3,
+   "seed": 30063,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "32213eb684679e9a"
+  },
+  {
+   "rules": 3,
+   "seed": 30064,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "8bd0b774e7743460"
+  },
+  {
+   "rules": 3,
+   "seed": 30065,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    2
+   ],
+   "hash": "0509744f63de3a63"
+  },
+  {
+   "rules": 3,
+   "seed": 30066,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    5
+   ],
+   "hash": "57c13552b253d986"
+  },
+  {
+   "rules": 3,
+   "seed": 30067,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "f787f62af68f247e"
+  },
+  {
+   "rules": 3,
+   "seed": 30068,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "bc4cf10f36b1cf6b"
+  },
+  {
+   "rules": 3,
+   "seed": 30069,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    3,
+    1
+   ],
+   "hash": "0fef033e5bf8666a"
+  },
+  {
+   "rules": 3,
+   "seed": 30070,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "db0b9d8535bb5ca1"
+  },
+  {
+   "rules": 3,
+   "seed": 30071,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    2
+   ],
+   "hash": "1a83698f9a36f53b"
+  },
+  {
+   "rules": 3,
+   "seed": 30072,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "1b3602348465e848"
+  },
+  {
+   "rules": 3,
+   "seed": 30073,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    3
+   ],
+   "hash": "eb0e92698bbb503d"
+  },
+  {
+   "rules": 3,
+   "seed": 30074,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    0
+   ],
+   "hash": "7aff54b3c7c2dd77"
+  },
+  {
+   "rules": 3,
+   "seed": 30075,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "1cc9471dd358acb1"
+  },
+  {
+   "rules": 3,
+   "seed": 30076,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "10296672bd32f8be"
+  },
+  {
+   "rules": 3,
+   "seed": 30077,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    2
+   ],
+   "hash": "23cc47f7dd29d5f3"
+  },
+  {
+   "rules": 3,
+   "seed": 30078,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "5996f26eed613e12"
+  },
+  {
+   "rules": 3,
+   "seed": 30079,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "6527b80a8016fb3e"
+  },
+  {
+   "rules": 3,
+   "seed": 30080,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "1408e6e5811ffa91"
+  },
+  {
+   "rules": 3,
+   "seed": 30081,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "e402d60a19cf9fe6"
+  },
+  {
+   "rules": 3,
+   "seed": 30082,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    4
+   ],
+   "hash": "8954cd916b349bbd"
+  },
+  {
+   "rules": 3,
+   "seed": 30083,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "7a1c780cf12ff2a0"
+  },
+  {
+   "rules": 3,
+   "seed": 30084,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "e6c691809fe2c10c"
+  },
+  {
+   "rules": 3,
+   "seed": 30085,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "d6b9e92334ab6f77"
+  },
+  {
+   "rules": 3,
+   "seed": 30086,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "02015082b7f66b76"
+  },
+  {
+   "rules": 3,
+   "seed": 30087,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    3,
+    2
+   ],
+   "hash": "d9d0c08ebdaae362"
+  },
+  {
+   "rules": 3,
+   "seed": 30088,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "a5836b6be3dc838f"
+  },
+  {
+   "rules": 3,
+   "seed": 30089,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    6
+   ],
+   "hash": "d351180e6bc36062"
+  },
+  {
+   "rules": 3,
+   "seed": 30090,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "6f78a05dbf961689"
+  },
+  {
+   "rules": 3,
+   "seed": 30091,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    3
+   ],
+   "hash": "b50f87cbf6e82947"
+  },
+  {
+   "rules": 3,
+   "seed": 30092,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    1
+   ],
+   "hash": "e9485a3c632b31c0"
+  },
+  {
+   "rules": 3,
+   "seed": 30093,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "76ebe905f914fff9"
+  },
+  {
+   "rules": 3,
+   "seed": 30094,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "8a44bc7a86d81b46"
+  },
+  {
+   "rules": 3,
+   "seed": 30095,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "96fc81b302bf327f"
+  },
+  {
+   "rules": 3,
+   "seed": 30096,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "8c25fed38c35a4d7"
+  },
+  {
+   "rules": 3,
+   "seed": 30097,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "0112bc00d160723c"
+  },
+  {
+   "rules": 3,
+   "seed": 30098,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    4,
+    0
+   ],
+   "hash": "21c53b80fc38fb04"
+  },
+  {
+   "rules": 3,
+   "seed": 30099,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "ce994c42cc81339e"
+  },
+  {
+   "rules": 3,
+   "seed": 30100,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    3
+   ],
+   "hash": "3f3fdcf8690c1b74"
+  },
+  {
+   "rules": 3,
+   "seed": 30101,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    1
+   ],
+   "hash": "8e30f7c924914a4d"
+  },
+  {
+   "rules": 3,
+   "seed": 30102,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    3
+   ],
+   "hash": "0bc0c12161833dfd"
+  },
+  {
+   "rules": 3,
+   "seed": 30103,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    0
+   ],
+   "hash": "e29e6dda284c1346"
+  },
+  {
+   "rules": 3,
+   "seed": 30104,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "4874d3eac1130af6"
+  },
+  {
+   "rules": 3,
+   "seed": 30105,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "903261a397afcc0f"
+  },
+  {
+   "rules": 3,
+   "seed": 30106,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    0
+   ],
+   "hash": "330fb8d0cb091e1c"
+  },
+  {
+   "rules": 3,
+   "seed": 30107,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    3
+   ],
+   "hash": "c84a0a96c623f672"
+  },
+  {
+   "rules": 3,
+   "seed": 30108,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "574a7ec11e1e5fcd"
+  },
+  {
+   "rules": 3,
+   "seed": 30109,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    3
+   ],
+   "hash": "a903035ae0aceafe"
+  },
+  {
+   "rules": 3,
+   "seed": 30110,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "66afa49bae868eb7"
+  },
+  {
+   "rules": 3,
+   "seed": 30111,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "17bc2f69d1107b55"
+  },
+  {
+   "rules": 3,
+   "seed": 30112,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    3
+   ],
+   "hash": "b2e82fbd61714939"
+  },
+  {
+   "rules": 3,
+   "seed": 30113,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "65201b1961bc555d"
+  },
+  {
+   "rules": 3,
+   "seed": 30114,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "fef74308dc7d7744"
+  },
+  {
+   "rules": 3,
+   "seed": 30115,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    2
+   ],
+   "hash": "a0edf9f402844cc8"
+  },
+  {
+   "rules": 3,
+   "seed": 30116,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "aef5423397cfa47f"
+  },
+  {
+   "rules": 3,
+   "seed": 30117,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    7,
+    1
+   ],
+   "hash": "b5bd1b7350dc400f"
+  },
+  {
+   "rules": 3,
+   "seed": 30118,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "8af57c9f295d9113"
+  },
+  {
+   "rules": 3,
+   "seed": 30119,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    3
+   ],
+   "hash": "4a1465a53b3cbd59"
+  },
+  {
+   "rules": 3,
+   "seed": 30120,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "16e3677c201b4208"
+  },
+  {
+   "rules": 3,
+   "seed": 30121,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "cfabcdbbbe040b97"
+  },
+  {
+   "rules": 3,
+   "seed": 30122,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "701683a30580d927"
+  },
+  {
+   "rules": 3,
+   "seed": 30123,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "b27cd31a7b828b2e"
+  },
+  {
+   "rules": 3,
+   "seed": 30124,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "3b571f374b7001db"
+  },
+  {
+   "rules": 3,
+   "seed": 30125,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    0
+   ],
+   "hash": "402ced90c04a9c54"
+  },
+  {
+   "rules": 3,
+   "seed": 30126,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "b7a4742eea95a2ba"
+  },
+  {
+   "rules": 3,
+   "seed": 30127,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "a5bf86970a063f6b"
+  },
+  {
+   "rules": 3,
+   "seed": 30128,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    2
+   ],
+   "hash": "a187dd8b8ae7f96f"
+  },
+  {
+   "rules": 3,
+   "seed": 30129,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "0f85a855f1e13501"
+  },
+  {
+   "rules": 3,
+   "seed": 30130,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "959f8773a8a30f6f"
+  },
+  {
+   "rules": 3,
+   "seed": 30131,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "d919dfbf9a360c83"
+  },
+  {
+   "rules": 3,
+   "seed": 30132,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "cac758922c3aaa8e"
+  },
+  {
+   "rules": 3,
+   "seed": 30133,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "b6107db6c3110162"
+  },
+  {
+   "rules": 3,
+   "seed": 30134,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "28a2297db18cf251"
+  },
+  {
+   "rules": 3,
+   "seed": 30135,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "6c008c578fe899eb"
+  },
+  {
+   "rules": 3,
+   "seed": 30136,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "3f88bb88d00c1f4c"
+  },
+  {
+   "rules": 3,
+   "seed": 30137,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    4
+   ],
+   "hash": "19f291045d96d668"
+  },
+  {
+   "rules": 3,
+   "seed": 30138,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    2,
+    4
+   ],
+   "hash": "790abf841532f900"
+  },
+  {
+   "rules": 3,
+   "seed": 30139,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "9c935aaf789ff343"
+  },
+  {
+   "rules": 3,
+   "seed": 30140,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    4,
+    2
+   ],
+   "hash": "eb243d4d8f217481"
+  },
+  {
+   "rules": 3,
+   "seed": 30141,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "3630aa62e27e5f46"
+  },
+  {
+   "rules": 3,
+   "seed": 30142,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "7789cc5a0f3d3d9e"
+  },
+  {
+   "rules": 3,
+   "seed": 30143,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "cd526cb6fb638b0a"
+  },
+  {
+   "rules": 3,
+   "seed": 30144,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "50f3d59cfc98ce38"
+  },
+  {
+   "rules": 3,
+   "seed": 30145,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    4
+   ],
+   "hash": "af620411736aceed"
+  },
+  {
+   "rules": 3,
+   "seed": 30146,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    4,
+    1
+   ],
+   "hash": "b56ca81e13654d62"
+  },
+  {
+   "rules": 3,
+   "seed": 30147,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    4,
+    1
+   ],
+   "hash": "123251c4ac8e7428"
+  },
+  {
+   "rules": 3,
+   "seed": 30148,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "b62801e2928ff2ee"
+  },
+  {
+   "rules": 3,
+   "seed": 30149,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "6d5b3c14a60ea7b0"
+  },
+  {
+   "rules": 3,
+   "seed": 30150,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    5
+   ],
+   "hash": "3a4bb62ca1d9dea0"
+  },
+  {
+   "rules": 3,
+   "seed": 30151,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "d7a5494c9bdf5770"
+  },
+  {
+   "rules": 3,
+   "seed": 30152,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "49b64dc892dec0dc"
+  },
+  {
+   "rules": 3,
+   "seed": 30153,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    4
+   ],
+   "hash": "41916d1f9290ac4b"
+  },
+  {
+   "rules": 3,
+   "seed": 30154,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    4
+   ],
+   "hash": "72d5684a0c173226"
+  },
+  {
+   "rules": 3,
+   "seed": 30155,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    4,
+    1
+   ],
+   "hash": "27e68ca112973e0d"
+  },
+  {
+   "rules": 3,
+   "seed": 30156,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    4,
+    3
+   ],
+   "hash": "ed6f3b40f9fe96ac"
+  },
+  {
+   "rules": 3,
+   "seed": 30157,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "50cafd8ced4559a0"
+  },
+  {
+   "rules": 3,
+   "seed": 30158,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "0d4e9ee96e36f6f5"
+  },
+  {
+   "rules": 3,
+   "seed": 30159,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    4
+   ],
+   "hash": "575d10dc62bb87d8"
+  },
+  {
+   "rules": 3,
+   "seed": 30160,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "ccc37a55bc672409"
+  },
+  {
+   "rules": 3,
+   "seed": 30161,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "bff7da680e3b6734"
+  },
+  {
+   "rules": 3,
+   "seed": 30162,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "d5f6b8b36a22fb5f"
+  },
+  {
+   "rules": 3,
+   "seed": 30163,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "6b9d7ddaf662288e"
+  },
+  {
+   "rules": 3,
+   "seed": 30164,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "c98aa30e0488ec22"
+  },
+  {
+   "rules": 3,
+   "seed": 30165,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    6,
+    1
+   ],
+   "hash": "b1329fc0d248f824"
+  },
+  {
+   "rules": 3,
+   "seed": 30166,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    4,
+    2
+   ],
+   "hash": "0cb7ef07fc3a6e0b"
+  },
+  {
+   "rules": 3,
+   "seed": 30167,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "872aecca8e623ec6"
+  },
+  {
+   "rules": 3,
+   "seed": 30168,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "2fa2c3f3ff8efeff"
+  },
+  {
+   "rules": 3,
+   "seed": 30169,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "7d4d356cb6cc0318"
+  },
+  {
+   "rules": 3,
+   "seed": 30170,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "17d1dbafd8f958e3"
+  },
+  {
+   "rules": 3,
+   "seed": 30171,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "23ea21e6ab095a8a"
+  },
+  {
+   "rules": 3,
+   "seed": 30172,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "c32cf20fcefe1e4b"
+  },
+  {
+   "rules": 3,
+   "seed": 30173,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    3
+   ],
+   "hash": "7da576513e3be9bd"
+  },
+  {
+   "rules": 3,
+   "seed": 30174,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "2632bc1e9552fcd2"
+  },
+  {
+   "rules": 3,
+   "seed": 30175,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    3
+   ],
+   "hash": "dd57570c7287dee8"
+  },
+  {
+   "rules": 3,
+   "seed": 30176,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "7d997fa65b94580a"
+  },
+  {
+   "rules": 3,
+   "seed": 30177,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "d715639302bb484f"
+  },
+  {
+   "rules": 3,
+   "seed": 30178,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "22ca267eb1e68b2a"
+  },
+  {
+   "rules": 3,
+   "seed": 30179,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    3
+   ],
+   "hash": "5ca8b1fbdc5b884f"
+  },
+  {
+   "rules": 3,
+   "seed": 30180,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "e36e16ad75a21ca9"
+  },
+  {
+   "rules": 3,
+   "seed": 30181,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    4,
+    0
+   ],
+   "hash": "6b59ce7cc978fbb0"
+  },
+  {
+   "rules": 3,
+   "seed": 30182,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "83fb51847e809430"
+  },
+  {
+   "rules": 3,
+   "seed": 30183,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "8a540aeceffe5f78"
+  },
+  {
+   "rules": 3,
+   "seed": 30184,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "c9de996fdb57ca8b"
+  },
+  {
+   "rules": 3,
+   "seed": 30185,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "53d678e4d4c4d5e8"
+  },
+  {
+   "rules": 3,
+   "seed": 30186,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "4c6e3b89d13a5fed"
+  },
+  {
+   "rules": 3,
+   "seed": 30187,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "e6ce2509c8bfe05d"
+  },
+  {
+   "rules": 3,
+   "seed": 30188,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "cdb6b49213332536"
+  },
+  {
+   "rules": 3,
+   "seed": 30189,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    5,
+    1
+   ],
+   "hash": "43496d9b789e32cf"
+  },
+  {
+   "rules": 3,
+   "seed": 30190,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "262fd0b5dd2ece31"
+  },
+  {
+   "rules": 3,
+   "seed": 30191,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "01a94712bcf6daf6"
+  },
+  {
+   "rules": 3,
+   "seed": 30192,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "13b81c36c0aee75a"
+  },
+  {
+   "rules": 3,
+   "seed": 30193,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "b3a28a896a89adcd"
+  },
+  {
+   "rules": 3,
+   "seed": 30194,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    3
+   ],
+   "hash": "26ba767829b5b08c"
+  },
+  {
+   "rules": 3,
+   "seed": 30195,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "c0a456307a37f1dc"
+  },
+  {
+   "rules": 3,
+   "seed": 30196,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "2d44b9e737ad564b"
+  },
+  {
+   "rules": 3,
+   "seed": 30197,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    3
+   ],
+   "hash": "29e95dd7a84db2bb"
+  },
+  {
+   "rules": 3,
+   "seed": 30198,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "ea74858597870441"
+  },
+  {
+   "rules": 3,
+   "seed": 30199,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "3f96d5e36cff264f"
+  },
+  {
+   "rules": 3,
+   "seed": 30200,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "449bce165bd65952"
+  },
+  {
+   "rules": 3,
+   "seed": 30201,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "4a1886b9e835aa05"
+  },
+  {
+   "rules": 3,
+   "seed": 30202,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    3
+   ],
+   "hash": "6723854d6e66f5d9"
+  },
+  {
+   "rules": 3,
+   "seed": 30203,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "da4a5b522769a01e"
+  },
+  {
+   "rules": 3,
+   "seed": 30204,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    3,
+    0
+   ],
+   "hash": "90a75fd73e1fcd43"
+  },
+  {
+   "rules": 3,
+   "seed": 30205,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "8e54c099ec3be5c5"
+  },
+  {
+   "rules": 3,
+   "seed": 30206,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "c22912d94907889d"
+  },
+  {
+   "rules": 3,
+   "seed": 30207,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "96dd8f731c6d956f"
+  },
+  {
+   "rules": 3,
+   "seed": 30208,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    4
+   ],
+   "hash": "2f0f2a258d358b11"
+  },
+  {
+   "rules": 3,
+   "seed": 30209,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    2
+   ],
+   "hash": "43bbfc5f1eb2ec63"
+  },
+  {
+   "rules": 3,
+   "seed": 30210,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "51f86580614608fc"
+  },
+  {
+   "rules": 3,
+   "seed": 30211,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "3dc9d5c6f0b80da2"
+  },
+  {
+   "rules": 3,
+   "seed": 30212,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "68e5046844cda604"
+  },
+  {
+   "rules": 3,
+   "seed": 30213,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    5,
+    1
+   ],
+   "hash": "85e06b48076f517c"
+  },
+  {
+   "rules": 3,
+   "seed": 30214,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "bf60576145f1e375"
+  },
+  {
+   "rules": 3,
+   "seed": 30215,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    1
+   ],
+   "hash": "d053a6cd5db668d9"
+  },
+  {
+   "rules": 3,
+   "seed": 30216,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    5
+   ],
+   "hash": "3012ca52382f25c6"
+  },
+  {
+   "rules": 3,
+   "seed": 30217,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "2a39e9322228f8fe"
+  },
+  {
+   "rules": 3,
+   "seed": 30218,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "d8a13bbe5e50ebaa"
+  },
+  {
+   "rules": 3,
+   "seed": 30219,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "1d6ddb902802033c"
+  },
+  {
+   "rules": 3,
+   "seed": 30220,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    4
+   ],
+   "hash": "5df8dfb285d9d976"
+  },
+  {
+   "rules": 3,
+   "seed": 30221,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "4d3756b46c32d0a0"
+  },
+  {
+   "rules": 3,
+   "seed": 30222,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "7af6d82c82df60e0"
+  },
+  {
+   "rules": 3,
+   "seed": 30223,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "ed3a283b9dbb49d7"
+  },
+  {
+   "rules": 3,
+   "seed": 30224,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    0
+   ],
+   "hash": "f1dd9ed3b97b507f"
+  },
+  {
+   "rules": 3,
+   "seed": 30225,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    3,
+    3
+   ],
+   "hash": "45adf17af53274f6"
+  },
+  {
+   "rules": 3,
+   "seed": 30226,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "507f5d3c197350c0"
+  },
+  {
+   "rules": 3,
+   "seed": 30227,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "eac524d1a77cc2d5"
+  },
+  {
+   "rules": 3,
+   "seed": 30228,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "21081b4eecabe042"
+  },
+  {
+   "rules": 3,
+   "seed": 30229,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "63ccd5600e39608c"
+  },
+  {
+   "rules": 3,
+   "seed": 30230,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "7c880e2db6159be9"
+  },
+  {
+   "rules": 3,
+   "seed": 30231,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "767302c0bffa211c"
+  },
+  {
+   "rules": 3,
+   "seed": 30232,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "1812b9ba655ef676"
+  },
+  {
+   "rules": 3,
+   "seed": 30233,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "0824e475e366db49"
+  },
+  {
+   "rules": 3,
+   "seed": 30234,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "8bd8a33da0bcd2f1"
+  },
+  {
+   "rules": 3,
+   "seed": 30235,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    3
+   ],
+   "hash": "4c6b94f114848cbd"
+  },
+  {
+   "rules": 3,
+   "seed": 30236,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "8c5935a04141120c"
+  },
+  {
+   "rules": 3,
+   "seed": 30237,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "d20a28c33e6b1f7f"
+  },
+  {
+   "rules": 3,
+   "seed": 30238,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "1c72f5366a18613a"
+  },
+  {
+   "rules": 3,
+   "seed": 30239,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "d666a4f59624fa49"
+  },
+  {
+   "rules": 2,
+   "seed": 30000,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    3,
+    1
+   ],
+   "hash": "ddfaa50fed453a4b"
+  },
+  {
+   "rules": 2,
+   "seed": 30001,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    4,
+    0
+   ],
+   "hash": "532514f44a4e9370"
+  },
+  {
+   "rules": 2,
+   "seed": 30002,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "53402335f4e11c89"
+  },
+  {
+   "rules": 2,
+   "seed": 30003,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    6
+   ],
+   "hash": "5a341b2efa48fb2a"
+  },
+  {
+   "rules": 2,
+   "seed": 30004,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "75512e62660f3396"
+  },
+  {
+   "rules": 2,
+   "seed": 30005,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    3
+   ],
+   "hash": "e05992a090ecce34"
+  },
+  {
+   "rules": 2,
+   "seed": 30006,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "83b48754346800b8"
+  },
+  {
+   "rules": 2,
+   "seed": 30007,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "6699fe4e6ca14e4a"
+  },
+  {
+   "rules": 2,
+   "seed": 30008,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    3
+   ],
+   "hash": "5bcbd420e4af294c"
+  },
+  {
+   "rules": 2,
+   "seed": 30009,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    3,
+    4
+   ],
+   "hash": "ccbd52da957d0da6"
+  },
+  {
+   "rules": 2,
+   "seed": 30010,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "8120ceaa5a53947e"
+  },
+  {
+   "rules": 2,
+   "seed": 30011,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    2
+   ],
+   "hash": "4bbe5fac08e54b10"
+  },
+  {
+   "rules": 2,
+   "seed": 30012,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "b156c04c3655e990"
+  },
+  {
+   "rules": 2,
+   "seed": 30013,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    2
+   ],
+   "hash": "7128983b8c00f98f"
+  },
+  {
+   "rules": 2,
+   "seed": 30014,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "52838a2c2918ded0"
+  },
+  {
+   "rules": 2,
+   "seed": 30015,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    6
+   ],
+   "hash": "002230cfdb31e9e3"
+  },
+  {
+   "rules": 2,
+   "seed": 30016,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    3
+   ],
+   "hash": "f8a42d3471b3adb8"
+  },
+  {
+   "rules": 2,
+   "seed": 30017,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "fd28697205574556"
+  },
+  {
+   "rules": 2,
+   "seed": 30018,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    3,
+    1
+   ],
+   "hash": "fd3af856aa875b42"
+  },
+  {
+   "rules": 2,
+   "seed": 30019,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    2
+   ],
+   "hash": "fe4b34a589a619f1"
+  },
+  {
+   "rules": 2,
+   "seed": 30020,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "4335d44bf5084fff"
+  },
+  {
+   "rules": 2,
+   "seed": 30021,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    5,
+    0
+   ],
+   "hash": "3e949d90e69b4c7c"
+  },
+  {
+   "rules": 2,
+   "seed": 30022,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    4
+   ],
+   "hash": "4ab31a9e7ba4aae2"
+  },
+  {
+   "rules": 2,
+   "seed": 30023,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    6,
+    3
+   ],
+   "hash": "5a0f62fb80ef88ff"
+  },
+  {
+   "rules": 2,
+   "seed": 30024,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "99c87bf3b763e3e7"
+  },
+  {
+   "rules": 2,
+   "seed": 30025,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "0fcfc7aa571eaece"
+  },
+  {
+   "rules": 2,
+   "seed": 30026,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    2
+   ],
+   "hash": "2365ca9a113fb516"
+  },
+  {
+   "rules": 2,
+   "seed": 30027,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    6
+   ],
+   "hash": "5f199fe58ee7fe81"
+  },
+  {
+   "rules": 2,
+   "seed": 30028,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    2
+   ],
+   "hash": "c70500ac759dba18"
+  },
+  {
+   "rules": 2,
+   "seed": 30029,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    0
+   ],
+   "hash": "218e7ecad0667a46"
+  },
+  {
+   "rules": 2,
+   "seed": 30030,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "d0677dc3fbe78c37"
+  },
+  {
+   "rules": 2,
+   "seed": 30031,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "97075f11e5bb34a5"
+  },
+  {
+   "rules": 2,
+   "seed": 30032,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    2
+   ],
+   "hash": "73bbbb2fcab69ee3"
+  },
+  {
+   "rules": 2,
+   "seed": 30033,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    6,
+    4
+   ],
+   "hash": "242f055d064d7579"
+  },
+  {
+   "rules": 2,
+   "seed": 30034,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    3
+   ],
+   "hash": "dbd4bd11910258e5"
+  },
+  {
+   "rules": 2,
+   "seed": 30035,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "1293056a0ecbdd3e"
+  },
+  {
+   "rules": 2,
+   "seed": 30036,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    3,
+    0
+   ],
+   "hash": "e58b18f849fed58c"
+  },
+  {
+   "rules": 2,
+   "seed": 30037,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    5,
+    4
+   ],
+   "hash": "b6f233f79bbe51f3"
+  },
+  {
+   "rules": 2,
+   "seed": 30038,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    5
+   ],
+   "hash": "308b89ed67fe07f9"
+  },
+  {
+   "rules": 2,
+   "seed": 30039,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "3323ef2f284bb90b"
+  },
+  {
+   "rules": 2,
+   "seed": 30040,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "e6968226efab89b2"
+  },
+  {
+   "rules": 2,
+   "seed": 30041,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    5
+   ],
+   "hash": "99767b5733aa6ddb"
+  },
+  {
+   "rules": 2,
+   "seed": 30042,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    3,
+    3
+   ],
+   "hash": "51ee2bd9f47f077d"
+  },
+  {
+   "rules": 2,
+   "seed": 30043,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    5,
+    2
+   ],
+   "hash": "4b6323a1539d19ad"
+  },
+  {
+   "rules": 2,
+   "seed": 30044,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "59903088cb78db74"
+  },
+  {
+   "rules": 2,
+   "seed": 30045,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    3,
+    3
+   ],
+   "hash": "a84187fa6cb17926"
+  },
+  {
+   "rules": 2,
+   "seed": 30046,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    2
+   ],
+   "hash": "c54b45220ae35cce"
+  },
+  {
+   "rules": 2,
+   "seed": 30047,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "79c8a8c049154aec"
+  },
+  {
+   "rules": 2,
+   "seed": 30048,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "33ab0dc6898d654a"
+  },
+  {
+   "rules": 2,
+   "seed": 30049,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    6,
+    3
+   ],
+   "hash": "a0bb6f70ccb1a25c"
+  },
+  {
+   "rules": 2,
+   "seed": 30050,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "4c4fba11f2309d5d"
+  },
+  {
+   "rules": 2,
+   "seed": 30051,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    4,
+    0
+   ],
+   "hash": "1cacd32406a98e88"
+  },
+  {
+   "rules": 2,
+   "seed": 30052,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "cc7b220652027afa"
+  },
+  {
+   "rules": 2,
+   "seed": 30053,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    5
+   ],
+   "hash": "5d0e52875a1ca5e3"
+  },
+  {
+   "rules": 2,
+   "seed": 30054,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    3,
+    1
+   ],
+   "hash": "a1e5c29149376a05"
+  },
+  {
+   "rules": 2,
+   "seed": 30055,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "ab5b5dacefb80c48"
+  },
+  {
+   "rules": 2,
+   "seed": 30056,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "076a07dc604cd298"
+  },
+  {
+   "rules": 2,
+   "seed": 30057,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "af77b11bd9c568c7"
+  },
+  {
+   "rules": 2,
+   "seed": 30058,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    3
+   ],
+   "hash": "3694ab421f9a7386"
+  },
+  {
+   "rules": 2,
+   "seed": 30059,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    2
+   ],
+   "hash": "5188b347f448c61b"
+  },
+  {
+   "rules": 2,
+   "seed": 30060,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "3f3c7e4f97ba1d2b"
+  },
+  {
+   "rules": 2,
+   "seed": 30061,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "13585f815d113835"
+  },
+  {
+   "rules": 2,
+   "seed": 30062,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    4,
+    1
+   ],
+   "hash": "ee9090a5d706fc31"
+  },
+  {
+   "rules": 2,
+   "seed": 30063,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "12fa65f1b52476d5"
+  },
+  {
+   "rules": 2,
+   "seed": 30064,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    3
+   ],
+   "hash": "f3dc7f58b61fb0bc"
+  },
+  {
+   "rules": 2,
+   "seed": 30065,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    4,
+    0
+   ],
+   "hash": "9455be664e02e94a"
+  },
+  {
+   "rules": 2,
+   "seed": 30066,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    4
+   ],
+   "hash": "4b6b5ea112698f3d"
+  },
+  {
+   "rules": 2,
+   "seed": 30067,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    4,
+    4
+   ],
+   "hash": "62677e118dd81265"
+  },
+  {
+   "rules": 2,
+   "seed": 30068,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    2
+   ],
+   "hash": "9b581395508d12c1"
+  },
+  {
+   "rules": 2,
+   "seed": 30069,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "4780f68b708894ef"
+  },
+  {
+   "rules": 2,
+   "seed": 30070,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    4,
+    0
+   ],
+   "hash": "cc1a59cc3d25c350"
+  },
+  {
+   "rules": 2,
+   "seed": 30071,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    2
+   ],
+   "hash": "e82265d1e59a2fbd"
+  },
+  {
+   "rules": 2,
+   "seed": 30072,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    4,
+    1
+   ],
+   "hash": "31c254705f43292c"
+  },
+  {
+   "rules": 2,
+   "seed": 30073,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "e14ff26c1a19a7e0"
+  },
+  {
+   "rules": 2,
+   "seed": 30074,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "7e6e40c131957d1d"
+  },
+  {
+   "rules": 2,
+   "seed": 30075,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    5,
+    3
+   ],
+   "hash": "56e941926f9021fe"
+  },
+  {
+   "rules": 2,
+   "seed": 30076,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "6409444eb7b68332"
+  },
+  {
+   "rules": 2,
+   "seed": 30077,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "8f9282d3ba14c87f"
+  },
+  {
+   "rules": 2,
+   "seed": 30078,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "07699d397914e27d"
+  },
+  {
+   "rules": 2,
+   "seed": 30079,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    5
+   ],
+   "hash": "19bbf31603c6b2aa"
+  },
+  {
+   "rules": 2,
+   "seed": 30080,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "d8f45ea99b3c0a7d"
+  },
+  {
+   "rules": 2,
+   "seed": 30081,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    2,
+    2
+   ],
+   "hash": "a056dab836f3a26c"
+  },
+  {
+   "rules": 2,
+   "seed": 30082,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    0
+   ],
+   "hash": "134030ee66248bd2"
+  },
+  {
+   "rules": 2,
+   "seed": 30083,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    3
+   ],
+   "hash": "be73d29ca2972cc0"
+  },
+  {
+   "rules": 2,
+   "seed": 30084,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "fbc8218385d846df"
+  },
+  {
+   "rules": 2,
+   "seed": 30085,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "0dddea8403eded28"
+  },
+  {
+   "rules": 2,
+   "seed": 30086,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    6
+   ],
+   "hash": "8d51ba38b4f9e33c"
+  },
+  {
+   "rules": 2,
+   "seed": 30087,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    5
+   ],
+   "hash": "6e1c6503f328299f"
+  },
+  {
+   "rules": 2,
+   "seed": 30088,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "47d0d82528ccbcd1"
+  },
+  {
+   "rules": 2,
+   "seed": 30089,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    3
+   ],
+   "hash": "d006207ab4f6ecee"
+  },
+  {
+   "rules": 2,
+   "seed": 30090,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    2,
+    3
+   ],
+   "hash": "71cf9dbf9ff04e73"
+  },
+  {
+   "rules": 2,
+   "seed": 30091,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    6,
+    3
+   ],
+   "hash": "70739e22b86017fe"
+  },
+  {
+   "rules": 2,
+   "seed": 30092,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    4,
+    4
+   ],
+   "hash": "a3584d6be5f16c7f"
+  },
+  {
+   "rules": 2,
+   "seed": 30093,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    3,
+    3
+   ],
+   "hash": "f39eccac0da16238"
+  },
+  {
+   "rules": 2,
+   "seed": 30094,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "f37f460bcd4d1077"
+  },
+  {
+   "rules": 2,
+   "seed": 30095,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "caab3cfec867e25a"
+  },
+  {
+   "rules": 2,
+   "seed": 30096,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "928c148c30484cc0"
+  },
+  {
+   "rules": 2,
+   "seed": 30097,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    6,
+    5
+   ],
+   "hash": "b17aa3f79e06d0e3"
+  },
+  {
+   "rules": 2,
+   "seed": 30098,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    4,
+    1
+   ],
+   "hash": "2dfc225ab3734166"
+  },
+  {
+   "rules": 2,
+   "seed": 30099,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "e226c0889fd6fe74"
+  },
+  {
+   "rules": 2,
+   "seed": 30100,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "3b766e617db24975"
+  },
+  {
+   "rules": 2,
+   "seed": 30101,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    5,
+    0
+   ],
+   "hash": "9da503e22ef57526"
+  },
+  {
+   "rules": 2,
+   "seed": 30102,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "c16a46d744115e9b"
+  },
+  {
+   "rules": 2,
+   "seed": 30103,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    4,
+    9
+   ],
+   "hash": "7bccadd350c0ef37"
+  },
+  {
+   "rules": 2,
+   "seed": 30104,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "e0626feffeb356e3"
+  },
+  {
+   "rules": 2,
+   "seed": 30105,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    4
+   ],
+   "hash": "a936eb8647193d32"
+  },
+  {
+   "rules": 2,
+   "seed": 30106,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    5,
+    2
+   ],
+   "hash": "07019cdebfbe801a"
+  },
+  {
+   "rules": 2,
+   "seed": 30107,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    3
+   ],
+   "hash": "a79773c96bb3f815"
+  },
+  {
+   "rules": 2,
+   "seed": 30108,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "74d8aa383122df3c"
+  },
+  {
+   "rules": 2,
+   "seed": 30109,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    4
+   ],
+   "hash": "a7ffba04e8a6b808"
+  },
+  {
+   "rules": 2,
+   "seed": 30110,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    0
+   ],
+   "hash": "255dc300cd7c0764"
+  },
+  {
+   "rules": 2,
+   "seed": 30111,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "fdc6ae8ac1b8ad06"
+  },
+  {
+   "rules": 2,
+   "seed": 30112,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    4,
+    0
+   ],
+   "hash": "9bf7f54362c49797"
+  },
+  {
+   "rules": 2,
+   "seed": 30113,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "bde6710aa75a6b56"
+  },
+  {
+   "rules": 2,
+   "seed": 30114,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "36ee3bf71b28e23b"
+  },
+  {
+   "rules": 2,
+   "seed": 30115,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    5,
+    5
+   ],
+   "hash": "b14f605d52302ed1"
+  },
+  {
+   "rules": 2,
+   "seed": 30116,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    1
+   ],
+   "hash": "7f45b3c37bbe00ef"
+  },
+  {
+   "rules": 2,
+   "seed": 30117,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "e02ffaf561695121"
+  },
+  {
+   "rules": 2,
+   "seed": 30118,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    5
+   ],
+   "hash": "364185f00eeb750c"
+  },
+  {
+   "rules": 2,
+   "seed": 30119,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "bcd1c5d171dbac6d"
+  },
+  {
+   "rules": 2,
+   "seed": 30120,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "1dfc8b43e8343477"
+  },
+  {
+   "rules": 2,
+   "seed": 30121,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "937b6f3e1d19f4c2"
+  },
+  {
+   "rules": 2,
+   "seed": 30122,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    1
+   ],
+   "hash": "17185b324644520e"
+  },
+  {
+   "rules": 2,
+   "seed": 30123,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    2,
+    3
+   ],
+   "hash": "12ad3660d2329e4c"
+  },
+  {
+   "rules": 2,
+   "seed": 30124,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    4,
+    1
+   ],
+   "hash": "f63bfb7ed4ed09ba"
+  },
+  {
+   "rules": 2,
+   "seed": 30125,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    4
+   ],
+   "hash": "29d00dff15c632b3"
+  },
+  {
+   "rules": 2,
+   "seed": 30126,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "737b995602895b8a"
+  },
+  {
+   "rules": 2,
+   "seed": 30127,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    1
+   ],
+   "hash": "505d933d83d89749"
+  },
+  {
+   "rules": 2,
+   "seed": 30128,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    4,
+    1
+   ],
+   "hash": "84836786f646895a"
+  },
+  {
+   "rules": 2,
+   "seed": 30129,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    2,
+    5
+   ],
+   "hash": "bd1cb324e05ff700"
+  },
+  {
+   "rules": 2,
+   "seed": 30130,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    3
+   ],
+   "hash": "3ec1914f07a4592b"
+  },
+  {
+   "rules": 2,
+   "seed": 30131,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    5
+   ],
+   "hash": "fc88a527bb530acb"
+  },
+  {
+   "rules": 2,
+   "seed": 30132,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "64a319ed43003851"
+  },
+  {
+   "rules": 2,
+   "seed": 30133,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    1
+   ],
+   "hash": "c67399bf2065b2bb"
+  },
+  {
+   "rules": 2,
+   "seed": 30134,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    3
+   ],
+   "hash": "b35ed5ffce2caa9b"
+  },
+  {
+   "rules": 2,
+   "seed": 30135,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "b06f72105c847cf4"
+  },
+  {
+   "rules": 2,
+   "seed": 30136,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    3
+   ],
+   "hash": "52eaca6db69206d9"
+  },
+  {
+   "rules": 2,
+   "seed": 30137,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    3
+   ],
+   "hash": "67152396111867b2"
+  },
+  {
+   "rules": 2,
+   "seed": 30138,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "3fbb5e9d2d6e6b09"
+  },
+  {
+   "rules": 2,
+   "seed": 30139,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    9
+   ],
+   "hash": "31171e290e57bc35"
+  },
+  {
+   "rules": 2,
+   "seed": 30140,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    4
+   ],
+   "hash": "0f1828034e3795ff"
+  },
+  {
+   "rules": 2,
+   "seed": 30141,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    4,
+    1
+   ],
+   "hash": "5d9de093c943fb7f"
+  },
+  {
+   "rules": 2,
+   "seed": 30142,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    0
+   ],
+   "hash": "501de95e9ec987ba"
+  },
+  {
+   "rules": 2,
+   "seed": 30143,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "42c2da3ae248e816"
+  },
+  {
+   "rules": 2,
+   "seed": 30144,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "4ea04cfe78a59e7a"
+  },
+  {
+   "rules": 2,
+   "seed": 30145,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    6
+   ],
+   "hash": "6e2b6e44d57eca48"
+  },
+  {
+   "rules": 2,
+   "seed": 30146,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    3
+   ],
+   "hash": "bcf8adf403422050"
+  },
+  {
+   "rules": 2,
+   "seed": 30147,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "571a4e15ca32b489"
+  },
+  {
+   "rules": 2,
+   "seed": 30148,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    0
+   ],
+   "hash": "ca3238dbf35c533f"
+  },
+  {
+   "rules": 2,
+   "seed": 30149,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    4,
+    2
+   ],
+   "hash": "18d4bac10736f09d"
+  },
+  {
+   "rules": 2,
+   "seed": 30150,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    5,
+    2
+   ],
+   "hash": "e06a84f3ba65775f"
+  },
+  {
+   "rules": 2,
+   "seed": 30151,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    3
+   ],
+   "hash": "9c08dcc3a9f4ec37"
+  },
+  {
+   "rules": 2,
+   "seed": 30152,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    4
+   ],
+   "hash": "9991e36cf98f9fa0"
+  },
+  {
+   "rules": 2,
+   "seed": 30153,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "21662cb0e6765064"
+  },
+  {
+   "rules": 2,
+   "seed": 30154,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    0
+   ],
+   "hash": "7a3150084b166a34"
+  },
+  {
+   "rules": 2,
+   "seed": 30155,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    6,
+    6
+   ],
+   "hash": "07b2ef38a0c820ac"
+  },
+  {
+   "rules": 2,
+   "seed": 30156,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "319830e0e1aa4e04"
+  },
+  {
+   "rules": 2,
+   "seed": 30157,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "4d43ccf1dc3a41f5"
+  },
+  {
+   "rules": 2,
+   "seed": 30158,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "4a863ef0aa28307c"
+  },
+  {
+   "rules": 2,
+   "seed": 30159,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "a4388ba6a42b6d3a"
+  },
+  {
+   "rules": 2,
+   "seed": 30160,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    5,
+    1
+   ],
+   "hash": "12bdd5e59a2d73c9"
+  },
+  {
+   "rules": 2,
+   "seed": 30161,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "24f0d871cc6ef935"
+  },
+  {
+   "rules": 2,
+   "seed": 30162,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    6,
+    7
+   ],
+   "hash": "5561ebc850e4d57c"
+  },
+  {
+   "rules": 2,
+   "seed": 30163,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    4,
+    2
+   ],
+   "hash": "7123ce9eaa6d5aba"
+  },
+  {
+   "rules": 2,
+   "seed": 30164,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    3
+   ],
+   "hash": "1cfb7f9a5706f186"
+  },
+  {
+   "rules": 2,
+   "seed": 30165,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    9,
+    1
+   ],
+   "hash": "f55c88f884a0502c"
+  },
+  {
+   "rules": 2,
+   "seed": 30166,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    4
+   ],
+   "hash": "0d8f2c7e91cafb52"
+  },
+  {
+   "rules": 2,
+   "seed": 30167,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    6,
+    1
+   ],
+   "hash": "4823e062dd7e6a36"
+  },
+  {
+   "rules": 2,
+   "seed": 30168,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "7e6f76fda49820e1"
+  },
+  {
+   "rules": 2,
+   "seed": 30169,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "4bd66b004a5980bc"
+  },
+  {
+   "rules": 2,
+   "seed": 30170,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "75433838cecd6864"
+  },
+  {
+   "rules": 2,
+   "seed": 30171,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    0,
+    4
+   ],
+   "hash": "980273f7f6efa9ab"
+  },
+  {
+   "rules": 2,
+   "seed": 30172,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "65ebab37c121f9bb"
+  },
+  {
+   "rules": 2,
+   "seed": 30173,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "423790e9a6e71315"
+  },
+  {
+   "rules": 2,
+   "seed": 30174,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "398d6e82f151bc5e"
+  },
+  {
+   "rules": 2,
+   "seed": 30175,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    5
+   ],
+   "hash": "b544123133fcafcd"
+  },
+  {
+   "rules": 2,
+   "seed": 30176,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "726ba4b225011db6"
+  },
+  {
+   "rules": 2,
+   "seed": 30177,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    2,
+    3
+   ],
+   "hash": "b82a0bda6fa0816e"
+  },
+  {
+   "rules": 2,
+   "seed": 30178,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    4
+   ],
+   "hash": "3d4ceb1dfe92b471"
+  },
+  {
+   "rules": 2,
+   "seed": 30179,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    5
+   ],
+   "hash": "5233da3c0d1cc6f8"
+  },
+  {
+   "rules": 2,
+   "seed": 30180,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    4
+   ],
+   "hash": "cadf7e36bf37c59a"
+  },
+  {
+   "rules": 2,
+   "seed": 30181,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    2
+   ],
+   "hash": "ca6f5223023322ef"
+  },
+  {
+   "rules": 2,
+   "seed": 30182,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "3526a4e60abcaeea"
+  },
+  {
+   "rules": 2,
+   "seed": 30183,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    2,
+    2
+   ],
+   "hash": "9df3f111eeb7ef55"
+  },
+  {
+   "rules": 2,
+   "seed": 30184,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    1
+   ],
+   "hash": "9a02132e0f178bd2"
+  },
+  {
+   "rules": 2,
+   "seed": 30185,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    3
+   ],
+   "hash": "dafe5fb27794c4c6"
+  },
+  {
+   "rules": 2,
+   "seed": 30186,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    3,
+    0
+   ],
+   "hash": "43d47194e15553d0"
+  },
+  {
+   "rules": 2,
+   "seed": 30187,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    4,
+    3
+   ],
+   "hash": "787d842d39702139"
+  },
+  {
+   "rules": 2,
+   "seed": 30188,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    3
+   ],
+   "hash": "247f9a387e8bd07c"
+  },
+  {
+   "rules": 2,
+   "seed": 30189,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    4
+   ],
+   "hash": "9097e914f8653740"
+  },
+  {
+   "rules": 2,
+   "seed": 30190,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "562e5b70f6898ee4"
+  },
+  {
+   "rules": 2,
+   "seed": 30191,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "2618d63ba3a87477"
+  },
+  {
+   "rules": 2,
+   "seed": 30192,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    3,
+    2
+   ],
+   "hash": "2793a9769c3197aa"
+  },
+  {
+   "rules": 2,
+   "seed": 30193,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    2
+   ],
+   "hash": "b08ebf47f29a1023"
+  },
+  {
+   "rules": 2,
+   "seed": 30194,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    3,
+    1
+   ],
+   "hash": "5ae6da617a3f9865"
+  },
+  {
+   "rules": 2,
+   "seed": 30195,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    4,
+    2
+   ],
+   "hash": "245ce26b5685cd8f"
+  },
+  {
+   "rules": 2,
+   "seed": 30196,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "0a42d85f13727a53"
+  },
+  {
+   "rules": 2,
+   "seed": 30197,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    5
+   ],
+   "hash": "5f87f1bf8e09a7ab"
+  },
+  {
+   "rules": 2,
+   "seed": 30198,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    5
+   ],
+   "hash": "9d2b1f8241a91da6"
+  },
+  {
+   "rules": 2,
+   "seed": 30199,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    3
+   ],
+   "hash": "41342422dad16a26"
+  },
+  {
+   "rules": 2,
+   "seed": 30200,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    4
+   ],
+   "hash": "43b178b1b2d217ed"
+  },
+  {
+   "rules": 2,
+   "seed": 30201,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    2,
+    4
+   ],
+   "hash": "46bb1af871441a74"
+  },
+  {
+   "rules": 2,
+   "seed": 30202,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "2e40ecdd7f323ef9"
+  },
+  {
+   "rules": 2,
+   "seed": 30203,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "5540d904535985c8"
+  },
+  {
+   "rules": 2,
+   "seed": 30204,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    0,
+    1
+   ],
+   "hash": "b4151726caaef12a"
+  },
+  {
+   "rules": 2,
+   "seed": 30205,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    5,
+    1
+   ],
+   "hash": "fa930f90303ea904"
+  },
+  {
+   "rules": 2,
+   "seed": 30206,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "7a00098581cb1059"
+  },
+  {
+   "rules": 2,
+   "seed": 30207,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    3,
+    2
+   ],
+   "hash": "6ecf787699e2a082"
+  },
+  {
+   "rules": 2,
+   "seed": 30208,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "18834d4c6cf0cb88"
+  },
+  {
+   "rules": 2,
+   "seed": 30209,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    5,
+    0
+   ],
+   "hash": "79ebfec63d4cb45a"
+  },
+  {
+   "rules": 2,
+   "seed": 30210,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    2,
+    3
+   ],
+   "hash": "bc6c9c47cbe234a3"
+  },
+  {
+   "rules": 2,
+   "seed": 30211,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    4
+   ],
+   "hash": "6727447cc1c39c58"
+  },
+  {
+   "rules": 2,
+   "seed": 30212,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    4,
+    3
+   ],
+   "hash": "36e98d373d30c86b"
+  },
+  {
+   "rules": 2,
+   "seed": 30213,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    6
+   ],
+   "hash": "54f7dc1e3551ff12"
+  },
+  {
+   "rules": 2,
+   "seed": 30214,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    4
+   ],
+   "hash": "66803e5c5b1c4be8"
+  },
+  {
+   "rules": 2,
+   "seed": 30215,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    5,
+    1
+   ],
+   "hash": "a4ea154eed75671a"
+  },
+  {
+   "rules": 2,
+   "seed": 30216,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    2,
+    2
+   ],
+   "hash": "251a070be829f97f"
+  },
+  {
+   "rules": 2,
+   "seed": 30217,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    3,
+    3
+   ],
+   "hash": "725585131fce6277"
+  },
+  {
+   "rules": 2,
+   "seed": 30218,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    1,
+    3
+   ],
+   "hash": "e499c82b1bc35087"
+  },
+  {
+   "rules": 2,
+   "seed": 30219,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    6,
+    3
+   ],
+   "hash": "113dc5dff4dbbd4b"
+  },
+  {
+   "rules": 2,
+   "seed": 30220,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "5055bac5c5c6cec9"
+  },
+  {
+   "rules": 2,
+   "seed": 30221,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    0
+   ],
+   "hash": "7c0707e9859afab5"
+  },
+  {
+   "rules": 2,
+   "seed": 30222,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "14f071d2bb725cb6"
+  },
+  {
+   "rules": 2,
+   "seed": 30223,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    2
+   ],
+   "hash": "91936bbf2d7b7933"
+  },
+  {
+   "rules": 2,
+   "seed": 30224,
+   "home": 0,
+   "away": 3,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "88689077e6868263"
+  },
+  {
+   "rules": 2,
+   "seed": 30225,
+   "home": 1,
+   "away": 8,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    4,
+    2
+   ],
+   "hash": "46076d59958d189d"
+  },
+  {
+   "rules": 2,
+   "seed": 30226,
+   "home": 2,
+   "away": 13,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    4
+   ],
+   "hash": "d11c1223babefda7"
+  },
+  {
+   "rules": 2,
+   "seed": 30227,
+   "home": 3,
+   "away": 2,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    2,
+    3
+   ],
+   "hash": "805c48d642eaece2"
+  },
+  {
+   "rules": 2,
+   "seed": 30228,
+   "home": 4,
+   "away": 7,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    1,
+    1
+   ],
+   "hash": "ed5ad86abf3db38e"
+  },
+  {
+   "rules": 2,
+   "seed": 30229,
+   "home": 5,
+   "away": 12,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    7
+   ],
+   "hash": "bf830ef4b9434090"
+  },
+  {
+   "rules": 2,
+   "seed": 30230,
+   "home": 6,
+   "away": 1,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    5,
+    0
+   ],
+   "hash": "495693d85d245e9c"
+  },
+  {
+   "rules": 2,
+   "seed": 30231,
+   "home": 7,
+   "away": 6,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    3,
+    0
+   ],
+   "hash": "e966354f8d57417b"
+  },
+  {
+   "rules": 2,
+   "seed": 30232,
+   "home": 8,
+   "away": 11,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    8,
+    1
+   ],
+   "hash": "b0e76ff46570a9e0"
+  },
+  {
+   "rules": 2,
+   "seed": 30233,
+   "home": 9,
+   "away": 0,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    2
+   ],
+   "hash": "8f7eea72116a3906"
+  },
+  {
+   "rules": 2,
+   "seed": 30234,
+   "home": 10,
+   "away": 5,
+   "offside": true,
+   "knockout": true,
+   "score": [
+    3,
+    1
+   ],
+   "hash": "965f198f8c6ee8b3"
+  },
+  {
+   "rules": 2,
+   "seed": 30235,
+   "home": 11,
+   "away": 10,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    1,
+    2
+   ],
+   "hash": "0cb7f4b14640f0fd"
+  },
+  {
+   "rules": 2,
+   "seed": 30236,
+   "home": 12,
+   "away": 15,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    0
+   ],
+   "hash": "084b419255479576"
+  },
+  {
+   "rules": 2,
+   "seed": 30237,
+   "home": 13,
+   "away": 4,
+   "offside": false,
+   "knockout": true,
+   "score": [
+    1,
+    4
+   ],
+   "hash": "d239252114205dd5"
+  },
+  {
+   "rules": 2,
+   "seed": 30238,
+   "home": 14,
+   "away": 9,
+   "offside": true,
+   "knockout": false,
+   "score": [
+    2,
+    1
+   ],
+   "hash": "411ea378523d0d74"
+  },
+  {
+   "rules": 2,
+   "seed": 30239,
+   "home": 15,
+   "away": 14,
+   "offside": false,
+   "knockout": false,
+   "score": [
+    0,
+    0
+   ],
+   "hash": "a9d82f9758255c13"
+  }
+ ]
+}
