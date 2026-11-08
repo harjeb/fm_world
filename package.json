@@ -23,6 +23,12 @@
     "mcp": "tsx mcp/index.ts",
     "fm:import": "tsx scripts/import-fm.ts",
     "traits:gen": "tsx scripts/generate-star-traits.ts",
+    "commentary:gen": "tsx scripts/build-commentary.ts",
+    "pes:baseline": "tsx scripts/pes-baseline.ts",
+    "pes:equiv": "tsx scripts/pes-equivalence.ts",
+    "pes:diff": "tsx scripts/pes-diff.ts",
+    "pes:freerun": "tsx scripts/pes-freerun.ts",
+    "pes:game": "tsx scripts/pes-game.ts",
     "typecheck": "tsc --noEmit",
     "build:site": "vite build",
     "build:safe": "bash scripts/build-safe.sh"
