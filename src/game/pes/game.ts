@@ -8,7 +8,7 @@
  */
 import { ROLES } from '../data/roles.ts'
 import { customSpotFor } from '../squad.ts'
-import { MATCH_TACTICS, autoSubDisplaySeconds } from '../match/management.ts'
+import { MATCH_MENTALITY_LABELS, MATCH_TACTICS, autoSubDisplaySeconds } from '../match/management.ts'
 import { opponentSide } from '../match/team.ts'
 import { LOGIC_MATCH_SECONDS } from '../match/time.ts'
 import type { MatchMentality, Tactics } from '../types.ts'
@@ -111,6 +111,7 @@ export class PesGame {
       contact: this.settlement,
     })
     this.settlement.markStarters(this.match)
+    this.settlement.note('kickoff', 'none', `${game.teams[0].name} 对 ${game.teams[1].name}，比赛开始。`, {}, 0)
   }
 
   static restore(snapshot: PesMatchSnapshot): PesGame {
@@ -136,8 +137,15 @@ export class PesGame {
     if (m.phase === 'end') return
     const second = Math.floor(m.time)
     m.step()
-    // 自动换人每个模拟秒检查一次：用“这一步跨过了整数秒”判断，不需要额外状态，读档后行为一致
-    if (Math.floor(m.time) !== second) this.applyAutoSubs()
+    const g = this.state
+    g.clock = m.time
+    g.half = m.half
+    // 每个模拟秒：自动换人检查、把控球 / 体力 / 比分同步到游戏层（比赛页的数据条读它们）。
+    // 用“这一步跨过了整数秒”判断，不需要额外状态，读档后行为一致
+    if (Math.floor(m.time) !== second) {
+      this.applyAutoSubs()
+      this.syncLive()
+    }
     if (m.finished) this.afterRegulation()
   }
 
@@ -152,15 +160,37 @@ export class PesGame {
     return this.state
   }
 
+  /** 比赛进行中，把物理量同步到游戏层：比分、控球秒数、体力。 */
+  private syncLive(): void {
+    const g = this.state
+    const m = this.match
+    g.score.home = m.teams[0].score
+    g.score.away = m.teams[1].score
+    g.stats.home.possession = m.teams[0].stats.possession
+    g.stats.away.possession = m.teams[1].stats.possession
+    for (const t of m.teams) {
+      for (const q of t.players) {
+        const player = this.settlement.gamePlayer(q.pid)
+        player.stamina = q.stamina * player.maxStamina
+        player.stats.staminaLeft = Math.round(q.stamina * 100)
+      }
+    }
+  }
+
   private afterRegulation(): void {
     const g = this.state
     if (g.finished) return
     this.settlement.finalize(this.match)
-    if (this.settlement.knockout && g.score.home === g.score.away) this.shootout()
+    if (this.settlement.knockout && g.score.home === g.score.away) {
+      this.settlement.note('info', 'none', '常规时间结束，双方战平，比赛进入点球大战。', {}, g.durationSeconds)
+      this.shootout()
+    }
     g.finished = true
     g.phase = 'finished'
     g.half = 2
     g.clock = g.durationSeconds
+    const shootoutText = g.shootout ? `点球大战 ${g.shootout.home} : ${g.shootout.away}。` : ''
+    this.settlement.note('full', 'none', `全场结束。 ${shootoutText}比分 ${g.score.home} : ${g.score.away}。`, {}, g.durationSeconds)
   }
 
   /* ---------- 点球大战（不进 2D，沿用现有引擎的纯结算） ---------- */
@@ -187,6 +217,7 @@ export class PesGame {
       if (goal) state[side]++
       if (side === 'home') state.attemptsHome++
       else state.attemptsAway++
+      this.settlement.note('penalty', side, `${team.name} ${taker.name} 主罚${goal ? '命中' : '罚失'}（点球大战 ${state.home} : ${state.away}）。`, { playerId: taker.id }, g.durationSeconds)
       state.suddenDeath = state.attemptsHome >= 5 && state.attemptsAway >= 5
       const remainingHome = Math.max(0, 5 - state.attemptsHome)
       const remainingAway = Math.max(0, 5 - state.attemptsAway)
@@ -202,7 +233,7 @@ export class PesGame {
     return this.state.teams[side === 'home' ? 0 : 1].bench.filter((player) => !player.cameOff && !player.onPitch)
   }
 
-  substitute(outId: string, inId: string, side: MatchSide = 'home', autoReason?: 'injury' | 'timed' | 'stamina'): { ok: boolean; error?: string } {
+  substitute(outId: string, inId: string, side: MatchSide = 'home', autoReason?: 'injury' | 'timed' | 'stamina', at?: number): { ok: boolean; error?: string } {
     const g = this.state
     if (g.finished) return { ok: false, error: '比赛已经结束' }
     const team = g.teams[side === 'home' ? 0 : 1]
@@ -246,10 +277,12 @@ export class PesGame {
     this.settlement.bind(physical.pid, incoming)
     this.settlement.markLeft(outPid, this.match.time)
     this.settlement.markJoined(physical.pid, this.match.time)
+    const reason = autoReason ? `自动换人（${{ injury: '受伤', timed: '定时', stamina: '体力' }[autoReason]}）` : '换人'
+    this.settlement.note('sub', side, `${reason}：${incoming.name} 换下 ${out.name}。`, { playerId: incoming.id }, at ?? this.match.time)
     return { ok: true }
   }
 
-  setTactics(mentality: MatchMentality, side: MatchSide = 'home'): { ok: boolean; error?: string } {
+  setTactics(mentality: MatchMentality, side: MatchSide = 'home', at?: number): { ok: boolean; error?: string } {
     const g = this.state
     if (g.finished) return { ok: false, error: '比赛已经结束' }
     if (mentality !== 'attack' && mentality !== 'balanced' && mentality !== 'defend') return { ok: false, error: '无效的比赛心态' }
@@ -259,6 +292,7 @@ export class PesGame {
     team.mentality = mentality
     this.match.teams[side === 'home' ? 0 : 1].tactics = tacticsOf(tactics)
     g.instructions.push({ step: g.step, kind: 'tactic', mentality, tactics: { ...tactics } })
+    this.settlement.note('tactic', side, `教练调整战术：${MATCH_MENTALITY_LABELS[mentality]}。`, {}, at ?? this.match.time)
     return { ok: true }
   }
 

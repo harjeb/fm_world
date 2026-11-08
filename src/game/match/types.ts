@@ -252,6 +252,8 @@ export type MatchState = {
   decisionRng: RngState
   resultRng: RngState
   lastGoalBy: MatchSide | null
+  /** 新引擎（rulesVersion 4）的物理比赛存档；现有引擎没有这一项。 */
+  pes?: unknown
 }
 
 export type MatchTeamInput = {

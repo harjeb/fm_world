@@ -1,5 +1,6 @@
 import { shortName } from './format.ts'
-import type { MatchEngine } from '../game/match/engine.ts'
+import type { GameEngine } from '../game/pes/engine.ts'
+import { drawPesPitch, isPesEngine, pesFrameCount, pesMotionSnapshot, pesViewEngine, resetPesView } from './pes-pitch.ts'
 import { PITCH_LENGTH, PITCH_WIDTH } from '../game/match/team.ts'
 import { game, ui } from './state.ts'
 import { inkOn } from './components.ts'
@@ -42,7 +43,7 @@ function reducedMotion(): boolean {
 }
 
 /** 比赛正在走：联赛一直走，友谊赛没暂停就走。这时画面持续刷新。 */
-function isLive(engine: MatchEngine): boolean {
+function isLive(_engine: GameEngine): boolean {
   if (reducedMotion()) return false
   return !!game.activeMatch?.context.isLeague || ui.matchPlaying
 }
@@ -86,7 +87,7 @@ function drawGround(ctx: CanvasRenderingContext2D, w: number, h: number, pad: nu
   ctx.strokeRect(w - pad, y(32) - goalH / 2, 10, goalH)
 }
 
-function drawFrame(canvas: HTMLCanvasElement, engine: MatchEngine, sample: PlaybackSample): void {
+function drawFrame(canvas: HTMLCanvasElement, engine: GameEngine, sample: PlaybackSample): void {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   const w = canvas.width
@@ -314,7 +315,7 @@ function loop(): void {
   view.frame = null
   const canvas = document.getElementById('pitch') as HTMLCanvasElement | null
   const engine = ui.matchEngine
-  if (!canvas || !engine || !view.playback) return
+  if (!canvas || !engine || isPesEngine(engine) || !view.playback) return
   drawFrame(canvas, engine, advanceMotion(performance.now(), false))
   if (isLive(engine) && view.playback.pending) view.frame = window.requestAnimationFrame(loop)
 }
@@ -328,6 +329,11 @@ export function drawPitch(): void {
   const canvas = document.getElementById('pitch') as HTMLCanvasElement | null
   const engine = ui.matchEngine
   if (!canvas || !engine) return
+  // 新引擎（pes2d 物理比赛）有自己的画法：连续运动、球的高度，不走下面的动作队列
+  if (isPesEngine(engine)) {
+    drawPesPitch(canvas, engine, matchKits(pesViewEngine(engine)))
+    return
+  }
   const now = performance.now()
   const state = engine.state
   const key = `${game.activeMatch?.startedAt}|${state.seed}|${state.teams.map((team) => team.id).join('|')}`
@@ -384,12 +390,12 @@ export function drawPitch(): void {
 
 /** 当前运动层的画面状态（位置与速度），给冒烟测试和排查用。 */
 export function pitchMotionSnapshot(): { id: string; x: number; y: number; speed: number }[] {
-  return view.motion?.sample(1) ?? []
+  return isPesEngine(ui.matchEngine) ? pesMotionSnapshot() : view.motion?.sample(1) ?? []
 }
 
 /** 已经推进了多少个 10 Hz 运动 tick；给冒烟测试和性能检查用。 */
 export function pitchMotionTicks(): number {
-  return view.motion?.ticks ?? 0
+  return isPesEngine(ui.matchEngine) ? pesFrameCount() : view.motion?.ticks ?? 0
 }
 
 /** 最后一次射门/终场动作播完后再进入赛后页。 */
@@ -399,6 +405,7 @@ export function pitchPlaybackPending(): boolean {
 
 /** 离开比赛或换一场时清空，避免下一场从上一场的位置滑入。 */
 export function resetPitchView(): void {
+  resetPesView()
   if (view.frame !== null) window.cancelAnimationFrame(view.frame)
   view.frame = null
   view.playback = null

@@ -12,7 +12,8 @@
 
 - [比赛机会与进球模型修改方案](docs/match-scoring-rebalance-plan.md) 已实施：比赛显示为完整 90 分钟，联赛现实推进约 10 分钟；机会驱动起脚，按空门/单刀/禁区空位/普通/困难场景设置射正保底，射正后仍由门将能力决定是否扑出。旧活动比赛保留旧规则恢复路径。
 - [引擎优化：跑位、传球选择与瞬移](docs/engine-optimisation.md)：修掉直塞把接球人瞬移、引擎跑速比画面快 40%、前锋不跑/中场全在球后面、总回传门将；附 GFootball / open-football / RCSS 的调研结论与取舍。
-- [2D 比赛连续性与动作节奏改造方案](docs/match-continuity-design.md)（阶段 A + B / v3 已实施）：阶段 A 把出脚提前到片段前 12–30%，普通传球平均等待从约 1.68 秒降到 0.41 秒；阶段 B 用 0.1 秒权威 tick、每 0.2 秒一帧的连续轨迹和事件边界裁决，让跑位、接应和逼抢在动作中途持续更新。用户观看的比赛走 v3，后台批量比赛固定 v2；`npm run match:timing` 可复现节奏/连续性基线。
+- [2D 比赛连续性与动作节奏改造方案](docs/match-continuity-design.md)（阶段 A + B / v3 已实施）：阶段 A 把出脚提前到片段前 12–30%，普通传球平均等待从约 1.68 秒降到 0.41 秒；阶段 B 用 0.1 秒权威 tick、每 0.2 秒一帧的连续轨迹和事件边界裁决，让跑位、接应和逼抢在动作中途持续更新。v3 现在只服务旧存档里进行中的比赛，后台批量比赛固定 v2；`npm run match:timing` 可复现节奏/连续性基线。
+- [比赛引擎移植方案（路线 C）](docs/pes2d-migration-plan.md)（阶段 0–3 + 接入游戏流程已实施）：玩家看得见的比赛（联赛、友谊赛）现在走新引擎 `src/game/pes/`——pes2d 的 60 Hz 物理比赛负责跑位和球路，每个接触点（传球、射门、抢断、争顶、犯规……）的成败仍由现有的概率结算内核按真实属性裁决；球场由 `src/ui/pes-pitch.ts` 直接画物理比赛（连续运动、球的高度）。存档是同一种 `MatchState`（`rulesVersion = 4`，带 `pes` 物理存档），按存档自动选引擎。`npm run pes:diff`（无结算模型时与原版 pes2d 逐位对照）、`npm run pes:equiv`（结算内核与旧引擎逐位对照）、`npm run pes:game`（整场统计）、`node scripts/pes-animation-smoke.mjs`（真浏览器冒烟，自带 vite 与无头 Chrome）。
 - [2D 动画研究：换引擎还是加回合](docs/2d-animation-research.md)：既有 10 Hz 运动层的研究与实现记录；运动插值不等于行为连续性，其“只加运动层即可”的结论由上述新方案补充修正。
 - [2D 动画与轨迹回放](docs/match-animation.md)：赛果、轨迹和显示时钟分离，正常速度下连续跑位/飞球，支持战术包络视图；友谊赛隔离预演，联赛只播放已确认动作。可导出 25fps 数据交给原版 soccerAnimate 离线渲染，R/GIF 渲染需另装 R，并非嵌入式网页 R 引擎。
 

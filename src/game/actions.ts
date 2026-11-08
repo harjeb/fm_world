@@ -1,5 +1,6 @@
 import { ALL_ATTRIBUTES, type AITeam, type AttrKey, type Attributes, type AutoSubPlan, type EventDef, type EventEffect, type EventOption, type GameState, type Lineup, type MatchMentality, type MatchRecord, type Player, type Position, type TrainingAutoConfig, type TrainingExchange, type TrainingSession } from './types.ts'
-import type { MatchEngine } from './match/engine.ts'
+import type { GameEngine } from './pes/engine.ts'
+import { restoreEngine } from './pes/engine.ts'
 import { MatchEngine as Engine } from './match/engine.ts'
 import type { MatchState } from './match/types.ts'
 import { branchProbability, createTrainingSession, partnersAt, planTraining, performTrainingAction, trainingActionsTotal, resolveTrainingEvent, confirmCandidate, discardCandidate, keepCandidate, TRAINING_ENERGY_COST, type PerformResult, type ResolveResult, type TrainingRequest, type TrainingPlan } from './training.ts'
@@ -671,12 +672,12 @@ export function startSingleChallenge(game: GameState, aiId: string, now = Date.n
   return { ok: result.ok, error: result.error }
 }
 
-export function restoreActiveEngine(game: GameState): MatchEngine | null {
+export function restoreActiveEngine(game: GameState): GameEngine | null {
   if (!game.activeMatch) return null
-  return Engine.restore(game.activeMatch.engineState as MatchState, !game.activeMatch.context.isLeague)
+  return restoreEngine(game.activeMatch.engineState as MatchState, !game.activeMatch.context.isLeague)
 }
 
-export function syncActiveEngine(game: GameState, engine: MatchEngine, now = Date.now()): void {
+export function syncActiveEngine(game: GameState, engine: GameEngine, now = Date.now()): void {
   if (!game.activeMatch) return
   recordMatchInjuries(game, engine.state, game.activeMatch.context.isLeague ? game.activeMatch.startedAt : now, game.activeMatch.context.isLeague)
   game.activeMatch.engineState = engine.serialize()
@@ -684,7 +685,7 @@ export function syncActiveEngine(game: GameState, engine: MatchEngine, now = Dat
   saveGame(game)
 }
 
-export function finishMatch(game: GameState, engine: MatchEngine, now = Date.now()): MatchRecord | null {
+export function finishMatch(game: GameState, engine: GameEngine, now = Date.now()): MatchRecord | null {
   const record = finishActiveMatch(game, engine, now)
   if (record) saveGame(game)
   return record
@@ -696,7 +697,7 @@ export function simulateSeasonRound(game: GameState, now = Date.now()): { ok: bo
   return result
 }
 
-export function changeMatchTactics(game: GameState, engine: MatchEngine, mentality: MatchMentality): { ok: boolean; error?: string } {
+export function changeMatchTactics(game: GameState, engine: GameEngine, mentality: MatchMentality): { ok: boolean; error?: string } {
   const active = game.activeMatch
   const eventClock = active?.context.isLeague && active ? leagueMatchClockAt(active, active.elapsedSeconds ?? 0) : undefined
   const result = engine.setTactics(mentality, active?.context.homeAway, eventClock)
@@ -704,7 +705,7 @@ export function changeMatchTactics(game: GameState, engine: MatchEngine, mentali
   return result
 }
 
-export function makeSubstitution(game: GameState, engine: MatchEngine, outId: string, inId: string): { ok: boolean; error?: string } {
+export function makeSubstitution(game: GameState, engine: GameEngine, outId: string, inId: string): { ok: boolean; error?: string } {
   const active = game.activeMatch
   const eventClock = active?.context.isLeague && active ? leagueMatchClockAt(active, active.elapsedSeconds ?? 0) : undefined
   const result = engine.substitute(outId, inId, active?.context.homeAway, eventClock)

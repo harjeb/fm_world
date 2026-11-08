@@ -3,6 +3,7 @@ import type { AITeam } from '../types.ts'
 import type { MatchTeamInput } from './types.ts'
 import { FORMATIONS } from '../data/formations.ts'
 import { MatchEngine, normalizePossession } from './engine.ts'
+import { PesEngine, type GameEngine } from '../pes/engine.ts'
 import { autoFillLineup, validateLineup } from '../squad.ts'
 import { prepareMatchInjuries } from '../injury.ts'
 import { LOGIC_MATCH_SECONDS } from './time.ts'
@@ -151,7 +152,11 @@ export function fixtureScorers(state: ReturnType<MatchEngine['serialize']>): {
   }
 }
 
-export function buildMatchEngineForGame(game: GameState, context: MatchContext, ai: AITeam, now = Date.now(), suspended?: Set<string>, rulesVersion?: number): MatchEngine {
+/**
+ * 创建一场比赛的引擎。没有指定 rulesVersion 时用新引擎（pes2d 物理 + 现有结算内核）；
+ * 指定了就用对应版本的现有引擎（后台 AI 对 AI 用 v2，只要赛果）。
+ */
+export function buildMatchEngineForGame(game: GameState, context: MatchContext, ai: AITeam, now = Date.now(), suspended?: Set<string>, rulesVersion?: number): GameEngine {
   const playerInput = teamInputFromLineup(game.roster, game.lineup, {
     id: 'player',
     name: game.clubName,
@@ -160,6 +165,18 @@ export function buildMatchEngineForGame(game: GameState, context: MatchContext, 
   })
   if (game.autoSubs) playerInput.autoSubs = structuredClone(game.autoSubs)
   const aiInput = teamInputFromAI(ai, suspended)
+  if (rulesVersion === undefined) {
+    const pes = new PesEngine({
+      seed: context.seed,
+      home: context.homeAway === 'home' ? playerInput : aiInput,
+      away: context.homeAway === 'home' ? aiInput : playerInput,
+      knockout: !context.isLeague,
+      durationSeconds: context.durationSeconds,
+      offside: context.offside ?? false,
+    })
+    prepareMatchInjuries(pes.state, game.injuries, now)
+    return pes
+  }
   const engine = new MatchEngine({
     seed: context.seed,
     home: context.homeAway === 'home' ? playerInput : aiInput,

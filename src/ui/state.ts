@@ -2,7 +2,7 @@ import type { AttrKey, AutoSubPlan, GameState, Lineup, Position, SkillId } from 
 import { loadGame, saveGame, setTeamPickPending } from '../game/state.ts'
 import { createWorldGame, type ClubPreview } from '../game/world.ts'
 import { restoreActiveEngine } from '../game/actions.ts'
-import type { MatchEngine } from '../game/match/engine.ts'
+import type { GameEngine } from '../game/pes/engine.ts'
 import type { SeasonGoal, SquadRole } from '../game/negotiation.ts'
 
 /** 谈判弹窗的状态：报价和承诺放在这里，成功率每次重绘时重算。 */
@@ -78,7 +78,7 @@ export type UIState = {
   pitchView: 'match' | 'tracking'
   /** 友谊赛当前这一步在屏幕上播多久。 */
   matchStepMs: number
-  matchEngine: MatchEngine | null
+  matchEngine: GameEngine | null
   matchTimer: number | null
   coachPanel: boolean
   /** 当前这次教练暂停是否已经扣过一次（同一暂停里多次调整不再扣）。 */

@@ -1,6 +1,6 @@
 import type { Player } from '../../game/types.ts'
 import { restoreActiveEngine } from '../../game/actions.ts'
-import type { MatchEngine } from '../../game/match/engine.ts'
+import type { GameEngine } from '../../game/pes/engine.ts'
 import { MATCH_MENTALITY_LABELS } from '../../game/match/management.ts'
 import { displayClock, MATCH_DISPLAY_SECONDS } from '../../game/match/time.ts'
 import type { MatchPlayerState, MatchTeamState } from '../../game/match/types.ts'
@@ -10,9 +10,10 @@ import { clubLook, compareRow, crest, distinctKit, emptyState, icon, meter, pane
 import { clockText, esc, positionLabel, tacticText } from '../format.ts'
 import { game, ui } from '../state.ts'
 import { renderCommentary, renderEvent } from './review.ts'
+import { isPesEngine, pesViewEngine } from '../pes-pitch.ts'
 
 /** 比赛双方的队服色：自己用俱乐部主色，对手撞色时换备用色。 */
-export function matchKits(engine: MatchEngine): { home: string; away: string } {
+export function matchKits(engine: GameEngine): { home: string; away: string } {
   const side = game.activeMatch?.context.homeAway ?? 'home'
   const [home, away] = engine.state.teams
   const mine = clubLook(PLAYER_TEAM_ID).color
@@ -52,7 +53,7 @@ function playerStatusTable(team: MatchTeamState, title: string, color: string): 
   return `<div class="status-team"><div class="status-head"><i class="swatch" style="background:${esc(color)}"></i><b>${esc(title)}</b><span class="muted small">换人 ${team.subsUsed} / 3</span></div><table class="dt plain status-table"><tbody>${rows}</tbody></table></div>`
 }
 
-function coachPanel(engine: MatchEngine): string {
+function coachPanel(engine: GameEngine): string {
   const side = game.activeMatch!.context.homeAway
   const team = engine.getTeam(side)
   const players = team.players.filter((player) => player.onPitch)
@@ -77,7 +78,8 @@ function coachPanel(engine: MatchEngine): string {
 export function renderMatch(): string {
   if (!game.activeMatch) return emptyState('没有进行中的比赛。')
   if (!ui.matchEngine) ui.matchEngine = restoreActiveEngine(game)
-  const engine = ui.matchEngine
+  // 新引擎的联赛：比分、数据和文字直播读画面引擎，不会比球场上的动作早到
+  const engine = ui.matchEngine ? pesViewEngine(ui.matchEngine) : null
   if (!engine) return emptyState('比赛状态读取失败。')
   const state = engine.state
   const home = state.teams[0]
@@ -100,7 +102,7 @@ export function renderMatch(): string {
         <div class="score-main">
           <b>${state.score.home} : ${state.score.away}</b>
           ${state.shootout ? `<small>点球 ${state.shootout.home} : ${state.shootout.away}</small>` : ''}
-          <span class="score-clock">${state.half === 1 ? '上半场' : '下半场'} · <span ${active.context.isLeague ? 'data-league-clock' : ''}>${clockText(matchClock)}</span> / ${clockText(MATCH_DISPLAY_SECONDS)}</span>
+          <span class="score-clock">${state.half === 1 ? '上半场' : '下半场'} · <span ${active.context.isLeague ? 'data-league-clock' : isPesEngine(engine) ? 'data-pes-clock' : ''}>${clockText(matchClock)}</span> / ${clockText(MATCH_DISPLAY_SECONDS)}</span>
         </div>
         <div class="score-team away"><div class="score-team-text"><b>${esc(away.name)}</b><small>${active.context.homeAway === 'away' ? '你 · ' : ''}${active.context.isLeague ? `联赛第 ${active.context.round} 轮` : '友谊赛'}</small></div>${crest({ name: away.name, color: kits.away }, 42)}</div>
       </div>
@@ -108,12 +110,12 @@ export function renderMatch(): string {
         <div class="seg" role="group" aria-label="球场视图"><button class="${ui.pitchView === 'match' ? 'active' : ''}" data-pitch-view="match">比赛</button><button class="${ui.pitchView === 'tracking' ? 'active' : ''}" data-pitch-view="tracking">战术轨迹</button></div>
         ${active.context.isLeague
           ? `<span class="muted small">联赛按现实时间进行，不可暂停、加速或跳过。</span><button class="btn small ${ui.coachPanel ? 'active' : ''}" data-action="match-coach">${icon('coach', 13)}教练调整</button>`
-          : `<span class="muted small steps">${state.step} 步 · 种子 ${active.context.seed}</span>
+          : `<span class="muted small steps">${state.step} ${isPesEngine(engine) ? '次判定' : '步'} · 种子 ${active.context.seed}</span>
             <button class="btn ${ui.matchPlaying ? '' : 'primary'}" data-action="match-toggle">${ui.matchPlaying ? `${icon('pause', 14)}暂停` : state.finished ? '已结束' : `${icon('play', 14)}开始 / 继续`}</button>
             <div class="seg" role="group" aria-label="比赛速度"><button class="${ui.matchSpeed === 4000 ? 'active' : ''}" data-speed="4000">慢</button><button class="${ui.matchSpeed === 2700 ? 'active' : ''}" data-speed="2700">正常</button><button class="${ui.matchSpeed === 1350 ? 'active' : ''}" data-speed="1350">快</button></div>
             <button class="btn small" data-action="match-skip">${icon('skip', 13)}跳过到终场</button>
             <button class="btn small ${ui.coachPanel ? 'active' : ''}" data-action="match-coach" ${ui.coachPanel || active.coachPausesLeft > 0 ? '' : 'disabled'}>${icon('coach', 13)}${ui.coachPanel ? '收起调整' : `教练暂停（${active.coachPausesLeft}）`}</button>`}
-        ${active.context.isLeague ? `<span class="muted small steps">${state.step} 步 · 种子 ${active.context.seed}</span>` : ''}
+        ${active.context.isLeague ? `<span class="muted small steps">${state.step} ${isPesEngine(engine) ? '次判定' : '步'} · 种子 ${active.context.seed}</span>` : ''}
       </div>
       ${ui.coachPanel ? coachPanel(engine) : ''}
       <div class="match-grid">

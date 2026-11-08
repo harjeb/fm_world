@@ -56,6 +56,7 @@ import { icon } from './icons.ts'
 import { morph } from './morph.ts'
 import { installTooltips, syncTooltip } from './tooltip.ts'
 import { drawPitch, pitchPlaybackPending, resetPitchView } from './pitch-canvas.ts'
+import { isPesEngine, setPesViewHooks } from './pes-pitch.ts'
 import { game, replay, resetReplay, setGame, stopReplay, ui, type ClubTab, type Screen, type SquadSortKey, type TransferTab } from './state.ts'
 import { renderAcademy } from './screens/academy.ts'
 import { renderChallenge } from './screens/challenge.ts'
@@ -429,7 +430,8 @@ function scheduleReplay(): void {
 }
 
 function ensureTimer(): void {
-  if (ui.screen !== 'match' || !ui.matchPlaying || !ui.matchEngine || !game.activeMatch || game.activeMatch.context.isLeague) {
+  // 新引擎由球场的画面循环按帧推进（pes-pitch.ts），不用这个按步计时的定时器
+  if (ui.screen !== 'match' || !ui.matchPlaying || !ui.matchEngine || !game.activeMatch || game.activeMatch.context.isLeague || isPesEngine(ui.matchEngine)) {
     stopTimer()
     return
   }
@@ -1697,6 +1699,11 @@ window.addEventListener('beforeunload', () => {
   saveGame(game)
 })
 
+setPesViewHooks({
+  refresh: () => render(),
+  finished: () => completeMatch(),
+  save: (engine) => syncActiveEngine(game, engine),
+})
 window.setInterval(tickRealtimeLeague, 1000)
 // 竞拍倒计时每秒走，不用整页重绘。
 window.setInterval(() => {

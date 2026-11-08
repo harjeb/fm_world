@@ -1,7 +1,7 @@
 import type { AITeam, Fixture, GameState, MatchContext, MatchRecord, SeasonState, SeasonTableRow } from './types.ts'
 import { splitSeed } from './rng.ts'
 import { buildMatchEngineForGame, createMatchRecord, fixtureScorers, simulateAIvsAIState } from './match/setup.ts'
-import { MatchEngine } from './match/engine.ts'
+import type { GameEngine } from './pes/engine.ts'
 import { ENERGY_RECOVERY_PER_GAME_DAY } from './training.ts'
 import { awardSeasonPrize } from './economy.ts'
 import { squadLimitError } from './market.ts'
@@ -544,7 +544,7 @@ export function startChallenge(game: GameState, aiId: string, now = Date.now()):
   return { ok: true, context }
 }
 
-export function finishActiveMatch(game: GameState, engine: MatchEngine, now = Date.now()): MatchRecord | null {
+export function finishActiveMatch(game: GameState, engine: GameEngine, now = Date.now()): MatchRecord | null {
   const active = game.activeMatch
   if (!active) return null
   const state = engine.serialize()
