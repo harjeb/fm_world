@@ -22,6 +22,7 @@
     "balance": "tsx scripts/balance.ts",
     "mcp": "tsx mcp/index.ts",
     "fm:import": "tsx scripts/import-fm.ts",
+    "legend:preview": "tsx scripts/legend-preview.ts",
     "traits:gen": "tsx scripts/generate-star-traits.ts",
     "commentary:gen": "tsx scripts/build-commentary.ts",
     "pes:baseline": "tsx scripts/pes-baseline.ts",
