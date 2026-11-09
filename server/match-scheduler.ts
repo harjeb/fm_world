@@ -5,6 +5,7 @@ import { recordMatchDiscipline } from '../src/game/discipline.ts'
 import { splitSeed } from '../src/game/rng.ts'
 import { LINEUP_LOCK_MS } from '../src/game/season.ts'
 import { RECENT_MATCHES } from '../src/game/transfer-rules.ts'
+import { settleCondition } from '../src/game/condition.ts'
 import { MatchQueue } from './match-queue.ts'
 import { emptyMatchBook, matchJobId, type LockedTeam, type MatchBook, type MatchJob, type MatchJobResult } from './match-job.ts'
 
@@ -55,11 +56,9 @@ export class MatchScheduler {
         kickoffAt, lockedAt: kickoffAt - LINEUP_LOCK_MS, seed: splitSeed(division.seed, `queued-${fixture.round}-${fixture.homeId}-${fixture.awayId}`),
         gameDayMs: division.gameDayMs, home: structuredClone(home), away: structuredClone(away),
       }
+      // 锁定到开球还有一段时间：快照里的体能按每小时的恢复结算到开球那一刻。
       for (const locked of [job.home, job.away]) {
-        for (const player of locked.team.players) {
-          const at = this.shared.matchBook!.conditionAt[player.id]
-          if (at !== undefined) player.condition = Math.min(100, (player.condition ?? 100) + Math.max(0, kickoffAt - at) / job.gameDayMs * 7)
-        }
+        for (const player of locked.team.players) settleCondition(player, kickoffAt, job.gameDayMs, this.shared.matchBook!.conditionAt[player.id])
       }
       this.queue.enqueue(job)
     }
@@ -108,9 +107,9 @@ export class MatchScheduler {
     // 只合并比赛产生的变化，绝不拿锁定时的整队/整个账号覆盖期间的训练、转会或经营。
     for (const team of Object.values(this.shared.teams ?? {})) for (const player of team.players) {
       if (!ids.has(player.id)) continue
-      const previous = book.conditionAt[player.id]
-      const recovery = previous === undefined ? 0 : Math.max(0, job.kickoffAt - previous) / job.gameDayMs * 7
-      player.condition = Math.max(1, Math.min(100, (player.condition ?? 100) + recovery) - (result.conditionLoss[player.id] ?? 0))
+      // 先把休息恢复结算到开球，再扣这场的消耗（踢满 90 分钟 70 点，见 condition.ts）。
+      settleCondition(player, job.kickoffAt, job.gameDayMs, book.conditionAt[player.id])
+      player.condition = Math.max(1, Math.min(100, (player.condition ?? 100) - (result.conditionLoss[player.id] ?? 0)))
     }
     for (const id of ids) book.conditionAt[id] = job.kickoffAt
   }

@@ -39,7 +39,7 @@ import { seasonStats } from '../game/player-stats.ts'
 import { injuryUntil } from '../game/injury.ts'
 import { ensureCards, playerCards } from '../game/cards.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeStarTraits } from '../game/names.ts'
-import { catchUpSeason, lineupLockState, skipToPostseasonEnd } from '../game/season.ts'
+import { catchUpSeason, lineupLockState, settleGameConditions, skipToPostseasonEnd } from '../game/season.ts'
 import { fetchFriendlyTeam, isOnlineMode } from '../online.ts'
 import { advanceLeagueRealtime, leagueDisplayClock } from '../game/realtime.ts'
 import { displayClock } from '../game/match/time.ts'
@@ -1815,10 +1815,18 @@ document.addEventListener('keydown', (event) => {
 })
 
 function autoAdvanceSeason(): void {
-  if (isOnlineMode() || game.activeMatch || game.season.finished) return
+  if (isOnlineMode()) return
+  // 体能每小时按比例恢复一次：比赛进行中、赛季结束后也照常结算（联机由服务器结算）。
+  if (game.activeMatch || game.season.finished) {
+    if (settleGameConditions(game, Date.now())) persist()
+    return
+  }
   const offersBefore = pendingOfferIds()
   const result = catchUpSeason(game)
-  if (result.advanced <= 0) return
+  if (result.advanced <= 0) {
+    if (result.rested) persist()
+    return
+  }
   refreshClubMarket(game, Math.max(1, game.season.round - 1))
   ui.notice = `已自动结算 ${result.advanced} 轮比赛。`
   announceNewOffers(offersBefore)

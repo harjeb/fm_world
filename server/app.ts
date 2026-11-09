@@ -12,7 +12,8 @@ import type { AIClubState, AITeam, Player, WorldState } from '../src/game/types.
 import { caOf } from '../src/game/ca.ts'
 import { refreshAILineup, refreshAILineups, repairLineup } from '../src/game/squad.ts'
 import { displayCA, mainAttrsFor } from '../src/game/rating.ts'
-import { kickoffAtForRound, postseasonStartAt, roundsKickedOff, seasonEndAt } from '../src/game/calendar.ts'
+import { GAME_DAY_MS, kickoffAtForRound, postseasonStartAt, roundsKickedOff, seasonEndAt } from '../src/game/calendar.ts'
+import { settleCondition } from '../src/game/condition.ts'
 import { splitSeed } from '../src/game/rng.ts'
 import { awardRoundIncome, awardSeasonPrize, economyOf } from '../src/game/economy.ts'
 import { advanceLeagueRealtime } from '../src/game/realtime.ts'
@@ -408,9 +409,13 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     for (const [id, until] of Object.entries(game?.injuries ?? {})) injuries[id] = Math.max(injuries[id] ?? 0, until)
     const bans = { ...sharedWorld.matchBook!.suspensions }
     for (const [id, ban] of Object.entries(game?.suspensions ?? {})) if (sharedWorld.matchBook!.conditionAt[id] === undefined) bans[id] = ban
-    const conditions = new Map(team.players.map((player) => [player.id, player.condition]))
+    const conditions = new Map(team.players.map((player) => [player.id, player]))
+    const withCondition = (player: Player): Player => {
+      const shared = conditions.get(player.id)
+      return shared ? { ...player, condition: shared.condition, recoveryAt: shared.recoveryAt } : { ...player }
+    }
     return {
-      team: game ? { ...team, name: game.clubName, players: game.roster.map((player) => ({ ...player, condition: conditions.get(player.id) ?? player.condition })), lineup: game.lineup, formationId: game.lineup.formationId, tactics: game.lineup.tactics } : team,
+      team: game ? { ...team, name: game.clubName, players: game.roster.map(withCondition), lineup: game.lineup, formationId: game.lineup.formationId, tactics: game.lineup.tactics } : team,
       autoSubs: game ? game.autoSubs ?? { timed: [], staminaBelow: null, onInjury: false } : undefined,
       injuries,
       suspended: Object.entries(bans).filter(([, ban]) => ban.matches > 0).map(([id]) => id),
@@ -452,7 +457,12 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (changed) {
       account.appliedMatchIds = [...applied]
       const live = new Map((sharedWorld.teams?.[clubId]?.players ?? []).map((player) => [player.id, player]))
-      for (const player of game.roster) if (live.has(player.id)) player.condition = live.get(player.id)!.condition
+      for (const player of game.roster) {
+        const shared = live.get(player.id)
+        if (!shared) continue
+        player.condition = shared.condition
+        player.recoveryAt = shared.recoveryAt
+      }
       if (coachedMatch && game.season.finished) awardSeasonPrize(game)
     }
     const book = sharedWorld.matchBook!
@@ -927,7 +937,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const sharedFixturesChanged = pullSharedFixtures(account)
       const sharedWorldChanged = pullSharedWorld(account)
       const publishedMatchesChanged = syncPublishedMatches(account)
-      let migrated = markedShared || elevenUpgraded || signaturesAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || sharedTeamsChanged || sharedFixturesChanged || sharedWorldChanged || publishedMatchesChanged || absorbInto(account)
+      // 体能每小时按比例恢复（见 condition.ts）；接管球队的名单以账号为准，publishClub 再写回共享名册。
+      const rested = settleAccountConditions(account)
+      let migrated = markedShared || elevenUpgraded || signaturesAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || sharedTeamsChanged || sharedFixturesChanged || sharedWorldChanged || publishedMatchesChanged || rested || absorbInto(account)
       const economyAdded = account.game.economy == null || account.game.economy.fans === undefined
       economyOf(account.game)
       const progressingLeague = !!account.game.activeMatch?.context.isLeague
@@ -963,9 +975,34 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
   }
 
+  /** 全服比赛日长度（测试里可能缩短）；体能每个游戏日的六分之一结算一次。 */
+  const sharedGameDayMs = (): number => sharedWorld.world.divisions[0]?.gameDayMs ?? GAME_DAY_MS
+
+  /** 接管球队的一线队体能结算到现在；没有上过全服比赛的人从现在开始记。 */
+  function settleAccountConditions(account: Account): boolean {
+    const clubId = ownedClubId(account)
+    if (!clubId || account.game.world?.clubs.find((club) => club.id === 'player')?.squadKey !== clubId) return false
+    const book = sharedWorld.matchBook!
+    let changed = false
+    for (const player of account.game.roster) if (settleCondition(player, now(), sharedGameDayMs(), book.conditionAt[player.id])) changed = true
+    return changed
+  }
+
+  /** 无主 AI 球队的体能结算到现在（有教练的球队走账号，见 settleAccountConditions）。 */
+  function settleSharedConditions(): void {
+    const book = sharedWorld.matchBook!
+    let changed = false
+    for (const [clubId, team] of Object.entries(sharedWorld.teams ?? {})) {
+      if (sharedWorld.owners[clubId]) continue
+      for (const player of team.players) if (settleCondition(player, now(), sharedGameDayMs(), book.conditionAt[player.id])) changed = true
+    }
+    if (changed) persistWorld()
+  }
+
   /** 同步全服公开赛果；仿真只在后台队列子进程中运行，和是否有人在线无关。 */
   function advanceAllMatches(): void {
     advanceSharedWorld()
+    settleSharedConditions()
     for (const account of db.accounts) advanceAccount(account)
   }
 
@@ -1659,6 +1696,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         const known = account.game.roster.find((item) => item.id === player.id)
         // 联机比赛体能由已发布的服务器结果决定；旧页面不能把赛后体能恢复成赛前值。
         if (known && sharedWorld.matchBook!.conditionAt[player.id] !== undefined) player.condition = known.condition
+        // 体能恢复由服务器每小时结算，页面不能改结算时间。
+        if (known) player.recoveryAt = known.recoveryAt
+        else delete player.recoveryAt
         if (known?.unhappy) player.unhappy = known.unhappy
         else delete player.unhappy
       }

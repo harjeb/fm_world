@@ -193,6 +193,8 @@ export type Player = {
   contract?: Contract
   /** 精力上次结算的时间（毫秒）；精力按经过的游戏日连续恢复。 */
   energyAt?: number
+  /** 体能恢复上次结算到的时间（毫秒）；体能每小时按比例恢复，见 condition.ts。 */
+  recoveryAt?: number
   /** 不满（拒绝了别的球队的高价报价）：截止时间之前精力恢复大减。 */
   unhappy?: { until: number; reason: string }
   /** 自由市场当天补进来的随机球员（第几个游戏日）；第二天没人买就销毁，签下后清掉。 */

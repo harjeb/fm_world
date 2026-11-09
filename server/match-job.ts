@@ -5,6 +5,7 @@ import { createMatchRecord, fixtureScorers, teamInputFromAI } from '../src/game/
 import { prepareMatchInjuries } from '../src/game/injury.ts'
 import { facilityLevel } from '../src/game/economy.ts'
 import { LOGIC_MATCH_SECONDS, matchRealSeconds } from '../src/game/match/time.ts'
+import { matchConditionLoss } from '../src/game/condition.ts'
 
 export type MatchBook = {
   injuries: Record<string, number>
@@ -83,7 +84,8 @@ export function computeMatchJob(job: MatchJob): MatchJobResult {
   const appearances: Record<string, number> = Object.fromEntries([...job.home.team.players, ...job.away.team.players].map((player) => [player.id, 0]))
   for (const stat of record.playerStats) {
     const id = stat.sourceId ?? stat.playerId.split(':').slice(1).join(':')
-    conditionLoss[id] = stat.minutes * 0.1 + Math.max(0, 55 - stat.staminaLeft) * 0.35
+    // 踢满 90 分钟掉 70 点（见 condition.ts），和单机结算同一个算法。
+    conditionLoss[id] = matchConditionLoss(stat.minutes)
     appearances[id] = Math.round(stat.minutes)
   }
   const cards = state.log.flatMap((entry) => entry.card && entry.playerId ? [{ card: entry.card, playerId: entry.playerId }] : [])

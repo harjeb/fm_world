@@ -5,6 +5,7 @@ import type { GameEngine } from './pes/engine.ts'
 import { ENERGY_RECOVERY_PER_GAME_DAY } from './training.ts'
 import { RECENT_MATCHES } from './transfer-rules.ts'
 import { settleSquadEnergy, shiftEnergyClock } from './energy.ts'
+import { applyConditionLoss, settleConditions, shiftConditionClock } from './condition.ts'
 import { expireOffers, runLocalTransfers } from './transfers.ts'
 import { refreshLocalFreeMarket } from './free-market.ts'
 import { awardSeasonPrize } from './economy.ts'
@@ -251,11 +252,17 @@ export function matchdayCountdown(game: GameState, now = Date.now()): string {
   return `${hours} 小时 ${minutes} 分`
 }
 
-function recoverConditions(game: GameState, gameDays: number): void {
-  for (const player of [...game.roster, ...game.aiTeams.flatMap((team) => team.players)]) {
-    player.condition = clamp((player.condition ?? 100) + gameDays * 7, 1, 100)
-  }
-  // 一线队的训练精力按时间连续恢复（energy.ts），这里只补电脑球队的。
+/**
+ * 一线队和电脑球队全部球员的体能恢复结算到 at（每小时 +5，见 condition.ts）。
+ * 自动补算多轮比赛时按每轮的开球时间逐轮结算，再结算到现在，所以不会把比赛之后的休息算到比赛之前。
+ */
+export function settleGameConditions(game: GameState, at: number): boolean {
+  const players = [...game.roster, ...game.aiTeams.flatMap((team) => team?.players ?? [])]
+  return settleConditions(players, at, game.season?.gameDayMs ?? GAME_DAY_MS)
+}
+
+/** 电脑球队的训练精力按轮间隔补（一线队的按时间连续恢复，见 energy.ts）。体能按时间结算，不在这里。 */
+function recoverAIEnergy(game: GameState, gameDays: number): void {
   for (const player of game.aiTeams.flatMap((team) => team.players)) {
     player.energy = clamp((player.energy ?? 100) + gameDays * ENERGY_RECOVERY_PER_GAME_DAY, 0, 100)
   }
@@ -304,15 +311,19 @@ function skipCalendar(game: GameState, delta: number, now: number): { ok: boolea
   const gameDays = delta / game.season.gameDayMs
   // 先把精力结算到现在（没记过时间的从现在开始记），再把时钟往回拨跳过的时长，补上这段时间的恢复。
   settleSquadEnergy(game, now)
+  // 体能同理：先结算到现在，再把结算时间往回拨，跳过的这段按休息恢复。
+  settleGameConditions(game, now)
   shiftCalendar(game, delta)
   shiftEnergyClock(game, delta)
+  shiftConditionClock([...game.roster, ...game.aiTeams.flatMap((team) => team.players)], delta)
   // 报价的回复期限也按游戏日算：时间往前跳，期限跟着往前挪。
   for (const offer of game.transferOffers ?? []) {
     if (offer.status !== 'pending') continue
     offer.createdAt -= delta
     offer.expiresAt -= delta
   }
-  recoverConditions(game, gameDays)
+  recoverAIEnergy(game, gameDays)
+  settleGameConditions(game, now)
   settleSquadEnergy(game, now)
   shiftInjuries(game, delta, now)
   return { ok: true, gameDays }
@@ -363,8 +374,8 @@ function applyMatchConditions(game: GameState, stats: MatchRecord['playerStats']
     const id = stat.sourceId ?? stat.playerId.split(':').slice(1).join(':')
     const player = all.get(id)
     if (!player) continue
-    const loss = stat.minutes * 0.1 + Math.max(0, 55 - stat.staminaLeft) * 0.35
-    player.condition = clamp(player.condition - loss, 1, 100)
+    // 踢满 90 分钟掉 70 点（见 condition.ts）。
+    applyConditionLoss(player, stat.minutes)
   }
 }
 
@@ -433,7 +444,7 @@ export function simulateAIFixturesInRound(game: GameState, round = game.season.r
 }
 
 /** 真实时间推进：到点的轮次自动结算，包括玩家未进行的比赛。 */
-export function catchUpSeason(game: GameState, now = Date.now()): { advanced: number; records: MatchRecord[] } {
+export function catchUpSeason(game: GameState, now = Date.now()): { advanced: number; records: MatchRecord[]; rested: boolean } {
   const records: MatchRecord[] = []
   // 一线队精力按时间补算（比赛进行中、赛季结束后也照常恢复）。
   settleSquadEnergy(game, now)
@@ -441,12 +452,14 @@ export function catchUpSeason(game: GameState, now = Date.now()): { advanced: nu
   expireOffers(game, now)
   // 自由市场每个游戏日补到 200 人，前几天没人要的随机球员销毁（联机由服务器补）。
   refreshLocalFreeMarket(game, now)
-  if (game.activeMatch || game.season.finished) return { advanced: 0, records }
+  if (game.activeMatch || game.season.finished) return { advanced: 0, records, rested: settleGameConditions(game, now) }
   economyOf(game)
   const target = dueRound(game, now)
   let advanced = 0
   while (game.season.round < target && !game.season.finished) {
     const round = game.season.round
+    // 体能先按休息结算到这一轮开球，再踢这一轮（补算多轮时不把之后的休息提前算进来）。
+    settleGameConditions(game, Math.min(now, roundKickoffAt(game, round)))
     const playerMatch = playerFixture(game, round)
     if (playerMatch && !playerMatch.played) {
       const record = simulateFixture(game, playerMatch, true, roundKickoffAt(game, round))
@@ -468,14 +481,15 @@ export function catchUpSeason(game: GameState, now = Date.now()): { advanced: nu
     advanced++
     if (round < ROUNDS && !game.season.finished) {
       game.season.round = round + 1
-      recoverConditions(game, roundGapGameDays(game.season.startedAt, round, game.season.clockShift))
+      recoverAIEnergy(game, roundGapGameDays(game.season.startedAt, round, game.season.clockShift))
     }
     updateSeasonTable(game)
   }
+  const rested = settleGameConditions(game, now)
   for (const record of records) {
     if (record.isLeague && (record.homeId === PLAYER_TEAM_ID || record.awayId === PLAYER_TEAM_ID)) game.matchHistory.unshift(record)
   }
-  return { advanced, records }
+  return { advanced, records, rested }
 }
 
 /** 玩家比赛结束后推进：模拟同轮剩余 AI 比赛并进入下一轮。 */
@@ -485,6 +499,7 @@ export function advanceSeasonRound(game: GameState, now = Date.now()): { ok: boo
   const round = game.season.round
   const playerMatch = playerFixture(game, round)
   if (playerMatch && !playerMatch.played) return { ok: false, error: '本轮玩家比赛还未进行' }
+  settleGameConditions(game, now)
   simulateAIFixturesInRound(game, round, now)
   updateSeasonTable(game)
   if (!isRoundComplete(game, round)) return { ok: false, error: '本轮仍有比赛未完成' }
@@ -499,7 +514,7 @@ export function advanceSeasonRound(game: GameState, now = Date.now()): { ok: boo
   }
   if (!game.season.finished && round < ROUNDS) {
     game.season.round = round + 1
-    recoverConditions(game, roundGapGameDays(game.season.startedAt, round, game.season.clockShift))
+    recoverAIEnergy(game, roundGapGameDays(game.season.startedAt, round, game.season.clockShift))
   }
   updateSeasonTable(game)
   return { ok: true }
@@ -607,6 +622,8 @@ export function startLeagueMatch(game: GameState, now = Date.now()): { ok: boole
     durationSeconds: LEAGUE_MATCH_SECONDS,
     offside: true,
   }
+  // 开球前把休息恢复的体能结算到现在。
+  settleGameConditions(game, now)
   const engine = buildMatchEngineForGame(game, context, ai, now)
   game.activeMatch = {
     context,
@@ -638,6 +655,8 @@ export function startChallengeAgainstTeam(
     durationSeconds: LEAGUE_MATCH_SECONDS,
     offside: true,
   }
+  // 开球前把休息恢复的体能结算到现在。
+  settleGameConditions(game, now)
   const engine = buildMatchEngineForGame(game, context, ai, now)
   game.activeMatch = {
     context,
@@ -665,6 +684,8 @@ export function startChallenge(game: GameState, aiId: string, now = Date.now()):
     durationSeconds: LEAGUE_MATCH_SECONDS,
     offside: true,
   }
+  // 开球前把休息恢复的体能结算到现在。
+  settleGameConditions(game, now)
   const engine = buildMatchEngineForGame(game, context, ai, now)
   game.activeMatch = {
     context,
@@ -715,7 +736,7 @@ export function finishActiveMatch(game: GameState, engine: GameEngine, now = Dat
       }
       if (!game.season.finished && round < ROUNDS) {
         game.season.round = round + 1
-        recoverConditions(game, roundGapGameDays(game.season.startedAt, round, game.season.clockShift))
+        recoverAIEnergy(game, roundGapGameDays(game.season.startedAt, round, game.season.clockShift))
       }
       updateSeasonTable(game)
     }
