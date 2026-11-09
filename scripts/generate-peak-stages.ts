@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { PEAK_ROAD_SEED, nationalTeamIndexForStage, peakStageTargetCa } from '../src/game/data/peak-config.ts'
+import { PEAK_ROAD_SEED, PEAK_ROAD_VERSION, nationalTeamIndexForStage, peakStageTargetCa } from '../src/game/data/peak-config.ts'
 import { NATIONAL_TEAMS } from '../src/game/data/national-teams.ts'
 import type { LegendTeamDef } from '../src/game/data/legend-teams.ts'
 import { calibrateGeneratedTeam, generateTeam, generatedTeamSpec } from '../src/game/generated-team.ts'
@@ -29,7 +29,7 @@ for (let stage = 1; stage <= 100; stage++) {
     continue
   }
 
-  const seed = splitSeed(PEAK_ROAD_SEED, `peak-v1-${stage}`)
+  const seed = splitSeed(PEAK_ROAD_SEED, `peak-v${PEAK_ROAD_VERSION}-${stage}`)
   const spec = generatedTeamSpec(seed, targetCa, `peak-${stage}`, stage - 1)
   const { def, actualCa } = generateTeam(spec)
   let name = def.club

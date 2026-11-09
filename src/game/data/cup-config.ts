@@ -19,8 +19,6 @@ export type CupDef = {
   worldCount: number
   randomCount: number
   randomPool: CupPoolId
-  /** 夺冠奖励（金钱，占位）。 */
-  reward: number
   description: string
 }
 
@@ -39,7 +37,6 @@ export const CUP_DEFS: CupDef[] = [
     worldCount: 11,
     randomCount: 4,
     randomPool: 'casual',
-    reward: 1_000_000,
     description: '4 组 × 4 队，小组前 2 进 8 强；淘汰赛单场。12 支世界队（含你，11 支 AI）+ 4 支随机队。',
   },
   {
@@ -52,7 +49,6 @@ export const CUP_DEFS: CupDef[] = [
     worldCount: 7,
     randomCount: 8,
     randomPool: 'league',
-    reward: 3_000_000,
     description: '4 组 × 4 队，小组前 2 进 8 强；淘汰赛单场。7 支世界队 + 你 + 8 支随机队。',
   },
   {
@@ -66,7 +62,6 @@ export const CUP_DEFS: CupDef[] = [
     worldCount: 11,
     randomCount: 20,
     randomPool: 'champions',
-    reward: 8_000_000,
     description: '8 组 × 4 队，小组前 2 进 16 强；16 强单场，8 强/半决赛两回合，决赛单场。11 支世界队 + 你 + 20 支随机队。',
   },
 ]

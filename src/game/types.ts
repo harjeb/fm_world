@@ -900,7 +900,6 @@ export type PveState = {
   legends: Record<string, PveLegendRecord>
   peak: {
     cleared: number
-    rewardClaimed: number
     history: PvePeakHistoryEntry[]
   }
   cups: Record<string, CupRun>

@@ -4,7 +4,6 @@ import { caOf } from '../../game/ca.ts'
 import { LEGEND_TEAMS } from '../../game/data/legend-teams.ts'
 import { legendTeamById } from '../../game/legend.ts'
 import { PEAK_STAGE_COUNT, peakStageDef } from '../../game/peak.ts'
-import { peakStageReward } from '../../game/data/peak-config.ts'
 import { CUP_DEFS, type CupId } from '../../game/data/cup-config.ts'
 import { buildCupField, buildCupGroups } from '../../game/cup.ts'
 import { cupPlayerFixture } from '../../game/cup-run.ts'
@@ -183,7 +182,7 @@ function renderPeak(): string {
   const done = cleared >= PEAK_STAGE_COUNT
   const def = done ? null : peakStageDef(stage)
   const history = game.pve?.peak.history ?? []
-  const nextReward = done ? 0 : peakStageReward(stage)
+  const overCap = !done && def!.targetCa > 900
   const cells = Array.from({ length: PEAK_STAGE_COUNT }, (_, index) => {
     const number = index + 1
     const classes = ['peak-cell']
@@ -198,10 +197,10 @@ function renderPeak(): string {
         <div class="peak-stage-no">第 ${stage} 关</div>
         <div class="peak-stage-main">
           <b>${esc(def!.team.season ? `${def!.team.club} ${def!.team.season}` : def!.team.club)}</b>
-          <span class="muted">${def!.kind === 'national' ? '世界杯国家队' : '生成队'} · ${esc(def!.team.formationId)} · ${esc(tacticText(def!.team.tactics))}</span>
+          <span class="muted">${def!.kind === 'national' ? '世界杯国家队' : '生成队'} · ${esc(def!.team.formationId)} · ${esc(tacticText(def!.team.tactics))}${overCap ? ` ${tag('超当前成长上限', 'gold')}` : ''}</span>
           <span class="muted small">核心：${def!.team.players.slice(0, 3).map((player) => esc(player[0])).join('、')}</span>
         </div>
-        <div class="peak-stage-ca"><span>目标 CA</span><b>${def!.targetCa}</b><small>实际 ${def!.actualCa.toFixed(0)}</small>${nextReward ? `<small>奖励 +${nextReward.toLocaleString()}</small>` : ''}</div>
+        <div class="peak-stage-ca"><span>目标 CA</span><b>${def!.targetCa}</b><small>实际 ${def!.actualCa.toFixed(0)}</small></div>
         <button class="btn" data-action="start-peak-stage" data-stage="${stage}" ${game.activeMatch ? 'disabled' : ''}>挑战</button>
       </div>`
   return `
@@ -209,9 +208,10 @@ function renderPeak(): string {
       ${`<div class="tile"><span class="tile-label">已通关</span><b class="tile-value">${cleared} / ${PEAK_STAGE_COUNT}</b><span class="tile-sub">${done ? '全部完成' : `下一关：第 ${stage} 关`}</span></div>`}
       ${`<div class="tile"><span class="tile-label">当前阶段</span><b class="tile-value">${done ? '已完成' : def!.kind === 'national' ? '世界杯墙' : stage <= 20 ? '起步' : stage <= 60 ? '中段' : stage <= 80 ? '高强度' : '冲刺'}</b><span class="tile-sub">${stage <= 80 ? '生成队' : '固定国家队'}</span></div>`}
       ${`<div class="tile"><span class="tile-label">目标 CA</span><b class="tile-value">${done ? '—' : def!.targetCa}</b><span class="tile-sub">${done ? '' : `实际 ${def!.actualCa.toFixed(0)}`}</span></div>`}
-      ${`<div class="tile"><span class="tile-label">本关奖励</span><b class="tile-value">${nextReward ? nextReward.toLocaleString() : '—'}</b><span class="tile-sub">已领至第 ${game.pve?.peak.rewardClaimed ?? 0} 关</span></div>`}
+      ${`<div class="tile"><span class="tile-label">最近结果</span><b class="tile-value">${history[0] ? (history[0].won ? '胜' : '负') : '—'}</b><span class="tile-sub">${history[0] ? `第 ${history[0].stage} 关` : '还没有挑战记录'}</span></div>`}
     </div>
     ${panel('进度', `<div class="peak-track">${cells}</div><div class="peak-legend"><span><i class="done"></i>已通关</span><span><i class="current"></i>当前关</span><span><i class="boss"></i>每 10 关</span></div>`, { flush: true })}
+    ${overCap ? `<div class="banner info">${icon('info', 18)}<b>当前成长上限</b><span>当前版本球员 CA 上限约 800；第 ${stage} 关目标 ${def!.targetCa}，需要后续成长上限提升到 1500 后再挑战。</span></div>` : ''}
     ${panel('当前对手', current, { flush: true })}
     ${panel('最近闯关', history.length === 0
       ? '<p class="muted pad">还没有闯关记录。</p>'
@@ -256,10 +256,10 @@ function renderCupRun(run: CupRun): string {
     const group = run.groups[run.playerGroupIndex]
     const table = group ? sortCupTable(group.table) : []
     return `<div class="cup-run">
-      <div class="cup-run-head"><b>${CUP_STAGE_LABEL[run.stage]}</b><span class="muted">第 ${run.groupRound} / 3 轮</span></div>
+      <div class="cup-run-head"><b>${CUP_STAGE_LABEL[run.stage]}</b><span class="muted">第 ${run.groupRound} / 3 轮 · 前 2 出线</span></div>
       ${nextLine}
       ${group ? `<div class="table-scroll"><table class="dt"><thead><tr><th>小组</th><th class="num">场</th><th class="num">胜/平/负</th><th class="num">进:失</th><th class="num">积分</th></tr></thead><tbody>
-        ${table.map((row) => `<tr class="${row.teamId === 'player' ? 'strong' : ''}"><td>${row.teamId === 'player' ? tag('你', 'good') : ''} ${esc(cupTeamName(run, row.teamId))}</td><td class="num">${row.played}</td><td class="num">${row.won}/${row.drawn}/${row.lost}</td><td class="num">${row.gf}:${row.ga}</td><td class="num strong">${row.points}</td></tr>`).join('')}
+        ${table.map((row, index) => `<tr class="${row.teamId === 'player' ? 'strong' : ''} ${index < 2 ? 'cup-qualified' : ''}"><td>${row.teamId === 'player' ? tag('你', 'good') : ''} ${esc(cupTeamName(run, row.teamId))}</td><td class="num">${row.played}</td><td class="num">${row.won}/${row.drawn}/${row.lost}</td><td class="num">${row.gf}:${row.ga}</td><td class="num strong">${row.points}</td></tr>`).join('')}
       </tbody></table></div>` : ''}
       ${group ? `<div class="cup-fixtures">${group.fixtures.map((fixture) => `<div class="cup-fixture ${fixture.homeId === 'player' || fixture.awayId === 'player' ? 'mine' : ''}">
         <span>${esc(cupTeamName(run, fixture.homeId))}</span>
@@ -318,7 +318,6 @@ function renderCup(): string {
             ${tag(`${def.groups} 组`)}
             ${tag(`小组前 ${def.qualifiers}`)}
             ${def.twoLeggedFrom ? tag('8强/半决赛两回合', 'gold') : tag('淘汰赛单场')}
-            ${tag(`冠军 ${def.reward.toLocaleString()}`, 'gold')}
           </div>
           <div class="cup-actions">
             ${primary}

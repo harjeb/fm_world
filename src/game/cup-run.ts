@@ -18,7 +18,6 @@ import { cachedOwnerlessTeams } from './world.ts'
 import { simulateAIvsAI } from './match/setup.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 import { caOf } from './ca.ts'
-import { economyOf } from './economy.ts'
 
 const ROUND_ORDER: CupRound[] = ['r16', 'qf', 'sf', 'final']
 
@@ -329,7 +328,6 @@ function finishCup(game: GameState, run: CupRun, status: 'champion' | 'eliminate
     ...(leg.shootout ? { finalShootout: { ...leg.shootout } } : {}),
     ...(leg.matchId ? { matchId: leg.matchId } : {}),
   })
-  economyOf(game).balance += def.reward
 }
 
 function advanceAfterTie(game: GameState, run: CupRun, tie: CupTie): void {

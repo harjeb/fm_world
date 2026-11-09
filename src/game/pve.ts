@@ -1,7 +1,5 @@
 import type { GameState, MatchContext, MatchRecord, PveLegendRecord, PveState } from './types.ts'
 import { recordCupResult } from './cup-run.ts'
-import { peakStageReward } from './data/peak-config.ts'
-import { economyOf } from './economy.ts'
 
 const EMPTY_LEGEND: PveLegendRecord = { played: 0, won: 0, drawn: 0, lost: 0, goals: 0, conceded: 0 }
 
@@ -11,7 +9,7 @@ export function ensurePve(game: GameState): boolean {
   if (!game.pve) {
     game.pve = {
       legends: {},
-      peak: { cleared: 0, rewardClaimed: 0, history: [] },
+      peak: { cleared: 0, history: [] },
       cups: {},
       trophies: [],
     }
@@ -23,7 +21,7 @@ export function ensurePve(game: GameState): boolean {
     changed = true
   }
   if (!pve.peak || typeof pve.peak !== 'object') {
-    pve.peak = { cleared: 0, rewardClaimed: 0, history: [] }
+    pve.peak = { cleared: 0, history: [] }
     changed = true
   }
   if (!Array.isArray(pve.peak.history)) {
@@ -89,13 +87,6 @@ export function applyPveResult(game: GameState, record: MatchRecord, context: Ma
       score: { ...record.score },
     })
     if (pve.peak.history.length > 50) pve.peak.history.length = 50
-    if (record.result === 'win') {
-      pve.peak.cleared = Math.max(pve.peak.cleared, context.stage)
-      const reward = peakStageReward(context.stage)
-      if (reward > 0 && pve.peak.rewardClaimed < context.stage) {
-        economyOf(game).balance += reward
-        pve.peak.rewardClaimed = context.stage
-      }
-    }
+    if (record.result === 'win') pve.peak.cleared = Math.max(pve.peak.cleared, context.stage)
   }
 }

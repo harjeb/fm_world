@@ -4,7 +4,6 @@ import { buildKnockoutRound, cupPlayerFixture, enterCup } from '../src/game/cup-
 import { cupDefById } from '../src/game/data/cup-config.ts'
 import { finishMatch, restoreActiveEngine, startCupMatch } from '../src/game/actions.ts'
 import type { GameState } from '../src/game/types.ts'
-import { economyOf } from '../src/game/economy.ts'
 
 function playNext(game: GameState, cupId: 'community' | 'league' | 'champions'): void {
   const start = startCupMatch(game, cupId)
@@ -49,10 +48,9 @@ describe('杯赛跑通', () => {
     expect(game.challengeHistory.filter((record) => record.mode === 'cup')).toHaveLength(3)
   })
 
-  it('杯赛冠军写入奖杯和奖金；淘汰则结束', () => {
+  it('杯赛冠军写入奖杯；淘汰则结束', () => {
     const game = createInitialGame(5153)
     expect(enterCup(game, 'community').ok).toBe(true)
-    const before = economyOf(game).balance
     for (let index = 0; index < 10; index++) {
       const run = game.pve!.cups.community
       if (run.status !== 'active' || !cupPlayerFixture(run)) break
@@ -61,7 +59,6 @@ describe('杯赛跑通', () => {
     const run = game.pve!.cups.community
     if (run.status === 'champion') {
       expect(game.pve!.trophies.some((trophy) => trophy.cupId === 'community')).toBe(true)
-      expect(economyOf(game).balance).toBeGreaterThan(before)
     } else {
       expect(run.status).toBe('eliminated')
       expect(game.pve!.trophies).toHaveLength(0)

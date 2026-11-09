@@ -1344,3 +1344,7 @@ circle.pm-5 { fill: var(--h6); }
 .trophy-list { border-top: 1px solid var(--line); }
 .trophy-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
 .trophy-row .result-teams { flex: 1; }
+
+/* 杯赛：前 2 出线与玩家比赛 */
+.cup-qualified td:first-child { box-shadow: inset 3px 0 var(--good); }
+.cup-fixture.mine { border-color: var(--accent); background: rgba(79, 208, 138, 0.06); }

@@ -20,6 +20,7 @@
     "start": "tsx server/index.ts",
     "smoke": "node scripts/browser-smoke.mjs",
     "balance": "tsx scripts/balance.ts",
+    "balance:pve": "tsx scripts/balance-pve.ts",
     "mcp": "tsx mcp/index.ts",
     "fm:import": "tsx scripts/import-fm.ts",
     "legend:preview": "tsx scripts/legend-preview.ts",
