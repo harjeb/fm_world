@@ -39,7 +39,7 @@ import { seasonStats } from '../game/player-stats.ts'
 import { injuryUntil } from '../game/injury.ts'
 import { ensureCards, playerCards } from '../game/cards.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeStarTraits } from '../game/names.ts'
-import { catchUpSeason, skipToPostseasonEnd } from '../game/season.ts'
+import { catchUpSeason, lineupLockState, skipToPostseasonEnd } from '../game/season.ts'
 import { fetchFriendlyTeam, isOnlineMode } from '../online.ts'
 import { advanceLeagueRealtime, leagueDisplayClock } from '../game/realtime.ts'
 import { displayClock } from '../game/match/time.ts'
@@ -632,7 +632,16 @@ function chooseEvent(optionId: string): void {
   render()
 }
 
+function lineupLockedNow(): boolean {
+  return isOnlineMode() && lineupLockState(game).locked
+}
+
 function updateLineupDraft(mutator: (draft: Lineup) => void): void {
+  // 联机开赛前 30 分钟锁阵容：锁了之后不能再改首发 / 替补 / 职责 / 战术 / 自动换人。
+  if (lineupLockedNow()) {
+    showNotice('阵容已锁定：开赛前 30 分钟内不能修改，比赛由服务器自动结算。')
+    return
+  }
   if (!ui.lineupDraft) ui.lineupDraft = structuredClone(game.lineup)
   mutator(ui.lineupDraft)
   render()
@@ -657,6 +666,10 @@ function equipFromUI(playerId: string, cardId: string | null): void {
 }
 
 function applyLineup(): void {
+  if (lineupLockedNow()) {
+    showNotice('阵容已锁定：开赛前 30 分钟内不能修改，比赛由服务器自动结算。')
+    return
+  }
   if (!ui.lineupDraft) return
   const result = setLineup(game, ui.lineupDraft, ui.autoSubsDraft ?? emptyAutoSubs())
   if (!result.ok) {
@@ -1220,6 +1233,10 @@ document.addEventListener('click', async (event) => {
       break
     }
     case 'lineup-auto':
+      if (lineupLockedNow()) {
+        showNotice('阵容已锁定：开赛前 30 分钟内不能修改，比赛由服务器自动结算。')
+        break
+      }
       ui.lineupDraft = autoFillLineupDraft()
       ui.notice = `${{ best: '已按 CA 和熟练度排出最强阵容', half: '已部分轮换：体力差的约一半主力换成体力好的替补', full: '已全部轮换：换上本赛季上场最少的一批人' }[ui.lineupAutoMode]}，记得保存。`
       render()
@@ -1239,6 +1256,10 @@ document.addEventListener('click', async (event) => {
       }
       break
     case 'lineup-formation':
+      if (lineupLockedNow()) {
+        showNotice('阵容已锁定：开赛前 30 分钟内不能修改，比赛由服务器自动结算。')
+        break
+      }
       if (ui.lineupDraft && actionEl.dataset.formation && actionEl.dataset.formation !== ui.lineupDraft.formationId) {
         ui.lineupDraft = structuredClone(autoFillLineup(game.roster, actionEl.dataset.formation as Lineup['formationId'], ui.lineupDraft.tactics))
         ui.lineupSlot = null

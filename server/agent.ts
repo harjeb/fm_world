@@ -48,7 +48,7 @@ import {
   trainingEventChoice,
   useCoachPause,
 } from '../src/game/actions.ts'
-import { dueRound, matchdayCountdown, playerFixture, seasonRoundLabel, teamName } from '../src/game/season.ts'
+import { dueRound, lineupLockState, matchdayCountdown, playerFixture, seasonRoundLabel, teamName } from '../src/game/season.ts'
 import { displayEventHint, trainingLogText } from '../src/ui/format.ts'
 
 export type AgentOutcome = { ok: boolean; error?: string; result?: unknown }
@@ -466,6 +466,10 @@ function findRecord(game: GameState, id: string) {
 }
 
 export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.now()): AgentOutcome {
+  const rawAction = (rawBody as { action?: unknown } | null)?.action
+  if ((rawAction === 'auto_lineup' || rawAction === 'set_lineup' || rawAction === 'set_auto_subs') && lineupLockState(game, now).locked) {
+    return { ok: false, error: '阵容已锁定：开赛前 30 分钟内不能修改，比赛由服务器自动结算' }
+  }
   const body = asRecord(rawBody)
   const action = text(body.action)
   switch (action) {

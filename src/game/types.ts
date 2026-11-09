@@ -287,6 +287,8 @@ export type Suspension = {
 
 export type GameSettings = {
   offside: boolean
+  /** 联机新账号：本赛季这一轮之前不自动结算（留时间选队 / 排阵容）；赛季滚动后自动失效。 */
+  autoSettle?: { season: number; fromRound: number }
 }
 
 export type Tactics = {

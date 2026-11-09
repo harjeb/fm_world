@@ -7,7 +7,8 @@ import { PLAYABLE_PROFICIENCY, positionMultiplier } from '../../game/ca.ts'
 import { formOf, recentAnalysis, squadForm, type PlayerForm } from '../../game/form.ts'
 import { injuryUntil } from '../../game/injury.ts'
 import { autoSubDisplaySeconds, emptyAutoSubs, validateAutoSubPlan } from '../../game/match/management.ts'
-import { PLAYER_TEAM_ID, matchdayCountdown, playerFixture, teamName } from '../../game/season.ts'
+import { LINEUP_LOCK_MS, PLAYER_TEAM_ID, lineupLockState, matchdayCountdown, playerFixture, teamName } from '../../game/season.ts'
+import { isOnlineMode } from '../../online.ts'
 import {
   BENCH_SIZE,
   applyTacticPreset,
@@ -664,6 +665,11 @@ document.addEventListener('input', (event) => {
 document.addEventListener('click', (event) => {
   if (ui.screen !== 'lineup') return
   const target = event.target as HTMLElement
+  const locked = isOnlineMode() && lineupLockState(game).locked
+  if (locked && (target.closest('[data-preset-save]') || target.closest('[data-preset-apply]'))) {
+    announceLineup('阵容已锁定：开赛前 30 分钟内不能修改，比赛由服务器自动结算。')
+    return
+  }
   if (target.closest('[data-preset-save]')) {
     savePresetFromDraft()
     return
@@ -762,12 +768,21 @@ export function renderLineup(): string {
   const selectedId = validSelection(formation)
   const look = clubLook(PLAYER_TEAM_ID)
   const dirty = lineupFingerprint(draft) !== lineupFingerprint(game.lineup) || JSON.stringify(ui.autoSubsDraft ?? emptyAutoSubs()) !== JSON.stringify(game.autoSubs ?? emptyAutoSubs())
+  const lock = lineupLockState(game)
+  const onlineLock = isOnlineMode() && lock.locked
+  const lockMinutes = Math.max(0, Math.ceil((lock.lockAt - Date.now()) / 60_000))
+  const lockBanner = isOnlineMode()
+    ? (onlineLock
+      ? `<div class="banner warn">${icon('lock', 16)}<b>本轮阵容已锁定</b><span>开赛前 ${LINEUP_LOCK_MS / 60_000} 分钟起不能修改首发、替补、职责、战术和自动换人；比赛由服务器在开赛时间自动结算，结算后解锁准备下一轮。</span></div>`
+      : `<div class="banner muted">${icon('clock', 16)}<b>距阵容锁定 ${lockMinutes} 分钟</b><span>开赛前 ${LINEUP_LOCK_MS / 60_000} 分钟会锁定本轮阵容，请提前保存。</span></div>`)
+    : ''
   return `
     ${pageHead({
       title: `战术 ${dirty ? '<span class="tag gold head-tag">未保存</span>' : ''}`,
       sub: contextLine(),
-      actions: `<select id="lineup-auto-mode" class="auto-mode" aria-label="自动填充方式"><option value="best" ${ui.lineupAutoMode === 'best' ? 'selected' : ''}>最强阵容（CA·熟练度）</option><option value="half" ${ui.lineupAutoMode === 'half' ? 'selected' : ''}>部分轮换</option><option value="full" ${ui.lineupAutoMode === 'full' ? 'selected' : ''}>全部轮换</option></select><button class="btn" data-action="lineup-auto">自动填充</button><button class="btn primary" data-action="lineup-save">${icon('check', 14)}保存阵容</button>`,
+      actions: `<select id="lineup-auto-mode" class="auto-mode" aria-label="自动填充方式" ${onlineLock ? 'disabled' : ''}><option value="best" ${ui.lineupAutoMode === 'best' ? 'selected' : ''}>最强阵容（CA·熟练度）</option><option value="half" ${ui.lineupAutoMode === 'half' ? 'selected' : ''}>部分轮换</option><option value="full" ${ui.lineupAutoMode === 'full' ? 'selected' : ''}>全部轮换</option></select><button class="btn" data-action="lineup-auto" ${onlineLock ? 'disabled' : ''}>自动填充</button><button class="btn primary" data-action="lineup-save" ${onlineLock ? 'disabled' : ''}>${icon('check', 14)}保存阵容</button>`,
     })}
+    ${lockBanner}
     <div class="tactics">
       <section class="panel">
         ${tacticsBar(draft, formation)}
