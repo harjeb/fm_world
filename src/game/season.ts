@@ -450,6 +450,33 @@ export function advanceSeasonRound(game: GameState, now = Date.now()): { ok: boo
   return { ok: true }
 }
 
+/** 把毫秒差写成“X 天 X 小时 / X 小时 X 分 / X 分”。 */
+export function shortCountdown(ms: number): string {
+  const diff = Math.max(0, ms)
+  const days = Math.floor(diff / 86_400_000)
+  const hours = Math.floor((diff % 86_400_000) / 3_600_000)
+  const minutes = Math.floor((diff % 3_600_000) / 60_000)
+  if (days > 0) return `${days} 天 ${hours} 小时`
+  if (hours > 0) return `${hours} 小时 ${minutes} 分`
+  return `${minutes} 分`
+}
+
+/**
+ * 下一场比赛的倒计时：本轮还没结算时显示“即将开赛”（新账号准备期则显示到准备截止），
+ * 本轮结算后显示下一轮开球时间。
+ */
+export function nextMatchCountdown(game: GameState, now = Date.now()): string {
+  const fixture = playerFixture(game, game.season.round)
+  if (fixture && !fixture.played) {
+    const skip = game.settings?.autoSettle
+    if (skip && skip.season === game.season.index && skip.after && game.season.round < skip.fromRound && now < skip.after) {
+      return shortCountdown(skip.after - now)
+    }
+    return '即将开赛'
+  }
+  return shortCountdown(roundKickoffAt(game, Math.min(ROUNDS, game.season.round + 1)) - now)
+}
+
 /** 开赛前这么久锁定阵容：锁了之后不能再改首发 / 替补 / 职责 / 战术 / 自动换人。 */
 export const LINEUP_LOCK_MS = 30 * 60_000
 

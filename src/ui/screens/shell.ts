@@ -1,6 +1,6 @@
 import { economyOf } from '../../game/economy.ts'
 import { transferWindowOpen } from '../../game/market.ts'
-import { PLAYER_TEAM_ID, inPostseason, matchdayCountdown, nextSeasonCountdown, playerFixture, seasonRoundLabel } from '../../game/season.ts'
+import { PLAYER_TEAM_ID, inPostseason, matchdayCountdown, nextMatchCountdown, nextSeasonCountdown, playerFixture, seasonRoundLabel } from '../../game/season.ts'
 import { gameDateOf } from '../../game/calendar.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
 import { isOnlineMode, marketState, onlineKickoffPending, onlineState, serverNow } from '../../online.ts'
@@ -93,9 +93,7 @@ function continueAction(): string {
   if (fixture && !fixture.played) {
     // 联机联赛由服务器到点自动结算，顶栏只显示倒计时或结算状态；单机可以跳到比赛日。
     if (isOnlineMode()) {
-      return onlineKickoffPending(game)
-        ? `<span class="continue-wait">${icon('clock', 14)}下一轮 · ${esc(matchdayCountdown(game, serverNow()))}</span>`
-        : `<span class="continue-wait">${icon('live', 14)}本轮由服务器自动结算</span>`
+      return `<span class="continue-wait">${icon('clock', 14)}下场比赛倒计时 · ${esc(nextMatchCountdown(game, serverNow()))}</span>`
     }
     return `<button class="btn primary continue" data-action="start-league" title="把游戏日历快进到本轮比赛日，体能按跳过的天数恢复">${icon('play', 14)}跳至比赛日</button>`
   }
@@ -120,7 +118,9 @@ export function renderTopbar(): string {
       <div class="top-stat"><span>第 ${game.season.index} 赛季</span><b>${esc(divisionText())}</b></div>
       ${game.season.finished
         ? (inPostseason(game) ? `<div class="top-stat"><span>赛后休整</span><b>${esc(nextSeasonCountdown(game))}</b></div>` : '')
-        : `<div class="top-stat optional"><span>距下一轮</span><b>${esc(matchdayCountdown(game))}</b></div>`}
+        : isOnlineMode()
+          ? `<div class="top-stat optional"><span>下场比赛</span><b>${esc(nextMatchCountdown(game, serverNow()))}</b></div>`
+          : `<div class="top-stat optional"><span>距下一轮</span><b>${esc(matchdayCountdown(game))}</b></div>`}
       <div class="top-stat"><span>余额</span><b>${economy.balance.toLocaleString()}</b></div>
       <div class="top-stat optional"><span>转会窗</span><b class="${transferWindowOpen(game) ? 'ok' : 'muted'}">${transferWindowOpen(game) ? '开放' : '关闭'}</b></div>
     </div>

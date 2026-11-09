@@ -588,7 +588,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
     forgetMarketAges(account)
     // 刚换队的这一轮先不自动踢，给玩家排阵容的时间；下一轮开始自动结算。
-    account.game.settings = { ...(account.game.settings ?? { offside: true }), autoSettle: { season: account.game.season.index, fromRound: account.game.season.round + 1 } }
+    account.game.settings = { ...(account.game.settings ?? { offside: true }), autoSettle: { season: account.game.season.index, fromRound: account.game.season.round + 1, after: now() + 30 * 60_000 } }
     persistWorld()
     account.revision++
     account.lastUserRevision = account.revision

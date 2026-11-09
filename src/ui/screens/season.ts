@@ -1,4 +1,4 @@
-import { PLAYER_TEAM_ID, currentRoundFixtures, inPostseason, matchdayCountdown, nextSeasonCountdown, playerFixture, teamName } from '../../game/season.ts'
+import { PLAYER_TEAM_ID, currentRoundFixtures, inPostseason, matchdayCountdown, nextMatchCountdown, nextSeasonCountdown, playerFixture, teamName } from '../../game/season.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
 import { clubRatings } from '../../game/club-rating.ts'
 import { leaderPanels } from '../leaderboard.ts'
@@ -55,9 +55,7 @@ export function renderSeason(): string {
     season.finished ? `<button class="btn primary" data-action="next-season">${icon('play', 14)}开始下一赛季</button>` : '',
     !season.finished && fixture && !fixture.played && !game.activeMatch
       ? (isOnlineMode()
-        ? (onlineKickoffPending(game)
-          ? `<span class="continue-wait">${icon('clock', 14)}下一轮 · ${esc(matchdayCountdown(game, serverNow()))}</span>`
-          : `<span class="continue-wait">${icon('live', 14)}本轮由服务器自动结算</span>`)
+        ? `<span class="continue-wait">${icon('clock', 14)}下场比赛倒计时 · ${esc(nextMatchCountdown(game, serverNow()))}</span>`
         : `<button class="btn primary" data-action="start-league">${icon('play', 14)}跳至比赛日 · 对阵 ${esc(teamName(game, fixture.homeId === PLAYER_TEAM_ID ? fixture.awayId : fixture.homeId))}</button>`)
       : '',
     !fixture && !season.finished && !game.activeMatch ? '<button class="btn" data-action="sim-round">模拟本轮</button>' : '',

@@ -1,7 +1,7 @@
 import { economyOf } from '../../game/economy.ts'
 import { transferWindowOpen } from '../../game/market.ts'
 import { FORMATIONS } from '../../game/data/formations.ts'
-import { PLAYER_TEAM_ID, matchdayCountdown, playerFixture, seasonRoundLabel, teamName } from '../../game/season.ts'
+import { PLAYER_TEAM_ID, matchdayCountdown, nextMatchCountdown, playerFixture, seasonRoundLabel, teamName } from '../../game/season.ts'
 import { validateLineup } from '../../game/squad.ts'
 import { SQUAD_LIMIT } from '../../game/market.ts'
 import { trainingActionsTotal } from '../../game/training.ts'
@@ -66,7 +66,7 @@ function nextMatchPanel(): string {
         ${played
           ? `<div class="nm-meta">下一轮 ${esc(matchdayCountdown(game))}</div>`
           : isOnlineMode()
-            ? `<div class="nm-meta">${icon(onlineKickoffPending(game) ? 'clock' : 'live', 13)} ${onlineKickoffPending(game) ? `距下一轮 ${esc(matchdayCountdown(game, serverNow()))}` : '本轮由服务器自动结算'}</div><span class="muted small">比赛由共享世界时钟自动进行，登录即可看比分</span>`
+            ? `<div class="nm-meta">${icon('clock', 13)} 下场比赛倒计时 ${esc(nextMatchCountdown(game, serverNow()))}</div>`
             : `<div class="nm-meta">${icon('clock', 13)} 距自动结算 ${esc(matchdayCountdown(game))}</div><button class="btn primary nm-go" data-action="start-league">${icon('play', 14)}跳至比赛日</button>`}
       </div>
       ${nextMatchSide(fixture.awayId, 'right', !homeIsMe)}
