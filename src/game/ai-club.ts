@@ -8,6 +8,7 @@ import { attrMax, attrRating } from './scale.ts'
 import { ALL_ATTRIBUTES, type AICard, type AIClubState, type AITeam, type AttrKey, type Attributes, type FacilityId, type GameState, type Player, type TierId, type WorldClub, type WorldState } from './types.ts'
 import { FULL_SQUAD, repairLineup, validateLineup } from './squad.ts'
 import { cachedOwnerlessTeams } from './world.ts'
+import { aiBuysLeft, noteAIBuy } from './transfer-rules.ts'
 
 /**
  * 电脑球队的经营。
@@ -404,6 +405,8 @@ export type AIBidInput = {
   rival?: number | null
   /** 这支球队在别的竞拍里已经压着的钱。 */
   committed?: number
+  /** 本赛季还能买几个人（每赛季最多 5 人）；不传按不限。 */
+  buysLeft?: number
 }
 
 /**
@@ -417,6 +420,7 @@ export function aiBidFor(input: AIBidInput): number | null {
   const { state, tier, player, squad, value, minimum } = input
   const rival = input.rival ?? null
   if (!(value > 0) || !(minimum > 0)) return null
+  if (input.buysLeft !== undefined && input.buysLeft <= 0) return null
   const profile = TIER_PROFILE[tier] ?? TIER_PROFILE.division2
   if (squad.length >= AI_SQUAD_LIMIT) return null
   const spendable = state.economy.balance - profile.reserve - Math.max(0, input.committed ?? 0)
@@ -453,6 +457,7 @@ export function aiBidFor(input: AIBidInput): number | null {
 
 /** 电脑球队把签下的人记进账本，赛季重建时并进名单。 */
 export function recordAISigning(state: AIClubState, player: Player, amount: number): void {
+  delete player.marketDay
   if (state.signings.some((item) => item.id === player.id)) return
   state.economy.balance = Math.max(0, state.economy.balance - amount)
   state.signings = [...state.signings, player].sort((a, b) => playerCa(b) - playerCa(a)).slice(0, AI_SIGNING_LIMIT)
@@ -464,7 +469,7 @@ export function recordAISigning(state: AIClubState, player: Player, amount: numb
  * 自由市场也会被电脑球队盯上：比本队同位置强、或者性价比高就签走。
  * 只在池子还厚的时候动手，免得玩家一进市场发现没人可签。
  */
-export function aiSignFreeAgents(game: { world?: WorldState; createdAt?: number; aiClubs?: Record<string, AIClubState>; aiTeams?: AITeam[]; freeStars: Player[]; seed: number }, round: number, now = Date.now()): number {
+export function aiSignFreeAgents(game: { world?: WorldState; createdAt?: number; aiClubs?: Record<string, AIClubState>; aiTeams?: AITeam[]; freeStars: Player[]; seed: number; season?: { index: number } }, round: number, now = Date.now()): number {
   if (!game.world || !game.aiClubs || !game.aiTeams?.length) return 0
   if (Object.keys(game.aiClubs).length === 0) return 0
   if (game.freeStars.length <= 24) return 0
@@ -481,9 +486,11 @@ export function aiSignFreeAgents(game: { world?: WorldState; createdAt?: number;
     const state = game.aiClubs?.[club.id]
     if (!state || club.players.length >= AI_SQUAD_LIMIT) continue
     const value = playerValue(player)
-    const plan = aiBidFor({ state, tier: club.tier ?? 'division2', player, squad: club.players, value, minimum: value })
+    const season = game.season?.index ?? game.world.seasonIndex
+    const plan = aiBidFor({ state, tier: club.tier ?? 'division2', player, squad: club.players, value, minimum: value, buysLeft: aiBuysLeft(state, season) })
     if (!plan) continue
     recordAISigning(state, player, Math.min(plan, value))
+    noteAIBuy(state, season)
     game.freeStars = game.freeStars.filter((item) => item.id !== player.id)
     club.players = [...club.players, player]
     const repaired = repairLineup(club.players, club.lineup)

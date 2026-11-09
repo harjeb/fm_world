@@ -4,7 +4,7 @@ import { trainingDate, trainingOptions, type TrainingActivityId } from '../src/g
 import type { SkillId } from '../src/game/types.ts'
 import { SKILLS } from '../src/game/data/skills.ts'
 import { economyOf, upgradeFacility, FACILITIES, facilityLevel, facilityRoundIncome, facilityStageChance, facilityStageInLevel, facilityUpgradeCost, type FacilityId } from '../src/game/economy.ts'
-import { aiTransferOffers, bestMarketValue, buyFreeAgent, listPlayer, cancelListing, releasePlayer, renewContract, signClubPlayer, transferWindowOpen } from '../src/game/market.ts'
+import { aiTransferOffers, previewClubSigning, bestMarketValue, buyFreeAgent, listPlayer, cancelListing, releasePlayer, renewContract, signClubPlayer, transferWindowOpen } from '../src/game/market.ts'
 import { negotiationDemands, negotiationTerms, SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../src/game/negotiation.ts'
 import { ALL_ATTRIBUTES, POSITIONS } from '../src/game/types.ts'
 import { caOf } from '../src/game/ca.ts'
@@ -133,6 +133,8 @@ export function playerView(player: GameState['roster'][number], game: GameState,
     skillTiers: player.skillTiers ?? {},
     condition: player.condition,
     energy: player.energy,
+    /** 不满（拒绝了高价报价）：截止时间前精力恢复只剩一成。 */
+    unhappy: player.unhappy ? { until: player.unhappy.until, reason: player.unhappy.reason } : null,
     injuryUntil: injuryUntil(game, player, now),
     equippedCardId: player.equippedCardId ?? null,
     cardIds: playerCards(game, player.id).map((card) => card.id),
@@ -352,10 +354,16 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
     market: {
       transferWindowOpen: transferWindowOpen(game),
       /** 和转会页“从 AI 球队买人”同一份列表；用 preview_signing / sign_club_player 谈判。 */
-      clubOffers: aiTransferOffers(game, options.isManaged).map(({ team, player, asking }) => ({ teamId: team.id, teamName: team.name, player: playerView(player, game, now), asking })),
+      // 本联赛 AI 球队的全部球员：俱乐部态度（主力/轮换/冷板凳、最近出场、要价；非卖品 asking 为 null）。
+      clubOffers: aiTransferOffers(game, options.isManaged).map(({ team, player, asking, terms }) => ({
+        teamId: team.id, teamName: team.name, player: playerView(player, game, now), asking,
+        status: terms.status, ageBand: terms.ageBand, minutesShare: Math.round(terms.minutesShare * 100) / 100, requiredPremium: terms.requiredPremium,
+      })),
       freeAgents: game.freeStars.map((player) => ({ player: playerView(player, game, now), price: bestMarketValue(game, player) })),
       listings: (game.market?.listings ?? []).map(({ player, price }) => ({ player: playerView(player, game, now), price })),
     },
+    // AI 俱乐部发来的报价：pending 的要在 expiresAt 前用 respond_offer 回复，过期算拒绝；高价（≥ 身价 1.3 倍）被拒绝球员会不满。
+    transferOffers: (game.transferOffers ?? []).map((offer) => ({ ...offer, high: offer.amount >= offer.value * 1.3 })),
     teams: game.aiTeams.map((team) => ({ id: team.id, name: team.name, strength: team.strength, style: team.style, formationId: team.formationId })),
     roster: game.roster.map((player) => playerView(player, game, now)),
     lineup: game.lineup,
@@ -632,37 +640,28 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
     }
     case 'preview_signing': {
       const offer = findClubOffer(game, body, options)
-      if (!offer) return { ok: false, error: '这名球员不在可谈判的 AI 球队名单里（见 state.market.clubOffers）' }
+      if (!offer) return { ok: false, error: '这名球员不在本联赛 AI 球队的名单里（见 state.market.clubOffers）' }
       const answers = negotiationAnswers(body)
       if (!answers) return { ok: false, error: `goal 只能是 ${SEASON_GOALS.join('/')}，role 只能是 ${SQUAD_ROLES.join('/')}` }
-      const amount = body.offer === undefined ? offer.asking : Number(body.offer)
+      const amount = body.offer === undefined ? offer.asking ?? offer.terms.value : Number(body.offer)
       if (!Number.isSafeInteger(amount) || amount <= 0) return { ok: false, error: '报价必须是正整数' }
-      const demands = negotiationDemands(game, offer.player)
-      const clubTier = game.season.tier ?? 'division2'
-      const value = bestMarketValue(game, offer.player)
-      const terms = negotiationTerms({ demands, value, asking: offer.asking, offer: amount, answers, clubTier, clubId: 'player' })
+      const preview = previewClubSigning(game, offer.team, offer.player, amount, answers)
+      const demands = preview.player.demands
       return {
         ok: true,
         result: {
           teamId: offer.team.id, playerId: offer.player.id, playerName: offer.player.name,
-          value, asking: offer.asking, offer: amount, balance: economyOf(game).balance, answers,
-          // 和谈判框展示的一样：他想听的目标/定位、想去的球队和最低联赛级别。
+          value: preview.value, asking: preview.asking, forSale: preview.forSale, offer: amount, balance: economyOf(game).balance, answers,
+          // 俱乐部这关：主力 / 轮换 / 冷板凳、年龄段、最近出场占比、要求的溢价、点头概率和理由。
+          club: { ...preview.club, chance: Math.round(preview.club.chance * 1000) / 1000, minutesShare: Math.round(preview.club.minutesShare * 100) / 100 },
+          // 球员这关：他想听的目标 / 定位、想去的球队和最低联赛级别。
           demands: { goal: demands.goal, role: demands.role, minTier: demands.minTier, wantsClubName: demands.wantsClubId && demands.wantsClubId !== 'player' ? demands.wantsClubName : null },
-          clubTier,
-          chance: Math.round(terms.chance * 1000) / 1000,
-          reasons: terms.reasons,
+          clubTier: game.season.tier ?? 'division2',
+          playerChance: Math.round(preview.player.chance * 1000) / 1000,
+          reasons: preview.player.reasons,
+          chance: Math.round(preview.chance * 1000) / 1000,
         },
       }
-    }
-    case 'sign_club_player': {
-      const offer = findClubOffer(game, body, options)
-      if (!offer) return { ok: false, error: '这名球员不在可谈判的 AI 球队名单里（见 state.market.clubOffers）' }
-      const answers = negotiationAnswers(body)
-      if (!answers) return { ok: false, error: `goal 只能是 ${SEASON_GOALS.join('/')}，role 只能是 ${SQUAD_ROLES.join('/')}` }
-      const amount = body.offer === undefined ? offer.asking : Number(body.offer)
-      const result = signClubPlayer(game, offer.team.id, offer.player.id, amount, answers)
-      const visible = { ok: result.ok, chance: result.chance ?? null, reasons: result.reasons ?? [], offer: amount, playerName: offer.player.name }
-      return result.ok ? { ok: true, result: visible } : { ok: false, error: result.error ?? '谈判失败', result: visible }
     }
     case 'renew_contract': {
       // 和俱乐部页“续约 2 年”一致。

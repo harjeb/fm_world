@@ -35,7 +35,12 @@ describe('Agent API 和手动界面能做的事一致', () => {
     expect(player.contract).toMatchObject({ wage: expect.any(Number), expiresSeason: expect.any(Number) })
     expect(typeof game.market.transferWindowOpen).toBe('boolean')
     expect(game.market.clubOffers.length).toBeGreaterThan(0)
-    expect(game.market.clubOffers.length).toBeLessThanOrEqual(18)
+    // 本联赛 AI 球队的全部球员，每人带俱乐部态度和要价（非卖品为 null）
+    expect(game.market.clubOffers.length).toBeGreaterThan(18)
+    for (const offer of game.market.clubOffers) {
+      expect(['key', 'rotation', 'fringe']).toContain(offer.status)
+      expect(offer.asking === null || offer.asking > 0).toBe(true)
+    }
     const world = await action({ action: 'get_world' })
     expect(world.status).toBe(200)
     expect(world.body.result.ownClubId).toBeTruthy()
@@ -52,7 +57,7 @@ describe('Agent API 和手动界面能做的事一致', () => {
     expect((await action({ action: 'get_world' })).body.result.ownClubId).toBe(free.id)
 
     let game = await state()
-    const offer = game.market.clubOffers[0]
+    const offer = game.market.clubOffers.find((item: any) => item.asking !== null)
     const preview = await action({ action: 'preview_signing', teamId: offer.teamId, playerId: offer.player.id })
     expect(preview.status).toBe(200)
     expect(preview.body.result.asking).toBe(offer.asking)
@@ -64,11 +69,12 @@ describe('Agent API 和手动界面能做的事一致', () => {
     expect(outsider.status).toBe(400)
     // 实际签一次：挑一名买得起、成功率封顶（必定成交）的球员；成功后共享世界里那支球队的名单也要同步去掉他。
     let deal: { teamId: string; playerId: string; offer: number } | undefined
-    for (const candidate of [...game.market.clubOffers].sort((a: any, b: any) => a.asking - b.asking)) {
+    for (const candidate of [...game.market.clubOffers].filter((item: any) => item.asking !== null).sort((a: any, b: any) => a.asking - b.asking)) {
       const amount = Math.min(game.economy.balance, Math.ceil(candidate.asking * 1.5))
       if (amount < candidate.asking) continue
       const check = await action({ action: 'preview_signing', teamId: candidate.teamId, playerId: candidate.player.id, offer: amount, goal: 'title', role: 'star' })
-      if (check.body.result.chance >= 0.98) { deal = { teamId: candidate.teamId, playerId: candidate.player.id, offer: amount }; break }
+      // 俱乐部（封顶 97% 必定点头）和球员（封顶 98% 必定点头）两关都稳过
+      if (check.body.result.club.chance >= 0.97 && check.body.result.playerChance >= 0.98) { deal = { teamId: candidate.teamId, playerId: candidate.player.id, offer: amount }; break }
     }
     expect(deal, '应当至少有一名必定能签下的 AI 球员').toBeDefined()
     const signed = await action({ action: 'sign_club_player', ...deal!, goal: 'title', role: 'star' })

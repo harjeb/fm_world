@@ -32,7 +32,8 @@ describe('服务器上的电脑球队竞拍', () => {
     const auth = { Authorization: `Bearer ${reg.token}` }
     type Entry = { player: { id: string; ca: number }; price: number }
     const view = await agentState(base, auth) as { game: { market: { freeAgents: Entry[] } } }
-    const target = [...view.game.market.freeAgents].sort((a, b) => a.price - b.price)[0]
+    // 自由市场每天补满 200 人，最便宜的多是电脑球队看不上的替补；挑买得起的人里能力最高的那个。
+    const target = [...view.game.market.freeAgents].filter((entry) => entry.price <= 450_000).sort((a, b) => b.player.ca - a.player.ca)[0]
     const placed = await fetch(`${base}/api/market/bid`, {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },

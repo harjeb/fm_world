@@ -46,12 +46,14 @@ import { displayClock } from '../game/match/time.ts'
 import { emptyAutoSubs } from '../game/match/management.ts'
 import { upgradeFacility, type FacilityId } from '../game/economy.ts'
 import { leadingBid, type Auction, type AuctionResult } from '../game/auction.ts'
-import { bestMarketValue, cancelListing, clubAsking, freeAgentAsking, listPlayer, playerMarketValue, refreshClubMarket, releasePlayer, renewContract, signClubPlayer, signFreeAgent } from '../game/market.ts'
+import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPlayer, playerMarketValue, refreshClubMarket, releasePlayer, renewContract, signClubPlayer, signFreeAgent } from '../game/market.ts'
 import { minimumBid } from '../game/auction.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
 import { clubNameError, normalizeClubName } from '../game/club-name.ts'
-import { bidOnline, chooseClubOnline, renameClubOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, marketState, nextWorldSeasonOnline, onlineState, publicConfig, refreshPublicWorld, registerOnline, revokeAgentTokenOnline, serverNow, setRemoteGameHandler, subscribeMarket, subscribeOnline } from '../online.ts'
+import { bidOnline, buyFromAIClubOnline, chooseClubOnline, renameClubOnline, respondOfferOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, marketState, nextWorldSeasonOnline, onlineState, publicConfig, refreshPublicWorld, registerOnline, revokeAgentTokenOnline, serverNow, setRemoteGameHandler, subscribeMarket, subscribeOnline } from '../online.ts'
 import { agentHandoffText } from './agent-handoff.ts'
+import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
+import { UNHAPPY_GAME_DAYS } from '../game/transfer-rules.ts'
 import { cardName } from './components.ts'
 import { clockText, countdownText, esc, pct } from './format.ts'
 import { icon } from './icons.ts'
@@ -316,11 +318,23 @@ function openFinishedLeague(previous: NonNullable<GameState['activeMatch']>): vo
 
 let lastOnlineCacheAt = 0
 
+/** 新来的报价弹一条提示（转会页“收到的报价”里回复，4 个游戏日内不回复算拒绝）。 */
+function announceNewOffers(before: ReadonlySet<string>): void {
+  const fresh = (game.transferOffers ?? []).filter((offer) => offer.status === 'pending' && !before.has(offer.id))
+  if (!fresh.length) return
+  const offer = fresh[0]
+  ui.notice = `${offer.clubName} 出价 ${offer.amount.toLocaleString()} 求购 ${offer.playerName}（身价 ${offer.value.toLocaleString()}），到转会页「收到的报价」里回复，现实 24 小时内有效。`
+}
+
+const pendingOfferIds = (): Set<string> => new Set((game.transferOffers ?? []).filter((offer) => offer.status === 'pending').map((offer) => offer.id))
+
 function applyOnlineGame(next: GameState, notice?: string): void {
+  const offersBefore = pendingOfferIds()
   const previous = game.activeMatch
   const wasMatch = ui.screen === 'match'
   const clubChanged = next.clubName !== game.clubName || next.season.index !== game.season.index
   setGame(next)
+  announceNewOffers(offersBefore)
   // 服务器存档也写一份本地缓存：刷新时在服务器恢复之前不会先看到旧离线存档。
   // 联赛实时推送每秒一次，没必要每次都写整个存档，换队/换季时立刻写，其余最多 10 秒一次。
   const stamp = Date.now()
@@ -701,10 +715,16 @@ function openNegotiation(kind: 'free' | 'club' | 'bid', playerId: string, clubId
   }
   const value = Math.max(1, Math.round(playerMarketValue(player)))
   const auction = kind === 'bid' ? marketState.auctions.find((item) => item.playerId === playerId) : undefined
+  const team = kind === 'club' ? game.aiTeams.find((item) => item.id === clubId) : undefined
+  const clubTerms = team ? clubSaleTerms(game, team, player) : undefined
+  if (kind === 'club' && clubTerms?.asking == null) {
+    showNotice(`${player.name} 是非卖品：${clubTerms?.reasons[0] ?? '俱乐部不卖'}`)
+    return
+  }
   const asking = kind === 'free'
     ? freeAgentAsking(game, player)
     : kind === 'club'
-      ? clubAsking(game, player)
+      ? clubTerms!.asking!
       : Math.max(askingFloor(player, auction), value)
   ui.negotiation = {
     kind,
@@ -899,6 +919,37 @@ document.addEventListener('click', async (event) => {
       ui.clubPage = Math.max(0, ui.clubPage + (action === 'club-next' ? 1 : -1))
       render()
       break
+    case 'ai-buy-prev':
+    case 'ai-buy-next':
+      ui.aiBuyPage = Math.max(0, ui.aiBuyPage + (action === 'ai-buy-next' ? 1 : -1))
+      render()
+      break
+    case 'offer-accept':
+    case 'offer-reject': {
+      const offerId = actionEl.dataset.offer
+      const offer = game.transferOffers?.find((item) => item.id === offerId)
+      if (!offerId || !offer) break
+      const accept = action === 'offer-accept'
+      if (accept && !window.confirm(`以 ${offer.amount.toLocaleString()} 把 ${offer.playerName} 卖给 ${offer.clubName}？`)) break
+      if (!accept && isHighOffer(offer) && !window.confirm(`这是高价报价（身价的 ${(offer.amount / offer.value).toFixed(2)} 倍）。拒绝后 ${offer.playerName} 会不满 ${UNHAPPY_GAME_DAYS} 个游戏日，精力恢复只剩一成。确定拒绝？`)) break
+      try {
+        if (isOnlineMode()) {
+          const next = await respondOfferOnline(offerId, accept)
+          applyOnlineGame(next, accept ? `${offer.playerName} 以 ${offer.amount.toLocaleString()} 转会 ${offer.clubName}。` : `已拒绝 ${offer.clubName} 的报价。`)
+        } else {
+          const buyer = localMarketClubs(game).find((club) => club.id === offer.clubId)
+          const result = respondToOffer(game, offerId, accept, Date.now(), buyer, game.season.index)
+          if (!result.ok) { showNotice(result.error ?? '操作失败'); break }
+          ui.lineupDraft = null
+          ui.autoSubsDraft = null
+          persist()
+          showNotice(accept ? `${offer.playerName} 以 ${offer.amount.toLocaleString()} 转会 ${offer.clubName}。` : result.unhappy ? `已拒绝。${offer.playerName} 对此不满，接下来 ${UNHAPPY_GAME_DAYS} 个游戏日精力恢复很慢。` : `已拒绝 ${offer.clubName} 的报价。`)
+        }
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : '操作失败')
+      }
+      break
+    }
     case 'club-rename': {
       const input = document.querySelector<HTMLInputElement>('[data-club-name-input]')
       const name = normalizeClubName(input?.value)
@@ -953,6 +1004,20 @@ document.addEventListener('click', async (event) => {
           showNotice(`出价 ${draft.offer.toLocaleString()} 成功。`)
         } catch (error) {
           draft.message = error instanceof Error ? error.message : '出价失败'
+          render()
+        }
+        break
+      }
+      if (draft.kind === 'club' && isOnlineMode()) {
+        // 联机向 AI 球队买人由服务器判定（俱乐部放人规则 + 球员诉求），成交后共享名册同步。
+        try {
+          const next = await buyFromAIClubOnline({ teamId: draft.clubId ?? '', playerId: draft.playerId, offer: draft.offer, goal: draft.goal, role: draft.role })
+          ui.negotiation = null
+          ui.lineupDraft = null
+          ui.autoSubsDraft = null
+          applyOnlineGame(next, `谈成了：${player.name} 加盟，花费 ${draft.offer.toLocaleString()}。`)
+        } catch (error) {
+          draft.message = error instanceof Error ? error.message : '谈判失败'
           render()
         }
         break
@@ -1553,6 +1618,13 @@ document.addEventListener('change', (event) => {
     render()
     return
   }
+  if (target.id === 'ai-buy-team' || target.id === 'ai-buy-pos') {
+    if (target.id === 'ai-buy-team') ui.aiBuyTeam = target.value || 'ALL'
+    else ui.aiBuyPos = target.value || 'ALL'
+    ui.aiBuyPage = 0
+    render()
+    return
+  }
   if (target.id === 'inventory-sort') {
     ui.inventorySort = target.value as typeof ui.inventorySort
     render()
@@ -1748,10 +1820,12 @@ document.addEventListener('keydown', (event) => {
 
 function autoAdvanceSeason(): void {
   if (isOnlineMode() || game.activeMatch || game.season.finished) return
+  const offersBefore = pendingOfferIds()
   const result = catchUpSeason(game)
   if (result.advanced <= 0) return
   refreshClubMarket(game, Math.max(1, game.season.round - 1))
   ui.notice = `已自动结算 ${result.advanced} 轮比赛。`
+  announceNewOffers(offersBefore)
   persist()
   render()
 }

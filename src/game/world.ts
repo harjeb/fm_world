@@ -719,13 +719,15 @@ export function createWorldGameFromWorld(
 ): GameState {
   const world = worldForClub(base, clubId)
   const club = clubById(world, 'player')
-  return createWorldGameFromSetup({
+  const game = createWorldGameFromSetup({
     world,
     playerClub: club,
     freeStars: structuredClone(freeStars),
     reserveStars: structuredClone(reserveStars),
   // 联机账号的电脑球队以服务器为准，不在这里另算一份（传空对象表示“由服务器推进”）。
   }, seed, startedAt, clubName, {})
+  game.shared = true
+  return game
 }
 
 /** 服务器共享世界按现实时间抽象推进；返回是否有变化。 */

@@ -412,6 +412,16 @@ export async function renameClubOnline(name: string): Promise<GameState> {
   return game
 }
 
+/** 联机向 AI 球队买人：服务器按放人规则和球员诉求判定，成交后共享名册同步。失败时抛出原因。 */
+export async function buyFromAIClubOnline(body: { teamId: string; playerId: string; offer: number; goal: string; role: string }): Promise<GameState> {
+  return onlineGameAction('/api/transfer/ai-buy', body)
+}
+
+/** 联机回复 AI 俱乐部的报价。 */
+export async function respondOfferOnline(offerId: string, accept: boolean): Promise<GameState> {
+  return onlineGameAction('/api/transfer/offer', { offerId, accept })
+}
+
 /** 注册后选队：服务端会按共享世界重建账号存档，只允许在还没踢过联赛时调用。 */
 export async function chooseClubOnline(clubId: string): Promise<GameState> {
   const game = await onlineGameAction('/api/world/choose-club', { clubId })

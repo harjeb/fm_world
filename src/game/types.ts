@@ -191,6 +191,30 @@ export type Player = {
   /** 第几代同名球员；原始球星为 0。 */
   generation?: number
   contract?: Contract
+  /** 精力上次结算的时间（毫秒）；精力按经过的游戏日连续恢复。 */
+  energyAt?: number
+  /** 不满（拒绝了别的球队的高价报价）：截止时间之前精力恢复大减。 */
+  unhappy?: { until: number; reason: string }
+  /** 自由市场当天补进来的随机球员（第几个游戏日）；第二天没人买就销毁，签下后清掉。 */
+  marketDay?: number
+}
+
+/** AI 俱乐部给玩家球队的报价。4 个游戏日内不回复就算拒绝。 */
+export type TransferOffer = {
+  id: string
+  clubId: string
+  clubName: string
+  tier?: TierId
+  playerId: string
+  playerName: string
+  amount: number
+  /** 报价时这名球员的身价；amount ≥ 身价 × 1.3 算高价，拒绝会让球员不满。 */
+  value: number
+  createdAt: number
+  expiresAt: number
+  status: 'pending' | 'accepted' | 'rejected' | 'expired' | 'withdrawn'
+  resolvedAt?: number
+  note?: string
 }
 
 /**
@@ -791,6 +815,14 @@ export type GameState = {
   autoSubs?: AutoSubPlan
   training: Record<string, TrainingSession>
   injuries?: Record<string, number>
+  /** 最近 20 场的出场分钟（按球员 id，玩家和本联赛 AI 球队的都记），俱乐部判断放不放人用。 */
+  appearances?: Record<string, number[]>
+  /** AI 俱乐部发来的报价（收件箱）。 */
+  transferOffers?: TransferOffer[]
+  /** 联机账号：世界、电脑球队和自由市场由服务器维护，本地不另算。 */
+  shared?: true
+  /** 自由市场最近一次每日补充是第几个游戏日（单机）。 */
+  freeMarketDay?: number
   /** 培养结束、玩家还没决定是否换上的那一份；对应的卡已经在 cards 里。 */
   candidates: Record<string, Player>
   /** 库存：培养出来的所有球员卡。 */
@@ -840,6 +872,8 @@ export type AIClubState = {
   upgrades: number
   /** 还没兑现的设施升级名额（按轮累计的小数）；二级慢、顶级快。 */
   upgradeProgress?: number
+  /** 这个赛季已经买进几个人（竞拍、签自由球员、挖人），每赛季最多 5 人。 */
+  transfers?: { season: number; bought: number }
 }
 
 export type MatchContext = {

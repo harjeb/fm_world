@@ -3,7 +3,8 @@ import { economyOf } from './economy.ts'
 import { caOf } from './ca.ts'
 import { playerMarketValue } from './pricing.ts'
 export { VALUE_AT_CA_205, VALUE_GROWTH_PER_CA, VALUE_CAP, playerMarketValue } from './pricing.ts'
-import { MIN_SQUAD, autoFillLineup, repairLineup, validateLineup } from './squad.ts'
+import { FULL_SQUAD, MIN_SQUAD, autoFillLineup, repairLineup, validateLineup } from './squad.ts'
+import { assessRelease, releaseChance, releaseRoll, type ReleaseAssessment } from './transfer-rules.ts'
 import { wageForPlayer } from './world.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 import { closeFinishedTraining, destroyPlayerCards, untrainedPlayer } from './cards.ts'
@@ -33,6 +34,8 @@ export function bestMarketValue(_game: Pick<GameState, 'cards'>, player: Player)
 function arriveWithoutCards(player: Player): void {
   Object.assign(player, untrainedPlayer(player))
   delete player.equippedCardId
+  // 自由市场当天补进来的人一旦签下就是正式球员，不会再被销毁。
+  delete player.marketDay
 }
 
 /** 本地 NPC 买家的预算上限：一轮最多花这么多，避免无脑倒卖把游戏刷成印钞机。 */
@@ -117,23 +120,80 @@ export function freeAgentAsking(game: Pick<GameState, 'cards'>, player: Player):
   return bestMarketValue(game, player)
 }
 
-/** 从 AI 球队买人的底价：估值 1.5 倍。 */
-export function clubAsking(game: Pick<GameState, 'cards'>, player: Player): number {
-  return Math.round(bestMarketValue(game, player) * CLUB_BUYOUT_RATIO)
+/**
+ * AI 俱乐部对自家某名球员的态度（主力 / 轮换 / 冷板凳、要价、非卖品），见 transfer-rules.ts。
+ * 出场时间用存档里记下的最近 20 场；没有记录就按他在阵容里的角色估算。
+ */
+export function clubSaleTerms(game: Pick<GameState, 'appearances'>, team: Pick<AITeam, 'lineup'>, player: Player): ReleaseAssessment {
+  return assessRelease({ player, lineup: team.lineup, minutes: game.appearances?.[player.id], value: playerMarketValue(player) })
 }
 
 /**
- * 转会页“从 AI 球队买人”能谈判的球员：前 6 支 AI 球队（联机时跳过有教练执教的）各前 3 人。
- * 手动界面和 Agent 共用这份列表，保证两边能买的人一样。
+ * 俱乐部要价。传了球队就按放人规则（非卖品返回 0）；不传是旧的一口价（估值 1.5 倍，只看原始属性），
+ * 只给内部的直接买断 buyFromClub 用。
+ */
+export function clubAsking(game: Pick<GameState, 'appearances' | 'cards'>, player: Player, team?: Pick<AITeam, 'lineup'>): number {
+  if (!team) return Math.round(bestMarketValue(game, player) * CLUB_BUYOUT_RATIO)
+  return clubSaleTerms(game, team, player).asking ?? 0
+}
+
+export type ClubTransferOffer = { team: GameState['aiTeams'][number]; player: Player; asking: number | null; terms: ReleaseAssessment }
+
+/**
+ * 转会页“从 AI 球队买人”的名单：本联赛所有 AI 球队（联机时跳过有教练执教的）的全部球员，
+ * 每人带着俱乐部的态度和要价；非卖品 asking 为 null。手动界面和 Agent 共用这份列表。
  */
 export function aiTransferOffers(
-  game: Pick<GameState, 'aiTeams' | 'cards'>,
+  game: Pick<GameState, 'aiTeams' | 'cards' | 'appearances'>,
   isManaged: (clubId: string) => boolean = () => false,
-): { team: GameState['aiTeams'][number]; player: Player; asking: number }[] {
+): ClubTransferOffer[] {
   return game.aiTeams
     .filter((team) => !isManaged(team.id))
-    .slice(0, 6)
-    .flatMap((team) => team.players.slice(0, 3).map((player) => ({ team, player, asking: clubAsking(game, player) })))
+    .flatMap((team) => team.players.map((player) => {
+      const terms = clubSaleTerms(game, team, player)
+      return { team, player, asking: terms.asking, terms }
+    }))
+}
+
+export type ClubSigningPreview = {
+  forSale: boolean
+  asking: number | null
+  value: number
+  offer: number
+  /** 俱乐部这关：主力 / 轮换 / 冷板凳、年龄段、最近出场、要求的溢价、点头概率。 */
+  club: { status: ReleaseAssessment['status']; ageBand: ReleaseAssessment['ageBand']; age: number; minutesShare: number; recorded: number; requiredPremium: number | null; chance: number; reasons: string[]; blocked: string | null }
+  /** 球员这关：他想听的目标 / 定位、想去的球队、最低联赛级别，和这份报价 + 承诺下的概率。 */
+  player: { demands: NegotiationDemands; chance: number; reasons: string[] }
+  /** 两关都过的概率。 */
+  chance: number
+}
+
+/** 向 AI 球队买人前预览：俱乐部和球员两关的概率和理由（手动谈判框和 Agent 共用），不写入存档。 */
+export function previewClubSigning(game: GameState, team: AITeam, player: Player, offer: number, answers: NegotiationAnswers): ClubSigningPreview {
+  const terms = clubSaleTerms(game, team, player)
+  const blocked = sellerSquadError(team, player)
+  const clubChance = blocked ? 0 : releaseChance(terms, offer)
+  const value = bestMarketValue(game, player)
+  const demands = negotiationDemands({ seed: game.seed, world: game.world, season: game.season }, player)
+  const playerTerms = negotiationTerms({ demands, value, asking: terms.asking ?? Math.max(1, value), offer, answers, clubTier: game.season?.tier ?? 'division2', clubId: 'player' })
+  const playerChance = terms.asking === null ? 0 : playerTerms.chance
+  return {
+    forSale: terms.asking !== null && !blocked,
+    asking: terms.asking,
+    value,
+    offer,
+    club: { status: terms.status, ageBand: terms.ageBand, age: terms.age, minutesShare: terms.minutesShare, recorded: terms.recorded, requiredPremium: terms.requiredPremium, chance: clubChance, reasons: terms.reasons, blocked },
+    player: { demands, chance: playerChance, reasons: playerTerms.reasons },
+    chance: clubChance * playerChance,
+  }
+}
+
+/** 卖掉这名球员后对方还剩一套完整比赛名单、至少两个门将吗？ */
+export function sellerSquadError(team: Pick<AITeam, 'players'>, player: Player): string | null {
+  const rest = team.players.filter((item) => item.id !== player.id)
+  if (rest.length < FULL_SQUAD) return `对方阵容只剩 ${team.players.length} 人，不再放人`
+  if (player.positions.GK > 0 && rest.filter((item) => item.positions.GK > 0).length < 2) return '对方门将不够，不放门将'
+  return null
 }
 
 /** 阵容上限：签人不拦，开赛前必须裁到 25 人以内。 */
@@ -146,6 +206,8 @@ export type NegotiationOutcome = MarketOutcome & {
   chance?: number
   reasons?: string[]
   asks?: { value: number; asking: number; demands: NegotiationDemands }
+  /** 向 AI 球队买人时：俱乐部点头的概率和理由（球员本人的在 chance / reasons）。 */
+  club?: { chance: number; reasons: string[]; terms: ReleaseAssessment }
 }
 
 export type { NegotiationAnswers, NegotiationDemands } from './negotiation.ts'
@@ -229,10 +291,26 @@ export function signClubPlayer(
   const team = game.aiTeams.find((item) => item.id === clubId)
   const player = team?.players.find((item) => item.id === playerId)
   if (!team || !player) return fail('球员不在该球队')
-  const asking = clubAsking(game, player)
-  const result = negotiate(game, player, offer, answers, asking, game.seed)
-  if (!result.ok) return result
+  const squad = sellerSquadError(team, player)
+  if (squad) return fail(squad)
+  // 先过俱乐部这关：主力 / 年龄 / 最近出场 / 溢价决定肯不肯放人，同一份报价结果固定。
+  const terms = clubSaleTerms(game, team, player)
+  if (terms.asking === null) return { ok: false, error: `${player.name} 是${team.name}的非卖品：${terms.reasons[0]}`, club: { chance: 0, reasons: terms.reasons, terms } }
+  if (!Number.isSafeInteger(offer) || offer < terms.asking) {
+    return { ok: false, error: `${team.name}要价 ${terms.asking.toLocaleString()}，这个报价不谈`, club: { chance: 0, reasons: terms.reasons, terms } }
+  }
+  const clubChance = releaseChance(terms, offer)
+  const club = { chance: clubChance, reasons: terms.reasons, terms }
+  if (!releaseRoll(game.seed, player.id, offer, clubChance)) {
+    return { ok: false, error: `${team.name}考虑之后拒绝了：${terms.reasons[0]}。再加点价试试。`, club }
+  }
+  // 再过球员本人这关（他的诉求、想去的球队、联赛级别）。
+  const result = negotiate(game, player, offer, answers, terms.asking, game.seed)
+  if (!result.ok) return { ...result, club }
   completeSigning(game, player, offer)
+  // 卖人的钱进对方账本（单机；联机由服务器记到共享账本）。
+  const seller = game.aiClubs?.[clubId]
+  if (seller) seller.economy.balance += offer
   team.players = team.players.filter((item) => item.id !== playerId)
   team.starPlayerIds = team.starPlayerIds.filter((id) => id !== playerId)
   team.playerNames = team.playerNames.filter((name) => name !== player.name)
@@ -240,7 +318,7 @@ export function signClubPlayer(
   if (worldClub) worldClub.starPlayerIds = worldClub.starPlayerIds.filter((id) => id !== playerId)
   const repaired = repairLineup(team.players, team.lineup)
   if (validateLineup(team.players, repaired.lineup).valid) team.lineup = repaired.lineup
-  return result
+  return { ...result, club }
 }
 
 /** 直接按底价成交（跳过谈判）：AI 和内部流程用。 */

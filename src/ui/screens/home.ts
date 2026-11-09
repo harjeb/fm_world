@@ -8,7 +8,7 @@ import { trainingActionsTotal } from '../../game/training.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
 import { isOnlineMode, onlineKickoffPending, serverNow } from '../../online.ts'
 import { boardMarkings, boardSpot, caHeat, clubLook, crest, emptyState, formPills, icon, injuryLabel, leagueTable, meter, pageHead, panel, recordResult, resultPill, teamForm, tile } from '../components.ts'
-import { esc, playerCA, shortName } from '../format.ts'
+import { countdownText, esc, playerCA, shortName } from '../format.ts'
 import { game } from '../state.ts'
 import type { IconName } from '../icons.ts'
 
@@ -139,6 +139,15 @@ function inboxItems(): InboxItem[] {
   if (!check.valid) items.push({ tone: 'bad', icon: 'alert', title: '阵容不合法', detail: check.errors[0] ?? '', attrs: 'data-nav="lineup"' })
   if (game.roster.length > SQUAD_LIMIT) {
     items.push({ tone: 'bad', icon: 'alert', title: `阵容超编 ${game.roster.length} / ${SQUAD_LIMIT}`, detail: `裁掉 ${game.roster.length - SQUAD_LIMIT} 人才能进入比赛。`, attrs: 'data-nav="transfer"' })
+  }
+  const offers = (game.transferOffers ?? []).filter((offer) => offer.status === 'pending')
+  if (offers.length) {
+    const soonest = Math.min(...offers.map((offer) => offer.expiresAt))
+    items.push({ tone: 'warn', icon: 'swap', title: `收到 ${offers.length} 份转会报价`, detail: `最早的 ${countdownText(soonest - serverNow())} 后过期，不回复算拒绝。`, attrs: 'data-action="go-transfer" data-tab="offers"' })
+  }
+  for (const player of game.roster) {
+    if (!player.unhappy || player.unhappy.until <= serverNow()) continue
+    items.push({ tone: 'warn', icon: 'alert', title: `${player.name} 不满`, detail: `${player.unhappy.reason}；${countdownText(player.unhappy.until - serverNow())} 内精力恢复只剩一成。`, attrs: `data-action="detail" data-player="${esc(player.id)}"` })
   }
   const inLineup = new Set([...game.lineup.starters.map((starter) => starter.playerId), ...game.lineup.bench])
   for (const id of Object.keys(game.suspensions ?? {})) {

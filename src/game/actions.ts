@@ -27,14 +27,19 @@ import { keyAttrsOf } from './data/key-attrs.ts'
 import { normalizeCeilings } from './data/attr-profile.ts'
 import { isGoalkeeper } from './ca.ts'
 import { MAIN_ATTR_MAX, attrLimit, mainAttrsFor } from './rating.ts'
+import { settleEnergy } from './energy.ts'
 
 export function startTraining(game: GameState, playerId: string, seed?: number): { ok: boolean; error?: string } {
   const running = game.training[playerId]
   if (running && !running.completed) return { ok: false, error: '该球员已有一轮培养' }
   const player = game.roster.find((item) => item.id === playerId)
   if (!player) return { ok: false, error: '球员不存在' }
+  settleEnergy(player, Date.now())
   const energy = player.energy ?? 100
-  if (!Number.isFinite(energy) || energy < TRAINING_ENERGY_COST) return { ok: false, error: `精力不足：开始一轮培养需要 ${TRAINING_ENERGY_COST} 点，当前 ${Math.round(energy)} 点。等待比赛日恢复。` }
+  if (!Number.isFinite(energy) || energy < TRAINING_ENERGY_COST) {
+    const unhappy = player.unhappy ? `（他正在闹情绪：${player.unhappy.reason}，精力恢复很慢）` : ''
+    return { ok: false, error: `精力不足：开始一轮培养需要 ${TRAINING_ENERGY_COST} 点，当前 ${Math.round(energy)} 点；每个游戏日恢复 50 点${unhappy}。` }
+  }
   // 上一轮的新卡已经在库存里，不需要先处理结果页才能开始下一轮。
   if (running?.completed || game.candidates[playerId]) closeFinishedTraining(game, playerId)
   player.energy = Math.max(0, energy - TRAINING_ENERGY_COST)
@@ -42,6 +47,9 @@ export function startTraining(game: GameState, playerId: string, seed?: number):
   // 每轮都从原始属性开始，和他现在装备哪张卡无关。
   const session = createTrainingSession(untrainedPlayer(player), seed ?? newTrainingSeed(game, playerId), { stadium: economy.stadium, academy: economy.academy, medical: economy.medical, shop: economy.shop, sponsor: economy.sponsor, psychology: economy.psychology, tactics: economy.tactics })
   session.scheduleSeed = splitSeed(game.seed, 'training-calendar')
+  // 候选卡只是一份属性快照：精力时钟和不满属于球员本人，不跟着进卡。
+  delete session.candidate.energyAt
+  delete session.candidate.unhappy
   game.training[playerId] = session
   saveGame(game)
   return { ok: true }

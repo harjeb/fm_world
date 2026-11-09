@@ -301,7 +301,8 @@ describe('全服自由市场', () => {
     const player = cheapest[0]
     const value = playerMarketValue(player)
 
-    expect((await bid(base, one.headers, player.id, value)).status).toBe(200)
+    const firstBid = await bid(base, one.headers, player.id, value)
+    expect(firstBid.status, JSON.stringify(await firstBid.clone().json())).toBe(200)
     let market = await getMarket(base)
     expect(market.auctions[0]).toMatchObject({ playerId: player.id, endsAt: clock + AUCTION_DURATION_MS })
     expect(leadingBid(market.auctions[0]).club).toBe(one.game.clubName)

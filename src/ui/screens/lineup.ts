@@ -73,6 +73,7 @@ function playerFlags(player: Player): string {
   const flags: string[] = []
   if (injuryUntil(game, player)) flags.push(tag('受伤', 'bad'))
   if (game.suspensions?.[player.id]) flags.push(tag('停赛', 'bad'))
+  if (player.unhappy && player.unhappy.until > Date.now()) flags.push(`<span class="tag gold" title="${esc(player.unhappy.reason)}：精力恢复只剩一成">不满</span>`)
   return flags.join('')
 }
 

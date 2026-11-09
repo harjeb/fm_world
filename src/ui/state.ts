@@ -25,7 +25,7 @@ import type { TrainingActivityId } from '../game/training-calendar.ts'
 
 export type Screen = 'club' | 'transfer' | 'home' | 'academy' | 'inventory' | 'training' | 'lineup' | 'season' | 'world' | 'challenge' | 'review' | 'match'
 export type ClubTab = 'facilities' | 'contracts' | 'history'
-export type TransferTab = 'market' | 'free'
+export type TransferTab = 'market' | 'free' | 'ai' | 'offers'
 export type SquadSortKey = 'pos' | 'name' | 'age' | 'ca' | 'condition' | 'energy' | 'value' | `attr${number}`
 
 export type UIState = {
@@ -36,6 +36,10 @@ export type UIState = {
   transferTab: TransferTab
   clubSearch: string
   clubPage: number
+  /** 「从 AI 球队买人」的筛选和翻页。 */
+  aiBuyTeam: string
+  aiBuyPos: string
+  aiBuyPage: number
   academySearch: string
   academyPos: Position | 'ALL'
   academyEra: string
@@ -126,6 +130,9 @@ export const ui: UIState = {
   transferTab: 'market',
   clubSearch: '',
   clubPage: 0,
+  aiBuyTeam: 'ALL',
+  aiBuyPos: 'ALL',
+  aiBuyPage: 0,
   academySearch: '',
   academyPos: 'ALL',
   academyEra: 'ALL',

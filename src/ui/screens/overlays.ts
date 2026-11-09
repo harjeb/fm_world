@@ -7,6 +7,8 @@ import { MAIN_FIELD_ATTRS, MAIN_GK_ATTRS } from '../../game/scale.ts'
 import type { ClubPreview } from '../../game/world.ts'
 import { marketState, onlineState, publicConfig, publicWorld } from '../../online.ts'
 import { AUCTION_EXTEND_MS, auctionRaiseFee } from '../../game/auction.ts'
+import { previewClubSigning } from '../../game/market.ts'
+import { SQUAD_STATUS_LABELS } from '../../game/transfer-rules.ts'
 import { economyOf } from '../../game/economy.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, TIER_LABELS, negotiationDemands, negotiationTerms, type SeasonGoal, type SquadRole } from '../../game/negotiation.ts'
 import { CA_STOPS, attrHeadCell, attributeRadar, attrHeat, caHeat, cardName, cardRoute, countryLabel, crest, eraLabel, findAnyPlayer, heatLegend, icon, injuryLabel, mainAttrs, meter, positionMap, posBadge, primaryPosition, skillGroups, skillTag, tag, traitLabel } from '../components.ts'
@@ -289,7 +291,14 @@ export function renderNegotiationOverlay(): string {
     clubTier: tier,
     clubId: 'player',
   })
-  const chance = Math.round(terms.chance * 1000) / 10
+  // 向 AI 球队买人：先过俱乐部（主力 / 年龄 / 最近出场 / 溢价），再过球员本人，成功率是两关相乘。
+  const seller = draft.kind === 'club' ? game.aiTeams.find((team) => team.id === draft.clubId) : undefined
+  const clubPreview = seller ? previewClubSigning(game, seller, player, draft.offer, { goal: draft.goal, role: draft.role }) : undefined
+  const chance = Math.round((clubPreview ? clubPreview.chance : terms.chance) * 1000) / 10
+  const clubSection = clubPreview ? `<div class="nego-club">
+      <p><b>俱乐部这关</b> · ${tag(SQUAD_STATUS_LABELS[clubPreview.club.status], clubPreview.club.status === 'key' ? 'good' : clubPreview.club.status === 'rotation' ? 'info' : '')} ${clubPreview.club.age} 岁 · 最近 20 场出场 ${Math.round(clubPreview.club.minutesShare * 100)}%${clubPreview.club.recorded >= 5 ? '' : '（按阵容估算）'} · 身价 ${clubPreview.value.toLocaleString()}</p>
+      <p class="hint">${esc(clubPreview.club.blocked ?? clubPreview.club.reasons.join('；'))} · 俱乐部点头 <b>${(clubPreview.club.chance * 100).toFixed(0)}%</b> × 球员点头 <b>${(clubPreview.player.chance * 100).toFixed(0)}%</b></p>
+    </div>` : ''
   const clubNameOf = (id: string) => game.world?.clubs.find((club) => club.id === id)?.name ?? game.aiTeams.find((team) => team.id === id)?.name ?? id
   const source = draft.kind === 'free' ? '自由球员' : draft.kind === 'bid' ? '全服竞拍' : `来自 ${clubNameOf(draft.clubId ?? '')}`
   const goalButtons = (Object.keys(SEASON_GOAL_LABELS) as SeasonGoal[]).map((goal) =>
@@ -321,7 +330,8 @@ export function renderNegotiationOverlay(): string {
           <div class="form-row"><label>你的赛季目标</label><div class="seg wrap">${goalButtons}</div></div>
           <div class="form-row"><label>你给他的位置</label><div class="seg wrap">${roleButtons}</div></div>
         </div>
-        <div class="form-row"><label for="nego-offer">报价（底价 ${draft.asking.toLocaleString()}，余额 ${economyOf(game).balance.toLocaleString()}）</label>
+        ${clubSection}
+        <div class="form-row"><label for="nego-offer">报价（${draft.kind === 'club' ? '俱乐部要价' : '底价'} ${draft.asking.toLocaleString()}，余额 ${economyOf(game).balance.toLocaleString()}）</label>
           <input id="nego-offer" type="number" min="${draft.asking}" step="1000" value="${draft.offer}" data-nego-offer></div>
         <div class="nego-chance ${chance >= 70 ? 'good' : chance >= 35 ? 'warn' : 'bad'}">
           <span>谈判成功率</span><b>${chance.toFixed(1)}%</b><span class="nego-bar"><i style="width:${Math.min(100, chance)}%"></i></span>

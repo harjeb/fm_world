@@ -114,17 +114,22 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
   const goalSchema = z.enum(['title', 'promotion', 'top-half', 'survival']).optional().describe('承诺的赛季目标：title 争冠/升级、promotion 冲击上游（默认）、top-half 稳居中游、survival 保级为主')
   const roleSchema = z.enum(['star', 'first-team', 'rotation']).optional().describe('承诺的队内定位：star 绝对主力、first-team 常规首发（默认）、rotation 轮换替补')
 
-  register('preview_signing', '预览谈判', '向 AI 球队买人前预览：底价、球员诉求（想听的目标/定位、想去的球队、最低联赛级别）和这份报价的成功率，不写入存档。只能谈 state.market.clubOffers 里的球员。', {
+  register('preview_signing', '预览谈判', '向本联赛 AI 球队买人前预览，不写入存档：俱乐部这关（主力/轮换/冷板凳、年龄、最近 20 场出场、要求的溢价、点头概率）和球员这关（想听的目标/定位、想去的球队、最低联赛级别、点头概率），chance 是两关相乘。年轻主力是非卖品（asking 为 null）。', {
     teamId: z.string().min(1), playerId: z.string().min(1),
     offer: z.number().int().positive().safe().optional().describe('报价总额；不填按底价'),
     goal: goalSchema, role: roleSchema,
   }, (args) => action('preview_signing', args))
 
-  register('sign_club_player', '谈判买人', '向 AI 球队报价买人（转会窗口开放时）。同一份报价和承诺的结果是固定的，失败后改报价或承诺才会重新判定。', {
+  register('sign_club_player', '谈判买人', '向本联赛 AI 球队报价买人（转会窗口开放时）：俱乐部按放人规则、球员按个人诉求，两关都过才成交；报价不能低于俱乐部要价。同一份报价和承诺的结果固定，换报价或承诺才重新判定。', {
     teamId: z.string().min(1), playerId: z.string().min(1),
     offer: z.number().int().positive().safe().describe('报价总额，不能低于底价'),
     goal: goalSchema, role: roleSchema,
   }, (args) => action('sign_club_player', args))
+
+  register('respond_offer', '回复报价', 'AI 俱乐部给你球员的报价（state.transferOffers 里 status 为 pending 的）：accept=true 接受（球员转走、钱到账），false 拒绝。4 个游戏日（现实 24 小时）不回复算拒绝；拒绝高价报价（high=true，不低于身价 1.3 倍）球员会不满 8 个游戏日，精力恢复只剩一成。', {
+    offerId: z.string().min(1),
+    accept: z.boolean(),
+  }, (args) => action('respond_offer', args))
 
   register('renew_contract', '续约', '给自己的球员续约 2 年，工资按身价上调。', {
     playerId: z.string().min(1),

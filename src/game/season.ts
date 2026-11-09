@@ -3,6 +3,10 @@ import { splitSeed } from './rng.ts'
 import { buildMatchEngineForGame, createMatchRecord, fixtureScorers, simulateAIvsAIState } from './match/setup.ts'
 import type { GameEngine } from './pes/engine.ts'
 import { ENERGY_RECOVERY_PER_GAME_DAY } from './training.ts'
+import { RECENT_MATCHES } from './transfer-rules.ts'
+import { settleSquadEnergy, shiftEnergyClock } from './energy.ts'
+import { expireOffers, runLocalTransfers } from './transfers.ts'
+import { refreshLocalFreeMarket } from './free-market.ts'
 import { awardSeasonPrize } from './economy.ts'
 import { squadLimitError } from './market.ts'
 import { GAME_DAY_MS, ROUND_GAME_DAYS, ROUND_MS, elapsedGameDays, gameDayOfRound, kickoffAtForRound, seasonEndAt } from './calendar.ts'
@@ -245,9 +249,11 @@ export function matchdayCountdown(game: GameState, now = Date.now()): string {
 }
 
 function recoverConditions(game: GameState, gameDays: number): void {
-  const all = [...game.roster, ...game.aiTeams.flatMap((team) => team.players)]
-  for (const player of all) {
+  for (const player of [...game.roster, ...game.aiTeams.flatMap((team) => team.players)]) {
     player.condition = clamp((player.condition ?? 100) + gameDays * 7, 1, 100)
+  }
+  // 一线队的训练精力按时间连续恢复（energy.ts），这里只补电脑球队的。
+  for (const player of game.aiTeams.flatMap((team) => team.players)) {
     player.energy = clamp((player.energy ?? 100) + gameDays * ENERGY_RECOVERY_PER_GAME_DAY, 0, 100)
   }
 }
@@ -287,8 +293,18 @@ function shiftInjuries(game: GameState, delta: number, now: number): void {
 function skipCalendar(game: GameState, delta: number, now: number): { ok: boolean; gameDays: number } {
   if (!(delta > 0)) return { ok: true, gameDays: 0 }
   const gameDays = delta / game.season.gameDayMs
+  // 先把精力结算到现在（没记过时间的从现在开始记），再把时钟往回拨跳过的时长，补上这段时间的恢复。
+  settleSquadEnergy(game, now)
   shiftCalendar(game, delta)
+  shiftEnergyClock(game, delta)
+  // 报价的回复期限也按游戏日算：时间往前跳，期限跟着往前挪。
+  for (const offer of game.transferOffers ?? []) {
+    if (offer.status !== 'pending') continue
+    offer.createdAt -= delta
+    offer.expiresAt -= delta
+  }
   recoverConditions(game, gameDays)
+  settleSquadEnergy(game, now)
   shiftInjuries(game, delta, now)
   return { ok: true, gameDays }
 }
@@ -309,6 +325,25 @@ export function skipToPostseasonEnd(game: GameState, now = Date.now()): { ok: bo
   if (!game.season.finished) return { ok: false, error: '常规赛还没结束', gameDays: 0 }
   if (now >= seasonEndAt(game.season.startedAt)) return { ok: true, gameDays: 0 }
   return skipCalendar(game, seasonEndAt(game.season.startedAt) - now, now)
+}
+
+/**
+ * 联赛踢完一场：两队整个名单各记一笔出场分钟（没进比赛名单、没上场记 0），只留最近 20 场。
+ * 俱乐部判断放不放人时看这份记录（见 transfer-rules.ts）。
+ */
+function recordAppearances(game: GameState, homeId: string, awayId: string, stats: MatchRecord['playerStats']): void {
+  const minutes = new Map<string, number>()
+  for (const stat of stats) minutes.set(stat.sourceId ?? stat.playerId.split(':').slice(1).join(':'), stat.minutes)
+  const squads = [homeId, awayId].map((id) => (id === PLAYER_TEAM_ID ? game.roster : game.aiTeams.find((team) => team.id === id)?.players ?? []))
+  const book = (game.appearances ??= {})
+  for (const squad of squads) {
+    for (const player of squad) book[player.id] = [...(book[player.id] ?? []), Math.round(minutes.get(player.id) ?? 0)].slice(-RECENT_MATCHES)
+  }
+  // 换赛季后旧名单的人不再出现：记录太多时只留当前还在名单上的。
+  if (Object.keys(book).length > 2000) {
+    const present = new Set([...game.roster, ...game.aiTeams.flatMap((team) => team.players)].map((player) => player.id))
+    for (const id of Object.keys(book)) if (!present.has(id)) delete book[id]
+  }
 }
 
 function applyMatchConditions(game: GameState, stats: MatchRecord['playerStats']): void {
@@ -353,6 +388,7 @@ export function simulateFixture(game: GameState, fixture: Fixture, auto = false,
   fixture.assisters = tally.assisters
   if (auto) fixture.autoSimulated = true
   applyMatchConditions(game, record.playerStats)
+  recordAppearances(game, fixture.homeId, fixture.awayId, record.playerStats)
   return record
 }
 
@@ -382,6 +418,7 @@ export function simulateAIFixturesInRound(game: GameState, round = game.season.r
     })
     record.autoSimulated = true
     applyMatchConditions(game, record.playerStats)
+    recordAppearances(game, fixture.homeId, fixture.awayId, record.playerStats)
   }
   updateSeasonTable(game)
 }
@@ -389,6 +426,12 @@ export function simulateAIFixturesInRound(game: GameState, round = game.season.r
 /** 真实时间推进：到点的轮次自动结算，包括玩家未进行的比赛。 */
 export function catchUpSeason(game: GameState, now = Date.now()): { advanced: number; records: MatchRecord[] } {
   const records: MatchRecord[] = []
+  // 一线队精力按时间补算（比赛进行中、赛季结束后也照常恢复）。
+  settleSquadEnergy(game, now)
+  // 过期的报价（4 个游戏日没回复）按拒绝处理。
+  expireOffers(game, now)
+  // 自由市场每个游戏日补到 200 人，前几天没人要的随机球员销毁（联机由服务器补）。
+  refreshLocalFreeMarket(game, now)
   if (game.activeMatch || game.season.finished) return { advanced: 0, records }
   economyOf(game)
   const target = dueRound(game, now)
@@ -406,6 +449,8 @@ export function catchUpSeason(game: GameState, now = Date.now()): { advanced: nu
     awardRoundIncome(game, round)
     settleMarket(game, round)
     runAIClubs(game, round)
+    // AI 互相挖人、给玩家报价（单机；联机由服务器在共享名册上做）。
+    runLocalTransfers(game, round, now)
     if (game.world) {
       simulateOtherDivisions(game, round)
       payWorldWages(game, round)
@@ -437,6 +482,7 @@ export function advanceSeasonRound(game: GameState, now = Date.now()): { ok: boo
   awardRoundIncome(game, round)
   settleMarket(game, round)
   runAIClubs(game, round)
+  runLocalTransfers(game, round, now)
   if (game.world) {
     simulateOtherDivisions(game, round)
     payWorldWages(game, round)
@@ -628,6 +674,8 @@ export function finishActiveMatch(game: GameState, engine: GameEngine, now = Dat
   const record = createMatchRecord(game, state, active.context)
   applyMatchConditions(game, record.playerStats)
   if (active.context.isLeague) {
+    const home = active.context.homeAway === 'home' ? PLAYER_TEAM_ID : active.context.opponentId
+    recordAppearances(game, home, home === PLAYER_TEAM_ID ? active.context.opponentId : PLAYER_TEAM_ID, record.playerStats)
     const round = active.context.round ?? game.season.round
     const fixture = game.season.fixtures.find((item) => item.round === round && item.isPlayer)
     if (fixture) {
