@@ -638,6 +638,68 @@ export function refreshAILineup(team: { players: Player[]; lineup: Lineup; forma
   return changed
 }
 
+/* ---------- 电脑球队按体能轮换 ---------- */
+
+/** 电脑球队的球员体能低于这个就先休息（联赛踢满一场掉 70，见 condition.ts）。 */
+export const AI_REST_BELOW = 80
+
+const restedEnough = (player: Player): boolean => (player.condition ?? 100) >= AI_REST_BELOW
+
+/** 这套首发里有没有该休息的人（或不在名单上的人）。 */
+export function aiNeedsRotation(players: Player[], lineup: Lineup): boolean {
+  const byId = new Map(players.map((player) => [player.id, player]))
+  return lineup.starters.some((starter) => {
+    const player = byId.get(starter.playerId)
+    return !player || !restedEnough(player)
+  })
+}
+
+/**
+ * 电脑球队这场比赛的阵容：体能低于 80 的先休息。每个位置按顺序找人：
+ * 体能够的、会踢这个位置的 → 体能不够但会踢这个位置的 → 体能够的任何人 → 剩下的任何人，
+ * 同一档里和自动填充一样按职责适配 × 位置熟练度挑最强的。所以门将累了也不会让后卫去守门，
+ * 实在没人可换时累的人照样上。替补也先用体能够的。只用于这一场，不改存档里的阵容。
+ */
+export function aiRotatedLineup(players: Player[], formationId: FormationId, tactics?: Tactics, previous?: LineupLike): Lineup {
+  const formation = FORMATIONS[formationId]
+  const used = new Set<string>()
+  const starters = [] as Lineup['starters']
+  const orderedSlots = [...formation.slots].sort((a, b) => (a.position === 'GK' ? -1 : b.position === 'GK' ? 1 : 0))
+  for (const slot of orderedSlots) {
+    const free = players.filter((player) => !used.has(player.id))
+    const fresh = free.filter(restedEnough)
+    const learned = (list: Player[]) => list.filter((player) => player.positions[slot.position] >= PLAYABLE_PROFICIENCY)
+    const pool = [learned(fresh), learned(free), fresh, free].find((list) => list.length) ?? []
+    let bestPlayer: Player | null = null
+    let bestRole: RoleId = slot.defaultRole
+    let bestScore = -Infinity
+    for (const player of pool) {
+      const multiplier = positionMultiplier(player.positions[slot.position])
+      for (const role of rolesForSlot(slot)) {
+        const score = roleFit(player.attrs, role, player.positions.GK > 0) * multiplier
+        if (score > bestScore) {
+          bestScore = score
+          bestPlayer = player
+          bestRole = role
+        }
+      }
+    }
+    if (bestPlayer) {
+      used.add(bestPlayer.id)
+      starters.push({ slotId: slot.id, playerId: bestPlayer.id, role: bestRole })
+    }
+  }
+  const remaining = players.filter((player) => !used.has(player.id))
+  const freshBench = remaining.filter(restedEnough)
+  return {
+    formationId,
+    starters,
+    bench: buildBench(freshBench.length >= BENCH_SIZE ? freshBench : [...freshBench, ...remaining.filter((player) => !restedEnough(player))]),
+    tactics: tactics ?? { ...formation.defaultTactics },
+    ...preservedExtras(previous, formationId),
+  }
+}
+
 /** 一批电脑球队都重排一次（读旧存档时用：修掉之前买进来却没进首发的球员）。返回有没有哪支队变了。 */
 export function refreshAILineups(teams: readonly { players: Player[]; lineup: Lineup; formationId: FormationId; tactics: Tactics }[]): boolean {
   let changed = false

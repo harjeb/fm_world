@@ -4,7 +4,7 @@ import type { MatchTeamInput } from './types.ts'
 import { FORMATIONS } from '../data/formations.ts'
 import { MatchEngine, normalizePossession } from './engine.ts'
 import { PesEngine, type GameEngine } from '../pes/engine.ts'
-import { autoFillLineup, validateLineup } from '../squad.ts'
+import { aiNeedsRotation, aiRotatedLineup, autoFillLineup, validateLineup } from '../squad.ts'
 import { prepareMatchInjuries } from '../injury.ts'
 import { LOGIC_MATCH_SECONDS } from './time.ts'
 import { matchPerformanceOf } from '../economy.ts'
@@ -35,17 +35,25 @@ export function teamInputFromLineup(roster: Player[], lineup: Lineup, identity: 
   }
 }
 
-export function teamInputFromAI(ai: AITeam, suspended?: Set<string>): MatchTeamInput {
+/**
+ * 电脑球队的比赛阵容。rotate：体能低于 80 的先休息（联赛用；有教练的球队按教练自己排的阵容，不传）。
+ * 轮换只影响这一场，存档里的阵容不变。
+ */
+export function teamInputFromAI(ai: AITeam, suspended?: Set<string>, options: { rotate?: boolean } = {}): MatchTeamInput {
   const players = suspended?.size ? ai.players.filter((player) => !suspended.has(player.id)) : ai.players
-  const lineup = players.length === ai.players.length ? ai.lineup : autoFillLineup(players, ai.formationId, ai.tactics)
+  const tactics = ai.lineup?.tactics ?? ai.tactics
+  const lineup = options.rotate && aiNeedsRotation(players, ai.lineup)
+    ? aiRotatedLineup(players, ai.lineup?.formationId ?? ai.formationId, tactics, ai.lineup)
+    : players.length === ai.players.length ? ai.lineup : autoFillLineup(players, ai.formationId, ai.tactics)
   return { ...teamInputFromLineup(players, lineup, { id: ai.id, name: ai.name, color: ai.color, accent: ai.accent }), autoSubs: { timed: [], staminaBelow: null, onInjury: true } }
 }
 
-export function simulateAIvsAIState(home: AITeam, away: AITeam, seed: number, durationSeconds = LOGIC_MATCH_SECONDS, injuries?: GameState['injuries'], now = Date.now(), suspended?: Set<string>) {
+/** 两支电脑球队的比赛（联赛、升级附加赛）：体能低于 80 的先休息（rotate 默认开）。 */
+export function simulateAIvsAIState(home: AITeam, away: AITeam, seed: number, durationSeconds = LOGIC_MATCH_SECONDS, injuries?: GameState['injuries'], now = Date.now(), suspended?: Set<string>, rotate = true) {
   const engine = new MatchEngine({
     seed,
-    home: teamInputFromAI(home, suspended),
-    away: teamInputFromAI(away, suspended),
+    home: teamInputFromAI(home, suspended, { rotate }),
+    away: teamInputFromAI(away, suspended, { rotate }),
     knockout: false,
     durationSeconds,
     offside: false,
@@ -179,7 +187,8 @@ export function buildMatchEngineForGame(game: GameState, context: MatchContext, 
     accent: '#052e1b',
   })
   if (game.autoSubs) playerInput.autoSubs = structuredClone(game.autoSubs)
-  const aiInput = teamInputFromAI(ai, suspended)
+  // 对手是电脑球队：体能低于 80 的先休息。
+  const aiInput = teamInputFromAI(ai, suspended, { rotate: true })
   if (rulesVersion === undefined) {
     const pes = new PesEngine({
       seed: context.seed,

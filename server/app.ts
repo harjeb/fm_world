@@ -422,6 +422,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       medical: game ? economyOf(game).medical : sharedWorld.aiClubs?.[clubId]?.economy.medical ?? 1,
       // 锁定时还欠薪：这场只发挥一半。
       ...(game && matchPerformanceOf(game) < 1 ? { performance: matchPerformanceOf(game) } : {}),
+      // 没有教练的电脑球队：开球时体能低于 80 的先休息（体能在入队时按开球时间结算）。
+      ...(game ? {} : { ai: true }),
     }
   }
 
