@@ -324,7 +324,15 @@ export interface PesRules {
 }
 
 export const NATIVE_RULES: PesRules = { fatigue: 'native', fatiguePerMeter: 2.0e-4, cross: false, offside: true, penalties: false }
-export const GAME_RULES: PesRules = { fatigue: 'distance', fatiguePerMeter: 2.0e-4, cross: true, offside: true, penalties: true }
+/**
+ * 玩法体力标定（D = 900）：普通外场球员满体力踢完显示的 90 分钟，
+ * 计入中场 +5% 恢复后平均消耗约 70%。原来的 2e-4 只消耗约三成。
+ * 仍按实际跑动 / 速度 / 耐力扣除，不在终场强制改数：前场多跑更累、
+ * 门将少跑消耗更少，替补只扣上场后的消耗；模拟时长缩放由 sim.ts 处理。
+ * 比赛存档自带 fatiguePerMeter，因此进行中的旧比赛保持原来的消耗系数。
+ */
+export const GAME_FATIGUE_PER_METER = 4.0e-4
+export const GAME_RULES: PesRules = { fatigue: 'distance', fatiguePerMeter: GAME_FATIGUE_PER_METER, cross: true, offside: true, penalties: true }
 
 /** 刚开出的任意球：发球人在这段时间内按定位球的规则出球（直接射门 / 传中 / 短传）。 */
 export interface PesSetPiece {
