@@ -6,7 +6,7 @@ import { ATTR_GROUPS } from '../game/data/attributes.ts'
 import { attrRating, mainAttrsFor } from '../game/rating.ts'
 import { publicWorld, onlineState, type WorldPublicClub, type WorldPublicPlayer } from '../online.ts'
 import { PLAYER_TEAM_ID } from '../game/season.ts'
-import { attrHeat, attributeRadar, caHeat, icon, panel, posBadge, positionMap, primaryPosition, skillGroups, tag, traitLabel } from './components.ts'
+import { attrHeat, attributeRadar, caHeat, humanMark, icon, panel, posBadge, positionMap, primaryPosition, skillGroups, tag, traitLabel } from './components.ts'
 import { attrLabel, esc, playerCA } from './format.ts'
 import { tipAttrs } from './tooltip.ts'
 import { game, ui } from './state.ts'
@@ -132,7 +132,7 @@ export function clubRosterPanel(club: WorldPublicClub, selectedId?: string | nul
     <td class="num">${player.age ?? 24}</td><td class="num strong">${caHeat(player.ca)}</td>
     <td>${equippedCardCell(player)}</td>
     <td>${traitLabel(player.traitId)}</td></tr>`).join('')
-  return `${panel(`${esc(club.name)} · 球员名单`, `<p class="hint">公开 CA、属性、位置、技能和他们现在装备的球员卡；实时体能、训练精力与伤病状态不公开。CA 是装备卡的评分，“原始”是没练过的属性。</p>
+  return `${panel(`${esc(club.name)}${humanMark(club.id, !!club.managed)} · 球员名单`, `<p class="hint">公开 CA、属性、位置、技能和他们现在装备的球员卡；实时体能、训练精力与伤病状态不公开。CA 是装备卡的评分，“原始”是没练过的属性。</p>
     ${club.facilities ? `<p class="hint">设施：${facilityTags(club.facilities)}</p>` : ''}
     <div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th class="num">年龄</th><th class="num">CA</th><th>装备卡</th><th>特性</th></tr></thead><tbody>${rows}</tbody></table></div>`, { flush: true })}
     ${selected ? `<div id="club-player-detail">${publicPlayerPanel(selected)}</div>` : ''}`

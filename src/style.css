@@ -419,6 +419,9 @@ h3:first-child { margin-top: 0; }
 /* 球队名现在是按钮：去掉浏览器默认样式，保留悬停反馈。 */
 .club-btn { padding: 0; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .club-btn:hover .club-name { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+/* 真实玩家执教的球队：名字右边一个绿色人物图标。 */
+.human-mark { flex: none; display: inline-grid; place-items: center; margin-left: 3px; color: var(--good); vertical-align: -1px; }
+.human-mark .ico { display: block; stroke-width: 2.2; }
 .crest { flex: none; display: block; }
 .crest text { font-family: var(--font); }
 

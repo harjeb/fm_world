@@ -7,7 +7,7 @@ import { SQUAD_LIMIT } from '../../game/market.ts'
 import { trainingActionsTotal } from '../../game/training.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
 import { isOnlineMode, onlineKickoffPending, serverNow } from '../../online.ts'
-import { boardMarkings, boardSpot, caHeat, clubLook, crest, emptyState, formPills, icon, injuryLabel, leagueTable, meter, pageHead, panel, recordResult, resultPill, tag, teamForm, tile } from '../components.ts'
+import { boardMarkings, boardSpot, caHeat, clubLook, crest, emptyState, formPills, humanMark, icon, injuryLabel, leagueTable, meter, pageHead, panel, recordResult, resultPill, tag, teamForm, tile } from '../components.ts'
 import { isHighOffer } from '../../game/transfers.ts'
 import { countdownText, esc, playerCA, shortName } from '../format.ts'
 import { game } from '../state.ts'
@@ -29,7 +29,7 @@ function nextMatchSide(teamId: string, align: 'left' | 'right', isMe: boolean): 
   return `<div class="nm-team ${align} ${isMe ? 'me' : ''}">
     ${crest(look, 64)}
     <div class="nm-team-text">
-      <b>${esc(look.name)}</b>
+      <b>${esc(look.name)}${humanMark(teamId)}</b>
       <span class="muted">${rank ? `第 ${rank} 名 · ${row?.points ?? 0} 分` : ''}</span>
       ${formPills(teamForm(teamId, game.season.fixtures))}
     </div>

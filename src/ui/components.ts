@@ -11,7 +11,7 @@ import { injuryUntil } from '../game/injury.ts'
 import { attrRating, initialDisplayCA, mainAttrsFor } from '../game/rating.ts'
 import { isMainAttr } from '../game/scale.ts'
 import { PLAYER_TEAM_ID, teamName } from '../game/season.ts'
-import { marketState } from '../online.ts'
+import { isOnlineMode, marketState, publicWorld } from '../online.ts'
 import { esc, playerCA, positionClass, positionLabel, skillName, traitName } from './format.ts'
 import { tipAttrs } from './tooltip.ts'
 import { icon } from './icons.ts'
@@ -101,10 +101,21 @@ export function crest(look: Pick<ClubLook, 'name' | 'color'>, size = 18): string
   return `<svg class="crest" width="${Math.round((size * 32) / 36)}" height="${size}" viewBox="0 0 32 36" aria-hidden="true"><path d="${SHIELD}" fill="${color}"/>${pattern ? `<path d="${pattern}" fill="${darken(color, 0.24)}"/>` : ''}<path d="${SHIELD}" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1.2"/><text x="16" y="23.4" text-anchor="middle" font-size="15" font-weight="700" fill="${inkOn(color)}">${letter}</text></svg>`
 }
 
+/** 这支球队由真实玩家执教：自己的球队，或联机时有教练接管的球队。 */
+export function isHumanClub(id: string): boolean {
+  if (id === PLAYER_TEAM_ID) return true
+  return isOnlineMode() && !!publicWorld?.clubs.find((club) => club.id === id)?.managed
+}
+
+/** 真实玩家执教的球队名右边的绿色人物图标；电脑球队返回空。已知有教练（公开名单的 managed）可以直接传 managed。 */
+export function humanMark(id: string, managed = false): string {
+  return managed || isHumanClub(id) ? `<span class="human-mark" title="真实玩家执教" aria-label="真实玩家执教">${icon('user', 12)}</span>` : ''
+}
+
 /** 球队名：任何界面都能点开这支球队的球员名单。 */
 export function clubName(id: string, size = 18): string {
   const look = clubLook(id)
-  return `<button type="button" class="club club-btn" data-club-open="${esc(id)}" ${look.enName ? `title="${esc(look.enName)}"` : ''}>${crest(look, size)}<span class="club-name">${esc(look.name)}</span></button>`
+  return `<button type="button" class="club club-btn" data-club-open="${esc(id)}" ${look.enName ? `title="${esc(look.enName)}"` : ''}>${crest(look, size)}<span class="club-name">${esc(look.name)}</span>${humanMark(id)}</button>`
 }
 
 /* ---------- 数值着色 ---------- */
@@ -378,7 +389,7 @@ export function leagueTable(rows: SeasonTableRow[], options: { tier?: TierId; fi
     const form = options.compact ? '' : `<td>${options.fixtures ? formPills(teamForm(row.teamId, options.fixtures)) : ''}</td>`
     const look = options.clubLabels?.[row.teamId]
     // 积分榜里的球队名一律可点开名单（赛季页、世界页都一样）。
-    const browse = `<button type="button" class="club club-btn" data-club-open="${esc(row.teamId)}" aria-label="查看${esc(look?.name ?? row.teamId)}球员">${crest(look ?? clubLook(row.teamId))}<span class="club-name">${esc(look?.name ?? clubLook(row.teamId).name)}</span></button>`
+    const browse = `<button type="button" class="club club-btn" data-club-open="${esc(row.teamId)}" aria-label="查看${esc(look?.name ?? row.teamId)}球员">${crest(look ?? clubLook(row.teamId))}<span class="club-name">${esc(look?.name ?? clubLook(row.teamId).name)}</span>${humanMark(row.teamId)}</button>`
     return `<tr class="${row.teamId === PLAYER_TEAM_ID ? 'me' : ''}"><td class="num rank ${zone ? `zone-${zone}` : ''}">${index + 1}</td><td>${browse}</td>${cells}${options.ratings ? `<td class="num dim">${Math.round(options.ratings.get(row.teamId) ?? 0) || ''}</td>` : ''}<td class="num strong">${row.points}</td>${form}</tr>`
   }).join('')
   return `<div class="table-scroll"><table class="dt league"><thead><tr>${head.replace('<th class="num">分</th>', `${ratingHead}<th class="num">分</th>`)}</tr></thead><tbody>${body}</tbody></table></div>${options.compact ? '' : zoneLegend(options.tier)}`

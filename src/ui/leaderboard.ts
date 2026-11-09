@@ -1,7 +1,7 @@
 import type { Fixture, SeasonState } from '../game/types.ts'
 import { divisionLeaders, worldDivisionLabel } from '../game/world.ts'
 import { PLAYER_TEAM_ID } from '../game/season.ts'
-import { clubLook, crest, emptyState, panel } from './components.ts'
+import { clubLook, crest, emptyState, humanMark, panel } from './components.ts'
 import { esc } from './format.ts'
 import { game, ui } from './state.ts'
 
@@ -15,7 +15,7 @@ function leaderRows(division: { fixtures: Fixture[] }, kind: 'goals' | 'assists'
     return `<div class="row-line${row.teamId === PLAYER_TEAM_ID ? ' me' : ''}">
       <span class="rank-no">${index + 1}</span>
       <span class="leader-name"><button class="name-btn" data-club-player="${esc(row.playerId)}" data-club="${esc(row.teamId)}">${esc(row.name)}</button></span>
-      <span class="leader-club">${crest(look, 14)}<span>${esc(look.name)}</span></span>
+      <span class="leader-club">${crest(look, 14)}<span>${esc(look.name)}</span>${humanMark(row.teamId)}</span>
       <b class="num strong">${value}</b>
     </div>`
   }).join('')}</div>`
