@@ -89,12 +89,12 @@ function continueAction(): string {
       : `<button class="btn primary continue" data-action="skip-postseason" title="跳过赛后休整，直接开新赛季">${icon('skip', 14)}跳至新赛季</button>`
   }
   if (game.season.finished) return `<button class="btn primary continue" data-action="next-season">${icon('play', 14)}开始下一赛季</button>`
+  // 本轮已结算后仍显示下一场的固定开球倒计时，不退回“等待下一轮”。
+  if (isOnlineMode()) {
+    return `<span class="continue-wait">${icon('clock', 14)}下场比赛倒计时 · ${esc(nextMatchCountdown(game, serverNow()))}</span>`
+  }
   const fixture = playerFixture(game)
   if (fixture && !fixture.played) {
-    // 联机联赛由服务器到点自动结算，顶栏只显示倒计时或结算状态；单机可以跳到比赛日。
-    if (isOnlineMode()) {
-      return `<span class="continue-wait">${icon('clock', 14)}下场比赛倒计时 · ${esc(nextMatchCountdown(game, serverNow()))}</span>`
-    }
     return `<button class="btn primary continue" data-action="start-league" title="把游戏日历快进到本轮比赛日，体能按跳过的天数恢复">${icon('play', 14)}跳至比赛日</button>`
   }
   return `<span class="continue-wait">${icon('clock', 14)}等待下一轮</span>`

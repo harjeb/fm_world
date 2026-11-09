@@ -38,6 +38,15 @@ export type WorldPublicSnapshot = {
 export let publicWorld: WorldPublicSnapshot | null = null
 let publicWorldRequest = 0
 
+/** 注册前的空缺球队预览；球队仅在注册提交成功时分配。 */
+export let registrationClubs: WorldPublicClub[] | null = null
+
+export async function refreshRegistrationClubs(): Promise<void> {
+  const data = await requestJson<{ clubs: WorldPublicClub[] }>('/api/registration/clubs')
+  registrationClubs = data.clubs
+  notify()
+}
+
 export async function refreshPublicWorld(): Promise<void> {
   if (onlineState.status !== 'online') return
   const request = ++publicWorldRequest
@@ -149,7 +158,7 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 export async function registerOnline(
   username: string,
   password: string,
-  extra: { inviteCode?: string; turnstileToken?: string } = {},
+  extra: { inviteCode?: string; turnstileToken?: string; clubId?: string } = {},
 ): Promise<AuthResponse> {
   const data = await requestJson<AuthResponse>('/api/register', {
     method: 'POST',
@@ -159,6 +168,7 @@ export async function registerOnline(
       password,
       ...(extra.inviteCode ? { inviteCode: extra.inviteCode } : {}),
       ...(extra.turnstileToken ? { turnstileToken: extra.turnstileToken } : {}),
+      ...(extra.clubId ? { clubId: extra.clubId } : {}),
     }),
   })
   acceptSession(data)
@@ -420,13 +430,6 @@ export async function buyFromAIClubOnline(body: { teamId: string; playerId: stri
 /** 联机回复 AI 俱乐部的报价。 */
 export async function respondOfferOnline(offerId: string, accept: boolean): Promise<GameState> {
   return onlineGameAction('/api/transfer/offer', { offerId, accept })
-}
-
-/** 注册后选队：服务端会按共享世界重建账号存档，只允许在还没踢过联赛时调用。 */
-export async function chooseClubOnline(clubId: string): Promise<GameState> {
-  const game = await onlineGameAction('/api/world/choose-club', { clubId })
-  void refreshPublicWorld()
-  return game
 }
 
 export async function nextWorldSeasonOnline(): Promise<GameState> {

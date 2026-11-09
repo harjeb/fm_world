@@ -5,7 +5,7 @@ import { equippedCard, playerCards } from '../../game/cards.ts'
 import { attrRating, initialDisplayCA, mainAttrsFor } from '../../game/rating.ts'
 import { MAIN_FIELD_ATTRS, MAIN_GK_ATTRS } from '../../game/scale.ts'
 import type { ClubPreview } from '../../game/world.ts'
-import { marketState, onlineState, publicConfig, publicWorld } from '../../online.ts'
+import { marketState, onlineState, publicConfig, registrationClubs } from '../../online.ts'
 import { AUCTION_EXTEND_MS, auctionRaiseFee } from '../../game/auction.ts'
 import { previewClubSigning } from '../../game/market.ts'
 import { SQUAD_STATUS_LABELS } from '../../game/transfer-rules.ts'
@@ -152,6 +152,8 @@ export function renderAccountOverlay(): string {
   const mode = publicConfig.registration
   const canRegister = mode === 'open' || mode === 'invite'
   const registering = ui.authMode === 'register' && canRegister
+  const clubs = [...(registrationClubs ?? [])].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0) || a.name.localeCompare(b.name, 'zh-CN'))
+  const selectedClub = clubs.find((club) => club.id === ui.registrationClubId)
   const registrationHint = mode === 'closed'
     ? '<p class="hint">本服务器已关闭注册，仅限已有账号登录。</p>'
     : mode === 'unknown'
@@ -174,11 +176,20 @@ export function renderAccountOverlay(): string {
           <div class="form-row"><label for="account-username">用户名</label><input id="account-username" autocomplete="username" placeholder="2-24 位" /></div>
           <div class="form-row"><label for="account-password">密码</label><input id="account-password" type="password" autocomplete="${registering ? 'new-password' : 'current-password'}" placeholder="至少 6 位" /></div>
           ${registering && mode === 'invite' ? '<div class="form-row"><label for="account-invite">邀请码</label><input id="account-invite" autocomplete="off" placeholder="向管理员索取" /></div>' : ''}
+          ${registering ? `
+            <div class="form-row"><label for="account-club">执教球队</label><select id="account-club">
+              <option value="">${registrationClubs === null ? '正在加载球队…' : clubs.length ? '请选择一支空缺的二级球队' : '暂无空缺球队'}</option>
+              ${clubs.map((club) => `<option value="${esc(club.id)}" ${selectedClub?.id === club.id ? 'selected' : ''}>${esc(club.name)} · ${esc(CONFERENCE_LABELS[club.conference ?? ''] ?? '')} · RANK ${club.rating ?? '—'}</option>`).join('')}
+            </select></div>
+            ${selectedClub ? `<p class="hint">${[...selectedClub.players].sort((a, b) => b.ca - a.ca).slice(0, 3).map((player) => `${posBadge(primaryPosition(player))} ${esc(player.name)} · CA ${player.ca}`).join(' / ')}</p>` : ''}
+            <p class="hint">球队在注册时确定，注册后不允许换队。错过的比赛由 AI 补算，开赛时间固定为北京时间 12:00 / 20:00。</p>
+            <button class="btn ghost small" data-action="registration-clubs-refresh">刷新球队列表</button>
+          ` : ''}
           ${registering && publicConfig.turnstileSiteKey ? '<div class="turnstile-slot" id="turnstile-slot" data-morph-skip></div>' : ''}
           ${registrationHint}
           ${onlineState.error ? `<p class="warn-text small">${esc(onlineState.error)}</p>` : ''}
           <div class="btn-row">
-            <button class="btn primary" data-action="account-submit">${registering ? '注册并进入' : '登录'}</button>
+            <button class="btn primary" data-action="account-submit">${registering ? '确认球队并注册' : '登录'}</button>
             ${canRegister ? `<button class="btn" data-action="account-mode">${registering ? '已有账号，去登录' : '没有账号，去注册'}</button>` : ''}
           </div>
         `}
@@ -350,38 +361,3 @@ export function renderNegotiationOverlay(): string {
 }
 
 const CONFERENCE_LABELS: Record<string, string> = { north: '北区', south: '南区' }
-
-/**
- * 注册后的选队：只列还没人执教的二级球队，避免新账号被系统随手塞一支队。
- * 服务器只允许在还没踢过联赛时换队，所以这里也提示选定后本赛季不能改。
- */
-export function renderOnlineClubPickOverlay(): string {
-  if (!ui.onlineClubPick) return ''
-  const free = (publicWorld?.clubs ?? [])
-    .filter((club) => club.tier === 'division2' && !club.managed)
-    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0) || a.name.localeCompare(b.name, 'zh-CN'))
-  // managed 表示“有人执教”（可能是别的玩家），自己的队要用 ownClubId 找。
-  const mine = publicWorld?.ownClubId ? publicWorld.clubs.find((club) => club.id === publicWorld!.ownClubId) : undefined
-  const row = (club: NonNullable<typeof publicWorld>['clubs'][number]) => {
-    const players = [...club.players].sort((a, b) => b.ca - a.ca).slice(0, 3)
-    return `<div class="club-pick-row" data-key="${esc(club.id)}">
-      <div class="club-pick-name"><i class="swatch" style="background:${esc(club.color)}"></i><b>${esc(club.name)}</b><small>${esc(CONFERENCE_LABELS[club.conference ?? ''] ?? club.conference ?? '')} · RANK ${club.rating ?? '—'}</small></div>
-      <div class="club-pick-players">${players.map((player) => `${posBadge(primaryPosition(player))} ${esc(player.name)} <span class="muted">CA ${player.ca}</span>`).join(' · ') || '<span class="muted small">名单加载中</span>'}</div>
-      <button class="btn small primary" data-action="online-club-pick" data-club="${esc(club.id)}">执教这支</button>
-    </div>`
-  }
-  return `
-    <div class="overlay" data-action="online-club-close">
-      <div class="modal online-club-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="选择球队">
-        <button class="modal-close" data-action="online-club-close" aria-label="关闭">${icon('close', 16)}</button>
-        <div class="kicker">联机注册 · 第二步</div>
-        <h1>选择你要执教的球队</h1>
-        <p class="hint">这是全服共享世界：所有账号看到同一批球队、同一个赛季、同一个日期。${mine ? `系统先给你分了 <b>${esc(mine.name)}</b>，你也可以换成下面任意一支空球队。` : '挑一支还没人执教的二级球队。'} 选定后本赛季不能再换。</p>
-        ${free.length ? `<div class="club-pick-list">${free.map(row).join('')}</div>` : `<p class="muted">${publicWorld ? '当前没有空缺的二级球队（可以保留系统分配的球队）。' : '正在加载球队列表…'}</p>`}
-        <div class="btn-row">
-          <button class="btn ghost" data-action="online-club-refresh">刷新列表</button>
-          ${mine ? `<button class="btn" data-action="online-club-close">保留 ${esc(mine.name)}</button>` : ''}
-        </div>
-      </div>
-    </div>`
-}

@@ -6,7 +6,7 @@ import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
 import { applyAgentAction } from '../server/agent.ts'
 import { createWorldGame } from '../src/game/world.ts'
-import { LINEUP_LOCK_MS, lineupLockState, playerFixture, settleDuePlayerMatch } from '../src/game/season.ts'
+import { LINEUP_LOCK_MS, lineupLockState, nextMatchCountdown, playerFixture, settleDuePlayerMatch } from '../src/game/season.ts'
 import { kickoffAtForRound, seasonStartForRound } from '../src/game/calendar.ts'
 import type { GameState } from '../src/game/types.ts'
 
@@ -32,14 +32,18 @@ describe('开赛前 30 分钟锁阵容', () => {
     expect(lineupLockState(game, now).locked).toBe(false)
   })
 
-  it('新注册跳过的那一轮不锁，也不自动结算', () => {
-    const now = Date.UTC(2026, 10, 9, 4)
-    const game = worldGame(seasonStartForRound(now, 2))
-    game.settings = { ...(game.settings ?? { offside: true }), autoSettle: { season: 1, fromRound: 2 } }
-    // 被跳过的是第 1 轮；第 2 轮开赛前 30 分钟之前仍然可以排阵容
-    expect(lineupLockState(game, now - LINEUP_LOCK_MS - 1000).locked).toBe(false)
-    expect(settleDuePlayerMatch(game, now)).toBeNull()
-    expect(playerFixture(game, 1)!.played).toBe(false)
+  it('未开赛的首轮倒计时和锁阵时间始终遵循固定开球点，没有新账号例外', () => {
+    const kickoff = Date.UTC(2026, 10, 9, 12)
+    const game = worldGame(kickoff)
+    game.season.startedAt = kickoff
+    expect(nextMatchCountdown(game, kickoff - 45 * minute)).toBe('45 分')
+    const before = lineupLockState(game, kickoff - LINEUP_LOCK_MS - 1)
+    expect(before).toEqual({ locked: false, lockAt: kickoff - LINEUP_LOCK_MS, kickoffAt: kickoff })
+    expect(lineupLockState(game, kickoff - LINEUP_LOCK_MS).locked).toBe(true)
+    expect(settleDuePlayerMatch(game, kickoff - 1)).toBeNull()
+    expect(playerFixture(game)!.played).toBe(false)
+    expect(settleDuePlayerMatch(game, kickoff)).not.toBeNull()
+    expect(lineupLockState(game, kickoff).locked).toBe(false)
   })
 
   it('服务端拒绝锁定期间的阵容修改，解锁后恢复；Agent 也一样', async () => {

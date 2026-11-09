@@ -50,7 +50,7 @@ import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPla
 import { minimumBid } from '../game/auction.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
 import { clubNameError, normalizeClubName } from '../game/club-name.ts'
-import { bidOnline, buyFromAIClubOnline, chooseClubOnline, renameClubOnline, respondOfferOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, marketState, nextWorldSeasonOnline, onlineState, publicConfig, refreshPublicWorld, registerOnline, revokeAgentTokenOnline, serverNow, setRemoteGameHandler, subscribeMarket, subscribeOnline } from '../online.ts'
+import { bidOnline, buyFromAIClubOnline, renameClubOnline, respondOfferOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, marketState, nextWorldSeasonOnline, onlineState, publicConfig, refreshPublicWorld, refreshRegistrationClubs, registerOnline, revokeAgentTokenOnline, serverNow, setRemoteGameHandler, subscribeMarket, subscribeOnline } from '../online.ts'
 import { agentHandoffText } from './agent-handoff.ts'
 import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
 import { UNHAPPY_GAME_DAYS } from '../game/transfer-rules.ts'
@@ -70,7 +70,7 @@ import { renderHome } from './screens/home.ts'
 import { renderInventory } from './screens/inventory.ts'
 import { parseLineupTarget, renderLineup, selectedSlotTarget } from './screens/lineup.ts'
 import { renderMatch } from './screens/match.ts'
-import { renderAccountOverlay, renderDetailOverlay, renderNegotiationOverlay, renderNewGameOverlay, renderOnlineClubPickOverlay } from './screens/overlays.ts'
+import { renderAccountOverlay, renderDetailOverlay, renderNegotiationOverlay, renderNewGameOverlay } from './screens/overlays.ts'
 import { renderClubOverlay } from './club-view.ts'
 import { renderReview } from './screens/review.ts'
 import { renderSeason } from './screens/season.ts'
@@ -227,7 +227,6 @@ function render(): void {
     ${renderBootGate()}
     ${renderDetailOverlay()}
     ${renderNegotiationOverlay()}
-    ${renderOnlineClubPickOverlay()}
     ${renderClubOverlay()}
     ${renderAccountOverlay()}
     ${renderAutoStrategyOverlay()}
@@ -385,13 +384,17 @@ async function submitAccount(): Promise<void> {
         render()
         return
       }
-      const data = await registerOnline(username, password, { inviteCode, turnstileToken: ui.turnstileToken })
+      const clubId = ui.registrationClubId
+      if (!clubId) {
+        showNotice('请先选择要执教的球队；注册后不能更换。')
+        return
+      }
+      const data = await registerOnline(username, password, { inviteCode, turnstileToken: ui.turnstileToken, clubId })
       ui.accountOpen = false
       ui.bootGate = false
       ui.turnstileToken = ''
-      applyOnlineGame(data.game, `已注册并登录 ${data.user.username}，存档已同步。`)
-      ui.onlineClubPick = true
-      void refreshPublicWorld().then(() => render())
+      ui.registrationClubId = ''
+      applyOnlineGame(data.game, `已注册并接管 ${data.game.clubName}，注册后不能换队。`)
       return
     }
     const data = await loginOnline(username, password)
@@ -1038,24 +1041,8 @@ document.addEventListener('click', async (event) => {
       }
       break
     }
-    case 'online-club-pick': {
-      const clubId = actionEl.dataset.club
-      if (!clubId) break
-      try {
-        const next = await chooseClubOnline(clubId)
-        ui.onlineClubPick = false
-        applyOnlineGame(next, `已接管 ${next.clubName}，本轮的比赛由全服时钟控制。`)
-      } catch (error) {
-        showNotice(error instanceof Error ? error.message : '选队失败')
-      }
-      break
-    }
-    case 'online-club-close':
-      ui.onlineClubPick = false
-      render()
-      break
-    case 'online-club-refresh':
-      void refreshPublicWorld().then(() => render())
+    case 'registration-clubs-refresh':
+      void refreshRegistrationClubs().catch((error) => showNotice(error instanceof Error ? error.message : '球队列表加载失败'))
       break
     case 'open-auctions':
       ui.transferTab = 'free'
@@ -1118,7 +1105,11 @@ document.addEventListener('click', async (event) => {
       }
       ui.authMode = ui.authMode === 'login' ? 'register' : 'login'
       ui.turnstileToken = ''
+      ui.registrationClubId = ''
       render()
+      if (ui.authMode === 'register') {
+        void refreshRegistrationClubs().catch((error) => showNotice(error instanceof Error ? error.message : '球队列表加载失败'))
+      }
       break
     }
     case 'account-submit':
@@ -1607,6 +1598,11 @@ document.addEventListener('click', async (event) => {
 
 document.addEventListener('change', (event) => {
   const target = event.target as HTMLSelectElement | HTMLInputElement
+  if (target.id === 'account-club') {
+    ui.registrationClubId = target.value
+    render()
+    return
+  }
   if (target.id === 'lineup-auto-mode') {
     ui.lineupAutoMode = target.value === 'half' || target.value === 'full' ? target.value : 'best'
     render()

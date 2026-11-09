@@ -498,6 +498,15 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     return { id, name, enName, country, era, age, foot, height, positions, attrs: visible, traitId, skills, skillTiers, ca: displayCA(caOf(attrs, positions.GK > 0)), baseCa }
   }
   for (const account of db.accounts) account.lastUserRevision ??= account.revision
+  // 清理旧版新账号准备期；正式开球时间不因注册或登录而变化。
+  let removedPreparation = false
+  for (const account of db.accounts) {
+    if (account.game?.settings && 'autoSettle' in account.game.settings) {
+      delete (account.game.settings as { autoSettle?: unknown }).autoSettle
+      removedPreparation = true
+    }
+  }
+  if (removedPreparation) writeJson(dbPath, db)
   const sessions: SessionMap = readJson<SessionMap>(sessionPath, {})
   const clients = new Map<string, Set<ServerResponse>>()
   const registerAttempts = new Map<string, number[]>()
@@ -631,11 +640,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
   const publicAccount = (account: Account) => ({ id: account.id, username: account.username })
   /** 世界页 / 球队详情看到的全服快照；手动界面和 Agent 的 get_world 共用。 */
-  function worldSnapshot(account: Account) {
+  function worldSnapshot(account?: Account) {
     advanceSharedWorld()
     return {
       seasonIndex: sharedWorld.world.seasonIndex,
-      ownClubId: ownedClubId(account) ?? null,
+      ownClubId: account ? ownedClubId(account) ?? null : null,
       clubs: sharedWorld.world.clubs.map((club) => {
         const owner = db.accounts.find((item) => item.id === sharedWorld.owners[club.id])
         const team = sharedWorld.teams?.[club.id]
@@ -667,42 +676,6 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       delete (player as Partial<Player>).energy
     }
     return { team: clone }
-  }
-
-  /** 注册后选队：只在还没踢过联赛时允许换到另一支空的二级球队，换队会按共享世界重建账号存档。 */
-  function chooseClub(account: Account, clubId: string): { ok: true } | { ok: false; error: string; status: number } {
-    const club = sharedWorld.world.clubs.find((item) => item.id === clubId)
-    if (!club) return { ok: false, error: '找不到这支球队', status: 404 }
-    if (club.tier !== 'division2') return { ok: false, error: '只能在二级联赛选队', status: 400 }
-    const owner = sharedWorld.owners[club.id]
-    if (owner && owner !== account.id) return { ok: false, error: '这支球队已经有人执教', status: 409 }
-    if (account.game.activeMatch) return { ok: false, error: '比赛进行中不能换队', status: 400 }
-    if (account.game.season.fixtures.some((fixture) => fixture.isPlayer && fixture.played)) {
-      return { ok: false, error: '已经开始过比赛，本赛季不能换队', status: 400 }
-    }
-    const current = ownedClubId(account)
-    if (current === club.id) return { ok: true }
-    if (current) delete sharedWorld.owners[current]
-    sharedWorld.owners[club.id] = account.id
-    account.game = createWorldGameFromWorld(sharedWorld.world, club.id, sharedWorld.seed, sharedWorld.startedAt, [], sharedWorld.reserveStars)
-    const chosenTeam = sharedWorld.teams?.[club.id]
-    if (chosenTeam) {
-      account.game.roster = structuredClone(chosenTeam.players).map((player) => ({
-        ...player,
-        contract: { clubId: 'player', wage: wageForPlayer(player), expiresSeason: account.game.season.index + 3 },
-      }))
-      account.game.lineup = structuredClone(chosenTeam.lineup)
-    }
-    forgetMarketAges(account)
-    // 刚换队的这一轮先不自动踢，给玩家排阵容的时间；下一轮开始自动结算。
-    account.game.settings = { ...(account.game.settings ?? { offside: true }), autoSettle: { season: account.game.season.index, fromRound: account.game.season.round + 1, after: now() + 30 * 60_000 } }
-    persistWorld()
-    account.revision++
-    account.lastUserRevision = account.revision
-    account.updatedAt = now()
-    persistDb()
-    broadcast(account)
-    return { ok: true }
   }
 
   /** 联机改俱乐部名字：最多 8 个字，不能和全服任何其他球队（AI 球队或别的教练的球队）重名。 */
@@ -1180,6 +1153,14 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return
     }
 
+    // 注册前只读预览：不创建账号、不预占球队，只提供空缺二级球队的公开名单。
+    if (url.pathname === '/api/registration/clubs' && req.method === 'GET') {
+      if (registrationMode === 'closed') return json(res, 403, { error: '本服务器已关闭注册' })
+      const clubs = worldSnapshot().clubs.filter((club) => club.tier === 'division2' && !club.managed)
+      json(res, 200, { clubs })
+      return
+    }
+
     if (url.pathname === '/api/register' && req.method === 'POST') {
       if (registrationMode === 'closed') return json(res, 403, { error: '本服务器已关闭注册' })
       const ip = clientIp(req)
@@ -1198,11 +1179,23 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (db.accounts.some((account) => account.username.toLowerCase() === username.toLowerCase())) return json(res, 409, { error: '用户名已存在' })
       const salt = crypto.randomBytes(16).toString('hex')
       advanceSharedWorld()
-      // 只在二级联赛找空位；二级满员就开一个新赛区，绝不占用一级/冠军的席位。
-      let club = pickFreeClubForNewAccount(sharedWorld.world, sharedWorld.owners, aliveAccountIds())
-      if (!club) {
-        expandWorldConference(sharedWorld.world, splitSeed(sharedWorld.seed, `expand-${sharedWorld.world.seasonIndex}-${Object.keys(sharedWorld.owners).length}`))
+      // 选队在注册事务内完成；注册成功后球队归属固定，不能再换队。
+      const requestedClubId = typeof body.clubId === 'string' ? body.clubId.trim() : ''
+      let club = requestedClubId ? sharedWorld.world.clubs.find((item) => item.id === requestedClubId) : undefined
+      if (requestedClubId) {
+        if (!club) return json(res, 400, { error: '找不到这支球队，请刷新列表' })
+        if (club.tier !== 'division2') return json(res, 400, { error: '只能选择空缺的二级联赛球队' })
+        const ownerId = sharedWorld.owners[club.id]
+        if (db.accounts.some((item) => item.id === ownerId)) {
+          return json(res, 409, { error: '这支球队已经有人执教，请选择其他球队' })
+        }
+      } else {
+        // 兼容未指定球队的 API 客户端：只在二级联赛找空位，满员就开新赛区。
         club = pickFreeClubForNewAccount(sharedWorld.world, sharedWorld.owners, aliveAccountIds())
+        if (!club) {
+          expandWorldConference(sharedWorld.world, splitSeed(sharedWorld.seed, `expand-${sharedWorld.world.seasonIndex}-${Object.keys(sharedWorld.owners).length}`))
+          club = pickFreeClubForNewAccount(sharedWorld.world, sharedWorld.owners, aliveAccountIds())
+        }
       }
       if (!club) return json(res, 503, { error: '服务器席位已满：新赛区也没能开出空位，请稍后再试' })
       const accountId = crypto.randomUUID()
@@ -1229,8 +1222,6 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         account.game.lineup = structuredClone(initialTeam.lineup)
       }
       forgetMarketAges(account)
-      // 刚注册的这一轮先不自动踢，给玩家选队和排阵容的时间；下一轮开始自动结算。
-      account.game.settings = { ...(account.game.settings ?? { offside: true }), autoSettle: { season: account.game.season.index, fromRound: account.game.season.round + 1, after: now() + 30 * 60_000 } }
       db.accounts.push(account)
       const token = createSession(account.id)
       persistDb()
@@ -1329,9 +1320,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
           return
         }
         if (body.action === 'choose_club') {
-          const chosen = chooseClub(agentAccount, String(body.clubId ?? ''))
-          json(res, chosen.ok ? 200 : chosen.status, { ...chosen, revision: agentAccount.revision, game: agentState() })
-          return
+          return json(res, 400, { error: '注册完成后不允许换队，球队只能在注册时选择' })
         }
         let outcome: ReturnType<typeof applyAgentAction>
         const previousRoster = new Set(agentAccount.game.roster.map((player) => player.id))
@@ -1389,14 +1378,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return
     }
 
-    /** 注册后选队：只在还没踢过联赛时允许，换队会按共享世界重建账号存档。 */
+    /** 旧客户端入口保留明确报错；浏览器和 Agent 都不能在注册后换队。 */
     if (url.pathname === '/api/world/choose-club' && req.method === 'POST') {
-      advanceAccount(account)
-      const body = await readJsonBody(req)
-      const chosen = chooseClub(account, String(body.clubId ?? ''))
-      if (!chosen.ok) return json(res, chosen.status, { error: chosen.error })
-      json(res, 200, { revision: account.revision, game: publicGame(account) })
-      return
+      return json(res, 400, { error: '注册完成后不允许换队，球队只能在注册时选择' })
     }
 
     if (url.pathname === '/api/transfer/ai-buy' && req.method === 'POST') {
@@ -1496,8 +1480,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         return
       }
       if (!isGameState(body.game)) return json(res, 400, { error: '无效的游戏存档' })
+      // 旧页面再次保存时也不能把已取消的新账号准备期带回来。
+      if (body.game.settings) delete (body.game.settings as { autoSettle?: unknown }).autoSettle
       const assignedId = ownedClubId(account)
-      if (body.game.world && (body.game.seed !== account.game.seed || body.game.world.seasonIndex !== sharedWorld.world.seasonIndex || body.game.season.index !== sharedWorld.world.seasonIndex || (assignedId && body.game.world.clubs.find((club) => club.id === 'player')?.squadKey !== assignedId))) {
+      if ((assignedId && body.game.world?.clubs.find((club) => club.id === 'player')?.squadKey !== assignedId) || (body.game.world && (body.game.seed !== account.game.seed || body.game.world.seasonIndex !== sharedWorld.world.seasonIndex || body.game.season.index !== sharedWorld.world.seasonIndex))) {
         return json(res, 400, { error: '联机账号不能替换共享世界或接管其他球队' })
       }
       if (body.game.injuries !== undefined && (!body.game.injuries || typeof body.game.injuries !== 'object' || Array.isArray(body.game.injuries) || Object.values(body.game.injuries).some((time) => typeof time !== 'number' || !Number.isFinite(time) || time < 0))) return json(res, 400, { error: '无效的伤病状态' })

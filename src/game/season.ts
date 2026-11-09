@@ -517,16 +517,15 @@ export function shortCountdown(ms: number): string {
 }
 
 /**
- * 下一场比赛的倒计时：本轮还没结算时显示“即将开赛”（新账号准备期则显示到准备截止），
+ * 下一场比赛倒计时始终指向固定开球时间；到点未结算时显示“即将开赛”，
  * 本轮结算后显示下一轮开球时间。
  */
 export function nextMatchCountdown(game: GameState, now = Date.now()): string {
   const fixture = playerFixture(game, game.season.round)
   if (fixture && !fixture.played) {
-    const skip = game.settings?.autoSettle
-    if (skip && skip.season === game.season.index && skip.after && game.season.round < skip.fromRound && now < skip.after) {
-      return shortCountdown(skip.after - now)
-    }
+    const kickoff = roundKickoffAt(game, game.season.round)
+    // 还没到固定开球时间时不能提前结算。
+    if (now < kickoff) return shortCountdown(kickoff - now)
     return '即将开赛'
   }
   return shortCountdown(roundKickoffAt(game, Math.min(ROUNDS, game.season.round + 1)) - now)
@@ -540,25 +539,17 @@ export const LINEUP_LOCK_MS = 30 * 60_000
  * 本轮已经结算（fixture.played）后立即解锁，方便准备下一轮。
  */
 export function lineupLockState(game: GameState, now = Date.now()): { locked: boolean; lockAt: number; kickoffAt: number } {
-  // 本轮已结算时，锁的是下一轮：上一轮踢完后到下一轮开赛前 30 分钟之间仍然可以准备阵容。
   const current = playerFixture(game, game.season.round)
-  let round = current && !current.played ? game.season.round : Math.min(ROUNDS, game.season.round + 1)
-  // 新账号跳过的那一轮不会在本次开球时结算，真正要锁的是下一轮。
-  if (current && !current.played && autoSettleSkipped(game, now)) round = Math.min(ROUNDS, game.season.round + 1)
-  const kickoffAt = roundKickoffAt(game, round)
-  const lockAt = kickoffAt - LINEUP_LOCK_MS
-  const target = playerFixture(game, round)
-  const skipped = round === game.season.round && autoSettleSkipped(game, now)
-  return { locked: !skipped && !!target && !target.played && now >= lockAt, lockAt, kickoffAt }
-}
-
-/** 本赛季这一轮是否被新账号保护跳过自动结算（首轮准备时间没到之前也不结算）。 */
-export function autoSettleSkipped(game: GameState, now = Date.now()): boolean {
-  const skip = game.settings?.autoSettle
-  if (!skip || skip.season !== game.season.index) return false
-  // 注册/换队的那一轮：有准备截止时间的话，到点就自动结算；老存档没有 after 就一直跳过。
-  if (game.season.round < skip.fromRound) return !skip.after || now < skip.after
-  return false
+  if (current && !current.played) {
+    const kickoff = roundKickoffAt(game, game.season.round)
+    return { locked: now >= kickoff - LINEUP_LOCK_MS, lockAt: kickoff - LINEUP_LOCK_MS, kickoffAt: kickoff }
+  }
+  // 本轮已结算时，锁的是下一轮：上一轮踢完后到下一轮开赛前 30 分钟之间仍然可以准备阵容。
+  const next = Math.min(ROUNDS, game.season.round + 1)
+  const kickoff = roundKickoffAt(game, next)
+  const target = playerFixture(game, next)
+  const lockAt = kickoff - LINEUP_LOCK_MS
+  return { locked: !!target && !target.played && now >= lockAt, lockAt, kickoffAt: kickoff }
 }
 
 /**
@@ -568,7 +559,6 @@ export function autoSettleSkipped(game: GameState, now = Date.now()): boolean {
 export function settleDuePlayerMatch(game: GameState, now = Date.now()): MatchRecord | null {
   if (game.activeMatch || game.season.finished) return null
   const round = game.season.round
-  if (autoSettleSkipped(game, now)) return null
   if (now < roundKickoffAt(game, round)) return null
   const fixture = playerFixture(game, round)
   if (!fixture || fixture.played) return null

@@ -773,16 +773,10 @@ export function renderLineup(): string {
   const lock = lineupLockState(game)
   const onlineLock = isOnlineMode() && lock.locked
   const lockMinutes = Math.max(0, Math.ceil((lock.lockAt - Date.now()) / 60_000))
-  const skip = game.settings?.autoSettle
-  const preparing = isOnlineMode() && !!skip && skip.season === game.season.index && !!skip.after
-    && Date.now() < skip.after && game.season.round === skip.fromRound - 1
-  const prepMinutes = preparing ? Math.max(0, Math.ceil((skip!.after! - Date.now()) / 60_000)) : 0
   const lockBanner = isOnlineMode()
-    ? (preparing
-      ? `<div class="banner warn">${icon('clock', 16)}<b>首轮准备时间：还剩 ${prepMinutes} 分钟</b><span>到点服务器会自动开赛并结算；请在这之前保存好首发、替补、职责、战术和自动换人。</span></div>`
-      : onlineLock
-        ? `<div class="banner warn">${icon('lock', 16)}<b>本轮阵容已锁定</b><span>开赛前 ${LINEUP_LOCK_MS / 60_000} 分钟起不能修改首发、替补、职责、战术和自动换人；比赛由服务器在开赛时间自动结算，结算后解锁准备下一轮。</span></div>`
-        : `<div class="banner muted">${icon('clock', 16)}<b>距阵容锁定 ${lockMinutes} 分钟</b><span>开赛前 ${LINEUP_LOCK_MS / 60_000} 分钟会锁定本轮阵容，请提前保存。</span></div>`)
+    ? (onlineLock
+      ? `<div class="banner warn">${icon('lock', 16)}<b>本轮阵容已锁定</b><span>开赛前 ${LINEUP_LOCK_MS / 60_000} 分钟起不能修改首发、替补、职责、战术和自动换人；比赛由服务器在开赛时间自动结算，结算后解锁准备下一轮。</span></div>`
+      : `<div class="banner muted">${icon('clock', 16)}<b>距阵容锁定 ${lockMinutes} 分钟</b><span>开赛前 ${LINEUP_LOCK_MS / 60_000} 分钟会锁定本轮阵容，请提前保存。</span></div>`)
     : ''
   return `
     ${pageHead({

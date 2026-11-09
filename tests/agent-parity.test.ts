@@ -48,13 +48,14 @@ describe('Agent API 和手动界面能做的事一致', () => {
     expect(world.body.result.divisions.length).toBeGreaterThan(0)
   })
 
-  it('选队、谈判买人、续约、解约都能通过 Agent 完成', async () => {
+  it('注册后 Agent 也不能换队，谈判买人、续约、解约仍可完成', async () => {
     const { action, state } = await setup()
     const world = (await action({ action: 'get_world' })).body.result
     const free = world.clubs.find((club: any) => club.tier === 'division2' && !club.managed)
     const chosen = await action({ action: 'choose_club', clubId: free.id })
-    expect(chosen.status).toBe(200)
-    expect((await action({ action: 'get_world' })).body.result.ownClubId).toBe(free.id)
+    expect(chosen.status).toBe(400)
+    expect(chosen.body.error).toContain('注册完成后不允许换队')
+    expect((await action({ action: 'get_world' })).body.result.ownClubId).toBe(world.ownClubId)
 
     let game = await state()
     const offer = game.market.clubOffers.find((item: any) => item.asking !== null)

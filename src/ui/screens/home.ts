@@ -63,10 +63,10 @@ function nextMatchPanel(): string {
       <div class="nm-center">
         ${played ? `<div class="nm-score">${fixture.score!.home} : ${fixture.score!.away}</div>` : '<div class="nm-vs">VS</div>'}
         <div class="nm-meta">${homeIsMe ? '主场' : '客场'} · ${esc(divisionText())}</div>
-        ${played
-          ? `<div class="nm-meta">下一轮 ${esc(matchdayCountdown(game))}</div>`
-          : isOnlineMode()
-            ? `<div class="nm-meta">${icon('clock', 13)} 下场比赛倒计时 ${esc(nextMatchCountdown(game, serverNow()))}</div>`
+        ${isOnlineMode()
+          ? `<div class="nm-meta">${icon('clock', 13)} 下场比赛倒计时 ${esc(nextMatchCountdown(game, serverNow()))}</div>`
+          : played
+            ? `<div class="nm-meta">下一轮 ${esc(matchdayCountdown(game))}</div>`
             : `<div class="nm-meta">${icon('clock', 13)} 距自动结算 ${esc(matchdayCountdown(game))}</div><button class="btn primary nm-go" data-action="start-league">${icon('play', 14)}跳至比赛日</button>`}
       </div>
       ${nextMatchSide(fixture.awayId, 'right', !homeIsMe)}

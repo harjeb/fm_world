@@ -5,7 +5,7 @@ import path from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
 import { createWorldGame } from '../src/game/world.ts'
-import { playerFixture, roundKickoffAt, settleDuePlayerMatch } from '../src/game/season.ts'
+import { nextMatchCountdown, playerFixture, roundKickoffAt, settleDuePlayerMatch } from '../src/game/season.ts'
 import { kickoffAtForRound } from '../src/game/calendar.ts'
 import type { GameState } from '../src/game/types.ts'
 
@@ -29,8 +29,8 @@ describe('联机联赛到点自动结算', () => {
   })
 
   it('服务器在登录时自动踢掉到点的比赛，玩家不用手动开始；之后不能再手动开赛', async () => {
-    // 北京时间 2026-11-09 12:00：服务器在开赛时间点上建世界，第 1 轮就在这一刻。
-    let clock = Date.UTC(2026, 10, 9, 4)
+    // 北京时间 16:15 注册：错过的 12:00 场由 AI 补算，下一场固定 20:00。
+    let clock = Date.UTC(2026, 10, 9, 8, 15)
     const app = createAppServer({
       dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'fm-auto-match-')),
       staticDir: path.resolve('dist'),
@@ -46,19 +46,23 @@ describe('联机联赛到点自动结算', () => {
     })).json() as { token: string; game: GameState; revision: number }
     const auth = { Authorization: `Bearer ${registered.token}`, 'Content-Type': 'application/json' }
     const first = await (await fetch(`${base}/api/game`, { headers: auth })).json() as { game: GameState }
-    // 刚注册的这一轮先不自动踢，留给玩家选队/排阵容（下一轮开始自动结算）
+    // 注册时第 1 轮已经开球：错过的时间由 AI 直接决定比分，固定赛程不受影响
     const firstFixture = first.game.season.fixtures.find((fixture) => fixture.isPlayer && fixture.round === first.game.season.round)
-    expect(firstFixture?.played).toBe(false)
+    expect(firstFixture?.played).toBe(true)
+    expect(firstFixture?.autoSimulated).toBe(true)
+    expect(first.game.matchHistory.length).toBeGreaterThanOrEqual(1)
     expect(first.game.activeMatch).toBeUndefined()
+    expect(nextMatchCountdown(first.game, clock)).toBe('3 小时 45 分')
+    expect(first.game.settings).not.toHaveProperty('autoSettle')
+    // 注册 30 分钟后没有额外比赛，也不会改变赛程或比分。
+    clock += 30 * 60_000
+    const later = await (await fetch(`${base}/api/game`, { headers: auth })).json() as { game: GameState }
+    expect(later.game.matchHistory).toEqual(first.game.matchHistory)
+    expect(playerFixture(later.game)!.score).toEqual(firstFixture!.score)
+    expect(nextMatchCountdown(later.game, clock)).toBe('3 小时 15 分')
+    expect(roundKickoffAt(later.game, 2)).toBe(Date.UTC(2026, 10, 9, 12))
 
-    // 30 分钟准备时间过后，当前轮自动踢（不用等到下一轮开球）
-    clock += 31 * 60_000
-    const prepared = await (await fetch(`${base}/api/game`, { headers: auth })).json() as { game: GameState }
-    const preparedFixture = prepared.game.season.fixtures.find((fixture) => fixture.isPlayer && fixture.round === prepared.game.season.round)
-    expect(preparedFixture?.played).toBe(true)
-    expect(prepared.game.season.round).toBe(1)
-
-    // 下一轮开球时间（当天 20:00）到了：登录时先自动补上第 1 轮，再自动踢第 2 轮
+    // 下一轮开球时间（当天 20:00）到了：登录时自动结算第 2 轮
     expect(registered.game.world!.seasonStartedAt).toBe(Date.UTC(2026, 10, 9, 4))
     clock = kickoffAtForRound(registered.game.world!.seasonStartedAt, 2)
     const second = await (await fetch(`${base}/api/game`, { headers: auth })).json() as { game: GameState }
