@@ -6,7 +6,7 @@ import { playerMarketValue } from './pricing.ts'
 import { isOnMarketToday } from './market-window.ts'
 import { attrMax, attrRating } from './scale.ts'
 import { ALL_ATTRIBUTES, type AICard, type AIClubState, type AITeam, type AttrKey, type Attributes, type FacilityId, type GameState, type Player, type TierId, type WorldClub, type WorldState } from './types.ts'
-import { FULL_SQUAD, repairLineup, validateLineup } from './squad.ts'
+import { FULL_SQUAD, refreshAILineup } from './squad.ts'
 import { cachedOwnerlessTeams } from './world.ts'
 import { aiBuysLeft, noteAIBuy } from './transfer-rules.ts'
 
@@ -493,8 +493,8 @@ export function aiSignFreeAgents(game: { world?: WorldState; createdAt?: number;
     noteAIBuy(state, season)
     game.freeStars = game.freeStars.filter((item) => item.id !== player.id)
     club.players = [...club.players, player]
-    const repaired = repairLineup(club.players, club.lineup)
-    if (validateLineup(club.players, repaired.lineup).valid) club.lineup = repaired.lineup
+    // 签下的球星要能进首发：只修“不合法”的阵容会让他一直坐在名单外。
+    refreshAILineup(club)
     signed += 1
   }
   return signed

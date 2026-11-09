@@ -7,7 +7,8 @@ import { SQUAD_LIMIT } from '../../game/market.ts'
 import { trainingActionsTotal } from '../../game/training.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
 import { isOnlineMode, onlineKickoffPending, serverNow } from '../../online.ts'
-import { boardMarkings, boardSpot, caHeat, clubLook, crest, emptyState, formPills, icon, injuryLabel, leagueTable, meter, pageHead, panel, recordResult, resultPill, teamForm, tile } from '../components.ts'
+import { boardMarkings, boardSpot, caHeat, clubLook, crest, emptyState, formPills, icon, injuryLabel, leagueTable, meter, pageHead, panel, recordResult, resultPill, tag, teamForm, tile } from '../components.ts'
+import { isHighOffer } from '../../game/transfers.ts'
 import { countdownText, esc, playerCA, shortName } from '../format.ts'
 import { game } from '../state.ts'
 import type { IconName } from '../icons.ts'
@@ -173,6 +174,27 @@ function inboxItems(): InboxItem[] {
   return items
 }
 
+/** 收到转会报价时总览最上面的醒目提示：列出待回复的报价，点任意一条去「收到的报价」。 */
+function offerAlert(): string {
+  const offers = (game.transferOffers ?? []).filter((offer) => offer.status === 'pending').sort((a, b) => a.expiresAt - b.expiresAt)
+  if (!offers.length) return ''
+  const shown = offers.slice(0, 3)
+  const rows = shown.map((offer) => {
+    const premium = offer.value > 0 ? offer.amount / offer.value - 1 : 0
+    return `<button class="offer-alert-row" data-action="go-transfer" data-tab="offers">
+      <b>${esc(offer.clubName)}</b><span>出价</span><b class="num-text">${offer.amount.toLocaleString()}</b><span>求购</span><b>${esc(offer.playerName)}</b>
+      <span class="${premium >= 0 ? 'up' : 'down'} num-text">${premium >= 0 ? '+' : ''}${Math.round(premium * 100)}%</span>
+      ${isHighOffer(offer) ? tag('高价：拒绝他会不满', 'gold') : ''}
+      <span class="offer-alert-time muted">剩余 <span class="countdown" data-countdown-end="${offer.expiresAt}">${countdownText(offer.expiresAt - serverNow())}</span></span>
+    </button>`
+  }).join('')
+  return `<section class="offer-alert" role="alert">
+    <div class="offer-alert-head">${icon('swap', 18)}<b>收到 ${offers.length} 份转会报价</b><span class="muted">过期不回复算拒绝</span>
+      <button class="btn small danger" data-action="go-transfer" data-tab="offers">去处理 ${icon('right', 12)}</button></div>
+    <div class="offer-alert-list">${rows}${offers.length > shown.length ? `<span class="muted small">还有 ${offers.length - shown.length} 份…</span>` : ''}</div>
+  </section>`
+}
+
 function inboxPanel(): string {
   const items = inboxItems()
   return panel('待办事项', items.length === 0
@@ -212,6 +234,7 @@ export function renderHome(): string {
       kicker: `第 ${game.season.index} 赛季 · ${esc(divisionText())}`,
       title: esc(game.clubName),
     })}
+    ${offerAlert()}
     <div class="dash">
       ${nextMatchPanel()}
       ${clubStatusPanel()}

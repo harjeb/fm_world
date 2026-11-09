@@ -11,7 +11,7 @@
 import type { AIClubState, AITeam, GameState, Player, TierId, TransferOffer } from './types.ts'
 import { AI_SQUAD_LIMIT, aiBidFor, aiTierProfile, recordAISigning } from './ai-club.ts'
 import { playerMarketValue } from './pricing.ts'
-import { MIN_SQUAD, repairLineup, validateLineup } from './squad.ts'
+import { MIN_SQUAD, refreshAILineup, repairLineup, validateLineup } from './squad.ts'
 import { sellerSquadError, transferWindowOpen } from './market.ts'
 import { validateAutoSubPlan } from './match/management.ts'
 import { derivedRng, splitSeed } from './rng.ts'
@@ -45,7 +45,8 @@ export function joinAIClub(buyer: MarketClub, player: Player, amount: number, se
   delete player.contract
   delete player.unhappy
   buyer.team.players = [...buyer.team.players.filter((item) => item.id !== player.id), player]
-  repairTeam(buyer.team)
+  // 新援要能进首发：只修“不合法”的阵容会让他一直坐在名单外。
+  refreshAILineup(buyer.team)
   recordAISigning(buyer.state, player, amount)
   noteAIBuy(buyer.state, season)
 }

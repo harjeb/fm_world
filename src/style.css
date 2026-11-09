@@ -99,6 +99,31 @@ abbr[title] { text-decoration: none; cursor: help; }
   min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; display: grid; place-items: center;
   background: var(--warn); color: #1c1403; font: 600 11px var(--font-num);
 }
+/* 要尽快处理的提醒（收到转会报价）：红色圆点。 */
+.nav-badge.alert { background: var(--bad); color: #fff; box-shadow: 0 0 0 2px rgba(242, 112, 106, 0.25); }
+.tab .badge {
+  display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 4px; border-radius: 9px;
+  background: var(--bad); color: #fff; font: 600 11px var(--font-num); vertical-align: 1px;
+}
+
+/* 总览最上面：收到转会报价的醒目提示。 */
+.offer-alert {
+  display: grid; gap: 8px; margin-bottom: 12px; padding: 12px 14px;
+  background: rgba(242, 112, 106, 0.1); border: 1px solid rgba(242, 112, 106, 0.55); border-left-width: 4px; border-radius: var(--radius);
+}
+.offer-alert-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.offer-alert-head .ico { color: var(--bad); }
+.offer-alert-head > b { font-size: 14px; font-weight: 600; }
+.offer-alert-head .muted { font-size: 12px; }
+.offer-alert-head .btn { margin-left: auto; }
+.offer-alert-list { display: grid; gap: 4px; }
+.offer-alert-row {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; width: 100%; padding: 6px 10px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); color: var(--text-2); text-align: left; font-size: 12.5px;
+}
+.offer-alert-row b { color: var(--text); font-weight: 600; }
+.offer-alert-row:hover { border-color: var(--bad); }
+.offer-alert-time { margin-left: auto; font-size: 12px; }
 .side-foot { display: flex; align-items: center; gap: 9px; padding: 12px 14px; border-top: 1px solid var(--line); }
 .brand-mark {
   width: 24px; height: 24px; display: grid; place-items: center; flex: none;

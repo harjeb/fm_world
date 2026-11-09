@@ -10,7 +10,7 @@ import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, cr
 import { lineupLockState } from '../src/game/season.ts'
 import type { AIClubState, AITeam, Player, WorldState } from '../src/game/types.ts'
 import { caOf } from '../src/game/ca.ts'
-import { repairLineup, validateLineup } from '../src/game/squad.ts'
+import { refreshAILineup, refreshAILineups, repairLineup } from '../src/game/squad.ts'
 import { displayCA, mainAttrsFor } from '../src/game/rating.ts'
 import { kickoffAtForRound, postseasonStartAt, roundsKickedOff, seasonEndAt } from '../src/game/calendar.ts'
 import { splitSeed } from '../src/game/rng.ts'
@@ -202,6 +202,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
     if (accountsMigrated) writeJson(dbPath, db)
   }
+  // 以前 AI 买进来的球员没排进首发（只修“不合法”的阵容），一直坐在名单外：无主的 AI 球队按名单重排一次。
+  // 有教练的球队阵容是教练自己排的，不动。
+  refreshAILineups(Object.entries(sharedWorld.teams ?? {}).filter(([clubId]) => !sharedWorld.owners[clubId]).map(([, team]) => team))
   if (!sharedWorld.matchBook) {
     sharedWorld.matchBook = emptyMatchBook()
     for (const account of db.accounts) {
@@ -653,8 +656,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       recordAISigning(state, player, amount)
       noteAIBuy(state, serverSeason())
       team.players = [...team.players, player]
-      const repaired = repairLineup(team.players, team.lineup)
-      if (validateLineup(team.players, repaired.lineup).valid) team.lineup = repaired.lineup
+      // 拍下的球员要能进首发：只修“不合法”的阵容会让他一直坐在名单外。
+      refreshAILineup(team)
     },
   }
 

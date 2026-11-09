@@ -10,7 +10,12 @@ import { leadingBid } from '../../game/auction.ts'
 import { icon, type IconName } from '../icons.ts'
 import { game, ui, type Screen } from '../state.ts'
 
-type NavItem = { id: Screen; label: string; icon: IconName; badge?: () => number }
+/** badge：普通提醒（黄色）；alert：要尽快处理的（红色圆点，优先于 badge 显示）。 */
+type NavItem = { id: Screen; label: string; icon: IconName; badge?: () => number; alert?: () => number }
+
+function pendingOffers(): number {
+  return (game.transferOffers ?? []).filter((offer) => offer.status === 'pending').length
+}
 
 function trainingAttention(): number {
   const pending = Object.values(game.training).filter((session) => session.pendingEventId || session.completed).length
@@ -40,7 +45,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
   { label: '经营', items: [
     { id: 'club', label: '俱乐部', icon: 'club' },
-    { id: 'transfer', label: '转会', icon: 'swap', badge: () => (isOnlineMode() ? marketState.auctions.length : 0) },
+    { id: 'transfer', label: '转会', icon: 'swap', alert: pendingOffers, badge: () => (isOnlineMode() ? marketState.auctions.length : 0) },
   ] },
 ]
 
@@ -67,8 +72,12 @@ export function renderSidebar(): string {
       ${NAV_GROUPS.map((group) => `
         ${group.label ? `<div class="nav-group">${group.label}</div>` : ''}
         ${group.items.map((item) => {
-          const count = item.badge?.() ?? 0
-          return `<button class="nav-item ${ui.screen === item.id ? 'active' : ''}" data-nav="${item.id}" ${ui.screen === item.id ? 'aria-current="page"' : ''}>${icon(item.icon, 18)}<span class="nav-label">${item.label}</span>${count ? `<span class="nav-badge">${count}</span>` : ''}</button>`
+          const alert = item.alert?.() ?? 0
+          const count = alert || (item.badge?.() ?? 0)
+          const badge = alert
+            ? `<span class="nav-badge alert" title="${alert} 份待回复的转会报价">${alert}</span>`
+            : count ? `<span class="nav-badge">${count}</span>` : ''
+          return `<button class="nav-item ${ui.screen === item.id ? 'active' : ''}" data-nav="${item.id}" ${ui.screen === item.id ? 'aria-current="page"' : ''}>${icon(item.icon, 18)}<span class="nav-label">${item.label}</span>${badge}</button>`
         }).join('')}
       `).join('')}
     </nav>

@@ -2,7 +2,7 @@ import type { Attributes, GameState, Player } from './types.ts'
 import { ALL_ATTRIBUTES } from './types.ts'
 import { isMainAttr } from './scale.ts'
 import { buildLeague } from './data/ai-teams.ts'
-import { autoFillLineup, validateLineup } from './squad.ts'
+import { autoFillLineup, refreshAILineups, validateLineup } from './squad.ts'
 import { elevenFormationFor } from './data/formations.ts'
 import { upgradeElevenASide } from './eleven.ts'
 import { validateAutoSubPlan } from './match/management.ts'
@@ -149,6 +149,8 @@ export function loadGame(): GameState | null {
     // 7 人制存档迁移到 11 人制：补随机球员、换阵型（只在还有旧阵型时动手）。
     const elevenUpgraded = upgradeElevenASide(parsed)
     const repaired = repairLoadedLineup(parsed)
+    // 以前 AI 买进来的球员没排进首发，一直坐在名单外：读档时按名单重排一次（单机的 AI 球队都没有教练）。
+    const aiLineupsRefreshed = refreshAILineups(parsed.aiTeams.filter((team) => team && !team.isPlayer))
     const signaturesAdded = upgradeLegacySignatures(parsed)
     const economyAdded = parsed.economy == null
     economyOf(parsed)
@@ -157,7 +159,7 @@ export function loadGame(): GameState | null {
     const traitsUpgraded = upgradeStarTraits(parsed)
     const attrsUpgraded = upgradeBurstAttr(parsed)
     parsed.ui = parsed.ui ?? { screen: 'home' }
-    if (rescheduled || elevenUpgraded || repaired || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded) saveGame(parsed)
+    if (rescheduled || elevenUpgraded || repaired || aiLineupsRefreshed || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded) saveGame(parsed)
     return parsed
   } catch {
     return null

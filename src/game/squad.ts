@@ -623,3 +623,24 @@ export function repairLineup(roster: Player[], lineup: Lineup): { lineup: Lineup
   const fixed = autoFillLineup(roster, lineup.formationId, lineup.tactics, lineup)
   return { lineup: fixed, changed: true }
 }
+
+/**
+ * 电脑球队按当前名单重新排最强首发和替补。有人进队时必须用这个，不能用 repairLineup：
+ * 原阵容仍然合法，repairLineup 什么都不改，买来的球星就一直坐在比赛名单外，
+ * 放人规则把他算成“冷板凳”（球星身价只加 5%），原来的首发反而成了“主力”。
+ * 返回阵容有没有变化。
+ */
+export function refreshAILineup(team: { players: Player[]; lineup: Lineup; formationId: FormationId; tactics: Tactics }): boolean {
+  const next = autoFillLineup(team.players, team.lineup?.formationId ?? team.formationId, team.lineup?.tactics ?? team.tactics, team.lineup)
+  if (!validateLineup(team.players, next).valid) return false
+  const changed = JSON.stringify(next) !== JSON.stringify(team.lineup)
+  team.lineup = next
+  return changed
+}
+
+/** 一批电脑球队都重排一次（读旧存档时用：修掉之前买进来却没进首发的球员）。返回有没有哪支队变了。 */
+export function refreshAILineups(teams: readonly { players: Player[]; lineup: Lineup; formationId: FormationId; tactics: Tactics }[]): boolean {
+  let changed = false
+  for (const team of teams) if (team?.players?.length && team.lineup && refreshAILineup(team)) changed = true
+  return changed
+}

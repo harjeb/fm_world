@@ -14,9 +14,10 @@ import {
   noteAIBuy,
   releaseChance,
 } from '../src/game/transfer-rules.ts'
-import { aiPoachRound, expireOffers, generateAIOffers, localMarketClubs, respondToOffer, type MarketClub } from '../src/game/transfers.ts'
+import { aiPoachRound, expireOffers, generateAIOffers, joinAIClub, localMarketClubs, respondToOffer, type MarketClub } from '../src/game/transfers.ts'
 import { aiBidFor, aiSignFreeAgents, playerValue } from '../src/game/ai-club.ts'
-import { previewClubSigning, signClubPlayer } from '../src/game/market.ts'
+import { aiTransferOffers, clubSaleTerms, previewClubSigning, signClubPlayer } from '../src/game/market.ts'
+import { refreshAILineups, validateLineup } from '../src/game/squad.ts'
 import { settleEnergy } from '../src/game/energy.ts'
 import { startTraining } from '../src/game/actions.ts'
 import { catchUpSeason } from '../src/game/season.ts'
@@ -135,6 +136,41 @@ describe('AI 每赛季最多买 5 人', () => {
     const before = game.freeStars.length
     for (let round = 1; round <= 10; round++) aiSignFreeAgents(game, round)
     expect(game.freeStars.length).toBe(before)
+  })
+})
+
+describe('AI 买进来的球员排进首发', () => {
+  const bestFreeStar = (game: GameState): Player => [...game.freeStars].sort((a, b) => playerMarketValue(b) - playerMarketValue(a))[0]
+
+  it('签下球星后直接进首发、算主力，主力的身价不再低于冷板凳', () => {
+    const game = createWorldGame(2101)
+    const buyer = localMarketClubs(game)[0]
+    const star = bestFreeStar(game)
+    game.freeStars = game.freeStars.filter((player) => player.id !== star.id)
+    joinAIClub(buyer, star, 1, game.season.index)
+    expect(validateLineup(buyer.team.players, buyer.team.lineup).valid).toBe(true)
+    expect(buyer.team.lineup.starters.some((starter) => starter.playerId === star.id)).toBe(true)
+    const rows = aiTransferOffers(game).filter((row) => row.team.id === buyer.team.id)
+    expect(rows.find((row) => row.player.id === star.id)!.terms.status).toBe('key')
+    const average = (status: string) => {
+      const picked = rows.filter((row) => row.terms.status === status)
+      return picked.reduce((sum, row) => sum + row.terms.value, 0) / Math.max(1, picked.length)
+    }
+    expect(average('key')).toBeGreaterThan(average('fringe'))
+  })
+
+  it('旧存档里买进来却坐在名单外的球员，重排一次就进首发；再排没有变化', () => {
+    const game = createWorldGame(2102)
+    const team = game.aiTeams[0]
+    const star = bestFreeStar(game)
+    // 旧逻辑：只把人加进名单，阵容仍合法所以没动。
+    team.players = [...team.players, star]
+    expect(team.lineup.starters.some((starter) => starter.playerId === star.id)).toBe(false)
+    expect(clubSaleTerms(game, team, star).status).toBe('fringe')
+    expect(refreshAILineups([team])).toBe(true)
+    expect(team.lineup.starters.some((starter) => starter.playerId === star.id)).toBe(true)
+    expect(clubSaleTerms(game, team, star).status).toBe('key')
+    expect(refreshAILineups([team])).toBe(false)
   })
 })
 
