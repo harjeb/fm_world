@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { renderChallenge } from '../src/ui/screens/challenge.ts'
-import { ui } from '../src/ui/state.ts'
+import { game, ui } from '../src/ui/state.ts'
+import { enterCup } from '../src/game/cup-run.ts'
 
 describe('挑战页面', () => {
   it('四种模式都能渲染', () => {
@@ -13,6 +14,17 @@ describe('挑战页面', () => {
     }
   })
 
+  it('报名后的杯赛小组赛可渲染', () => {
+    const result = enterCup(game, 'community')
+    expect(result.ok, result.error).toBe(true)
+    ui.challengeMode = 'cup'
+    ui.cupPreviewId = 'community'
+    const html = renderChallenge()
+    expect(html).toContain('小组赛')
+    expect(html).toContain('继续比赛')
+    expect(html).toContain('你')
+  })
+
   it('传奇档位筛选和杯赛分组预览可渲染', () => {
     ui.challengeMode = 'legend'
     ui.legendTier = 'S+'
@@ -21,7 +33,7 @@ describe('挑战页面', () => {
     expect(legend).toContain('传奇球队')
 
     ui.challengeMode = 'cup'
-    ui.cupPreviewId = 'community'
+    ui.cupPreviewId = 'league'
     const cup = renderChallenge()
     expect(cup).toContain('A 组')
     expect(cup).toContain('随机')

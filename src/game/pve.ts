@@ -1,4 +1,7 @@
 import type { GameState, MatchContext, MatchRecord, PveLegendRecord, PveState } from './types.ts'
+import { recordCupResult } from './cup-run.ts'
+import { peakStageReward } from './data/peak-config.ts'
+import { economyOf } from './economy.ts'
 
 const EMPTY_LEGEND: PveLegendRecord = { played: 0, won: 0, drawn: 0, lost: 0, goals: 0, conceded: 0 }
 
@@ -35,6 +38,12 @@ export function ensurePve(game: GameState): boolean {
     pve.trophies = []
     changed = true
   }
+  for (const run of Object.values(pve.cups)) {
+    if (run && run.status === 'active' && run.seasonIndex !== game.season.index) {
+      run.status = 'void'
+      changed = true
+    }
+  }
   return changed
 }
 
@@ -66,6 +75,11 @@ export function applyPveResult(game: GameState, record: MatchRecord, context: Ma
     return
   }
 
+  if (context.mode === 'cup') {
+    recordCupResult(game, record, context)
+    return
+  }
+
   if (context.mode === 'peak' && context.stage) {
     pve.peak.history.unshift({
       stage: context.stage,
@@ -75,6 +89,13 @@ export function applyPveResult(game: GameState, record: MatchRecord, context: Ma
       score: { ...record.score },
     })
     if (pve.peak.history.length > 50) pve.peak.history.length = 50
-    if (record.result === 'win') pve.peak.cleared = Math.max(pve.peak.cleared, context.stage)
+    if (record.result === 'win') {
+      pve.peak.cleared = Math.max(pve.peak.cleared, context.stage)
+      const reward = peakStageReward(context.stage)
+      if (reward > 0 && pve.peak.rewardClaimed < context.stage) {
+        economyOf(game).balance += reward
+        pve.peak.rewardClaimed = context.stage
+      }
+    }
   }
 }

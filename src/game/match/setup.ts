@@ -94,6 +94,8 @@ export function createMatchRecord(game: { season?: { index: number }; lineup: Li
     isLeague: context.isLeague,
     mode: context.mode,
     stage: context.stage,
+    cupId: context.cupId,
+    cupFixtureId: context.cupFixtureId,
     round: context.round,
     homeId: home.id,
     awayId: away.id,

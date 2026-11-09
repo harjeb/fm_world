@@ -17,6 +17,8 @@ import { cachedOwnerlessTeams } from './world.ts'
 import { legendTeamById } from './legend.ts'
 import { PEAK_STAGE_COUNT, buildPeakTeam } from './peak.ts'
 import { ensurePve } from './pve.ts'
+import { cupPlayerFixture, cupTeam, enterCup } from './cup-run.ts'
+import type { CupId } from './data/cup-config.ts'
 import { emptyAutoSubs, validateAutoSubPlan } from './match/management.ts'
 import { recordMatchInjuries } from './injury.ts'
 import { economyOf } from './economy.ts'
@@ -724,6 +726,38 @@ export function startPeakChallenge(game: GameState, stage: number, now = Date.no
   const ai = buildPeakTeam(target)
   const seed = splitSeed(game.seed, `peak-match-${target}`)
   const result = startChallengeAgainstTeam(game, ai, seed, now, 'peak', target, `${target}-${game.challengeHistory.length}`)
+  if (result.ok) saveGame(game)
+  return { ok: result.ok, error: result.error }
+}
+
+/** 报名杯赛：生成混合名单 + 小组赛，并提前结算 AI 对 AI。 */
+export function enterCupAction(game: GameState, cupId: CupId): { ok: boolean; error?: string } {
+  ensurePve(game)
+  const result = enterCup(game, cupId)
+  if (result.ok) saveGame(game)
+  return { ok: result.ok, error: result.error }
+}
+
+/** 打杯赛的下一场（小组赛或淘汰赛某一回合）。 */
+export function startCupMatch(game: GameState, cupId: CupId, now = Date.now()): { ok: boolean; error?: string } {
+  const error = validateAutoSubPlan(game.roster, game.lineup, game.autoSubs ?? emptyAutoSubs())[0]
+  if (error) return { ok: false, error: `自动换人规则无效：${error}` }
+  ensurePve(game)
+  const run = game.pve?.cups?.[cupId]
+  if (!run || run.status !== 'active') return { ok: false, error: '这个杯赛当前没有进行中的赛程' }
+  const next = cupPlayerFixture(run)
+  if (!next) return { ok: false, error: '杯赛当前没有你的比赛' }
+  const fixture = next.fixture
+  const opponentId = fixture.homeId === 'player' ? fixture.awayId : fixture.homeId
+  const opponent = cupTeam(game, run, opponentId)
+  if (!opponent) return { ok: false, error: '找不到杯赛对手' }
+  const homeAway = fixture.homeId === 'player' ? 'home' : 'away'
+  const seed = splitSeed(game.seed, `cup-match-${cupId}-${run.seasonIndex}-${fixture.id}`)
+  const result = startChallengeAgainstTeam(game, opponent, seed, now, 'cup', undefined, fixture.id, {
+    homeAway,
+    cupId,
+    cupFixtureId: fixture.id,
+  })
   if (result.ok) saveGame(game)
   return { ok: result.ok, error: result.error }
 }

@@ -28,6 +28,11 @@ export function peakStageTargetCa(stage: number): number {
   return 1300
 }
 
+/** 每 5 关的金钱奖励（占位）；不是里程碑关返回 0。 */
+export function peakStageReward(stage: number): number {
+  return stage % 5 === 0 ? stage * 100_000 : 0
+}
+
 /** 81–100 关固定国家队的序号（0 起）；其他关卡返回 -1。 */
 export function nationalTeamIndexForStage(stage: number): number {
   return stage >= 81 && stage <= 100 ? stage - 81 : -1

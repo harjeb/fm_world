@@ -1,11 +1,13 @@
-import type { AITeam } from '../../game/types.ts'
+import type { AITeam, CupRun } from '../../game/types.ts'
 import type { WorldClub } from '../../game/types.ts'
 import { caOf } from '../../game/ca.ts'
 import { LEGEND_TEAMS } from '../../game/data/legend-teams.ts'
 import { legendTeamById } from '../../game/legend.ts'
 import { PEAK_STAGE_COUNT, peakStageDef } from '../../game/peak.ts'
+import { peakStageReward } from '../../game/data/peak-config.ts'
 import { CUP_DEFS, type CupId } from '../../game/data/cup-config.ts'
 import { buildCupField, buildCupGroups } from '../../game/cup.ts'
+import { cupPlayerFixture } from '../../game/cup-run.ts'
 import { legendRecordOf } from '../../game/pve.ts'
 import { caHeat, clubName, icon, pageHead, panel, recordResult, resultPill, tag } from '../components.ts'
 import { esc, playerCA, tacticText } from '../format.ts'
@@ -181,6 +183,7 @@ function renderPeak(): string {
   const done = cleared >= PEAK_STAGE_COUNT
   const def = done ? null : peakStageDef(stage)
   const history = game.pve?.peak.history ?? []
+  const nextReward = done ? 0 : peakStageReward(stage)
   const cells = Array.from({ length: PEAK_STAGE_COUNT }, (_, index) => {
     const number = index + 1
     const classes = ['peak-cell']
@@ -198,7 +201,7 @@ function renderPeak(): string {
           <span class="muted">${def!.kind === 'national' ? '世界杯国家队' : '生成队'} · ${esc(def!.team.formationId)} · ${esc(tacticText(def!.team.tactics))}</span>
           <span class="muted small">核心：${def!.team.players.slice(0, 3).map((player) => esc(player[0])).join('、')}</span>
         </div>
-        <div class="peak-stage-ca"><span>目标 CA</span><b>${def!.targetCa}</b><small>实际 ${def!.actualCa.toFixed(0)}</small></div>
+        <div class="peak-stage-ca"><span>目标 CA</span><b>${def!.targetCa}</b><small>实际 ${def!.actualCa.toFixed(0)}</small>${nextReward ? `<small>奖励 +${nextReward.toLocaleString()}</small>` : ''}</div>
         <button class="btn" data-action="start-peak-stage" data-stage="${stage}" ${game.activeMatch ? 'disabled' : ''}>挑战</button>
       </div>`
   return `
@@ -206,7 +209,7 @@ function renderPeak(): string {
       ${`<div class="tile"><span class="tile-label">已通关</span><b class="tile-value">${cleared} / ${PEAK_STAGE_COUNT}</b><span class="tile-sub">${done ? '全部完成' : `下一关：第 ${stage} 关`}</span></div>`}
       ${`<div class="tile"><span class="tile-label">当前阶段</span><b class="tile-value">${done ? '已完成' : def!.kind === 'national' ? '世界杯墙' : stage <= 20 ? '起步' : stage <= 60 ? '中段' : stage <= 80 ? '高强度' : '冲刺'}</b><span class="tile-sub">${stage <= 80 ? '生成队' : '固定国家队'}</span></div>`}
       ${`<div class="tile"><span class="tile-label">目标 CA</span><b class="tile-value">${done ? '—' : def!.targetCa}</b><span class="tile-sub">${done ? '' : `实际 ${def!.actualCa.toFixed(0)}`}</span></div>`}
-      ${`<div class="tile"><span class="tile-label">最近结果</span><b class="tile-value">${history[0] ? (history[0].won ? '胜' : '负') : '—'}</b><span class="tile-sub">${history[0] ? `第 ${history[0].stage} 关` : '还没有挑战记录'}</span></div>`}
+      ${`<div class="tile"><span class="tile-label">本关奖励</span><b class="tile-value">${nextReward ? nextReward.toLocaleString() : '—'}</b><span class="tile-sub">已领至第 ${game.pve?.peak.rewardClaimed ?? 0} 关</span></div>`}
     </div>
     ${panel('进度', `<div class="peak-track">${cells}</div><div class="peak-legend"><span><i class="done"></i>已通关</span><span><i class="current"></i>当前关</span><span><i class="boss"></i>每 10 关</span></div>`, { flush: true })}
     ${panel('当前对手', current, { flush: true })}
@@ -227,6 +230,59 @@ function cupStatus(cupId: CupId): string {
   return run.status === 'active' ? '进行中' : run.status === 'eliminated' ? '已淘汰' : run.status === 'champion' ? '已夺冠' : '已作废'
 }
 
+const CUP_STAGE_LABEL: Record<CupRun['stage'], string> = {
+  group: '小组赛',
+  r16: '16 强',
+  qf: '1/4 决赛',
+  sf: '半决赛',
+  final: '决赛',
+  done: '结束',
+}
+
+function cupTeamName(run: CupRun, id: string): string {
+  return run.participants[id]?.name ?? id
+}
+
+function sortCupTable(rows: CupRun['groups'][number]['table']): CupRun['groups'][number]['table'] {
+  return [...rows].sort((a, b) => b.points - a.points || b.gf - b.ga - (a.gf - a.ga) || b.gf - a.gf || a.teamId.localeCompare(b.teamId))
+}
+
+function renderCupRun(run: CupRun): string {
+  const next = cupPlayerFixture(run)
+  const nextLine = next
+    ? `<div class="cup-next">${icon('flag', 14)} 下一场：${esc(cupTeamName(run, next.fixture.homeId))} vs ${esc(cupTeamName(run, next.fixture.awayId))}${next.tie ? `（第 ${next.fixture.round} 回合）` : ''}</div>`
+    : `<div class="cup-next muted">${run.status === 'active' ? '等待其他比赛结算' : run.status === 'champion' ? '已夺冠' : '已结束'}</div>`
+  if (run.stage === 'group' || (run.status === 'eliminated' && !run.knockout)) {
+    const group = run.groups[run.playerGroupIndex]
+    const table = group ? sortCupTable(group.table) : []
+    return `<div class="cup-run">
+      <div class="cup-run-head"><b>${CUP_STAGE_LABEL[run.stage]}</b><span class="muted">第 ${run.groupRound} / 3 轮</span></div>
+      ${nextLine}
+      ${group ? `<div class="table-scroll"><table class="dt"><thead><tr><th>小组</th><th class="num">场</th><th class="num">胜/平/负</th><th class="num">进:失</th><th class="num">积分</th></tr></thead><tbody>
+        ${table.map((row) => `<tr class="${row.teamId === 'player' ? 'strong' : ''}"><td>${row.teamId === 'player' ? tag('你', 'good') : ''} ${esc(cupTeamName(run, row.teamId))}</td><td class="num">${row.played}</td><td class="num">${row.won}/${row.drawn}/${row.lost}</td><td class="num">${row.gf}:${row.ga}</td><td class="num strong">${row.points}</td></tr>`).join('')}
+      </tbody></table></div>` : ''}
+      ${group ? `<div class="cup-fixtures">${group.fixtures.map((fixture) => `<div class="cup-fixture ${fixture.homeId === 'player' || fixture.awayId === 'player' ? 'mine' : ''}">
+        <span>${esc(cupTeamName(run, fixture.homeId))}</span>
+        <b>${fixture.score ? `${fixture.score.home}:${fixture.score.away}` : 'vs'}</b>
+        <span>${esc(cupTeamName(run, fixture.awayId))}</span>
+      </div>`).join('')}</div>` : ''}
+    </div>`
+  }
+  const ties = run.knockout?.ties ?? []
+  return `<div class="cup-run">
+    <div class="cup-run-head"><b>${CUP_STAGE_LABEL[run.stage]}</b><span class="muted">${run.status === 'champion' ? '冠军' : '淘汰赛'}</span></div>
+    ${nextLine}
+    <div class="cup-ties">${ties.map((tie) => {
+      const mine = tie.legs.some((leg) => leg.homeId === 'player' || leg.awayId === 'player')
+      return `<div class="cup-tie ${mine ? 'mine' : ''}">
+        <div class="cup-tie-name">${tie.legs.map((leg) => `<span>${esc(cupTeamName(run, leg.homeId))} vs ${esc(cupTeamName(run, leg.awayId))} <b>${leg.score ? `${leg.score.home}:${leg.score.away}` : '未赛'}</b></span>`).join('')}</div>
+        ${tie.aggregate ? `<small class="muted">总比分 ${tie.aggregate.home}:${tie.aggregate.away}${tie.shootout ? ` · 点球 ${tie.shootout.home}:${tie.shootout.away}` : ''}</small>` : ''}
+        ${tie.winnerId ? `<small class="muted">晋级：${esc(cupTeamName(run, tie.winnerId))}</small>` : ''}
+      </div>`
+    }).join('')}</div>
+  </div>`
+}
+
 function renderCupPreview(cupId: CupId): string {
   const def = CUP_DEFS.find((item) => item.id === cupId)!
   const field = buildCupField(cupId, game, game.season.index)
@@ -234,18 +290,27 @@ function renderCupPreview(cupId: CupId): string {
   return `<div class="cup-groups">
     ${groups.map((group) => `<div class="cup-group">
       <h3>${String.fromCharCode(65 + group.index)} 组</h3>
-      <ul>${group.teams.map((team) => `<li>${team.kind === 'random' ? tag('随机', 'info') : tag('世界')} <span>${esc(team.name)}</span></li>`).join('')}</ul>
+      <ul>${group.teams.map((team) => `<li>${team.kind === 'random' ? tag('随机', 'info') : team.kind === 'player' ? tag('你', 'good') : tag('世界')} <span>${esc(team.name)}</span></li>`).join('')}</ul>
     </div>`).join('')}
   </div>
-  <p class="hint pad">${esc(def.description)} 报名、小组积分和淘汰赛将在下一步接入。</p>`
+  <p class="hint pad">${esc(def.description)} 报名后会在本周内逐场进行；小组前 2 进入淘汰赛。</p>`
 }
 
 function renderCup(): string {
   const previewId = ui.cupPreviewId as CupId | null
   return `
     <div class="cup-cards">
-      ${CUP_DEFS.map((def) => `<section class="panel cup-card">
-        <header class="panel-head"><h2>${esc(def.name)}</h2><span class="tag ${cupStatus(def.id) === '未报名' ? '' : 'info'}">${cupStatus(def.id)}</span></header>
+      ${CUP_DEFS.map((def) => {
+        const run = game.pve?.cups?.[def.id]
+        const next = run?.status === 'active' ? cupPlayerFixture(run) : undefined
+        const canEnter = !run || run.status === 'void'
+        const primary = run?.status === 'active'
+          ? `<button class="btn small" data-action="start-cup-match" data-cup="${def.id}" ${!next || game.activeMatch ? 'disabled' : ''}>${next ? '继续比赛' : '等待结算'}</button>`
+          : canEnter
+            ? `<button class="btn small" data-action="enter-cup" data-cup="${def.id}" ${game.activeMatch ? 'disabled' : ''}>报名</button>`
+            : ''
+        return `<section class="panel cup-card">
+        <header class="panel-head"><h2>${esc(def.name)}</h2><span class="tag ${run?.status === 'active' ? 'info' : run?.status === 'champion' ? 'gold' : ''}">${cupStatus(def.id)}</span></header>
         <div class="panel-body">
           <p class="muted">${esc(def.description)}</p>
           <div class="tag-row">
@@ -256,12 +321,13 @@ function renderCup(): string {
             ${tag(`冠军 ${def.reward.toLocaleString()}`, 'gold')}
           </div>
           <div class="cup-actions">
-            <button class="btn small" data-action="cup-preview" data-cup="${def.id}">${previewId === def.id ? '收起分组' : '查看分组'}</button>
-            <span class="muted small">报名/开赛待接入</span>
+            ${primary}
+            <button class="btn small ghost" data-action="cup-preview" data-cup="${def.id}">${previewId === def.id ? '收起' : run ? '查看赛程' : '查看分组'}</button>
           </div>
-          ${previewId === def.id ? renderCupPreview(def.id) : ''}
+          ${previewId === def.id ? (run ? renderCupRun(run) : renderCupPreview(def.id)) : ''}
         </div>
-      </section>`).join('')}
+      </section>`
+      }).join('')}
     </div>
   `
 }

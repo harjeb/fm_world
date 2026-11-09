@@ -1336,3 +1336,11 @@ circle.pm-5 { fill: var(--h6); }
   .cup-groups { grid-template-columns: 1fr; }
   .peak-track { grid-template-columns: repeat(10, minmax(0, 1fr)); }
 }
+
+/* ---------- 荣誉橱窗 ---------- */
+.trophy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; padding: 10px; }
+.trophy-card { display: flex; gap: 8px; align-items: center; border: 1px solid var(--line-2); border-radius: var(--radius); padding: 8px; background: var(--raised); color: var(--warn); }
+.trophy-card div { display: flex; flex-direction: column; }
+.trophy-list { border-top: 1px solid var(--line); }
+.trophy-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
+.trophy-row .result-teams { flex: 1; }

@@ -1,6 +1,7 @@
 import type { AttrKey, AutoSubPlan, GameState, Lineup, Position, SkillId } from '../game/types.ts'
 import { loadGame, saveGame, setTeamPickPending } from '../game/state.ts'
 import { createWorldGame, type ClubPreview } from '../game/world.ts'
+import { ensurePve } from '../game/pve.ts'
 import { restoreActiveEngine } from '../game/actions.ts'
 import type { GameEngine } from '../game/pes/engine.ts'
 import type { SeasonGoal, SquadRole } from '../game/negotiation.ts'
@@ -120,6 +121,7 @@ const SAVE_SCREEN: Screen[] = ['club', 'transfer', 'home', 'academy', 'inventory
 const saved = loadGame()
 /** 当前存档。其他模块通过 live binding 读到最新值，替换时用 setGame。 */
 export let game: GameState = saved ?? createWorldGame()
+ensurePve(game)
 if (!saved) {
   saveGame(game)
   // 这支球队是系统随手分的：玩家选离线模式时会先让他自己挑一支。

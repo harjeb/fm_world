@@ -11,7 +11,7 @@ import { awardSeasonPrize } from './economy.ts'
 import { squadLimitError } from './market.ts'
 import { AVERAGE_ROUND_GAME_DAYS, GAME_DAY_MS, KICKOFF_SCHEDULE, latestKickoffAt, elapsedGameDays, gameDayOfRound, kickoffAtForRound, seasonEndAt, roundsKickedOff, roundGapGameDays } from './calendar.ts'
 import { recordMatchInjuries } from './injury.ts'
-import { applyPveResult } from './pve.ts'
+import { applyPveResult, ensurePve } from './pve.ts'
 import { awardRoundIncome, economyOf } from './economy.ts'
 import { playerMarketValue, settleMarket } from './market.ts'
 import { LOGIC_MATCH_SECONDS } from './match/time.ts'
@@ -54,7 +54,11 @@ export function createSeason(seed: number, aiTeams: AITeam[], clubName: string, 
 
 /** Finish any pending final-round settlement before starting the next season. */
 export function startNextSeason(game: GameState, now = Date.now()): { ok: boolean; error?: string } {
-  if (game.world) return advanceWorldSeason(game, now)
+  if (game.world) {
+    const result = advanceWorldSeason(game, now)
+    if (result.ok) ensurePve(game)
+    return result
+  }
   if (game.activeMatch || !game.season?.finished) return { ok: false, error: '赛季尚未结束或比赛进行中' }
   const season = game.season
   if (!Number.isSafeInteger(season.index) || season.index < 1 || !Number.isSafeInteger(season.index + 1) ||
@@ -94,6 +98,7 @@ export function startNextSeason(game: GameState, now = Date.now()): { ok: boolea
   }
   ;(game.seasonHistory ??= []).push(season)
   game.season = next
+  ensurePve(game)
   return { ok: true }
 }
 
@@ -629,6 +634,7 @@ export function startChallengeAgainstTeam(
   mode: MatchContext['mode'] = 'friendly',
   stage?: number,
   recordKey?: string | number,
+  extra?: Partial<MatchContext>,
 ): { ok: boolean; error?: string; context?: MatchContext } {
   if (game.activeMatch) return { ok: false, error: '已有进行中的比赛' }
   const overLimit = squadLimitError(game)
@@ -644,6 +650,7 @@ export function startChallengeAgainstTeam(
     homeAway: 'home',
     durationSeconds: LEAGUE_MATCH_SECONDS,
     offside: true,
+    ...extra,
   }
   const engine = buildMatchEngineForGame(game, context, ai, now)
   game.activeMatch = {

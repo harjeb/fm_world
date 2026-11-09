@@ -3,13 +3,16 @@ import { CUP_SEED, cupDefById, type CupId } from './data/cup-config.ts'
 import { CUP_TEAM_POOLS } from './data/cup-teams.generated.ts'
 import type { LegendTeamDef } from './data/legend-teams.ts'
 import { buildHistoricTeam } from './legend.ts'
+import { caOf } from './ca.ts'
 import { cachedOwnerlessTeams } from './world.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 
 export type CupParticipant = {
   id: string
   name: string
-  kind: 'world' | 'random'
+  kind: 'player' | 'world' | 'random'
+  /** 随机队的 LegendTeamDef id；世界队/玩家没有。 */
+  defId?: string
   team: AITeam
 }
 
@@ -60,9 +63,30 @@ export function cupRandomTeams(cupId: CupId, seasonIndex: number, count?: number
   for (let i = 0; i < want; i++) {
     const teamDef = pool[(start + i) % pool.length]
     const team = randomTeam(teamDef)
-    picked.push({ id: team.id, name: team.name, kind: 'random', team })
+    picked.push({ id: team.id, name: team.name, kind: 'random', defId: teamDef.id, team })
   }
   return picked
+}
+
+export function playerTeamForCup(game: GameState): AITeam {
+  const ranked = [...game.roster].sort((a, b) => caOf(b.attrs, b.positions.GK > 0) - caOf(a.attrs, a.positions.GK > 0))
+  return {
+    id: 'player',
+    name: game.clubName,
+    short: game.clubName.slice(0, 2),
+    color: '#34d399',
+    accent: '#052e1b',
+    style: 'player',
+    formationId: game.lineup.formationId,
+    tactics: { ...game.lineup.tactics },
+    strength: 5,
+    playerNames: game.roster.map((player) => player.name),
+    lineup: structuredClone(game.lineup),
+    players: game.roster,
+    starPlayerIds: ranked.slice(0, 3).map((player) => player.id),
+    starCount: 3,
+    isPlayer: true,
+  }
 }
 
 function allWorldTeams(game: GameState): Map<string, AITeam> {
@@ -117,9 +141,10 @@ export function buildCupField(cupId: CupId, game: GameState, seasonIndex = game.
   const random = cupRandomTeams(cupId, seasonIndex, def.randomCount)
   const extraRandom = world.length < def.worldCount ? cupRandomTeams(cupId, seasonIndex, def.randomCount + (def.worldCount - world.length)) : random
   const extraWorld = random.length < def.randomCount ? cupWorldTeams(game, cupId, seasonIndex, def.worldCount + (def.randomCount - random.length)) : world
-  const field = [...extraWorld, ...extraRandom]
   const rng = derivedRng(splitSeed(CUP_SEED, `cup-field-${cupId}-${seasonIndex}`), 'shuffle')
-  return shuffle(field, rng).slice(0, def.size)
+  const player: CupParticipant = { id: 'player', name: game.clubName, kind: 'player', team: playerTeamForCup(game) }
+  const others = shuffle([...extraWorld, ...extraRandom], rng).slice(0, def.size - 1)
+  return shuffle([player, ...others], rng)
 }
 
 const GROUP_PAIRS: [number, number][][] = [

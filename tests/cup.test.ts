@@ -32,7 +32,7 @@ describe('杯赛配置与分组', () => {
     expect(CUP_DEFS.map((def) => def.size)).toEqual([16, 16, 32])
     for (const def of CUP_DEFS) {
       expect(def.groups * 4, def.id).toBe(def.size)
-      expect(def.worldCount + def.randomCount, def.id).toBe(def.size)
+      expect(def.worldCount + def.randomCount + 1, def.id).toBe(def.size)
       expect(def.qualifiers, def.id).toBe(2)
     }
     expect(cupDefById('community').knockout).toEqual(['qf', 'sf', 'final'])
@@ -47,6 +47,7 @@ describe('杯赛配置与分组', () => {
       const field = buildCupField(cupId, game, 1)
       expect(field, cupId).toHaveLength(def.size)
       expect(new Set(field.map((team) => team.id)).size, cupId).toBe(def.size)
+      expect(field.filter((team) => team.kind === 'player')).toHaveLength(1)
       expect(field.filter((team) => team.kind === 'world')).toHaveLength(def.worldCount)
       expect(field.filter((team) => team.kind === 'random')).toHaveLength(def.randomCount)
 

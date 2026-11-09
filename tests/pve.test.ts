@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
 import { ensurePve } from '../src/game/pve.ts'
 import { finishMatch, restoreActiveEngine, startLegendChallenge, startPeakChallenge } from '../src/game/actions.ts'
+import { buildPeakTeam } from '../src/game/peak.ts'
+import { peakStageReward } from '../src/game/data/peak-config.ts'
+import { economyOf } from '../src/game/economy.ts'
 
 describe('PvE 挑战', () => {
   it('旧存档补 PvE 字段', () => {
@@ -33,6 +36,27 @@ describe('PvE 挑战', () => {
     expect(row.won + row.drawn + row.lost).toBe(1)
     expect(row.goals).toBe(record.score.home)
     expect(row.conceded).toBe(record.score.away)
+  })
+
+  it('巅峰里程碑胜利发钱并记录已领奖励', () => {
+    const game = createInitialGame(2028)
+    game.pve!.peak.cleared = 4
+    // 把第 5 关对手削到最低，保证这场测试能验证发奖逻辑。
+    const opponent = buildPeakTeam(5)
+    for (const player of opponent.players) {
+      for (const key of Object.keys(player.attrs) as (keyof typeof player.attrs)[]) player.attrs[key] = 1
+      for (const key of Object.keys(player.ceilings) as (keyof typeof player.ceilings)[]) player.ceilings[key] = 1
+    }
+    const before = economyOf(game).balance
+    const start = startPeakChallenge(game, 5)
+    expect(start.ok).toBe(true)
+    const engine = restoreActiveEngine(game)!
+    engine.simulate()
+    const record = finishMatch(game, engine)!
+    expect(record.result).toBe('win')
+    expect(game.pve!.peak.cleared).toBe(5)
+    expect(game.pve!.peak.rewardClaimed).toBe(5)
+    expect(economyOf(game).balance).toBe(before + peakStageReward(5))
   })
 
   it('巅峰之路只能挑战当前关，结果写入进度和历史', () => {
