@@ -4,9 +4,8 @@ import os from 'node:os'
 import path from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
-import { ROUND_MS } from '../src/game/season.ts'
 import { personKey } from '../src/game/injury.ts'
-import { BEIJING_SCHEDULE, seasonEndAt } from '../src/game/calendar.ts'
+import { seasonEndAt, seasonStartForRound } from '../src/game/calendar.ts'
 import { FORMATIONS } from '../src/game/data/formations.ts'
 import { createInitialGame } from '../src/game/state.ts'
 import type { FormationId } from '../src/game/types.ts'
@@ -174,7 +173,7 @@ describe('联机服务器 / 账号 / SSE', () => {
     delete star.signatureSkill
     delete star.skillTiers
     star.skills = []
-    oldGame.season.startedAt = Date.now() - ROUND_MS - 1000
+    oldGame.season.startedAt = seasonStartForRound(Date.now(), 2)
     fs.writeFileSync(file, JSON.stringify(db))
     const restarted = createAppServer({ dataDir: dir, staticDir: path.resolve('dist'), tickMs: 0 })
     servers.push(restarted)
@@ -250,7 +249,7 @@ describe('联机服务器 / 账号 / SSE', () => {
   it('服务器时间推进：到点的轮次自动结算', async () => {
     const { base } = await start()
     const account = await register(base, 'dave')
-    account.game.season.startedAt = Date.now() - ROUND_MS * 2 - 1000
+    account.game.season.startedAt = seasonStartForRound(Date.now(), 3)
     const put = await fetch(`${base}/api/game`, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${account.token}`, 'Content-Type': 'application/json' },
@@ -395,7 +394,7 @@ describe('联机服务器 / 账号 / SSE', () => {
   it('服务器自动推进可以完成整个 38 轮赛季', async () => {
     const { base } = await start()
     const account = await register(base, 'frank')
-    account.game.season.startedAt = Date.now() - ROUND_MS * 40
+    account.game.season.startedAt = seasonStartForRound(Date.now(), 39)
     await fetch(`${base}/api/game`, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${account.token}`, 'Content-Type': 'application/json' },
@@ -482,7 +481,7 @@ describe('Agent API', () => {
       expect(put.status).toBe(200)
       // 常规赛结束后要等 12 个游戏日的赛后休整窗口走完，才允许开始新赛季。
       expect((await client.callTool({ name: 'start_next_season', arguments: {} })).isError).toBe(true)
-      clock = Math.max(clock, seasonEndAt(account.game.world.seasonStartedAt, BEIJING_SCHEDULE))
+      clock = Math.max(clock, seasonEndAt(account.game.world.seasonStartedAt))
       expect((await client.callTool({ name: 'start_next_season', arguments: {} })).isError).not.toBe(true)
       const saved = await (await fetch(`${base}/api/game`, { headers: { Authorization: `Bearer ${account.token}` } })).json() as { game: Record<string, any> }
       expect(saved.game.season.index).toBe(2)

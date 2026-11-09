@@ -9,7 +9,7 @@ import { expireOffers, runLocalTransfers } from './transfers.ts'
 import { refreshLocalFreeMarket } from './free-market.ts'
 import { awardSeasonPrize } from './economy.ts'
 import { squadLimitError } from './market.ts'
-import { GAME_DAY_MS, ROUND_GAME_DAYS, ROUND_MS, elapsedGameDays, gameDayOfRound, kickoffAtForRound, seasonEndAt, roundsKickedOff, roundGapGameDays, DAILY_SCHEDULE } from './calendar.ts'
+import { AVERAGE_ROUND_GAME_DAYS, GAME_DAY_MS, KICKOFF_SCHEDULE, latestKickoffAt, elapsedGameDays, gameDayOfRound, kickoffAtForRound, seasonEndAt, roundsKickedOff, roundGapGameDays } from './calendar.ts'
 import { recordMatchInjuries } from './injury.ts'
 import { awardRoundIncome, economyOf } from './economy.ts'
 import { playerMarketValue, settleMarket } from './market.ts'
@@ -20,7 +20,7 @@ import { recordMatchDiscipline, serveSuspensions, suspendedPlayerIds } from './d
 
 export const PLAYER_TEAM_ID = 'player'
 export const ROUNDS = 38
-export { GAME_DAY_MS, ROUND_GAME_DAYS, ROUND_MS } from './calendar.ts'
+export { AVERAGE_ROUND_GAME_DAYS, GAME_DAY_MS } from './calendar.ts'
 export { LEAGUE_REALTIME_SECONDS } from './match/time.ts'
 export const LEAGUE_MATCH_SECONDS = LOGIC_MATCH_SECONDS
 
@@ -28,9 +28,9 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
 
-export function createSeason(seed: number, aiTeams: AITeam[], clubName: string, startedAt = Date.now()): SeasonState {
+export function createSeason(seed: number, aiTeams: AITeam[], clubName: string, startedAt = latestKickoffAt(Date.now()), clockShift = 0): SeasonState {
   const ids = [PLAYER_TEAM_ID, ...aiTeams.map((team) => team.id)]
-  const fixtures = buildFixtures(ids, startedAt)
+  const fixtures = buildFixtures(ids, startedAt, clockShift)
   const season: SeasonState = {
     index: 1,
     round: 1,
@@ -42,8 +42,9 @@ export function createSeason(seed: number, aiTeams: AITeam[], clubName: string, 
     seed,
     startedAt,
     gameDayMs: GAME_DAY_MS,
-    roundGameDays: ROUND_GAME_DAYS,
-    kickoffSchedule: DAILY_SCHEDULE,
+    roundGameDays: AVERAGE_ROUND_GAME_DAYS,
+    kickoffSchedule: KICKOFF_SCHEDULE,
+    ...(clockShift ? { clockShift } : {}),
   }
   const names = new Map<string, string>([[PLAYER_TEAM_ID, clubName], ...aiTeams.map((team) => [team.id, team.name] as [string, string])])
   season.table = computeTable(ids, fixtures, names)
@@ -79,7 +80,8 @@ export function startNextSeason(game: GameState, now = Date.now()): { ok: boolea
     }
   }
   const index = season.index + 1
-  const next = createSeason(splitSeed(game.seed, `season-${index}`), game.aiTeams, game.clubName, now)
+  // 老的单联赛存档：新赛季从（存档时钟）最近一个开赛时间点开始，跳过的时间继续算数。
+  const next = createSeason(splitSeed(game.seed, `season-${index}`), game.aiTeams, game.clubName, latestKickoffAt(now, season.clockShift), season.clockShift)
   next.index = index
   const economy = economyOf(game)
   awardRoundIncome(game, season.round)
@@ -94,8 +96,8 @@ export function startNextSeason(game: GameState, now = Date.now()): { ok: boolea
   return { ok: true }
 }
 
-/** 20 队双循环：19 轮首循环 + 19 轮次循环，单机每 4 个游戏日一轮（现实 24 小时）。 */
-function buildFixtures(teamIds: string[], startedAt: number): Fixture[] {
+/** 20 队双循环：19 轮首循环 + 19 轮次循环，每天北京时间 12:00、20:00 各一轮。 */
+function buildFixtures(teamIds: string[], startedAt: number, shift = 0): Fixture[] {
   const ids = [...teamIds]
   const fixtures: Fixture[] = []
   let order = [...ids]
@@ -120,8 +122,8 @@ function buildFixtures(teamIds: string[], startedAt: number): Fixture[] {
       awayId: match.b,
       isPlayer: match.a === PLAYER_TEAM_ID || match.b === PLAYER_TEAM_ID,
       played: false,
-      gameDay: gameDayOfRound(startedAt, match.round),
-      kickoffAt: kickoffAtForRound(startedAt, match.round),
+      gameDay: gameDayOfRound(startedAt, match.round, shift),
+      kickoffAt: kickoffAtForRound(startedAt, match.round, shift),
     })
   }
   return fixtures
@@ -208,8 +210,8 @@ export function isRoundComplete(game: GameState, round = game.season.round): boo
 }
 
 export function dueRound(game: GameState, now = Date.now()): number {
-  // 已经开过球的轮数（单机一天一轮，联机北京时间 12:00、20:00 各一轮）；赛季开始到第一轮开赛之间也算第 1 轮。
-  return Math.min(ROUNDS + 1, Math.max(1, roundsKickedOff(game.season.startedAt, now, game.season.kickoffSchedule)))
+  // 已经开过球的轮数（每天北京时间 12:00、20:00 各一轮）；赛季开始到第一轮开赛之间也算第 1 轮。
+  return Math.min(ROUNDS + 1, Math.max(1, roundsKickedOff(game.season.startedAt, now, game.season.clockShift)))
 }
 
 export function seasonDay(game: GameState, now = Date.now()): number {
@@ -217,7 +219,7 @@ export function seasonDay(game: GameState, now = Date.now()): number {
 }
 
 export function roundKickoffAt(game: GameState, round = game.season.round): number {
-  return kickoffAtForRound(game.season.startedAt, round, game.season.kickoffSchedule)
+  return kickoffAtForRound(game.season.startedAt, round, game.season.clockShift)
 }
 
 /** 当前轮的结算时刻，也就是下一轮开赛的时刻。 */
@@ -227,7 +229,7 @@ export function nextMatchdayAt(game: GameState): number {
 
 /** 赛后休整还要多久（升级附加赛窗口）。 */
 export function nextSeasonCountdown(game: GameState, now = Date.now()): string {
-  const diff = Math.max(0, seasonEndAt(game.season.startedAt, game.season.kickoffSchedule) - now)
+  const diff = Math.max(0, seasonEndAt(game.season.startedAt, game.season.clockShift) - now)
   const days = Math.floor(diff / GAME_DAY_MS)
   const hours = Math.floor((diff % GAME_DAY_MS) / 3_600_000)
   const minutes = Math.floor((diff % 3_600_000) / 60_000)
@@ -238,7 +240,7 @@ export function nextSeasonCountdown(game: GameState, now = Date.now()): string {
 
 /** 赛季结束后是否还在赛后休整窗口里（这期间只能踢友谊赛）。 */
 export function inPostseason(game: GameState, now = Date.now()): boolean {
-  return game.season.finished && now < seasonEndAt(game.season.startedAt, game.season.kickoffSchedule)
+  return game.season.finished && now < seasonEndAt(game.season.startedAt, game.season.clockShift)
 }
 
 export function matchdayCountdown(game: GameState, now = Date.now()): string {
@@ -262,19 +264,25 @@ function recoverConditions(game: GameState, gameDays: number): void {
 /* ---------- 离线存档：手动把日历快进到比赛日 ---------- */
 
 /**
- * 把存档里的时间锚点一起往前挪 delta 毫秒。
- * 赛季起点、每场比赛的开球时间、世界日历都要同时动，否则“第 N 轮”和“第几天”会再次错开。
+ * 把存档里的时间锚点一起往前挪 delta 毫秒，存档时钟（clockShift）同时往前拨 delta。
+ * 赛季起点、每场比赛的开球时间、世界日历都要同时动，否则“第 N 轮”和“第几天”会再次错开；
+ * 开赛时间点按存档时钟的 12:00 / 20:00 算，所以挪完以后赛程仍然对得上。
  */
 function shiftCalendar(game: GameState, delta: number): void {
   if (!Number.isFinite(delta) || delta <= 0) return
-  game.season.startedAt -= delta
-  for (const fixture of game.season.fixtures) {
-    if (typeof fixture.kickoffAt === 'number') fixture.kickoffAt -= delta
+  // 当前赛季就是世界里玩家那个分区；其他分区一起挪，各挪一次。
+  for (const season of new Set([game.season, ...(game.world?.divisions ?? [])])) {
+    season.startedAt -= delta
+    season.clockShift = (season.clockShift ?? 0) + delta
+    for (const fixture of season.fixtures ?? []) {
+      if (typeof fixture.kickoffAt === 'number') fixture.kickoffAt -= delta
+    }
   }
   if (game.world) {
     if (typeof game.world.calendarStartAt === 'number') game.world.calendarStartAt -= delta
     else game.createdAt -= delta
     game.world.seasonStartedAt -= delta
+    game.world.clockShift = (game.world.clockShift ?? 0) + delta
   } else {
     // 没有世界数据的老存档：顶栏日期回退到建档时间。
     game.createdAt -= delta
@@ -324,8 +332,8 @@ export function skipToMatchday(game: GameState, now = Date.now()): { ok: boolean
 /** 离线存档：把赛后休整快进到结束，之后就能开始下一赛季。 */
 export function skipToPostseasonEnd(game: GameState, now = Date.now()): { ok: boolean; error?: string; gameDays: number } {
   if (!game.season.finished) return { ok: false, error: '常规赛还没结束', gameDays: 0 }
-  if (now >= seasonEndAt(game.season.startedAt, game.season.kickoffSchedule)) return { ok: true, gameDays: 0 }
-  return skipCalendar(game, seasonEndAt(game.season.startedAt, game.season.kickoffSchedule) - now, now)
+  if (now >= seasonEndAt(game.season.startedAt, game.season.clockShift)) return { ok: true, gameDays: 0 }
+  return skipCalendar(game, seasonEndAt(game.season.startedAt, game.season.clockShift) - now, now)
 }
 
 /**
@@ -460,7 +468,7 @@ export function catchUpSeason(game: GameState, now = Date.now()): { advanced: nu
     advanced++
     if (round < ROUNDS && !game.season.finished) {
       game.season.round = round + 1
-      recoverConditions(game, roundGapGameDays(game.season.startedAt, round, game.season.kickoffSchedule))
+      recoverConditions(game, roundGapGameDays(game.season.startedAt, round, game.season.clockShift))
     }
     updateSeasonTable(game)
   }
@@ -491,7 +499,7 @@ export function advanceSeasonRound(game: GameState, now = Date.now()): { ok: boo
   }
   if (!game.season.finished && round < ROUNDS) {
     game.season.round = round + 1
-    recoverConditions(game, roundGapGameDays(game.season.startedAt, round, game.season.kickoffSchedule))
+    recoverConditions(game, roundGapGameDays(game.season.startedAt, round, game.season.clockShift))
   }
   updateSeasonTable(game)
   return { ok: true }
@@ -703,7 +711,7 @@ export function finishActiveMatch(game: GameState, engine: GameEngine, now = Dat
       }
       if (!game.season.finished && round < ROUNDS) {
         game.season.round = round + 1
-        recoverConditions(game, roundGapGameDays(game.season.startedAt, round, game.season.kickoffSchedule))
+        recoverConditions(game, roundGapGameDays(game.season.startedAt, round, game.season.clockShift))
       }
       updateSeasonTable(game)
     }

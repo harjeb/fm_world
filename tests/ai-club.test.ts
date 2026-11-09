@@ -19,7 +19,7 @@ import {
 } from '../src/game/ai-club.ts'
 import { AI_BID_PREFIX, AUCTION_DURATION_MS, placeAIBid, settleAuctions, type FreeMarket } from '../src/game/auction.ts'
 import { facilityUpgradeCost, facilityLevel, projectedRoundIncome } from '../src/game/economy.ts'
-import { ROUND_GAME_DAYS } from '../src/game/calendar.ts'
+import { AVERAGE_ROUND_GAME_DAYS } from '../src/game/calendar.ts'
 import { cachedOwnerlessTeams, createWorldGame } from '../src/game/world.ts'
 
 const game = () => createWorldGame(2024)
@@ -112,7 +112,7 @@ describe('电脑球队的经营节奏', () => {
       counted[tier] = result.trained
       const [low, high] = aiTierProfile(tier).perDay
       expect(result.trained).toBeGreaterThanOrEqual(low * 5 * 0.5)
-      expect(result.trained).toBeLessThanOrEqual(high * 5 * ROUND_GAME_DAYS)
+      expect(result.trained).toBeLessThanOrEqual(high * 5 * AVERAGE_ROUND_GAME_DAYS)
       void low
     }
     expect(counted.division2).toBeLessThan(counted.division1)

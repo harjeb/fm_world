@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
 import { economyOf, fansAfterResult, GOAL_INCOME_BONUS, LEAGUE_WIN_BONUS, projectedRoundIncome, type EconomyState } from '../src/game/economy.ts'
-import { catchUpSeason, playerFixture, ROUND_MS } from '../src/game/season.ts'
+import { catchUpSeason, playerFixture } from '../src/game/season.ts'
+import { kickoffAtForRound } from '../src/game/calendar.ts'
 import { advanceLeagueRealtime } from '../src/game/realtime.ts'
 import { restoreActiveEngine, simulateSeasonRound, startLeague, startSingleChallenge, finishMatch } from '../src/game/actions.ts'
 import { recordMatchInjuries } from '../src/game/injury.ts'
@@ -32,7 +33,8 @@ describe('economy integration', () => {
 
   it('pays each completed round once during batched catchup', () => {
     const game = createInitialGame(43)
-    const now = game.season.startedAt + 3 * ROUND_MS
+    // 第 4 轮开球：前 3 轮该结算了
+    const now = kickoffAtForRound(game.season.startedAt, 4)
     expect(catchUpSeason(game, now).advanced).toBe(3)
     const expected = economyOf(game)
     expected.balance = 100000

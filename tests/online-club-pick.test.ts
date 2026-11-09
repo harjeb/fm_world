@@ -6,7 +6,7 @@ import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
 import { applyAgentAction } from '../server/agent.ts'
 import { createWorldGame } from '../src/game/world.ts'
-import { ROUND_MS } from '../src/game/calendar.ts'
+import { seasonStartForRound } from '../src/game/calendar.ts'
 import type { GameState } from '../src/game/types.ts'
 
 const servers: AppServer[] = []
@@ -54,7 +54,7 @@ describe('联机注册后选队', () => {
     expect(early.ok).toBe(false)
     expect(early.error).toContain('还没开始')
     // 第二轮开球时间到了就能开打
-    game.season.startedAt = now - ROUND_MS
+    game.season.startedAt = seasonStartForRound(now, 2)
     const due = applyAgentAction(game, { action: 'start_league' }, now)
     expect(due.ok, due.error).toBe(true)
   })

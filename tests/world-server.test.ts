@@ -4,7 +4,9 @@ import os from 'node:os'
 import path from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
-import { BEIJING_SCHEDULE, ROUND_MS, postseasonStartAt, seasonEndAt } from '../src/game/calendar.ts'
+import { KICKOFF_SCHEDULE, postseasonStartAt, seasonEndAt } from '../src/game/calendar.ts'
+
+const HOUR = 60 * 60 * 1000
 
 const servers: AppServer[] = []
 afterEach(() => {
@@ -41,12 +43,12 @@ async function load(base: string, token: string): Promise<{ game: any; revision:
 }
 
 /** 把这个账号的联赛赛程全部标成已赛；返回可 PUT 回去的存档。 */
-/** 共享世界当前赛季（联机赛程）的赛后休整开始、结束时间。 */
+/** 共享世界当前赛季的赛后休整开始、结束时间。 */
 async function seasonTimes(base: string, token: string): Promise<{ postseason: number; end: number }> {
   const { game } = await load(base, token)
   const start = game.world.seasonStartedAt
-  expect(game.world.kickoffSchedule).toBe(BEIJING_SCHEDULE)
-  return { postseason: postseasonStartAt(start, BEIJING_SCHEDULE), end: seasonEndAt(start, BEIJING_SCHEDULE) }
+  expect(game.world.kickoffSchedule).toBe(KICKOFF_SCHEDULE)
+  return { postseason: postseasonStartAt(start), end: seasonEndAt(start) }
 }
 
 async function finishSeason(base: string, token: string) {
@@ -84,7 +86,7 @@ describe('服务器共享世界', () => {
     const { base } = await start(() => now)
     const first = await register(base, 'world_early')
     expect(first.game.season.round).toBe(1)
-    now += ROUND_MS + 2 * 60 * 60 * 1000 // 一天多一点：至少过了两个开赛时间点
+    now += 26 * HOUR // 一天多一点：至少过了两个开赛时间点
     const late = await register(base, 'world_late')
     expect(late.game.season.round).toBeGreaterThanOrEqual(2)
     expect(late.game.season.fixtures.some((fixture: any) => fixture.played)).toBe(true)
@@ -115,7 +117,7 @@ describe('服务器共享世界', () => {
       return Object.fromEntries(Object.entries(result).map(([tier, row]) => [tier, row.gain / Math.max(1, row.players)]))
     }
     const start0 = gains(await teams())
-    clock += ROUND_MS * 8
+    clock += 8 * 24 * HOUR
     const later = gains(await teams())
     for (const tier of ['division2', 'division1', 'champions']) expect(later[tier], tier).toBeGreaterThan(start0[tier] + 0.3)
     expect(later.division1).toBeGreaterThan(later.division2)

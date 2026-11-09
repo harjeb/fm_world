@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { ELEVEN_SQUAD_SIZE } from '../src/game/eleven.ts'
 import { createWorldGame, payWorldWages, d2ClubChoices, createOwnerlessWorld, createWorldGameFromWorld, advanceOwnerlessWorld } from '../src/game/world.ts'
-import { ROUND_MS, startLeagueMatch, startNextSeason, updateSeasonTable } from '../src/game/season.ts'
+import { startLeagueMatch, startNextSeason, updateSeasonTable } from '../src/game/season.ts'
+import { seasonEndAt, seasonStartForRound } from '../src/game/calendar.ts'
 import { buyFreeAgent, joinRoster, releasePlayer, renewContract, transferWindowOpen, playerMarketValue } from '../src/game/market.ts'
 import { isOnMarketToday } from '../src/game/market-window.ts'
 import { economyOf } from '../src/game/economy.ts'
@@ -22,7 +23,7 @@ function finishSeason(game: GameState, playerGoals = 5): void {
 }
 
 function next(game: GameState): ReturnType<typeof startNextSeason> {
-  return startNextSeason(game, game.season.startedAt + ROUND_MS * 41)
+  return startNextSeason(game, seasonEndAt(game.season.startedAt, game.season.clockShift))
 }
 
 describe('三级共享世界', () => {
@@ -73,7 +74,7 @@ describe('三级共享世界', () => {
   })
 
   it('共享世界快照可按当前轮次接管球队，并保留已赛结果', () => {
-    const startedAt = Date.now() - ROUND_MS - 2 * 60 * 60 * 1000 // 刚过一轮
+    const startedAt = seasonStartForRound(Date.now(), 2) // 第 2 轮刚开球
     const ownerless = createOwnerlessWorld(1, startedAt)
     expect(ownerless.world.clubs.some((club) => club.id === 'player')).toBe(false)
     expect(advanceOwnerlessWorld(ownerless.world, Date.now())).toBe(true)

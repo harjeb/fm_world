@@ -8,6 +8,8 @@ import { upgradeElevenASide } from './eleven.ts'
 import { validateAutoSubPlan } from './match/management.ts'
 import { createSeason } from './season.ts'
 import { ensureWorldCalendar } from './world.ts'
+import { migrateGameSchedule } from './schedule.ts'
+import { latestKickoffAt } from './calendar.ts'
 import { splitSeed } from './rng.ts'
 import { economyOf } from './economy.ts'
 import { addLegacySignature } from './data/players.ts'
@@ -48,7 +50,8 @@ export function setRemoteSaver(saver: RemoteSaver | null): void {
 
 export function createInitialGame(seed?: number, clubName = '青石'): GameState {
   const gameSeed = seed ?? Math.floor(Math.random() * 0x7fffffff)
-  const startedAt = Date.now()
+  // 从最近一个开赛时间点（北京时间 12:00 / 20:00）开始：第 1 轮马上就能踢。
+  const startedAt = latestKickoffAt(Date.now())
   const { playerTeam, aiTeams, freeStars } = buildLeague(gameSeed, clubName)
   const roster = playerTeam.players
   const lineup = playerTeam.lineup
@@ -141,6 +144,8 @@ export function loadGame(): GameState | null {
       // 越位规则固定开启：旧存档里关掉过的也改回来。
       parsed.settings = { ...(parsed.settings ?? {}), offside: true }
     }
+    // 一天一轮的旧赛程换成一天两轮（北京时间 12:00、20:00），当前该踢的轮次不变。
+    const rescheduled = migrateGameSchedule(parsed, Date.now())
     // 7 人制存档迁移到 11 人制：补随机球员、换阵型（只在还有旧阵型时动手）。
     const elevenUpgraded = upgradeElevenASide(parsed)
     const repaired = repairLoadedLineup(parsed)
@@ -152,7 +157,7 @@ export function loadGame(): GameState | null {
     const traitsUpgraded = upgradeStarTraits(parsed)
     const attrsUpgraded = upgradeBurstAttr(parsed)
     parsed.ui = parsed.ui ?? { screen: 'home' }
-    if (elevenUpgraded || repaired || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded) saveGame(parsed)
+    if (rescheduled || elevenUpgraded || repaired || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded) saveGame(parsed)
     return parsed
   } catch {
     return null

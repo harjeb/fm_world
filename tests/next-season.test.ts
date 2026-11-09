@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
 import { awardRoundIncome, economyOf } from '../src/game/economy.ts'
 import { cancelListing, listPlayer, playerMarketValue, settleMarket } from '../src/game/market.ts'
-import { catchUpSeason, ROUND_MS, startLeagueMatch, startNextSeason, updateSeasonTable } from '../src/game/season.ts'
+import { catchUpSeason, startLeagueMatch, startNextSeason, updateSeasonTable } from '../src/game/season.ts'
+import { latestKickoffAt } from '../src/game/calendar.ts'
 
 function finish(game: ReturnType<typeof createInitialGame>) {
   for (const fixture of game.season.fixtures) fixture.played = true
@@ -46,8 +47,9 @@ describe('next season', () => {
     expect(JSON.parse(JSON.stringify(game)).seasonHistory).toEqual([oldSeason])
     expect(game.season.index).toBe(2)
     expect(game.season.seed).not.toBe(oldSeed)
-    expect(game.season.startedAt).toBe(123456)
-    expect(game.season.fixtures.find(f => f.round === 1)!.kickoffAt).toBe(123456)
+    // 新赛季从最近一个开赛时间点（北京时间 12:00 / 20:00）开始，第 1 轮就在那一刻
+    expect(game.season.startedAt).toBe(latestKickoffAt(123456))
+    expect(game.season.fixtures.find(f => f.round === 1)!.kickoffAt).toBe(latestKickoffAt(123456))
     expect(game.season.fixtures.every(f => !f.played)).toBe(true)
     expect(game.roster).toEqual(roster)
     expect(game.lineup).toEqual(lineup)
@@ -98,7 +100,7 @@ describe('next season', () => {
     delete game.activeMatch
     finish(game)
     delete game.economy
-    expect(catchUpSeason(game, game.season.startedAt + 100 * ROUND_MS).advanced).toBe(0)
+    expect(catchUpSeason(game, game.season.startedAt + 100 * 24 * 60 * 60 * 1000).advanced).toBe(0)
     expect(startNextSeason(game, 1000).ok).toBe(true)
     expect(game.economy!.balance).toBe(500_000)
     expect(game.economy!.lastIncomeRound).toBe(0)

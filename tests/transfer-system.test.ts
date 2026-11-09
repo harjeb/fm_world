@@ -20,7 +20,7 @@ import { previewClubSigning, signClubPlayer } from '../src/game/market.ts'
 import { settleEnergy } from '../src/game/energy.ts'
 import { startTraining } from '../src/game/actions.ts'
 import { catchUpSeason } from '../src/game/season.ts'
-import { GAME_DAY_MS, ROUND_MS } from '../src/game/calendar.ts'
+import { GAME_DAY_MS, seasonStartForRound } from '../src/game/calendar.ts'
 import { economyOf } from '../src/game/economy.ts'
 import { playerMarketValue } from '../src/game/pricing.ts'
 import { createWorldGame } from '../src/game/world.ts'
@@ -283,7 +283,7 @@ describe('训练精力', () => {
 describe('出场记录', () => {
   it('联赛踢完后两队整个名单都记一笔出场分钟，最多留 20 场', () => {
     const game = createWorldGame(2601)
-    game.season.startedAt -= 24 * ROUND_MS
+    game.season.startedAt = seasonStartForRound(Date.now(), 25)
     if (game.world) game.world.seasonStartedAt = game.season.startedAt
     catchUpSeason(game)
     const book = game.appearances ?? {}

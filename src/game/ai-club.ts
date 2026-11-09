@@ -1,6 +1,6 @@
 import { caOf, costAttrs } from './ca.ts'
 import { MAX_FANS, STAGES_PER_LEVEL, facilityLevel, facilityStageChance, facilityUpgradeCost, projectedRoundIncome } from './economy.ts'
-import { ROUND_GAME_DAYS, averageRoundGameDays } from './calendar.ts'
+import { AVERAGE_ROUND_GAME_DAYS } from './calendar.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 import { playerMarketValue } from './pricing.ts'
 import { isOnMarketToday } from './market-window.ts'
@@ -288,11 +288,11 @@ export type AIAdvanceResult = { trained: number; upgrades: number }
 
 /**
  * 推进一支电脑球队：收钱、涨球迷、按频率培养、偶尔升设施。
- * `rounds` 是这次补算了多少轮，每天的训练次数按 `roundGameDays`（一轮几个游戏日，单机 4、联机平均 2）折算。
+ * `rounds` 是这次补算了多少轮，每天的训练次数按 AVERAGE_ROUND_GAME_DAYS（一天两轮，平均一轮 2 个游戏日）折算。
  * `applyToTeam = false` 时只练卡片，不动当季名单（服务器用：名册改动要等赛季滚动再统一生效，
  * 否则每个 tick 都会改动全服名册、把每个教练的存档版本推高）。
  */
-export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | 'tier'>, team: AITeam | undefined, rounds: number, seed: number, applyToTeam = true, roundGameDays = ROUND_GAME_DAYS): AIAdvanceResult {
+export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | 'tier'>, team: AITeam | undefined, rounds: number, seed: number, applyToTeam = true): AIAdvanceResult {
   if (rounds <= 0) return { trained: 0, upgrades: 0 }
   const profile = TIER_PROFILE[club.tier] ?? TIER_PROFILE.division2
   // 收入：和玩家同一套公式（基本收入 + 球迷 + 设施），按轮结算。
@@ -301,7 +301,7 @@ export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | '
   const players = team?.players
   if (players && players.length && applyToTeam) equipAICards(state, players)
 
-  const days = rounds * roundGameDays
+  const days = rounds * AVERAGE_ROUND_GAME_DAYS
   const rng = derivedRng(seed, 'ai-train', state.trained, rounds)
   state.progress += days * aiTrainingPerDay(club.tier, rng)
   let sessions = Math.floor(state.progress)
@@ -385,7 +385,7 @@ export function advanceAIClubs(game: { world?: WorldState; aiTeams?: AITeam[]; a
     const own = teams.get(club.id)
     // 其他分区没有存档名单：用种子复原的名单当培养对象，只练账本里的卡，不动任何名单。
     const team = own ?? (ownerless ??= cachedOwnerlessTeams(game.world, game.seed, game.aiClubs))[club.id]
-    advanceAIClub(state, club, team, rounds, splitSeed(game.seed, `ai-advance-${club.id}-${game.season?.round ?? 1}-${rounds}`), !!own, averageRoundGameDays(game.world.kickoffSchedule))
+    advanceAIClub(state, club, team, rounds, splitSeed(game.seed, `ai-advance-${club.id}-${game.season?.round ?? 1}-${rounds}`), !!own)
   }
   return true
 }

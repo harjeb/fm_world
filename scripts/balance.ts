@@ -2,7 +2,8 @@ import { createInitialGame } from '../src/game/state.ts'
 import { LOGIC_MATCH_SECONDS } from '../src/game/match/time.ts'
 import { simulateAIvsAIState } from '../src/game/match/setup.ts'
 import { caOf } from '../src/game/ca.ts'
-import { catchUpSeason, ROUND_MS } from '../src/game/season.ts'
+import { catchUpSeason } from '../src/game/season.ts'
+import { postseasonStartAt } from '../src/game/calendar.ts'
 import { startTraining, trainingAction, trainingEventChoice } from '../src/game/actions.ts'
 import { trainingOptions } from '../src/game/training-calendar.ts'
 import { eventById } from '../src/game/data/events.ts'
@@ -88,7 +89,7 @@ while (!session.completed) {
 const trainGain = caOf(session.candidate.attrs, false) - startCa
 
 const longGame = createInitialGame(20260418)
-const advance = catchUpSeason(longGame, longGame.season.startedAt + ROUND_MS * 40)
+const advance = catchUpSeason(longGame, postseasonStartAt(longGame.season.startedAt))
 console.log(JSON.stringify({
   matches,
   avgGoals: Number((goals / matches).toFixed(2)),

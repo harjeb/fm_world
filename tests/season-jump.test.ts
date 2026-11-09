@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
 import { createWorldGame } from '../src/game/world.ts'
-import { GAME_DAY_MS, ROUND_GAME_DAYS, advanceSeasonRound, dueRound, playerFixture, skipToMatchday, skipToPostseasonEnd } from '../src/game/season.ts'
+import { GAME_DAY_MS, advanceSeasonRound, dueRound, nextMatchdayAt, playerFixture, skipToMatchday, skipToPostseasonEnd } from '../src/game/season.ts'
 import { kickoffAtForRound, seasonEndAt } from '../src/game/calendar.ts'
 import { startLeagueOnMatchday } from '../src/game/actions.ts'
 import type { Player } from '../src/game/types.ts'
@@ -32,6 +32,8 @@ function playRounds(game: ReturnType<typeof createInitialGame>, rounds: number, 
 }
 
 const gameDayOf = (game: ReturnType<typeof createInitialGame>, now: number, anchor: number) => Math.floor((now - anchor) / GAME_DAY_MS)
+/** 北京时间（UTC+8）的小时。 */
+const beijingHour = (at: number) => (new Date(at).getUTCHours() + 8) % 24
 
 describe('跳至比赛日（离线存档）', () => {
   // 测试先取 `now`，建档时又各取一次 Date.now()；毫秒一跳（并行跑全套时很常见）就差出 5e-8 个游戏日，
@@ -50,23 +52,49 @@ describe('跳至比赛日（离线存档）', () => {
     const game = createInitialGame(2024)
     playRounds(game, 5, now)
     expect(game.season.round).toBe(6)
-    // 现在还是“第 1 天”，所以第 6 轮按日历算是 20 个游戏日之后。
+    // 存档从今天北京时间 12:00 开始，现在 16:00，还是“第 1 天”；第 6 轮在后天 20:00。
+    expect(game.season.startedAt).toBe(Date.UTC(2026, 2, 14, 4))
     expect(gameDayOf(game, now, game.createdAt)).toBe(0)
+    const kickoff = kickoffAtForRound(game.season.startedAt, 6)
+    expect(kickoff - game.season.startedAt).toBe((2 * 24 + 8) * 60 * 60 * 1000)
 
     const jump = skipToMatchday(game, now)
     expect(jump.ok).toBe(true)
-    expect(jump.gameDays).toBe((ROUND_GAME_DAYS * (6 - 1)))
+    expect(jump.gameDays).toBeCloseTo((kickoff - now) / GAME_DAY_MS, 10)
     expect(game.season.round).toBe(6)
-    // 日期、轮次、开球时间重新对齐：第 6 轮就在今天。
-    expect(gameDayOf(game, now, game.createdAt)).toBe(ROUND_GAME_DAYS * (6 - 1))
-    expect(kickoffAtForRound(game.season.startedAt, 6)).toBe(now)
+    // 日期、轮次、开球时间重新对齐：第 6 轮就在现在。
+    expect(gameDayOf(game, now, game.createdAt)).toBe(Math.floor((kickoff - Date.UTC(2026, 2, 14, 4)) / GAME_DAY_MS))
+    expect(game.season.clockShift).toBe(kickoff - now)
+    expect(kickoffAtForRound(game.season.startedAt, 6, game.season.clockShift)).toBe(now)
     expect(dueRound(game, now)).toBe(6)
+    // 存档时钟领先现实：按存档时钟，第 6 轮在 20:00，下一轮在第二天 12:00（16 小时后）。
+    expect(beijingHour(now + game.season.clockShift!)).toBe(20)
+    expect(nextMatchdayAt(game)).toBe(now + 16 * 60 * 60 * 1000)
+    expect(beijingHour(nextMatchdayAt(game) + game.season.clockShift!)).toBe(12)
+  })
+
+  it('跳过两次，存档时钟累计领先，赛程仍然对得上', () => {
+    const now = Date.now()
+    const game = createInitialGame(2025)
+    playRounds(game, 2, now)
+    const first = skipToMatchday(game, now)
+    expect(first.gameDays).toBeGreaterThan(0)
+    expect(dueRound(game, now)).toBe(3)
+    playRounds(game, 1, now)
+    const second = skipToMatchday(game, now)
+    expect(second.gameDays).toBeGreaterThan(0)
+    expect(dueRound(game, now)).toBe(4)
+    expect(kickoffAtForRound(game.season.startedAt, 4, game.season.clockShift)).toBe(now)
+    for (const fixture of game.season.fixtures) {
+      expect(fixture.kickoffAt).toBe(kickoffAtForRound(game.season.startedAt, fixture.round, game.season.clockShift))
+      expect([12, 20]).toContain(beijingHour(fixture.kickoffAt! + game.season.clockShift!))
+    }
   })
 
   it('跳过的日子会恢复体能、精力，并把伤病按时间治好', () => {
     const now = Date.now()
     const game = createInitialGame(77)
-    game.season.round = 4
+    game.season.round = 7
     const player = game.roster.find((item) => item.positions.GK === 0)!
     player.condition = 30
     player.energy = 20
@@ -75,7 +103,8 @@ describe('跳至比赛日（离线存档）', () => {
     const healthy = game.roster.length
 
     const jump = skipToMatchday(game, now)
-    expect(jump.gameDays).toBe(ROUND_GAME_DAYS * 3)
+    // 第 7 轮在 3 天后的 12:00：68 小时 = 11⅓ 个游戏日。
+    expect(jump.gameDays).toBeCloseTo(68 / 6, 10)
     expect(player.condition).toBe(100)
     expect(player.energy).toBeGreaterThan(20)
     expect(game.injuries).toBeDefined()
@@ -89,12 +118,19 @@ describe('跳至比赛日（离线存档）', () => {
     game.season.round = 6
     const beforeCalendar = game.world!.calendarStartAt!
     const beforeSeason = game.world!.seasonStartedAt
+    const kickoff = kickoffAtForRound(beforeSeason, 6)
     const jump = skipToMatchday(game, now)
-    expect(jump.gameDays).toBe(ROUND_GAME_DAYS * 5)
-    const delta = jump.gameDays * GAME_DAY_MS
+    const delta = kickoff - now
+    expect(jump.gameDays).toBeCloseTo(delta / GAME_DAY_MS, 10)
     expect(game.world!.calendarStartAt).toBe(beforeCalendar - delta)
     expect(game.world!.seasonStartedAt).toBe(beforeSeason - delta)
-    expect(gameDayOf(game, now, game.world!.calendarStartAt!)).toBe(ROUND_GAME_DAYS * 5)
+    expect(game.world!.clockShift).toBe(delta)
+    expect(gameDayOf(game, now, game.world!.calendarStartAt!)).toBe(Math.floor((kickoff - beforeCalendar) / GAME_DAY_MS))
+    // 其他分区一起挪：全世界还是同一套开赛时间
+    for (const division of game.world!.divisions) {
+      expect(division.startedAt).toBe(game.world!.seasonStartedAt)
+      expect(division.clockShift).toBe(delta)
+    }
   })
 
   it('开赛失败就回滚，不会白跳时间', () => {
@@ -125,7 +161,7 @@ describe('跳至比赛日（离线存档）', () => {
     expect(now).toBeLessThan(seasonEndAt(game.season.startedAt))
     const jump = skipToPostseasonEnd(game, now)
     expect(jump.ok).toBe(true)
-    expect(seasonEndAt(game.season.startedAt)).toBeLessThanOrEqual(now + 1)
+    expect(seasonEndAt(game.season.startedAt, game.season.clockShift)).toBeLessThanOrEqual(now + 1)
     expect(skipToPostseasonEnd(game, now).gameDays).toBe(0)
   })
 })

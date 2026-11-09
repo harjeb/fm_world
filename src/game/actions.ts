@@ -591,7 +591,7 @@ export function autoLineup(game: GameState, formationId = game.lineup.formationI
 
 export function startNextSeasonAction(game: GameState, now = Date.now()): { ok: boolean; error?: string } {
   // 赛季结束后先过 12 个游戏日的休整窗口（升级附加赛 + 友谊赛），不能一点就开新赛季。
-  if (game.world && game.season.finished && now < seasonEndAt(game.season.startedAt, game.season.kickoffSchedule)) {
+  if (game.world && game.season.finished && now < seasonEndAt(game.season.startedAt, game.season.clockShift)) {
     return { ok: false, error: `赛后休整还没结束：${nextSeasonCountdown(game, now)}后开始下一赛季` }
   }
   const result = startNextSeason(game, now)
@@ -608,11 +608,11 @@ export function startLeague(game: GameState, now = Date.now()): { ok: boolean; e
 }
 
 type ClockSnapshot = {
-  seasonStartedAt: number
-  kickoffs: (number | undefined)[]
+  seasons: { season: GameState['season']; startedAt: number; clockShift?: number; kickoffs: (number | undefined)[] }[]
   createdAt: number
   worldCalendarStartAt?: number
   worldSeasonStartedAt: number
+  worldClockShift?: number
   condition: Map<string, { condition: number; energy: number }>
   injuries: Record<string, number> | undefined
 }
@@ -623,23 +623,34 @@ function snapshotClock(game: GameState): ClockSnapshot {
     condition.set(player.id, { condition: player.condition, energy: player.energy })
   }
   return {
-    seasonStartedAt: game.season.startedAt,
-    kickoffs: game.season.fixtures.map((fixture) => fixture.kickoffAt),
+    seasons: [...new Set([game.season, ...(game.world?.divisions ?? [])])].map((season) => ({
+      season,
+      startedAt: season.startedAt,
+      clockShift: season.clockShift,
+      kickoffs: (season.fixtures ?? []).map((fixture) => fixture.kickoffAt),
+    })),
     createdAt: game.createdAt,
     worldCalendarStartAt: game.world?.calendarStartAt,
     worldSeasonStartedAt: game.world?.seasonStartedAt ?? 0,
+    worldClockShift: game.world?.clockShift,
     condition,
     injuries: game.injuries ? { ...game.injuries } : undefined,
   }
 }
 
 function restoreClock(game: GameState, snapshot: ClockSnapshot): void {
-  game.season.startedAt = snapshot.seasonStartedAt
-  game.season.fixtures.forEach((fixture, index) => { fixture.kickoffAt = snapshot.kickoffs[index] })
+  for (const saved of snapshot.seasons) {
+    saved.season.startedAt = saved.startedAt
+    saved.season.clockShift = saved.clockShift
+    if (saved.clockShift === undefined) delete saved.season.clockShift
+    ;(saved.season.fixtures ?? []).forEach((fixture, index) => { fixture.kickoffAt = saved.kickoffs[index] })
+  }
   game.createdAt = snapshot.createdAt
   if (game.world) {
     game.world.calendarStartAt = snapshot.worldCalendarStartAt
     game.world.seasonStartedAt = snapshot.worldSeasonStartedAt
+    game.world.clockShift = snapshot.worldClockShift
+    if (snapshot.worldClockShift === undefined) delete game.world.clockShift
   }
   for (const player of [...game.roster, ...game.aiTeams.flatMap((team) => team.players)]) {
     const before = snapshot.condition.get(player.id)

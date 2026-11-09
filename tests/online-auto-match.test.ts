@@ -6,7 +6,7 @@ import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
 import { createWorldGame } from '../src/game/world.ts'
 import { playerFixture, roundKickoffAt, settleDuePlayerMatch } from '../src/game/season.ts'
-import { BEIJING_SCHEDULE, kickoffAtForRound } from '../src/game/calendar.ts'
+import { kickoffAtForRound } from '../src/game/calendar.ts'
 import type { GameState } from '../src/game/types.ts'
 
 const servers: AppServer[] = []
@@ -60,7 +60,7 @@ describe('联机联赛到点自动结算', () => {
 
     // 下一轮开球时间（当天 20:00）到了：登录时先自动补上第 1 轮，再自动踢第 2 轮
     expect(registered.game.world!.seasonStartedAt).toBe(Date.UTC(2026, 10, 9, 4))
-    clock = kickoffAtForRound(registered.game.world!.seasonStartedAt, 2, BEIJING_SCHEDULE)
+    clock = kickoffAtForRound(registered.game.world!.seasonStartedAt, 2)
     const second = await (await fetch(`${base}/api/game`, { headers: auth })).json() as { game: GameState }
     expect(second.game.season.round).toBe(2)
     for (const round of [1, 2]) {

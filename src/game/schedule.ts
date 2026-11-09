@@ -1,15 +1,14 @@
 /**
- * 联机赛程迁移：一天一轮（每 24 小时）→ 一天两轮（北京时间 12:00、20:00）。只给服务器的共享世界和联机账号用，单机存档保留一天一轮。
+ * 赛程迁移：一天一轮（每 24 小时）→ 一天两轮（北京时间 12:00、20:00）。单机存档、联机账号和服务器共享世界都用。
  *
  * 进行中的赛季保持“现在该踢第几轮”不变：把那一轮的开赛时间对齐到最近的一个开赛时间点，
  * 赛季开始时间和存档里每场比赛的开赛时间跟着重算，不会一上线就连着补算好几轮。
  * 还没开始的赛季只重算赛程时间。用 kickoffSchedule 标记，迁移过一次之后什么都不做。
  */
 import type { GameState, SeasonState, WorldState } from './types.ts'
-import { BEIJING_SCHEDULE, averageRoundGameDays, gameDayOfRound, kickoffAtForRound, seasonStartForRound, SEASON_ROUNDS } from './calendar.ts'
+import { AVERAGE_ROUND_GAME_DAYS, KICKOFF_SCHEDULE, gameDayOfRound, kickoffAtForRound, seasonStartForRound, SEASON_ROUNDS } from './calendar.ts'
 
-/** 联机赛程：一天两轮（北京时间 12:00、20:00）。 */
-export const KICKOFF_SCHEDULE = BEIJING_SCHEDULE
+export { KICKOFF_SCHEDULE }
 const LEGACY_ROUND_MS = 24 * 60 * 60 * 1000
 
 /** 旧日历下现在该踢第几轮（39 = 常规赛已经踢完）。 */
@@ -20,17 +19,19 @@ function legacyDueRound(startedAt: number, now: number): number {
 /** 旧赛季按新日历重新定开始时间：还没开始的不动，进行中的让当前轮落在最近的开赛时间点。 */
 export function rescheduledStart(startedAt: number, now: number): number {
   if (now < startedAt) return startedAt
-  return seasonStartForRound(now, legacyDueRound(startedAt, now), KICKOFF_SCHEDULE)
+  return seasonStartForRound(now, legacyDueRound(startedAt, now))
 }
 
 /** 把一个联赛分区的赛季挪到新的开始时间：每场比赛的开赛时间和游戏日一起重算。 */
 export function reanchorSeason(season: SeasonState, startedAt: number): void {
   season.startedAt = startedAt
-  season.roundGameDays = averageRoundGameDays(KICKOFF_SCHEDULE)
+  season.roundGameDays = AVERAGE_ROUND_GAME_DAYS
   season.kickoffSchedule = KICKOFF_SCHEDULE
+  // 旧存档跳过的时间已经算进 startedAt，新赛程从现实时间重新对齐。
+  delete season.clockShift
   for (const fixture of season.fixtures ?? []) {
-    fixture.kickoffAt = kickoffAtForRound(startedAt, fixture.round, KICKOFF_SCHEDULE)
-    fixture.gameDay = gameDayOfRound(startedAt, fixture.round, KICKOFF_SCHEDULE)
+    fixture.kickoffAt = kickoffAtForRound(startedAt, fixture.round)
+    fixture.gameDay = gameDayOfRound(startedAt, fixture.round)
   }
 }
 
@@ -41,6 +42,7 @@ export function migrateWorldSchedule(world: WorldState, now: number): boolean {
   world.seasonStartedAt = start
   for (const division of world.divisions ?? []) reanchorSeason(division, start)
   world.kickoffSchedule = KICKOFF_SCHEDULE
+  delete world.clockShift
   return true
 }
 

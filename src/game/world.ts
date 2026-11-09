@@ -24,7 +24,7 @@ import { caOf } from './ca.ts'
 import { derivedRng, splitSeed, hashString } from './rng.ts'
 import { simulateAIvsAIState } from './match/setup.ts'
 import { economyOf } from './economy.ts'
-import { GAME_DAY_MS, gameDayOfRound, kickoffAtForRound, roundsKickedOff, seasonEndAt, seasonGameDays, DAILY_SCHEDULE, BEIJING_SCHEDULE, averageRoundGameDays, type KickoffSchedule } from './calendar.ts'
+import { AVERAGE_ROUND_GAME_DAYS, GAME_DAY_MS, KICKOFF_SCHEDULE, gameDayOfRound, kickoffAtForRound, latestKickoffAt, roundsKickedOff, seasonEndAt, seasonGameDays } from './calendar.ts'
 
 export const WORLD_ROUNDS = 38
 const START_YEAR = 2026
@@ -73,7 +73,7 @@ function pickPlayerClub(defs: WorldClubDef[], requested?: string): WorldClubDef 
   return d2.find((club) => club.id === requested) ?? d2[0]
 }
 
-export function createWorld(seed: number, requestedClubId?: string, startedAt = Date.now(), schedule: KickoffSchedule = DAILY_SCHEDULE): WorldSetup {
+export function createWorld(seed: number, requestedClubId?: string, startedAt = Date.now()): WorldSetup {
   const defs = clubDefs(seed)
   const chosen = pickPlayerClub(defs, requestedClubId)
   const clubs: WorldClub[] = defs.map((def) => ({
@@ -121,14 +121,14 @@ export function createWorld(seed: number, requestedClubId?: string, startedAt = 
     playerDivisionId: divisionIdForTier('division2', chosen.conference ?? 'north'),
     starAges,
     history: [],
-    kickoffSchedule: schedule,
+    kickoffSchedule: KICKOFF_SCHEDULE,
   }
   world.divisions = buildAllDivisions(world, seed, startedAt)
   const playerClub = clubs.find((club) => club.isPlayer)!
   return { world, playerClub, freeStars, reserveStars }
 }
 
-function buildFixtures(teamIds: string[], startedAt: number, playerId = 'player', schedule: KickoffSchedule = DAILY_SCHEDULE): Fixture[] {
+function buildFixtures(teamIds: string[], startedAt: number, playerId = 'player', shift = 0): Fixture[] {
   const ids = [...teamIds]
   const fixtures: Fixture[] = []
   let order = [...ids]
@@ -151,8 +151,8 @@ function buildFixtures(teamIds: string[], startedAt: number, playerId = 'player'
       awayId: match.b,
       isPlayer: match.a === playerId || match.b === playerId,
       played: false,
-      gameDay: gameDayOfRound(startedAt, match.round, schedule),
-      kickoffAt: kickoffAtForRound(startedAt, match.round, schedule),
+      gameDay: gameDayOfRound(startedAt, match.round, shift),
+      kickoffAt: kickoffAtForRound(startedAt, match.round, shift),
     })
   }
   return fixtures
@@ -208,7 +208,7 @@ export function buildWorldDivision(
   const conference: ConferenceId | undefined = conferenceOfDivision(id)
   const clubs = world.clubs.filter((club) => divisionIdForTier(club.tier, club.conference) === id)
   const clubIds = clubs.map((club) => club.id)
-  const fixtures = buildFixtures(clubIds, startedAt, 'player', world.kickoffSchedule)
+  const fixtures = buildFixtures(clubIds, startedAt, 'player', world.clockShift)
   const names = new Map(clubs.map((club) => [club.id, club.name]))
   const season: SeasonState = {
     index,
@@ -221,8 +221,9 @@ export function buildWorldDivision(
     seed: splitSeed(seed, `division-${id}-${index}`),
     startedAt,
     gameDayMs: GAME_DAY_MS,
-    roundGameDays: averageRoundGameDays(world.kickoffSchedule),
-    kickoffSchedule: world.kickoffSchedule ?? DAILY_SCHEDULE,
+    roundGameDays: AVERAGE_ROUND_GAME_DAYS,
+    kickoffSchedule: KICKOFF_SCHEDULE,
+    ...(world.clockShift ? { clockShift: world.clockShift } : {}),
     divisionId: id,
     tier,
     conference,
@@ -404,7 +405,7 @@ function createWorldGameFromSetup(setup: WorldSetup, seed: number, startedAt: nu
   return game
 }
 
-export function createWorldGame(seed = Math.floor(Math.random() * 0x7fffffff), requestedClubId?: string, clubName?: string, startedAt = Date.now()): GameState {
+export function createWorldGame(seed = Math.floor(Math.random() * 0x7fffffff), requestedClubId?: string, clubName?: string, startedAt = latestKickoffAt(Date.now())): GameState {
   const setup = createWorld(seed, requestedClubId, startedAt)
   return createWorldGameFromSetup(setup, seed, startedAt, clubName, seedAIClubs(setup.world, seed))
 }
@@ -466,8 +467,7 @@ export function buildOwnerlessTeams(world: WorldState, seed: number, aiClubs?: R
 
 /** 用于服务器共享世界的无主世界：保留 80 支原始球队，不替换玩家球队。 */
 export function createOwnerlessWorld(seed: number, startedAt = Date.now()): { world: WorldState; freeStars: Player[]; reserveStars: Player[] } {
-  // 服务器共享世界用联机赛程：每天北京时间 12:00、20:00 各一轮。
-  const setup = createWorld(seed, undefined, startedAt, BEIJING_SCHEDULE)
+  const setup = createWorld(seed, undefined, startedAt)
   const club = setup.playerClub
   const def = WORLD_CLUB_DEFS.find((item) => item.tier === 'division2' && item.name === club.name && item.conference === club.conference)
   if (def) {
@@ -736,7 +736,7 @@ export function createWorldGameFromWorld(
 /** 服务器共享世界按现实时间抽象推进；返回是否有变化。 */
 export function advanceOwnerlessWorld(world: WorldState, now = Date.now(), ownedClubs: ReadonlySet<string> = new Set(), seed = world.seasonStartedAt): boolean {
   // 第 n 轮在第 n+1 轮开赛时结算（和以前“开赛后一轮间隔”一致）。
-  const completed = Math.min(38, Math.max(0, roundsKickedOff(world.seasonStartedAt, now, world.kickoffSchedule) - 1))
+  const completed = Math.min(38, Math.max(0, roundsKickedOff(world.seasonStartedAt, now, world.clockShift) - 1))
   let changed = false
   const clubs = new Map(world.clubs.map((club) => [club.id, club]))
   for (const division of world.divisions) {
@@ -1245,7 +1245,7 @@ export function advanceWorldSeason(game: GameState, now = Date.now(), protectedC
   while (fillMarket && game.freeStars.length < 250 && (game.reserveStars?.length ?? 0) > 0) game.freeStars.push(game.reserveStars!.shift()!)
   const world = game.world
   // 赛季按日历排期开始，而不是等到有人点“下一赛季”：赛后那 12 个游戏日照样留给附加赛。新赛季接在上赛季结束处。
-  const scheduledStart = seasonEndAt(world.seasonStartedAt, world.kickoffSchedule)
+  const scheduledStart = seasonEndAt(world.seasonStartedAt, world.clockShift)
   world.seasonIndex++
   world.seasonStartedAt = Math.min(now, scheduledStart) > 0 ? scheduledStart : now
   world.lastPromotionPlayoff = world.promotionPlayoff
@@ -1295,7 +1295,7 @@ export function ensureWorldCalendar(world: WorldState): boolean {
   if (Number.isFinite(world.calendarStartAt) && (world.calendarStartAt ?? 0) > 0) return false
   const index = Math.max(1, world.seasonIndex)
   const start = world.seasonStartedAt || Date.now()
-  world.calendarStartAt = start - (index - 1) * seasonGameDays(start, world.kickoffSchedule) * GAME_DAY_MS
+  world.calendarStartAt = start - (index - 1) * seasonGameDays(start, world.clockShift) * GAME_DAY_MS
   return true
 }
 

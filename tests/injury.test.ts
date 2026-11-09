@@ -6,7 +6,8 @@ import { teamInputFromLineup } from '../src/game/match/setup.ts'
 import { startTraining, trainingAction, trainingEventChoice, confirmTraining, startLeague, startSingleChallenge, restoreActiveEngine, finishMatch } from '../src/game/actions.ts'
 import { eventById } from '../src/game/data/events.ts'
 import { advanceLeagueRealtime } from '../src/game/realtime.ts'
-import { catchUpSeason, ROUND_MS, simulateFixture } from '../src/game/season.ts'
+import { catchUpSeason, simulateFixture } from '../src/game/season.ts'
+import { kickoffAtForRound } from '../src/game/calendar.ts'
 import { matchRealSeconds } from '../src/game/match/time.ts'
 
 function setup() {
@@ -143,8 +144,8 @@ describe('人物伤病', () => {
     const one = createInitialGame(seed)
     const batches = structuredClone(one)
     const start = one.season.startedAt
-    catchUpSeason(one, start + 3 * ROUND_MS)
-    for (let round = 1; round <= 3; round++) catchUpSeason(batches, start + round * ROUND_MS)
+    catchUpSeason(one, kickoffAtForRound(start, 4))
+    for (let round = 1; round <= 3; round++) catchUpSeason(batches, kickoffAtForRound(start, round + 1))
     expect(one.injuries).toEqual(batches.injuries)
     expect(one.season.fixtures.map(f => f.score)).toEqual(batches.season.fixtures.map(f => f.score))
     // 伤病是低概率事件，不绑定某一年某一轮：在前三轮里找第一场有伤病的比赛。
@@ -152,7 +153,9 @@ describe('人物伤病', () => {
     expect(record).toBeDefined()
     const event = record.keyEvents.find((entry) => entry.injury)!
     expect(event).toBeDefined()
-    expect(event.injury!.recoverAt).toBe(start + matchRealSeconds(event.clock, record.durationSeconds ?? 900) * 1000 + event.injury!.recoveryDays * one.season.gameDayMs)
+    // 伤病从那一轮的开球时间算起（一天两轮：第 1、2、3 轮分别在开始后 0、8、24 小时）。
+    expect(record.round).toBeDefined()
+    expect(event.injury!.recoverAt).toBe(kickoffAtForRound(start, record.round!) + matchRealSeconds(event.clock, record.durationSeconds ?? 900) * 1000 + event.injury!.recoveryDays * one.season.gameDayMs)
   }, 20_000)
 
   it('当场跨队跨卡生效，旧比赛兼容且快照隐藏倾向', () => {

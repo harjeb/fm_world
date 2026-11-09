@@ -309,6 +309,8 @@ export type WorldState = {
   history: WorldSeasonSummary[]
   /** 赛程日历版本：2 = 一天两轮（北京时间 12:00、20:00）。 */
   kickoffSchedule?: number
+  /** 单机“跳至比赛日”累计把存档时钟往前拨了多少毫秒；开赛时间点按存档时钟算（联机永远是 0）。 */
+  clockShift?: number
 }
 
 export type Suspension = {
@@ -746,6 +748,8 @@ export type SeasonState = {
   clubIds?: string[]
   /** 赛程日历版本：2 = 一天两轮（北京时间 12:00、20:00）。没有的是旧的一天一轮，读档时迁移。 */
   kickoffSchedule?: number
+  /** 单机“跳至比赛日”累计把存档时钟往前拨了多少毫秒；开赛时间点按存档时钟算（联机永远是 0）。 */
+  clockShift?: number
 }
 
 export type AITeamDef = {

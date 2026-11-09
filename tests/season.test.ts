@@ -1,7 +1,8 @@
 import { describe, expect, it, beforeEach } from 'vitest'
 import { createInitialGame, GAME_VERSION, LEGACY_SAVE_KEY, loadGame, saveGame, upgradeLegacySignatures } from '../src/game/state.ts'
 import { startLeague, restoreActiveEngine, finishMatch, simulateSeasonRound, startSingleChallenge } from '../src/game/actions.ts'
-import { catchUpSeason, playerFixture, ROUND_MS } from '../src/game/season.ts'
+import { catchUpSeason, playerFixture } from '../src/game/season.ts'
+import { postseasonStartAt } from '../src/game/calendar.ts'
 import { createTrainingSession, planTraining } from '../src/game/training.ts'
 import { isMainAttr } from '../src/game/scale.ts'
 import type { Attributes, Player } from '../src/game/types.ts'
@@ -140,7 +141,7 @@ describe('赛季与存档', () => {
 
   it('自动时间推进能完整结算 38 轮，且只记录玩家比赛', () => {
     const game = createInitialGame(16)
-    const result = catchUpSeason(game, game.season.startedAt + ROUND_MS * 40)
+    const result = catchUpSeason(game, postseasonStartAt(game.season.startedAt))
     expect(result.advanced).toBe(38)
     expect(game.season.finished).toBe(true)
     expect(game.season.round).toBe(38)

@@ -7,7 +7,7 @@ import { createAppServer, type AppServer } from '../server/app.ts'
 import { applyAgentAction } from '../server/agent.ts'
 import { createWorldGame } from '../src/game/world.ts'
 import { LINEUP_LOCK_MS, lineupLockState, playerFixture, settleDuePlayerMatch } from '../src/game/season.ts'
-import { BEIJING_SCHEDULE, ROUND_MS, kickoffAtForRound } from '../src/game/calendar.ts'
+import { kickoffAtForRound, seasonStartForRound } from '../src/game/calendar.ts'
 import type { GameState } from '../src/game/types.ts'
 
 const servers: AppServer[] = []
@@ -21,8 +21,9 @@ function worldGame(startedAt: number): GameState {
 
 describe('开赛前 30 分钟锁阵容', () => {
   it('本轮已结算时锁的是下一轮：开赛前 30 分钟内锁定，之前和结算后都解锁', () => {
-    const now = 1_000_000_000
-    const game = worldGame(now - ROUND_MS)
+    // 北京时间 12:00：第 2 轮正好在这一刻开球
+    const now = Date.UTC(2026, 10, 9, 4)
+    const game = worldGame(seasonStartForRound(now, 2))
     playerFixture(game, 1)!.played = true
     expect(lineupLockState(game, now - LINEUP_LOCK_MS - 1000).locked).toBe(false)
     expect(lineupLockState(game, now - 1000).locked).toBe(true)
@@ -32,8 +33,8 @@ describe('开赛前 30 分钟锁阵容', () => {
   })
 
   it('新注册跳过的那一轮不锁，也不自动结算', () => {
-    const now = 1_000_000_000
-    const game = worldGame(now - ROUND_MS)
+    const now = Date.UTC(2026, 10, 9, 4)
+    const game = worldGame(seasonStartForRound(now, 2))
     game.settings = { ...(game.settings ?? { offside: true }), autoSettle: { season: 1, fromRound: 2 } }
     // 被跳过的是第 1 轮；第 2 轮开赛前 30 分钟之前仍然可以排阵容
     expect(lineupLockState(game, now - LINEUP_LOCK_MS - 1000).locked).toBe(false)
@@ -58,8 +59,8 @@ describe('开赛前 30 分钟锁阵容', () => {
     })).json() as { token: string }
     const auth = { Authorization: `Bearer ${registered.token}`, 'Content-Type': 'application/json' }
     const worldStart = ((await (await fetch(`${base}/api/health`)).json()) as { worldSeasonStartedAt: number }).worldSeasonStartedAt
-    // 联机赛程：每天北京时间 12:00、20:00 各一轮。
-    const kickoff = (round: number) => kickoffAtForRound(worldStart, round, BEIJING_SCHEDULE)
+    // 每天北京时间 12:00、20:00 各一轮。
+    const kickoff = (round: number) => kickoffAtForRound(worldStart, round)
 
     // 到第 2 轮开球时间：第 1、2 轮自动结算，当前第 2 轮已踢，锁的是第 3 轮。
     clock = kickoff(2) + 1000
