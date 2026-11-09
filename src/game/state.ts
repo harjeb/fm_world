@@ -77,6 +77,15 @@ export function createInitialGame(seed?: number, clubName = '青石'): GameState
   return game
 }
 
+/** 只写本地缓存（联机存档来自服务器时用，避免把服务器状态再推回去）。 */
+export function cacheGameLocally(game: GameState): void {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(SAVE_KEY, JSON.stringify(game))
+  } catch {
+    // 本地缓存失败不影响服务器同步。
+  }
+}
+
 export function saveGame(game: GameState): boolean {
   game.ui = { ...(game.ui ?? { screen: 'home' }) }
   let local = false

@@ -399,6 +399,13 @@ export async function leagueActionOnline(body: Record<string, unknown>): Promise
   return onlineGameAction('/api/match/action', body)
 }
 
+/** 注册后选队：服务端会按共享世界重建账号存档，只允许在还没踢过联赛时调用。 */
+export async function chooseClubOnline(clubId: string): Promise<GameState> {
+  const game = await onlineGameAction('/api/world/choose-club', { clubId })
+  void refreshPublicWorld()
+  return game
+}
+
 export async function nextWorldSeasonOnline(): Promise<GameState> {
   const next = await onlineGameAction('/api/world/next-season', {})
   void refreshPublicWorld()

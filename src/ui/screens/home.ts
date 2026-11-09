@@ -1,7 +1,7 @@
 import { economyOf } from '../../game/economy.ts'
 import { transferWindowOpen } from '../../game/market.ts'
 import { FORMATIONS } from '../../game/data/formations.ts'
-import { PLAYER_TEAM_ID, matchdayCountdown, playerFixture, seasonRoundLabel, teamName } from '../../game/season.ts'
+import { PLAYER_TEAM_ID, dueRound, matchdayCountdown, playerFixture, seasonRoundLabel, teamName } from '../../game/season.ts'
 import { validateLineup } from '../../game/squad.ts'
 import { SQUAD_LIMIT } from '../../game/market.ts'
 import { trainingActionsTotal } from '../../game/training.ts'
@@ -63,7 +63,11 @@ function nextMatchPanel(): string {
       <div class="nm-center">
         ${played ? `<div class="nm-score">${fixture.score!.home} : ${fixture.score!.away}</div>` : '<div class="nm-vs">VS</div>'}
         <div class="nm-meta">${homeIsMe ? '主场' : '客场'} · ${esc(divisionText())}</div>
-        ${played ? `<div class="nm-meta">下一轮 ${esc(matchdayCountdown(game))}</div>` : `<div class="nm-meta">${icon('clock', 13)} 距自动结算 ${esc(matchdayCountdown(game))}</div><button class="btn primary nm-go" data-action="start-league">${icon('play', 14)}${isOnlineMode() ? '开始本轮比赛' : '跳至比赛日'}</button>`}
+        ${played
+          ? `<div class="nm-meta">下一轮 ${esc(matchdayCountdown(game))}</div>`
+          : isOnlineMode() && game.season.round > dueRound(game)
+            ? `<div class="nm-meta">${icon('clock', 13)} 本轮还没开赛 · 距下一轮 ${esc(matchdayCountdown(game))}</div><span class="muted small">全服时钟到了才能开打</span>`
+            : `<div class="nm-meta">${icon('clock', 13)} 距自动结算 ${esc(matchdayCountdown(game))}</div><button class="btn primary nm-go" data-action="start-league">${icon('play', 14)}${isOnlineMode() ? '开始本轮比赛' : '跳至比赛日'}</button>`}
       </div>
       ${nextMatchSide(fixture.awayId, 'right', !homeIsMe)}
     </div>`, { aside: `<span class="muted">${esc(seasonRoundLabel(game))}</span>`, className: 'next-match span-8' })

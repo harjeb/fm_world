@@ -1,5 +1,5 @@
 import type { AttrKey, GameState, Lineup, MatchMentality, Player, Position, RoleId, SkillId, Tactics } from '../game/types.ts'
-import { clearSave, saveGame, setTeamPickPending, teamPickPending, upgradeLegacySignatures } from '../game/state.ts'
+import { cacheGameLocally, clearSave, saveGame, setTeamPickPending, teamPickPending, upgradeLegacySignatures } from '../game/state.ts'
 import { createWorldGame, previewD2Clubs } from '../game/world.ts'
 import { friendlyStepMs } from './match-timing.ts'
 import {
@@ -49,7 +49,7 @@ import { leadingBid, type Auction, type AuctionResult } from '../game/auction.ts
 import { bestMarketValue, cancelListing, clubAsking, freeAgentAsking, listPlayer, playerMarketValue, refreshClubMarket, releasePlayer, renewContract, signClubPlayer, signFreeAgent } from '../game/market.ts'
 import { minimumBid } from '../game/auction.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
-import { bidOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, marketState, nextWorldSeasonOnline, onlineState, publicConfig, refreshPublicWorld, registerOnline, revokeAgentTokenOnline, serverNow, setRemoteGameHandler, subscribeMarket, subscribeOnline } from '../online.ts'
+import { bidOnline, chooseClubOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, marketState, nextWorldSeasonOnline, onlineState, publicConfig, refreshPublicWorld, registerOnline, revokeAgentTokenOnline, serverNow, setRemoteGameHandler, subscribeMarket, subscribeOnline } from '../online.ts'
 import { cardName } from './components.ts'
 import { clockText, countdownText, esc, pct } from './format.ts'
 import { icon } from './icons.ts'
@@ -66,7 +66,7 @@ import { renderHome } from './screens/home.ts'
 import { renderInventory } from './screens/inventory.ts'
 import { parseLineupTarget, renderLineup, selectedSlotTarget } from './screens/lineup.ts'
 import { renderMatch } from './screens/match.ts'
-import { renderAccountOverlay, renderDetailOverlay, renderNegotiationOverlay, renderNewGameOverlay } from './screens/overlays.ts'
+import { renderAccountOverlay, renderDetailOverlay, renderNegotiationOverlay, renderNewGameOverlay, renderOnlineClubPickOverlay } from './screens/overlays.ts'
 import { renderClubOverlay } from './club-view.ts'
 import { renderReview } from './screens/review.ts'
 import { renderSeason } from './screens/season.ts'
@@ -219,6 +219,7 @@ function render(): void {
     ${renderBootGate()}
     ${renderDetailOverlay()}
     ${renderNegotiationOverlay()}
+    ${renderOnlineClubPickOverlay()}
     ${renderClubOverlay()}
     ${renderAccountOverlay()}
     ${renderAutoStrategyOverlay()}
@@ -307,10 +308,20 @@ function openFinishedLeague(previous: NonNullable<GameState['activeMatch']>): vo
   ui.notice = '联赛比赛已结束。'
 }
 
+let lastOnlineCacheAt = 0
+
 function applyOnlineGame(next: GameState, notice?: string): void {
   const previous = game.activeMatch
   const wasMatch = ui.screen === 'match'
+  const clubChanged = next.clubName !== game.clubName || next.season.index !== game.season.index
   setGame(next)
+  // 服务器存档也写一份本地缓存：刷新时在服务器恢复之前不会先看到旧离线存档。
+  // 联赛实时推送每秒一次，没必要每次都写整个存档，换队/换季时立刻写，其余最多 10 秒一次。
+  const stamp = Date.now()
+  if (clubChanged || stamp - lastOnlineCacheAt > 10_000) {
+    lastOnlineCacheAt = stamp
+    cacheGameLocally(next)
+  }
   upgradeLegacySignatures(game)
   ensureCards(game)
   upgradeNames(game)
@@ -359,6 +370,8 @@ async function submitAccount(): Promise<void> {
       ui.bootGate = false
       ui.turnstileToken = ''
       applyOnlineGame(data.game, `已注册并登录 ${data.user.username}，存档已同步。`)
+      ui.onlineClubPick = true
+      void refreshPublicWorld().then(() => render())
       return
     }
     const data = await loginOnline(username, password)
@@ -926,6 +939,25 @@ document.addEventListener('click', async (event) => {
       }
       break
     }
+    case 'online-club-pick': {
+      const clubId = actionEl.dataset.club
+      if (!clubId) break
+      try {
+        const next = await chooseClubOnline(clubId)
+        ui.onlineClubPick = false
+        applyOnlineGame(next, `已接管 ${next.clubName}，本轮的比赛由全服时钟控制。`)
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : '选队失败')
+      }
+      break
+    }
+    case 'online-club-close':
+      ui.onlineClubPick = false
+      render()
+      break
+    case 'online-club-refresh':
+      void refreshPublicWorld().then(() => render())
+      break
     case 'open-auctions':
       ui.transferTab = 'free'
       go('transfer')

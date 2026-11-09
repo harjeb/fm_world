@@ -1256,3 +1256,17 @@ circle.pm-5 { fill: var(--h6); }
 .auto-modal .btn-row { margin-bottom: 8px; }
 
 .auto-mode { height: 28px; max-width: 190px; }
+
+/* ---------- 联机注册后选队 ---------- */
+.online-club-modal { max-width: 760px; margin-top: 6vh; }
+.club-pick-list { display: grid; gap: 6px; max-height: 54vh; overflow-y: auto; margin: 10px 0; padding-right: 4px; }
+.club-pick-row { display: grid; grid-template-columns: 190px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 10px; background: var(--panel-2); border: 1px solid transparent; border-radius: var(--radius); }
+.club-pick-row:hover { border-color: var(--line-2); }
+.club-pick-name { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.club-pick-name b { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.club-pick-name small { color: var(--text-3); font-size: 11px; white-space: nowrap; }
+.club-pick-players { color: var(--text-2); font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+@media (max-width: 860px) {
+  .club-pick-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .club-pick-players { display: none; }
+}

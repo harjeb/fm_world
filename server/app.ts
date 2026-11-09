@@ -1019,6 +1019,43 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return
     }
 
+    /** 注册后选队：只在还没踢过联赛时允许，换队会按共享世界重建账号存档。 */
+    if (url.pathname === '/api/world/choose-club' && req.method === 'POST') {
+      advanceAccount(account)
+      const body = await readJsonBody(req)
+      const clubId = String(body.clubId ?? '')
+      const club = sharedWorld.world.clubs.find((item) => item.id === clubId)
+      if (!club) return json(res, 404, { error: '找不到这支球队' })
+      if (club.tier !== 'division2') return json(res, 400, { error: '只能在二级联赛选队' })
+      const owner = sharedWorld.owners[club.id]
+      if (owner && owner !== account.id) return json(res, 409, { error: '这支球队已经有人执教' })
+      if (account.game.season.fixtures.some((fixture) => fixture.isPlayer && fixture.played)) {
+        return json(res, 400, { error: '已经开始过比赛，本赛季不能换队' })
+      }
+      const current = ownedClubId(account)
+      if (current === club.id) return json(res, 200, { revision: account.revision, game: publicGame(account) })
+      if (current) delete sharedWorld.owners[current]
+      sharedWorld.owners[club.id] = account.id
+      account.game = createWorldGameFromWorld(sharedWorld.world, club.id, sharedWorld.seed, sharedWorld.startedAt, [], sharedWorld.reserveStars)
+      const chosenTeam = sharedWorld.teams?.[club.id]
+      if (chosenTeam) {
+        account.game.roster = structuredClone(chosenTeam.players).map((player) => ({
+          ...player,
+          contract: { clubId: 'player', wage: wageForPlayer(player), expiresSeason: account.game.season.index + 3 },
+        }))
+        account.game.lineup = structuredClone(chosenTeam.lineup)
+      }
+      forgetMarketAges(account)
+      persistWorld()
+      account.revision++
+      account.lastUserRevision = account.revision
+      account.updatedAt = now()
+      persistDb()
+      broadcast(account)
+      json(res, 200, { revision: account.revision, game: publicGame(account) })
+      return
+    }
+
     if (url.pathname === '/api/world/teams' && req.method === 'GET') {
       advanceSharedWorld()
       json(res, 200, {

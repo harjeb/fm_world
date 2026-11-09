@@ -48,7 +48,7 @@ import {
   trainingEventChoice,
   useCoachPause,
 } from '../src/game/actions.ts'
-import { playerFixture, seasonRoundLabel, teamName } from '../src/game/season.ts'
+import { dueRound, matchdayCountdown, playerFixture, seasonRoundLabel, teamName } from '../src/game/season.ts'
 import { displayEventHint, trainingLogText } from '../src/ui/format.ts'
 
 export type AgentOutcome = { ok: boolean; error?: string; result?: unknown }
@@ -565,6 +565,10 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       return result.ok ? { ok: true, result: game.autoSubs } : { ok: false, error: result.errors.join('；') }
     }
     case 'start_league': {
+      // 联机比赛由共享世界时钟控制：本轮还没到开赛时间就不能提前开打。
+      if (game.season.round > dueRound(game, now)) {
+        return { ok: false, error: `第 ${game.season.round} 轮还没开始：距下一轮 ${matchdayCountdown(game, now)}` }
+      }
       const result = startLeague(game, now)
       return { ...result, result: result.ok ? matchView(game) : undefined }
     }

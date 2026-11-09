@@ -90,6 +90,8 @@ export type UIState = {
   autoSubsDraft: AutoSubPlan | null
   completing: boolean
   accountOpen: boolean
+  /** 联机第一次注册后先选队；服务器只允许在还没踢过联赛时换队。 */
+  onlineClubPick: boolean
   /** 自动策略弹窗（针对当前选中的培养球员）。 */
   autoStrategyOpen: boolean
   authMode: 'login' | 'register'
@@ -169,6 +171,7 @@ export const ui: UIState = {
   autoSubsDraft: null,
   completing: false,
   accountOpen: false,
+  onlineClubPick: false,
   autoStrategyOpen: false,
   authMode: 'login',
   turnstileToken: '',

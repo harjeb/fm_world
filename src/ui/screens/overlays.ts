@@ -5,7 +5,7 @@ import { equippedCard, playerCards } from '../../game/cards.ts'
 import { attrRating, initialDisplayCA, mainAttrsFor } from '../../game/rating.ts'
 import { MAIN_FIELD_ATTRS, MAIN_GK_ATTRS } from '../../game/scale.ts'
 import type { ClubPreview } from '../../game/world.ts'
-import { onlineState, publicConfig } from '../../online.ts'
+import { onlineState, publicConfig, publicWorld } from '../../online.ts'
 import { economyOf } from '../../game/economy.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, TIER_LABELS, negotiationDemands, negotiationTerms, type SeasonGoal, type SquadRole } from '../../game/negotiation.ts'
 import { CA_STOPS, attrHeadCell, attributeRadar, attrHeat, caHeat, cardName, cardRoute, countryLabel, crest, eraLabel, findAnyPlayer, heatLegend, icon, injuryLabel, mainAttrs, meter, positionMap, posBadge, primaryPosition, skillGroups, skillTag, tag, traitLabel } from '../components.ts'
@@ -161,7 +161,7 @@ export function renderAccountOverlay(): string {
         <div class="kicker">联机账号</div>
         <h1>${online ? '已连接服务器' : registering ? '注册账号' : '登录账号'}</h1>
         ${online ? `
-          <p>当前账号：<b>${esc(onlineState.user?.username ?? '')}</b> · 第 ${onlineState.revision} 版存档${onlineState.connected ? ' · SSE 已连接' : ' · SSE 重连中'}</p>
+          <p>当前账号：<b>${esc(onlineState.user?.username ?? '')}</b> · ${onlineState.connected ? '实时同步中' : '正在重连服务器'}</p>
           <p class="hint">另一台设备保存后会自动同步到这里。冲突时服务器版本优先。</p>
           <div class="btn-row"><button class="btn primary" data-action="agent-token">生成 / 复制 Agent 令牌</button><button class="btn ghost" data-action="agent-revoke">重置令牌</button></div>
           <p class="hint">把 fm_... 令牌交给 Claude / Cursor 的 MCP 配置；不需要给账号密码。令牌可随时重置。</p>
@@ -330,6 +330,42 @@ export function renderNegotiationOverlay(): string {
           <button class="btn ghost" data-action="nego-cancel">再想想</button>
         </div>
         <p class="hint">同一份报价 + 同一组回答，结果固定；换报价或换个承诺才会重新掷骰。</p>
+      </div>
+    </div>`
+}
+
+const CONFERENCE_LABELS: Record<string, string> = { north: '北区', south: '南区' }
+
+/**
+ * 注册后的选队：只列还没人执教的二级球队，避免新账号被系统随手塞一支队。
+ * 服务器只允许在还没踢过联赛时换队，所以这里也提示选定后本赛季不能改。
+ */
+export function renderOnlineClubPickOverlay(): string {
+  if (!ui.onlineClubPick) return ''
+  const free = (publicWorld?.clubs ?? [])
+    .filter((club) => club.tier === 'division2' && !club.managed)
+    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0) || a.name.localeCompare(b.name, 'zh-CN'))
+  const mine = publicWorld?.clubs.find((club) => club.managed)
+  const row = (club: NonNullable<typeof publicWorld>['clubs'][number]) => {
+    const players = [...club.players].sort((a, b) => b.ca - a.ca).slice(0, 3)
+    return `<div class="club-pick-row" data-key="${esc(club.id)}">
+      <div class="club-pick-name"><i class="swatch" style="background:${esc(club.color)}"></i><b>${esc(club.name)}</b><small>${esc(CONFERENCE_LABELS[club.conference ?? ''] ?? club.conference ?? '')} · RANK ${club.rating ?? '—'}</small></div>
+      <div class="club-pick-players">${players.map((player) => `${posBadge(player.positions.GK > 0 ? 'GK' : 'CM')} ${esc(player.name)} <span class="muted">CA ${player.ca}</span>`).join(' · ') || '<span class="muted small">名单加载中</span>'}</div>
+      <button class="btn small primary" data-action="online-club-pick" data-club="${esc(club.id)}">执教这支</button>
+    </div>`
+  }
+  return `
+    <div class="overlay" data-action="online-club-close">
+      <div class="modal online-club-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="选择球队">
+        <button class="modal-close" data-action="online-club-close" aria-label="关闭">${icon('close', 16)}</button>
+        <div class="kicker">联机注册 · 第二步</div>
+        <h1>选择你要执教的球队</h1>
+        <p class="hint">这是全服共享世界：所有账号看到同一批球队、同一个赛季、同一个日期。${mine ? `系统先给你分了 <b>${esc(mine.name)}</b>，你也可以换成下面任意一支空球队。` : '挑一支还没人执教的二级球队。'} 选定后本赛季不能再换。</p>
+        ${free.length ? `<div class="club-pick-list">${free.map(row).join('')}</div>` : `<p class="muted">${publicWorld ? '当前没有空缺的二级球队（可以保留系统分配的球队）。' : '正在加载球队列表…'}</p>`}
+        <div class="btn-row">
+          <button class="btn ghost" data-action="online-club-refresh">刷新列表</button>
+          ${mine ? `<button class="btn" data-action="online-club-close">保留 ${esc(mine.name)}</button>` : ''}
+        </div>
       </div>
     </div>`
 }
