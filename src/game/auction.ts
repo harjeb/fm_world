@@ -4,11 +4,15 @@ import type { GameState, Player } from './types.ts'
 
 /**
  * 联机的自由球员市场：全服共用一个球员池，靠竞拍签人。
- * 第一个出价开始倒计时，时间到时最高价者得；最后关头有人加价，倒计时回到 AUCTION_EXTEND_MS，
- * 不会被人卡在最后一秒抢走。这里只有规则，存储和广播在 server/app.ts。
+ * 第一个出价开始 1 小时倒计时，时间到时最高价者得；最后 AUCTION_EXTEND_MS（10 分钟）以内有人跟价，
+ * 倒计时重新回到 10 分钟，不会被人卡在最后一秒抢走；离结束还早时跟价不改倒计时。跟价要先交一笔不退还的手续费（开拍那一口不收）。
+ * 这里只有规则，存储和广播在 server/app.ts。
  */
-export const AUCTION_DURATION_MS = 5 * 60_000
-export const AUCTION_EXTEND_MS = 60_000
+export const AUCTION_DURATION_MS = 60 * 60_000
+export const AUCTION_EXTEND_MS = 10 * 60_000
+/** 跟价手续费：出价的 2%，至少 1,000；无论最后有没有拍到都不退还。 */
+export const AUCTION_RAISE_FEE_RATE = 0.02
+export const AUCTION_RAISE_FEE_MIN = 1_000
 /** 每次至少加价 5%。 */
 export const AUCTION_MIN_RAISE = 0.05
 const LOG_SIZE = 30
@@ -40,11 +44,22 @@ export type FreeMarket = {
   version: number
 }
 
-export type BidResult = { ok: true; auction: Auction; outbid: string | null } | { ok: false; error: string }
+export type BidResult = { ok: true; auction: Auction; outbid: string | null; /** 这口价交的跟价手续费，开拍为 0。 */ fee: number } | { ok: false; error: string }
 
 const fail = (error: string): BidResult => ({ ok: false, error })
 
 export const leadingBid = (auction: Auction): AuctionBid => auction.bids[auction.bids.length - 1]
+
+/** 跟价（这名球员已经有人出过价）要交的手续费；开拍的第一口不收。 */
+export function auctionRaiseFee(amount: number): number {
+  return Math.max(AUCTION_RAISE_FEE_MIN, Math.ceil(amount * AUCTION_RAISE_FEE_RATE))
+}
+
+/** 跟价：记下这口价；最后 10 分钟以内跟价，倒计时重新回到 10 分钟。 */
+function raise(auction: Auction, bid: AuctionBid): void {
+  auction.bids.push(bid)
+  auction.endsAt = Math.max(auction.endsAt, bid.at + AUCTION_EXTEND_MS)
+}
 
 /** 下一口至少出多少：还没人出价时是估值，之后在当前价上加 5%，至少多 1。 */
 export function minimumBid(player: Player, auction?: Auction | null): number {
@@ -81,12 +96,12 @@ export function placeAIBid(market: FreeMarket, club: { id: string; name: string 
   if (!auction) {
     const created: Auction = { playerId, playerName: player.name, startedAt: now, endsAt: now + AUCTION_DURATION_MS, bids: [bid] }
     market.auctions.push(created)
-    return { ok: true, auction: created, outbid: null }
+    return { ok: true, auction: created, outbid: null, fee: 0 }
   }
   const outbid = leadingBid(auction).accountId
-  auction.bids.push(bid)
-  auction.endsAt = Math.max(auction.endsAt, now + AUCTION_EXTEND_MS)
-  return { ok: true, auction, outbid }
+  raise(auction, bid)
+  // 手续费由调用方从电脑球队的账上扣（这里没有它的经济数据）。
+  return { ok: true, auction, outbid, fee: auctionRaiseFee(amount) }
 }
 
 export function placeBid(market: FreeMarket, game: GameState, accountId: string, playerId: string, amount: number, now: number): BidResult {
@@ -100,19 +115,24 @@ export function placeBid(market: FreeMarket, game: GameState, accountId: string,
   // 自己练过这名球员时估值按最好的卡算，免得低价卖掉再低价竞拍回来。
   const minimum = Math.max(minimumBid(player, auction), bestMarketValue(game, player))
   if (amount < minimum) return fail(`出价至少 ${minimum.toLocaleString()}`)
-  const balance = economyOf(game).balance
+  const economy = economyOf(game)
   const committed = committedFunds(market.auctions, accountId, playerId)
-  if (balance - committed < amount) return fail(committed > 0 ? `余额不足：其他领先的竞拍占用了 ${committed.toLocaleString()}` : '余额不足')
+  const fee = auction ? auctionRaiseFee(amount) : 0
+  if (economy.balance - committed < amount + fee) {
+    const need = fee ? `（含跟价手续费 ${fee.toLocaleString()}）` : ''
+    return fail(committed > 0 ? `余额不足${need}：其他领先的竞拍占用了 ${committed.toLocaleString()}` : `余额不足${need}`)
+  }
   const bid: AuctionBid = { accountId, club: game.clubName, amount, at: now }
   if (!auction) {
     const created: Auction = { playerId, playerName: player.name, startedAt: now, endsAt: now + AUCTION_DURATION_MS, bids: [bid] }
     market.auctions.push(created)
-    return { ok: true, auction: created, outbid: null }
+    return { ok: true, auction: created, outbid: null, fee: 0 }
   }
   const outbid = leadingBid(auction).accountId
-  auction.bids.push(bid)
-  auction.endsAt = Math.max(auction.endsAt, now + AUCTION_EXTEND_MS)
-  return { ok: true, auction, outbid }
+  // 手续费当场扣掉，不管最后有没有拍到都不退。
+  economy.balance -= fee
+  raise(auction, bid)
+  return { ok: true, auction, outbid, fee }
 }
 
 export type Settlement = { result: AuctionResult; winnerId: string | null }

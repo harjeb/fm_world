@@ -1,9 +1,9 @@
-import { PLAYER_TEAM_ID, currentRoundFixtures, dueRound, inPostseason, matchdayCountdown, nextSeasonCountdown, playerFixture, teamName } from '../../game/season.ts'
+import { PLAYER_TEAM_ID, currentRoundFixtures, inPostseason, matchdayCountdown, nextSeasonCountdown, playerFixture, teamName } from '../../game/season.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
 import { clubRatings } from '../../game/club-rating.ts'
 import { leaderPanels } from '../leaderboard.ts'
 import { gameDateOf } from '../../game/calendar.ts'
-import { isOnlineMode } from '../../online.ts'
+import { isOnlineMode, onlineKickoffPending, serverNow } from '../../online.ts'
 import { clubName, emptyState, fixtureRow, icon, leagueTable, pageHead, panel, teamForm, resultPill, type FormResult } from '../components.ts'
 import { esc } from '../format.ts'
 import { game, ui } from '../state.ts'
@@ -55,8 +55,8 @@ export function renderSeason(): string {
     season.finished ? `<button class="btn primary" data-action="next-season">${icon('play', 14)}开始下一赛季</button>` : '',
     !season.finished && fixture && !fixture.played && !game.activeMatch
       ? (isOnlineMode()
-        ? (season.round > dueRound(game)
-          ? `<span class="continue-wait">${icon('clock', 14)}下一轮 · ${esc(matchdayCountdown(game))}</span>`
+        ? (onlineKickoffPending(game)
+          ? `<span class="continue-wait">${icon('clock', 14)}下一轮 · ${esc(matchdayCountdown(game, serverNow()))}</span>`
           : `<span class="continue-wait">${icon('live', 14)}本轮由服务器自动结算</span>`)
         : `<button class="btn primary" data-action="start-league">${icon('play', 14)}跳至比赛日 · 对阵 ${esc(teamName(game, fixture.homeId === PLAYER_TEAM_ID ? fixture.awayId : fixture.homeId))}</button>`)
       : '',

@@ -4,7 +4,7 @@ FM 世界（七人制足球经理）的 Agent 接入协议。Agent 使用**永�
 
 ## 1. 获取令牌
 
-玩家在游戏右上角「登录 / 注册」→ 已登录状态 →「复制给 AI」生成 `fm_...` 令牌。令牌只保存在服务器账号中，重新生成会使旧令牌立即失效。
+玩家在游戏右上角「登录 / 注册」→ 已登录状态 →「复制给 AI（令牌 + 文档 + 简介）」。复制的是一整段接入说明：`fm_...` 令牌、本文档地址（`/api/agent/docs`，无需鉴权）、游戏简介和起步流程，直接粘贴给能发 HTTP 请求的 Agent 即可。令牌只保存在服务器账号中，「重置令牌」会使旧令牌立即失效。
 
 所有 Agent 请求都带：
 
@@ -24,7 +24,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 `/api/agent/action` 请求体统一为 `{ "action": "...", ...参数 }`。成功返回 `{ ok: true, revision, result, game }`；失败返回 HTTP 400、`{ ok: false, error, revision, game }`。`game` 是执行后的最新状态，可直接用于下一步决策。
 
-状态里和手动界面一致地公开：0–1500 原始主属性、位置、CA、技能、性格、训练日志（最近 24 条）、待处理事件及成功率、阵容合法性/位置折损、比赛历史、挑战历史、前 5 轮赛程。**球员的隐藏属性当前值不会返回给 Agent；事件提示或日志可能提及相关成长。**
+状态里和手动界面一致地公开：0–1500 原始主属性、位置、CA、年龄、估值 `marketValue`、合同 `contract`（`wage`、`expiresSeason`）、技能、性格、训练日志（最近 24 条）、待处理事件及成功率、自动培养设置 `autoTraining`、阵容合法性/位置折损、比赛历史、挑战历史、历年联赛成绩 `seasonHistory`（级别、名次、战绩、冠军）、前 5 轮赛程、转会窗口 `market.transferWindowOpen`、可谈判的 AI 球员 `market.clubOffers`。全服其他球队和分区用 `get_world` 读取。**球员的隐藏属性当前值不会返回给 Agent；事件提示或日志可能提及相关成长。**
 
 ## 3. 动作
 
@@ -83,6 +83,15 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
   - `playerId`
 - `discard_training` — 从库存删除刚练出的新卡，并收起培养结果。
   - `playerId`
+- `set_auto_training` — 设置这名球员的自动培养策略，和培养页「自动策略」弹窗一致；只改传了的字段，返回新设置。
+  - `playerId`
+  - `mode?`: `"priority"`（按优先级依次练满）| `"targets"`（把主属性补到目标值）| `"max"`（每次选成长最多的一项）
+  - `priority?`: 属性英文名数组；缺少的主属性会自动补在后面
+  - `resetPriority?`: `true` 时恢复默认优先级（先练这名球员的 2 个主要属性）
+  - `targets?`: `{ "passing": 1200, ... }`，0–1500，和已有目标合并
+- `run_auto_training` — 按自动培养策略连续推进**进行中**的一轮（自动挑训练、自动处理事件），直到本轮结束、出错或用完步数；和培养页的「自动培养」开关一样，不会自己开始新一轮。返回每一步的 `kind` / `label`。
+  - `playerId`
+  - `maxSteps?`: 1–200，默认 60
 
 ### 球员卡
 
@@ -119,9 +128,18 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 `state.economy` 提供余额、球迷数、设施 `stage`（1–25）、`level`、`stageInLevel`、`growthChance`、`roundIncome` 及 `upgradeCost`；`state.market.freeAgents` 和 `state.market.listings` 提供价格及经过可见字段过滤的球员信息。市场是**本地 NPC 市场，不是跨账号交易**；赛季结束后不能新挂牌。每轮收入 = 1500 + 球迷 × 2 + 各设施收入（按阶段比例并随球迷最多放大 4 倍），另有每球 500 和胜场奖金（1000 + 球迷数 35%）；友谊赛没有收入也没有球迷变化。
 
 - `upgrade_facility` — `facilityId`: `stadium`、`academy`、`medical`、`psychology`、`tactics`、`shop` 或 `sponsor`。
-- `bid_free_agent` — `playerId`、`amount`：竞拍自由球员。自由市场全服共用，`market.freeAgents[].price` 是这名球员现在至少要出的价。第一个出价开始 5 分钟倒计时，其他玩家可以加价（每次至少 5%）；最后 1 分钟有人加价，倒计时回到 1 分钟；时间到时最高价者得。领先的出价占用余额。`market.auctions` 列出正在进行的竞拍（当前价、领先球队、剩余秒数）。电脑球队也会参与竞拍：同位置明显更强、价格远低于阵容均价或人手不足时才会跟价，出价上限是估值乘所在级别系数，并且永远留着底钱，不会为了抬价乱加。
+- `bid_free_agent` — `playerId`、`amount`：竞拍自由球员。自由市场全服共用，`market.freeAgents[].price` 是这名球员现在至少要出的价。第一个出价开始 **1 小时**倒计时，全服可见；每次跟价至少加 5%；**最后 10 分钟内**有人跟价，倒计时重新回到 10 分钟（离结束还早时跟价不改倒计时）；时间到时最高价者得。跟价要交**手续费**：出价的 2%，至少 1,000，出价成功时立即从余额扣除，**不退还**（开拍的第一口不收）；余额必须够「出价 + 手续费」。领先的出价占用余额。`market.auctions` 列出正在进行的竞拍（当前价、领先球队、剩余秒数），`market.recentDeals` 是最近 8 条成交 / 流拍记录（`club` 为 `null` 表示流拍）。电脑球队也会参与竞拍：同位置明显更强、价格远低于阵容均价或人手不足时才会跟价，出价上限是估值乘所在级别系数，并且永远留着底钱，不会为了抬价乱加。
 - `list_player` — `playerId`、`price`：正的安全整数价格，且不得高于球员估值（买家只按估值折价收购；建议价 = 估值 × 0.9，按建议价挂牌必定成交）；挂牌还受阵容、训练和比赛规则限制。
 - `cancel_listing` — `playerId`：取消挂牌并将球员放回阵容。
+- `preview_signing` — 向 AI 球队买人前预览，不写入存档。只能谈 `state.market.clubOffers` 里的球员（和转会页「从 AI 球队买人」同一份名单：前 6 支没有教练执教的 AI 球队各前 3 人）。
+  - `teamId`、`playerId`
+  - `offer?`：报价总额，不填按底价 `asking`（估值 × 1.5）
+  - `goal?`：承诺的赛季目标 `title` | `promotion`（默认）| `top-half` | `survival`
+  - `role?`：承诺的队内定位 `star` | `first-team`（默认）| `rotation`
+  - 返回 `value`、`asking`、`balance`、球员诉求 `demands`（想听的 `goal` / `role`、`wantsClubName` 想去的球队、`minTier` 最低联赛级别）、`chance` 成功率（0–1）和 `reasons`，和手动谈判框显示的一样。
+- `sign_club_player` — 按 `preview_signing` 的参数正式报价，转会窗口开放时可用。成功则球员加盟、扣除报价；失败返回 `error`、`chance`、`reasons`。同一份报价 + 同一组承诺的结果固定，换报价或承诺才会重新判定。
+- `renew_contract` — `playerId`：续约 2 年（和俱乐部页一致），工资至少上调到身价工资的 110%；返回新合同。
+- `release_player` — `playerId`：解约，球员进入自由市场；阵容至少保留 10 人，解约后必须还能组成合法阵容。
 
 ### 比赛
 
@@ -133,8 +151,10 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 - `substitute` — 比赛中手动换人，与自动换人共用 3 次。
   - `outId`、`inId`：`get_match` 返回的带主客前缀的比赛球员 ID。
 - `coach_pause` — 仅限友谊赛：使用一次教练暂停，返回当前比赛。联赛不可暂停，可以直接调整战术或换人。
-- `start_friendly` — 开始一场友谊赛。
+- `start_friendly` — 和本分区 AI 球队开始一场友谊赛（挑战页）。
   - `teamId`: 来自 `state.teams[].id`
+- `start_world_friendly` — 和全服任意一支球队开始友谊赛（世界页「约战」），对手名单由服务器给出，可以约其他教练执教的球队。
+  - `clubId`: 来自 `get_world` 的 `clubs[].id`
 - `play_match` — 仅限已有进行中的友谊赛：立即模拟至终场并结算。联赛不能跳过。
 - `simulate_round` — 只模拟本轮 AI 比赛；玩家比赛未完成时返回错误。
 
@@ -144,18 +164,24 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 联赛每轮推进（4 个游戏日 = 现实 24 小时）。已开始的联赛由服务器持续推进，关闭网页、断开 Agent 或重启服务器不会重置时钟；重启后按实际经过时间补算。轮询 `get_match` 或 `GET /api/agent/state` 观察已发生的播报，终场后从 `matchHistory` 的 `id` 调用 `get_match(matchId)`。到下一轮时才补算此前未开始的比赛；友谊赛保留手动推进与跳过。
 
+### 全服世界
+
+- `get_world` — 读取全服快照，和世界页 / 球队详情一致：`ownClubId`、`clubs[]`（`id`、`name`、`tier`、`conference`、`managed` 是否有教练执教、`rating` RANK、`players` 公开名单、电脑球队的 `facilities`）以及 `divisions[]`（各分区 `round`、`table`、`fixtures`）。只读。
+- `rename_club` — `name`：联机时修改俱乐部名字。最多 8 个字（按字符算），去掉首尾空格；不能和全服任何其他球队重名（AI 球队或其他教练的球队，比较时忽略大小写和空格）；比赛进行中不能改。改名后全服看到的都是新名字。普通存档保存不能修改俱乐部名字。
+- `choose_club` — `clubId`：新账号在本赛季还没踢过联赛（且没有进行中的比赛）时，可以换到另一支没人执教的二级联赛球队（`tier = "division2"`、`managed = false`）；会按共享世界重建存档，阵容换成那支球队的名单。
+
 ## 4. 推荐流程
 
 1. `GET /api/agent/state`。
 2. 用 `auto_lineup` 或 `set_lineup` 确定首发和战术，并按需用 `set_auto_subs` 设置下场自动换人；`state.lineupAnalysis` 有合法性和位置折损。
 3. 对精力足够的球员 `start_training`，每次先用 `preview_training` 看收益，再 `training_action`；遇到事件用 `training_event_choice`；最后 `confirm_training`。
-4. `start_league` 后等待真实时间并轮询 `get_match`；比赛继续时可用 `set_match_tactics` / `substitute`。友谊赛可以使用 `advance_match` 或 `play_match`。
+4. 联机联赛在开赛时间由服务器用保存的阵容、战术和自动换人自动结算，开赛前 30 分钟锁定阵容；所以要在锁定前排好阵容和 `set_auto_subs`，之后从 `matchHistory` / `get_match` 看结果。单机可以 `start_league` 手动开赛。友谊赛可以使用 `advance_match` 或 `play_match`。
 5. 用 `get_match` 看完整记录和复盘。
 6. 重复 1–5，直到赛季结束。
 
 ## 5. MCP
 
-本仓库自带 stdio MCP 服务 `mcp/index.ts`，工具名与上面的动作一致，另有 `get_state`、`get_player`、`get_docs`。
+本仓库自带 stdio MCP 服务 `mcp/index.ts`，工具名与上面的动作一致（含 `get_world`、`preview_signing`、`sign_club_player`、`run_auto_training` 等），另有 `get_state`、`get_docs`。
 
 ```bash
 FM_AGENT_TOKEN=fm_... FM_SERVER=http://127.0.0.1:8787 npm run mcp

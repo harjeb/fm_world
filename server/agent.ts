@@ -1,10 +1,11 @@
-import type { AttrKey, EventDef, FormationId, GameState, Lineup, PlayerCard, Position, RoleId, Tactics, TrainingSession } from '../src/game/types.ts'
+import type { AttrKey, EventDef, FormationId, GameState, Lineup, PlayerCard, Position, RoleId, Tactics, TrainingAutoConfig, TrainingSession } from '../src/game/types.ts'
 import type { TrainingRequest } from '../src/game/training.ts'
 import { trainingDate, trainingOptions, type TrainingActivityId } from '../src/game/training-calendar.ts'
 import type { SkillId } from '../src/game/types.ts'
 import { SKILLS } from '../src/game/data/skills.ts'
 import { economyOf, upgradeFacility, FACILITIES, facilityLevel, facilityRoundIncome, facilityStageChance, facilityStageInLevel, facilityUpgradeCost, type FacilityId } from '../src/game/economy.ts'
-import { bestMarketValue, buyFreeAgent, listPlayer, cancelListing } from '../src/game/market.ts'
+import { aiTransferOffers, bestMarketValue, buyFreeAgent, listPlayer, cancelListing, releasePlayer, renewContract, signClubPlayer, transferWindowOpen } from '../src/game/market.ts'
+import { negotiationDemands, negotiationTerms, SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../src/game/negotiation.ts'
 import { ALL_ATTRIBUTES, POSITIONS } from '../src/game/types.ts'
 import { caOf } from '../src/game/ca.ts'
 import { displayCA, displayAttr, displayGain, initialDisplayCA } from '../src/game/rating.ts'
@@ -25,6 +26,11 @@ import { traitEffectText } from '../src/game/data/skill-effects.ts'
 import { traitNameOf } from '../src/game/data/star-traits.ts'
 import {
   autoLineup,
+  autoTrainingConfig,
+  autoTrainingRunnable,
+  autoTrainingStep,
+  defaultAutoPriority,
+  setAutoTrainingConfig,
   changeMatchTactics,
   confirmTraining,
   discardTraining,
@@ -52,6 +58,9 @@ import { dueRound, lineupLockState, matchdayCountdown, playerFixture, seasonRoun
 import { displayEventHint, trainingLogText } from '../src/ui/format.ts'
 
 export type AgentOutcome = { ok: boolean; error?: string; result?: unknown }
+
+/** 服务器提供的共享世界信息：联机时有教练执教的球队不能直接买人（和转会页一致）。 */
+export type AgentOptions = { isManaged?: (clubId: string) => boolean }
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
@@ -106,6 +115,7 @@ export function playerView(player: GameState['roster'][number], game: GameState,
     enName: player.enName,
     country: player.country,
     era: player.era,
+    age: player.age ?? 24,
     number: player.number,
     foot: player.foot,
     height: player.height,
@@ -126,7 +136,16 @@ export function playerView(player: GameState['roster'][number], game: GameState,
     injuryUntil: injuryUntil(game, player, now),
     equippedCardId: player.equippedCardId ?? null,
     cardIds: playerCards(game, player.id).map((card) => card.id),
+    /** 估值（只看原始属性）；挂牌上限和买回价都用这个数。 */
+    marketValue: bestMarketValue(game, player),
+    contract: player.contract ? { wage: player.contract.wage, expiresSeason: player.contract.expiresSeason } : null,
   }
+}
+
+/** 自动培养设置，和培养页“自动策略”弹窗一致。 */
+function autoTrainingView(game: GameState, playerId: string) {
+  const { mode, priority, targets } = autoTrainingConfig(game, playerId)
+  return { mode, priority, targets }
 }
 
 /** 设施用“阶段”存储（每级 5 个，共 25 个），对外同时给出阶段、等级与成长概率。 */
@@ -152,6 +171,7 @@ function economyView(game: GameState) {
 function playerDetailView(player: GameState['roster'][number], game: GameState, now: number) {
   return {
     ...playerView(player, game, now),
+    autoTraining: autoTrainingView(game, player.id),
     // 手动详情页只展示历史标题/正文，不展开历史收益。
     history: (player.history ?? []).map((entry) => ({ action: entry.action, week: entry.week, kind: entry.kind, title: entry.title, text: trainingLogText(entry, player.positions.GK > 0) })),
   }
@@ -271,7 +291,7 @@ function eventView(session: TrainingSession, event: EventDef) {
   }
 }
 
-export function agentView(game: GameState, now = Date.now()) {
+export function agentView(game: GameState, now = Date.now(), options: AgentOptions = {}) {
   const sessionView = Object.values(game.training).map((session) => {
     const player = game.roster.find((item) => item.id === session.playerId)
     const pending = session.pendingEventId ? eventById(session.pendingEventId) : undefined
@@ -295,6 +315,7 @@ export function agentView(game: GameState, now = Date.now()) {
       routePoints: session.routePoints,
       nextEventChance: session.action >= trainingActionsTotal(session) ? null : eventChance(session, session.action + 1),
       candidate: playerView(session.candidate, game, now),
+      autoTraining: autoTrainingView(game, session.playerId),
       pendingEvent: pending ? eventView(session, pending) : null,
       log: session.log.slice(-24).map((entry) => ({
         action: entry.action,
@@ -329,6 +350,9 @@ export function agentView(game: GameState, now = Date.now()) {
     },
     economy: economyView(game),
     market: {
+      transferWindowOpen: transferWindowOpen(game),
+      /** 和转会页“从 AI 球队买人”同一份列表；用 preview_signing / sign_club_player 谈判。 */
+      clubOffers: aiTransferOffers(game, options.isManaged).map(({ team, player, asking }) => ({ teamId: team.id, teamName: team.name, player: playerView(player, game, now), asking })),
       freeAgents: game.freeStars.map((player) => ({ player: playerView(player, game, now), price: bestMarketValue(game, player) })),
       listings: (game.market?.listings ?? []).map(({ player, price }) => ({ player: playerView(player, game, now), price })),
     },
@@ -370,6 +394,18 @@ export function agentView(game: GameState, now = Date.now()) {
     matchHistory: game.matchHistory.map(matchSummary),
     challengeHistory: game.challengeHistory.map(matchSummary),
     recentMatches: game.matchHistory.slice(0, 5).map(matchSummary),
+    // 俱乐部页“历史成绩”：每个已完成赛季的级别、名次、战绩和冠军（只统计联赛）。
+    seasonHistory: (game.seasonHistory ?? []).filter((season) => season.index !== game.season.index).map((season) => {
+      const position = season.table.findIndex((row) => row.teamId === 'player')
+      const row = position >= 0 ? season.table[position] : null
+      return {
+        index: season.index, tier: season.tier ?? null, conference: season.conference ?? null,
+        finish: season.playerFinish ?? (position >= 0 ? position + 1 : null), teams: season.table.length,
+        record: row ? { played: row.played, won: row.won, drawn: row.drawn, lost: row.lost, gf: row.gf, ga: row.ga, points: row.points } : null,
+        champion: season.champion === 'player' ? game.clubName : season.champion ? (game.world?.clubs.find((club) => club.id === season.champion)?.name ?? teamName(game, season.champion)) : null,
+        wonTitle: season.champion === 'player',
+      }
+    }),
     trainingActions: TRAINING_ACTION_INFO,
   }
 }
@@ -461,11 +497,53 @@ function matchResult(record: NonNullable<ReturnType<typeof finishMatch>>) {
   }
 }
 
+const SEASON_GOALS = Object.keys(SEASON_GOAL_LABELS) as SeasonGoal[]
+const SQUAD_ROLES = Object.keys(SQUAD_ROLE_LABELS) as SquadRole[]
+const AUTO_TARGET_MAX = 1500
+
+/** 谈判时的承诺；不填和手动谈判框的默认值一样（冲击上游 / 常规首发）。 */
+function negotiationAnswers(body: Record<string, unknown>): { goal: SeasonGoal; role: SquadRole } | null {
+  const goal = body.goal === undefined ? 'promotion' : text(body.goal) as SeasonGoal
+  const role = body.role === undefined ? 'first-team' : text(body.role) as SquadRole
+  return SEASON_GOALS.includes(goal) && SQUAD_ROLES.includes(role) ? { goal, role } : null
+}
+
+function findClubOffer(game: GameState, body: Record<string, unknown>, options: AgentOptions) {
+  const teamId = text(body.teamId)
+  const playerId = text(body.playerId)
+  return aiTransferOffers(game, options.isManaged).find((offer) => offer.team.id === teamId && offer.player.id === playerId)
+}
+
+function parseAutoTrainingPatch(game: GameState, playerId: string, body: Record<string, unknown>): Partial<TrainingAutoConfig> | string {
+  const player = game.roster.find((item) => item.id === playerId)
+  if (!player) return '球员不存在'
+  const patch: Partial<TrainingAutoConfig> = {}
+  if (body.mode !== undefined) {
+    if (body.mode !== 'priority' && body.mode !== 'targets' && body.mode !== 'max') return 'mode 只能是 priority、targets 或 max'
+    patch.mode = body.mode
+  }
+  if (body.resetPriority === true) patch.priority = defaultAutoPriority(player)
+  else if (body.priority !== undefined) {
+    if (!Array.isArray(body.priority) || body.priority.some((key) => !(ALL_ATTRIBUTES as readonly unknown[]).includes(key))) return 'priority 必须是属性英文名数组'
+    patch.priority = [...new Set(body.priority as AttrKey[])]
+  }
+  if (body.targets !== undefined) {
+    const raw = asRecord(body.targets)
+    const targets: Partial<Record<AttrKey, number>> = { ...autoTrainingConfig(game, playerId).targets }
+    for (const [key, value] of Object.entries(raw)) {
+      if (!(ALL_ATTRIBUTES as readonly string[]).includes(key) || typeof value !== 'number' || !Number.isFinite(value)) return `无效的目标属性：${key}`
+      targets[key as AttrKey] = Math.round(Math.max(0, Math.min(AUTO_TARGET_MAX, value)))
+    }
+    patch.targets = targets
+  }
+  return patch
+}
+
 function findRecord(game: GameState, id: string) {
   return [...game.matchHistory, ...game.challengeHistory].find((record) => record.id === id)
 }
 
-export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.now()): AgentOutcome {
+export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.now(), options: AgentOptions = {}): AgentOutcome {
   const rawAction = (rawBody as { action?: unknown } | null)?.action
   if ((rawAction === 'auto_lineup' || rawAction === 'set_lineup' || rawAction === 'set_auto_subs') && lineupLockState(game, now).locked) {
     return { ok: false, error: '阵容已锁定：开赛前 30 分钟内不能修改，比赛由服务器自动结算' }
@@ -551,6 +629,72 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
         : action === 'cancel_listing' ? cancelListing(game, body.playerId)
         : listPlayer(game, body.playerId, body.price as number)
       return result.ok ? { ok: true, result } : result
+    }
+    case 'preview_signing': {
+      const offer = findClubOffer(game, body, options)
+      if (!offer) return { ok: false, error: '这名球员不在可谈判的 AI 球队名单里（见 state.market.clubOffers）' }
+      const answers = negotiationAnswers(body)
+      if (!answers) return { ok: false, error: `goal 只能是 ${SEASON_GOALS.join('/')}，role 只能是 ${SQUAD_ROLES.join('/')}` }
+      const amount = body.offer === undefined ? offer.asking : Number(body.offer)
+      if (!Number.isSafeInteger(amount) || amount <= 0) return { ok: false, error: '报价必须是正整数' }
+      const demands = negotiationDemands(game, offer.player)
+      const clubTier = game.season.tier ?? 'division2'
+      const value = bestMarketValue(game, offer.player)
+      const terms = negotiationTerms({ demands, value, asking: offer.asking, offer: amount, answers, clubTier, clubId: 'player' })
+      return {
+        ok: true,
+        result: {
+          teamId: offer.team.id, playerId: offer.player.id, playerName: offer.player.name,
+          value, asking: offer.asking, offer: amount, balance: economyOf(game).balance, answers,
+          // 和谈判框展示的一样：他想听的目标/定位、想去的球队和最低联赛级别。
+          demands: { goal: demands.goal, role: demands.role, minTier: demands.minTier, wantsClubName: demands.wantsClubId && demands.wantsClubId !== 'player' ? demands.wantsClubName : null },
+          clubTier,
+          chance: Math.round(terms.chance * 1000) / 1000,
+          reasons: terms.reasons,
+        },
+      }
+    }
+    case 'sign_club_player': {
+      const offer = findClubOffer(game, body, options)
+      if (!offer) return { ok: false, error: '这名球员不在可谈判的 AI 球队名单里（见 state.market.clubOffers）' }
+      const answers = negotiationAnswers(body)
+      if (!answers) return { ok: false, error: `goal 只能是 ${SEASON_GOALS.join('/')}，role 只能是 ${SQUAD_ROLES.join('/')}` }
+      const amount = body.offer === undefined ? offer.asking : Number(body.offer)
+      const result = signClubPlayer(game, offer.team.id, offer.player.id, amount, answers)
+      const visible = { ok: result.ok, chance: result.chance ?? null, reasons: result.reasons ?? [], offer: amount, playerName: offer.player.name }
+      return result.ok ? { ok: true, result: visible } : { ok: false, error: result.error ?? '谈判失败', result: visible }
+    }
+    case 'renew_contract': {
+      // 和俱乐部页“续约 2 年”一致。
+      const result = renewContract(game, text(body.playerId), 2)
+      return result.ok ? { ok: true, result: game.roster.find((player) => player.id === text(body.playerId))?.contract ?? null } : result
+    }
+    case 'release_player': {
+      const result = releasePlayer(game, text(body.playerId))
+      return result.ok ? { ok: true, result } : result
+    }
+    case 'set_auto_training': {
+      const playerId = text(body.playerId)
+      const patch = parseAutoTrainingPatch(game, playerId, body)
+      if (typeof patch === 'string') return { ok: false, error: patch }
+      setAutoTrainingConfig(game, playerId, patch)
+      return { ok: true, result: autoTrainingView(game, playerId) }
+    }
+    case 'run_auto_training': {
+      // 和培养页的“自动培养”开关一样：只推进进行中的一轮，不会自己开始新一轮。
+      const playerId = text(body.playerId)
+      if (!autoTrainingRunnable(game, playerId)) return { ok: false, error: '没有进行中的培养：先 start_training，或先处理已完成的培养结果' }
+      const rawSteps = Number(body.maxSteps ?? 60)
+      const maxSteps = Math.max(1, Math.min(200, Number.isFinite(rawSteps) ? Math.floor(rawSteps) : 60))
+      const steps: { kind: string; label: string | null }[] = []
+      let completed = false
+      while (steps.length < maxSteps && autoTrainingRunnable(game, playerId)) {
+        const step = autoTrainingStep(game, playerId)
+        if (!step.ok) return { ok: false, error: `自动培养已停止：${step.error ?? '无法继续'}`, result: { steps, completed } }
+        steps.push({ kind: step.kind, label: step.label ?? null })
+        if (step.completed) { completed = true; break }
+      }
+      return { ok: true, result: { steps, completed: completed || !!game.training[playerId]?.completed } }
     }
     case 'auto_lineup': {
       const requested = text(body.formationId)

@@ -17,7 +17,7 @@ import {
   runAIClubs,
   seedAIClubs,
 } from '../src/game/ai-club.ts'
-import { AI_BID_PREFIX, placeAIBid, settleAuctions, type FreeMarket } from '../src/game/auction.ts'
+import { AI_BID_PREFIX, AUCTION_DURATION_MS, placeAIBid, settleAuctions, type FreeMarket } from '../src/game/auction.ts'
 import { facilityUpgradeCost, facilityLevel, projectedRoundIncome } from '../src/game/economy.ts'
 import { ROUND_GAME_DAYS } from '../src/game/calendar.ts'
 import { cachedOwnerlessTeams, createWorldGame } from '../src/game/world.ts'
@@ -354,7 +354,7 @@ describe('竞拍里的电脑球队', () => {
 
     const ai = state(8_000_000, 'division1')
     let signed: { clubId: string; player: Player; amount: number } | null = null
-    const results = settleAuctions(market, () => undefined, 1000 + 10 * 60 * 1000, {
+    const results = settleAuctions(market, () => undefined, 1000 + AUCTION_DURATION_MS, {
       balance: (clubId) => (clubId === 'd1n_01' ? ai.economy.balance : 0),
       canSign: () => true,
       sign: (clubId, signedPlayer, amount) => {
@@ -375,7 +375,7 @@ describe('竞拍里的电脑球队', () => {
     const market: FreeMarket = { pool: base.freeStars, auctions: [], log: [], version: 1 }
     const value = playerValue(player)
     placeAIBid(market, { id: 'd1n_01', name: '北岸竞技' }, player.id, value, 1000)
-    const results = settleAuctions(market, () => undefined, 1000 + 10 * 60 * 1000, {
+    const results = settleAuctions(market, () => undefined, 1000 + AUCTION_DURATION_MS, {
       balance: () => 0,
       canSign: () => false,
       sign: () => {

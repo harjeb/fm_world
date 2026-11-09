@@ -77,7 +77,10 @@ describe('联机服务器 / 账号 / SSE', () => {
     const gameResponse = await fetch(`${base}/api/game`, { headers: { Authorization: `Bearer ${session.token}` } })
     expect(gameResponse.status).toBe(200)
     const current = await gameResponse.json() as { revision: number; game: Record<string, any> }
+    // 联机存档里俱乐部名字只能走改名接口，普通保存用战术设置做标记。
+    const originalName = current.game.clubName
     current.game.clubName = '联机队'
+    current.game.lineup.tactics.tempo = 'slow'
     const put = await fetch(`${base}/api/game`, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${session.token}`, 'Content-Type': 'application/json' },
@@ -90,7 +93,8 @@ describe('联机服务器 / 账号 / SSE', () => {
     const reload = await fetch(`${base}/api/game`, { headers: { Authorization: `Bearer ${session.token}` } })
     const next = await reload.json() as { revision: number; game: Record<string, any> }
     expect(next.revision).toBe(saved.revision)
-    expect(next.game.clubName).toBe('联机队')
+    expect(next.game.lineup.tactics.tempo).toBe('slow')
+    expect(next.game.clubName).toBe(originalName)
   })
 
   it('拒绝缺失或损坏赛程的存档，不污染已保存的数据', async () => {
@@ -230,7 +234,7 @@ describe('联机服务器 / 账号 / SSE', () => {
     const market = await readSse(reader, first.rest)
     expect(market.data.type).toBe('market')
 
-    account.game.clubName = 'SSE 队'
+    account.game.lineup.tactics.tempo = 'slow'
     await fetch(`${base}/api/game`, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${account.token}`, 'Content-Type': 'application/json', 'X-FM-Client': 'test-tab' },
@@ -239,7 +243,7 @@ describe('联机服务器 / 账号 / SSE', () => {
     const second = await readSse(reader, market.rest)
     expect(second.data.revision).toBe(account.revision + 1)
     expect(second.data.source).toBe('test-tab')
-    expect(second.data.game.clubName).toBe('SSE 队')
+    expect(second.data.game.lineup.tactics.tempo).toBe('slow')
     controller.abort()
   })
 
@@ -287,13 +291,13 @@ describe('联机服务器 / 账号 / SSE', () => {
     const adjustment = await fetch(`${base}/api/match/action`, { method: 'POST', headers, body: JSON.stringify({ action: 'set_match_tactics', mentality: 'attack' }) })
     expect(adjustment.status).toBe(200)
     const adjusted = await adjustment.json() as { game: Record<string, any> }
-    started.game.clubName = '比赛中训练的球队'
+    started.game.lineup.tactics.press = 'low'
     started.game.activeMatch = undefined
     started.game.season.round = 30
     const put = await fetch(`${base}/api/game`, { method: 'PUT', headers, body: JSON.stringify({ game: started.game, baseRevision: started.revision }) })
     expect(put.status).toBe(200)
     const merged = await (await fetch(`${base}/api/game`, { headers })).json() as { revision: number; game: Record<string, any> }
-    expect(merged.game.clubName).toBe('比赛中训练的球队')
+    expect(merged.game.lineup.tactics.press).toBe('low')
     expect(merged.game.season.round).toBe(1)
     expect(merged.game.activeMatch.context.isLeague).toBe(true)
     expect(merged.game.activeMatch.engineState.log.length).toBe(adjusted.game.activeMatch.engineState.log.length)

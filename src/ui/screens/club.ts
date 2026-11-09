@@ -1,4 +1,8 @@
-import type { Player } from '../../game/types.ts'
+import type { Player, SeasonState, TierId } from '../../game/types.ts'
+import { CLUB_NAME_MAX } from '../../game/club-name.ts'
+import { PLAYER_TEAM_ID } from '../../game/season.ts'
+import { worldTierLabel } from '../../game/world.ts'
+import { isOnlineMode } from '../../online.ts'
 import { BASE_ROUND_INCOME, economyOf, FACILITIES, facilityLevel, facilityRoundIncome, facilityStageChance, facilityStageInLevel, facilityUpgradeCost, GOAL_INCOME_BONUS, LEAGUE_WIN_BONUS, MAX_FACILITY_LEVEL, MAX_FACILITY_STAGE, projectedRoundIncome, STAGES_PER_LEVEL, type FacilityId } from '../../game/economy.ts'
 import { bestMarketValue, transferWindowOpen } from '../../game/market.ts'
 import { caHeat, icon, pageHead, panel, posBadge, primaryPosition, tag, tile } from '../components.ts'
@@ -22,7 +26,91 @@ const GROWTH_FACILITIES = new Set<FacilityId>(['stadium', 'academy', 'medical', 
 const TABS: { id: ClubTab; label: string }[] = [
   { id: 'facilities', label: '设施' },
   { id: 'contracts', label: '合同与工资' },
+  { id: 'history', label: '历史成绩' },
 ]
+
+const TIER_RANK: Record<TierId, number> = { division2: 1, division1: 2, champions: 3 }
+
+/** 历史赛季里对手可能已经不在本赛季的名单里了：先查世界球队，再查当前 AI 球队。 */
+function clubNameOf(id: string | null): string {
+  if (!id) return '—'
+  if (id === PLAYER_TEAM_ID) return game.clubName
+  return game.world?.clubs.find((club) => club.id === id)?.name ?? game.aiTeams.find((team) => team.id === id)?.name ?? id
+}
+
+function seasonLeague(season: SeasonState): string {
+  if (!season.tier) return '联赛'
+  const conference = season.conference === 'south' ? ' · 南区' : season.conference === 'north' ? ' · 北区' : ''
+  return `${worldTierLabel(season.tier)}${season.tier === 'division2' ? conference : ''}`
+}
+
+/** 每个赛季一行：级别、名次、战绩、冠军，以及下赛季是升级还是降级。 */
+function historyTab(): string {
+  const seasons = [...(game.seasonHistory ?? []).filter((season) => season.index !== game.season.index), game.season]
+    .sort((a, b) => a.index - b.index)
+  const rows = seasons.map((season, index) => {
+    const position = season.table.findIndex((row) => row.teamId === PLAYER_TEAM_ID)
+    const row = position >= 0 ? season.table[position] : undefined
+    const current = season === game.season && !season.finished
+    const next = seasons[index + 1]
+    const moved = next?.tier && season.tier ? TIER_RANK[next.tier] - TIER_RANK[season.tier] : 0
+    const finish = season.playerFinish ?? (position >= 0 ? position + 1 : null)
+    const badges = [
+      current ? tag('进行中', 'info') : '',
+      season.finished && season.champion === PLAYER_TEAM_ID ? tag('冠军', 'gold') : '',
+      moved > 0 ? tag('升级', 'good') : moved < 0 ? tag('降级', 'bad') : '',
+    ].join(' ')
+    return `<tr data-key="season-${season.index}">
+      <td class="strong">第 ${season.index} 赛季</td>
+      <td>${esc(seasonLeague(season))}</td>
+      <td class="num strong">${finish ? `${current ? '暂列' : ''}第 ${finish} 名` : '—'}<small class="muted"> / ${season.table.length}</small></td>
+      <td class="num">${row ? `${row.played}` : '—'}</td>
+      <td class="num">${row ? `${row.won} / ${row.drawn} / ${row.lost}` : '—'}</td>
+      <td class="num">${row ? `${row.gf} : ${row.ga}` : '—'}</td>
+      <td class="num strong">${row?.points ?? '—'}</td>
+      <td>${season.finished ? esc(clubNameOf(season.champion)) : '<span class="muted">—</span>'}</td>
+      <td>${badges}</td>
+    </tr>`
+  }).reverse().join('')
+  const done = seasons.filter((season) => season.finished)
+  const total = done.reduce((sum, season) => {
+    const row = season.table.find((item) => item.teamId === PLAYER_TEAM_ID)
+    if (row) { sum.won += row.won; sum.drawn += row.drawn; sum.lost += row.lost; sum.gf += row.gf; sum.ga += row.ga }
+    return sum
+  }, { won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 })
+  const titles = done.filter((season) => season.champion === PLAYER_TEAM_ID).length
+  const promotions = seasons.filter((season, index) => {
+    const next = seasons[index + 1]
+    return !!(next?.tier && season.tier && TIER_RANK[next.tier] > TIER_RANK[season.tier])
+  }).length
+  const finishes = done.map((season) => season.playerFinish ?? season.table.findIndex((row) => row.teamId === PLAYER_TEAM_ID) + 1).filter((value) => value > 0)
+  const best = done.reduce<SeasonState | null>((pick, season) => {
+    if (!season.tier) return pick
+    if (!pick?.tier) return season
+    const rank = (item: SeasonState) => TIER_RANK[item.tier!] * 100 - (item.playerFinish ?? 99)
+    return rank(season) > rank(pick) ? season : pick
+  }, null)
+  return `<div class="kpi-row club-kpis">
+      ${tile('已完成赛季', String(done.length), seasons.length > done.length ? '本赛季进行中' : '')}
+      ${tile('联赛冠军', String(titles))}
+      ${tile('升级次数', String(promotions))}
+      ${tile('历史最佳', best ? `${seasonLeague(best)} 第 ${best.playerFinish ?? '—'}` : finishes.length ? `第 ${Math.min(...finishes)} 名` : '—')}
+      ${tile('联赛总战绩', `${total.won} 胜 ${total.drawn} 平 ${total.lost} 负`, `进 ${total.gf} 失 ${total.ga}`)}
+    </div>
+    ${panel('历年联赛成绩', `<div class="table-scroll"><table class="dt"><thead><tr><th>赛季</th><th>联赛</th><th class="num">名次</th><th class="num">场次</th><th class="num">胜 / 平 / 负</th><th class="num">进 : 失</th><th class="num">积分</th><th>冠军</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="hint pad">只统计联赛；友谊赛和升级附加赛不计入。升降级按下一个赛季所在的联赛级别判断。</p>`, { flush: true })}`
+}
+
+/** 联机时可以改俱乐部名字；名字由服务器查重名和字数。 */
+function renameRow(): string {
+  if (!isOnlineMode()) return ''
+  return `<div class="club-rename">
+    <label for="club-name-input">俱乐部名字</label>
+    <input id="club-name-input" type="text" maxlength="${CLUB_NAME_MAX}" value="${esc(game.clubName)}" placeholder="最多 ${CLUB_NAME_MAX} 个字" autocomplete="off" data-club-name-input>
+    <button class="btn small" data-action="club-rename" ${game.activeMatch ? 'disabled' : ''}>改名</button>
+    <span class="muted small">最多 ${CLUB_NAME_MAX} 个字，不能和全服已有球队重名；改名后所有玩家看到的都是新名字。</span>
+  </div>`
+}
 
 /** 等级内的 5 个阶段；每个等级的第 5 阶段必成。 */
 function stagePips(stage: number): string {
@@ -95,9 +183,10 @@ export function renderClub(): string {
   const income = projectedRoundIncome(economy, game.season.tier)
   const wagesDue = game.world && game.world.seasonIndex <= 1 ? 0 : wages
   const net = income - wagesDue
-  const body = ui.clubTab === 'contracts' ? contractsTab() : facilitiesTab()
+  const body = ui.clubTab === 'contracts' ? contractsTab() : ui.clubTab === 'history' ? historyTab() : facilitiesTab()
   return `
-    ${pageHead({ kicker: '俱乐部', title: '设施与合同' })}
+    ${pageHead({ kicker: '俱乐部', title: esc(game.clubName) })}
+    ${renameRow()}
     <div class="kpi-row club-kpis">
       ${tile('余额', economy.balance.toLocaleString())}
       ${tile('球迷', economy.fans.toLocaleString(), economy.lastFanChange === undefined ? '联赛赛果带动球迷增长' : `上轮 ${economy.lastFanChange >= 0 ? '+' : ''}${economy.lastFanChange.toLocaleString()}`)}

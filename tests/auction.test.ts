@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
-import { AUCTION_DURATION_MS, AUCTION_EXTEND_MS, absorbFreeAgents, committedFunds, leadingBid, minimumBid, placeBid, settleAuctions, type FreeMarket } from '../src/game/auction.ts'
+import { AUCTION_DURATION_MS, AUCTION_EXTEND_MS, AUCTION_RAISE_FEE_MIN, absorbFreeAgents, auctionRaiseFee, committedFunds, leadingBid, minimumBid, placeBid, settleAuctions, type FreeMarket } from '../src/game/auction.ts'
 import { economyOf } from '../src/game/economy.ts'
 import { SQUAD_LIMIT, playerMarketValue, releasePlayer, squadLimitError } from '../src/game/market.ts'
 import { createWorldGame } from '../src/game/world.ts'
@@ -26,11 +26,12 @@ function setup() {
 }
 
 describe('竞拍规则', () => {
-  it('第一口价按估值起拍，开始 5 分钟倒计时', () => {
+  it('第一口价按估值起拍，开始 1 小时倒计时，开拍不收手续费', () => {
     const { market, a, player, value } = setup()
     expect(placeBid(market, a, 'a', player.id, value - 1, 1000).ok).toBe(false)
     const bid = placeBid(market, a, 'a', player.id, value, 1000)
-    expect(bid.ok).toBe(true)
+    expect(bid).toMatchObject({ ok: true, fee: 0 })
+    expect(AUCTION_DURATION_MS).toBe(60 * 60_000)
     expect(market.auctions).toHaveLength(1)
     expect(market.auctions[0].endsAt).toBe(1000 + AUCTION_DURATION_MS)
     expect(leadingBid(market.auctions[0])).toMatchObject({ accountId: 'a', amount: value, club: a.clubName })
@@ -51,15 +52,49 @@ describe('竞拍规则', () => {
     expect(again).toMatchObject({ ok: false, error: '你已经是最高出价' })
   })
 
-  it('最后 1 分钟有人加价，倒计时回到 1 分钟；时间还多时不延长', () => {
+  it('最后 10 分钟内有人跟价，倒计时重新回到 10 分钟；时间还多时不延长', () => {
     const { market, a, b, player, value } = setup()
     placeBid(market, a, 'a', player.id, value, 0)
     const original = market.auctions[0].endsAt
+    expect(AUCTION_EXTEND_MS).toBe(10 * 60_000)
     placeBid(market, b, 'b', player.id, minimumBid(player, market.auctions[0]), 1000)
     expect(market.auctions[0].endsAt).toBe(original)
     const late = original - 5000
     placeBid(market, a, 'a', player.id, minimumBid(player, market.auctions[0]), late)
     expect(market.auctions[0].endsAt).toBe(late + AUCTION_EXTEND_MS)
+  })
+
+  it('跟价要交出价 2%（至少 1,000）的手续费，当场扣除，拍不到也不退', () => {
+    const { market, a, b, games, player, value } = setup()
+    expect(auctionRaiseFee(10_000)).toBe(AUCTION_RAISE_FEE_MIN)
+    expect(auctionRaiseFee(1_000_000)).toBe(20_000)
+    placeBid(market, a, 'a', player.id, value, 0)
+    const raise = minimumBid(player, market.auctions[0])
+    const fee = auctionRaiseFee(raise)
+    const result = placeBid(market, b, 'b', player.id, raise, 1)
+    expect(result).toMatchObject({ ok: true, fee })
+    expect(economyOf(b).balance).toBe(10_000_000 - fee)
+    // a 再跟价，b 被超过：b 交的手续费不退。
+    const again = minimumBid(player, market.auctions[0])
+    placeBid(market, a, 'a', player.id, again, 2)
+    expect(economyOf(a).balance).toBe(10_000_000 - auctionRaiseFee(again))
+    const [settled] = settleAuctions(market, (id) => games[id], market.auctions[0].endsAt)
+    expect(settled.winnerId).toBe('a')
+    expect(economyOf(b).balance).toBe(10_000_000 - fee)
+    expect(economyOf(a).balance).toBe(10_000_000 - auctionRaiseFee(again) - again)
+  })
+
+  it('余额要够出价加手续费才能跟价', () => {
+    const { market, a, b, player, value } = setup()
+    placeBid(market, a, 'a', player.id, value, 0)
+    const raise = minimumBid(player, market.auctions[0])
+    economyOf(b).balance = raise + auctionRaiseFee(raise) - 1
+    const refused = placeBid(market, b, 'b', player.id, raise, 1)
+    expect(refused).toMatchObject({ ok: false, error: expect.stringContaining('手续费') })
+    expect(economyOf(b).balance).toBe(raise + auctionRaiseFee(raise) - 1)
+    economyOf(b).balance += 1
+    expect(placeBid(market, b, 'b', player.id, raise, 1).ok).toBe(true)
+    expect(economyOf(b).balance).toBe(raise)
   })
 
   it('领先的出价占用余额：同一笔钱不能同时拍两个人', () => {
@@ -106,10 +141,12 @@ describe('竞拍规则', () => {
     placeBid(market, a, 'a', player.id, value, 0)
     const price = minimumBid(player, market.auctions[0])
     placeBid(market, b, 'b', player.id, price, 1)
-    expect(settleAuctions(market, (id) => games[id], AUCTION_DURATION_MS - 1)).toEqual([])
-    const [settled] = settleAuctions(market, (id) => games[id], AUCTION_DURATION_MS)
+    const endsAt = AUCTION_DURATION_MS
+    expect(market.auctions[0].endsAt).toBe(endsAt)
+    expect(settleAuctions(market, (id) => games[id], endsAt - 1)).toEqual([])
+    const [settled] = settleAuctions(market, (id) => games[id], endsAt)
     expect(settled.winnerId).toBe('b')
-    expect(economyOf(b).balance).toBe(10_000_000 - price)
+    expect(economyOf(b).balance).toBe(10_000_000 - price - auctionRaiseFee(price))
     expect(economyOf(a).balance).toBe(10_000_000)
     expect(b.roster.some((item) => item.id === player.id)).toBe(true)
     expect(b.roster.find((item) => item.id === player.id)?.contract?.clubId).toBe('player')
@@ -273,6 +310,10 @@ describe('全服自由市场', () => {
     expect(low.status).toBe(400)
     const price = minimumBid(player, market.auctions[0])
     expect((await bid(base, two.headers, player.id, price)).status).toBe(200)
+    // 跟价手续费当场从服务器存档里扣掉；离结束还早，倒计时不变。
+    const charged = await getGame(base, two.headers)
+    expect(economyOf(charged.game).balance).toBe(economyOf(two.game).balance - auctionRaiseFee(price))
+    expect((await getMarket(base)).auctions[0].endsAt).toBe(clock + AUCTION_DURATION_MS)
 
     clock += AUCTION_DURATION_MS + 1
     market = await getMarket(base)

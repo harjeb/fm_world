@@ -99,7 +99,7 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     facilityId: z.enum(['stadium', 'academy', 'medical', 'shop', 'sponsor', 'psychology', 'tactics']),
   }, (args) => action('upgrade_facility', args))
 
-  register('bid_free_agent', '竞拍自由球员', '自由市场全服共用：第一个出价开始倒计时，其他玩家可以加价（每次至少 5%），时间到时最高价者得。amount 是出价总额。', {
+  register('bid_free_agent', '竞拍自由球员', '自由市场全服共用：第一个出价开始 1 小时倒计时，最后 10 分钟内有人跟价，倒计时重新回到 10 分钟；跟价每次至少加 5%，并交出价 2%（至少 1,000）的手续费，手续费不退还。时间到时最高价者得。amount 是出价总额。', {
     playerId: z.string().min(1), amount: z.number().int().positive().safe(),
   }, (args) => action('bid_free_agent', args))
 
@@ -110,6 +110,29 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
   register('cancel_listing', '取消挂牌', '取消本地挂牌并将球员放回阵容。', {
     playerId: z.string().min(1),
   }, (args) => action('cancel_listing', args))
+
+  const goalSchema = z.enum(['title', 'promotion', 'top-half', 'survival']).optional().describe('承诺的赛季目标：title 争冠/升级、promotion 冲击上游（默认）、top-half 稳居中游、survival 保级为主')
+  const roleSchema = z.enum(['star', 'first-team', 'rotation']).optional().describe('承诺的队内定位：star 绝对主力、first-team 常规首发（默认）、rotation 轮换替补')
+
+  register('preview_signing', '预览谈判', '向 AI 球队买人前预览：底价、球员诉求（想听的目标/定位、想去的球队、最低联赛级别）和这份报价的成功率，不写入存档。只能谈 state.market.clubOffers 里的球员。', {
+    teamId: z.string().min(1), playerId: z.string().min(1),
+    offer: z.number().int().positive().safe().optional().describe('报价总额；不填按底价'),
+    goal: goalSchema, role: roleSchema,
+  }, (args) => action('preview_signing', args))
+
+  register('sign_club_player', '谈判买人', '向 AI 球队报价买人（转会窗口开放时）。同一份报价和承诺的结果是固定的，失败后改报价或承诺才会重新判定。', {
+    teamId: z.string().min(1), playerId: z.string().min(1),
+    offer: z.number().int().positive().safe().describe('报价总额，不能低于底价'),
+    goal: goalSchema, role: roleSchema,
+  }, (args) => action('sign_club_player', args))
+
+  register('renew_contract', '续约', '给自己的球员续约 2 年，工资按身价上调。', {
+    playerId: z.string().min(1),
+  }, (args) => action('renew_contract', args))
+
+  register('release_player', '解约', '解约球员，球员进入自由市场；阵容至少保留 10 人。', {
+    playerId: z.string().min(1),
+  }, (args) => action('release_player', args))
 
   register('auto_lineup', '自动排阵容', '按指定阵型自动选择首发、替补和默认战术。', {
     formationId: z.enum(['1-2-3-1', '1-3-2-1', '1-2-2-2']).optional().describe('不填则沿用当前阵型'),
@@ -160,6 +183,19 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     playerId: z.string(),
   }, (args) => action('discard_training', args))
 
+  register('set_auto_training', '设置自动培养', '设置这名球员的自动培养策略（和培养页“自动策略”一致）：mode=priority 按优先级依次练满、targets 把主属性补到目标值、max 每次选成长最多的一项。', {
+    playerId: z.string().min(1),
+    mode: z.enum(['priority', 'targets', 'max']).optional(),
+    priority: z.array(z.string()).optional().describe('属性英文名的优先顺序'),
+    resetPriority: z.boolean().optional().describe('true 时恢复默认优先级（先练这名球员的 2 个主要属性）'),
+    targets: z.record(z.string(), z.number().min(0).max(1500)).optional().describe('targets 模式的目标值，如 { "passing": 1200 }'),
+  }, (args) => action('set_auto_training', args))
+
+  register('run_auto_training', '自动培养', '按自动培养策略连续推进进行中的一轮培养（自动挑训练、自动处理事件），直到本轮结束或用完 maxSteps。不会自己开始新一轮。', {
+    playerId: z.string().min(1),
+    maxSteps: z.number().int().min(1).max(200).optional().describe('最多推进几步，默认 60'),
+  }, (args) => action('run_auto_training', args))
+
   register('equip_card', '给球员换卡', '把球员自己的一张球员卡装备到他身上；cardId 为 null 换回原始属性。比赛进行中不能换；体能、精力、伤病和停赛不受换卡影响。', {
     playerId: z.string(),
     cardId: z.string().nullable().describe('来自 get_state 的 cards[].id；null 表示原始属性'),
@@ -171,11 +207,25 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
 
   register('start_next_season', '开始新赛季', '赛季结束后开始下一赛季，保留球员和俱乐部数据。', {}, () => action('start_next_season'))
 
-  register('start_league', '开始联赛比赛', '开始本轮联赛；比赛显示 90 分钟，服务器按现实时间推进约 10 分钟，不能暂停、加速或跳过。', {}, () => action('start_league'))
+  register('start_league', '开始联赛比赛', '单机：开始本轮联赛。联机联赛到开赛时间由服务器用保存的阵容自动结算，不能手动开赛；开赛前 30 分钟锁定阵容。', {}, () => action('start_league'))
 
-  register('start_friendly', '开始友谊赛', '与指定 AI 球队开始一场友谊赛。', {
+  register('start_friendly', '开始友谊赛', '与本分区一支 AI 球队开始一场友谊赛；约全服其他球队用 start_world_friendly。', {
     teamId: z.string().describe('来自 get_state 的 teams[].id'),
   }, (args) => action('start_friendly', args))
+
+  register('start_world_friendly', '约战全服球队', '和世界页一样，与全服任意一支球队（含其他教练执教的球队）开始友谊赛，对手名单由服务器给出。', {
+    clubId: z.string().describe('来自 get_world 的 clubs[].id'),
+  }, (args) => action('start_world_friendly', args))
+
+  register('get_world', '查看全服世界', '读取全服所有球队（名单、RANK、是否有教练执教、电脑球队设施）以及各分区的积分榜和赛程，和世界页 / 球队详情一致。', {}, () => action('get_world'))
+
+  register('rename_club', '俱乐部改名', '联机时修改俱乐部名字：最多 8 个字，不能和全服已有球队（AI 球队或其他教练的球队）重名；比赛进行中不能改。', {
+    name: z.string().min(1).max(8),
+  }, (args) => action('rename_club', args))
+
+  register('choose_club', '选择执教球队', '新账号在本赛季还没踢过联赛时，可以换到另一支没人执教的二级联赛球队；会按共享世界重建存档。', {
+    clubId: z.string().describe('来自 get_world 的 clubs[].id，tier 为 division2 且 managed 为 false'),
+  }, (args) => action('choose_club', args))
 
   register('get_match', '查看比赛', '不传 matchId 时读取当前进行中比赛的比分、时钟、统计、场上球员、替补、战术和最近事件；传 matchId 时读取完整比赛记录和复盘建议。', {
     matchId: z.string().optional().describe('比赛记录 ID；不填则读取当前比赛'),

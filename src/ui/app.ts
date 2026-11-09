@@ -49,7 +49,9 @@ import { leadingBid, type Auction, type AuctionResult } from '../game/auction.ts
 import { bestMarketValue, cancelListing, clubAsking, freeAgentAsking, listPlayer, playerMarketValue, refreshClubMarket, releasePlayer, renewContract, signClubPlayer, signFreeAgent } from '../game/market.ts'
 import { minimumBid } from '../game/auction.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
-import { bidOnline, chooseClubOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, marketState, nextWorldSeasonOnline, onlineState, publicConfig, refreshPublicWorld, registerOnline, revokeAgentTokenOnline, serverNow, setRemoteGameHandler, subscribeMarket, subscribeOnline } from '../online.ts'
+import { clubNameError, normalizeClubName } from '../game/club-name.ts'
+import { bidOnline, chooseClubOnline, renameClubOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, marketState, nextWorldSeasonOnline, onlineState, publicConfig, refreshPublicWorld, registerOnline, revokeAgentTokenOnline, serverNow, setRemoteGameHandler, subscribeMarket, subscribeOnline } from '../online.ts'
+import { agentHandoffText } from './agent-handoff.ts'
 import { cardName } from './components.ts'
 import { clockText, countdownText, esc, pct } from './format.ts'
 import { icon } from './icons.ts'
@@ -70,7 +72,7 @@ import { renderAccountOverlay, renderDetailOverlay, renderNegotiationOverlay, re
 import { renderClubOverlay } from './club-view.ts'
 import { renderReview } from './screens/review.ts'
 import { renderSeason } from './screens/season.ts'
-import { renderSidebar, renderTopbar } from './screens/shell.ts'
+import { renderMarketTicker, renderSidebar, renderTopbar } from './screens/shell.ts'
 import { buildTrainingRequest, renderAutoStrategyOverlay, renderTraining } from './screens/training.ts'
 import { renderWorld } from './screens/world.ts'
 
@@ -94,7 +96,7 @@ function announceMarket(previous: Auction[], previousLog: AuctionResult[]): void
     if (old && leadingBid(old).accountId === me && lead.accountId !== me) {
       ui.notice = `你对 ${auction.playerName} 的出价被 ${lead.club} 超过了，现价 ${lead.amount.toLocaleString()}。`
     } else if (!old && lead.accountId !== me && ui.screen !== 'match') {
-      ui.notice = `${lead.club} 对 ${auction.playerName} 出价 ${lead.amount.toLocaleString()}，竞拍开始。`
+      ui.notice = `全服通告：${lead.club} 对 ${auction.playerName} 出价 ${lead.amount.toLocaleString()}，竞拍开始，1 小时后落槌。`
     }
   }
   const known = new Set(previousLog.map((item) => `${item.playerId}|${item.at}`))
@@ -103,6 +105,9 @@ function announceMarket(previous: Auction[], previousLog: AuctionResult[]): void
     const old = before.get(item.playerId)!
     if (old.bids.some((bid) => bid.accountId === me)) {
       ui.notice = item.club === game.clubName ? `你以 ${item.amount.toLocaleString()} 签下了 ${item.playerName}。` : item.club ? `${item.playerName} 被 ${item.club} 以 ${item.amount.toLocaleString()} 签下。` : `${item.playerName} 的竞拍流拍了。`
+    } else if (item.club && ui.screen !== 'match') {
+      // 竞拍落槌全服通告：没参与的人也能看到谁签下了谁。
+      ui.notice = `全服通告：${item.club} 以 ${item.amount.toLocaleString()} 签下了 ${item.playerName}。`
     }
   }
 }
@@ -212,6 +217,7 @@ function render(): void {
       ${renderSidebar()}
       <div class="workspace">
         ${renderTopbar()}
+        ${renderMarketTicker()}
         <main class="content ${ui.screen === 'lineup' ? 'wide' : ''}">${renderScreen()}</main>
         <footer class="footer">真实球星和俱乐部名称仅用于原型玩法测试；正式发行需取得相应授权。固定 PCG32 随机；同种子同输入可复现。<span class="muted"> · 构建 ${BUILD_ID}</span></footer>
       </div>
@@ -893,7 +899,22 @@ document.addEventListener('click', async (event) => {
       ui.clubPage = Math.max(0, ui.clubPage + (action === 'club-next' ? 1 : -1))
       render()
       break
-    case 'club-upgrade': {
+    case 'club-rename': {
+      const input = document.querySelector<HTMLInputElement>('[data-club-name-input]')
+      const name = normalizeClubName(input?.value)
+      if (name === game.clubName) { showNotice('名字没有变化。'); break }
+      // 先在本地查字数和格式；重名只有服务器知道全服名单，交给服务器判断。
+      const error = clubNameError(name, [])
+      if (error) { showNotice(error); break }
+      try {
+        const next = await renameClubOnline(name)
+        applyOnlineGame(next, `俱乐部已改名为「${next.clubName}」。`)
+      } catch (failure) {
+        showNotice(failure instanceof Error ? failure.message : '改名失败')
+      }
+      break
+    }
+        case 'club-upgrade': {
       const result = upgradeFacility(game, actionEl.dataset.facility as FacilityId)
       if (result.ok) persist()
       showNotice(result.ok ? '设施已升级。' : `升级失败：${result.error ?? '未知错误'}`)
@@ -1040,8 +1061,13 @@ document.addEventListener('click', async (event) => {
       break
     case 'agent-token':
       void createAgentTokenOnline().then(async (token) => {
-        try { await navigator.clipboard.writeText(token) } catch { /* 剪贴板不可用时直接显示令牌。 */ }
-        ui.notice = `Agent 令牌已复制：${token}`
+        // 复制的是一整段接入说明：令牌 + 文档链接 + 游戏简介，粘贴给 Agent 就能直接上手。
+        const text = agentHandoffText({ token, origin: window.location.origin, clubName: game.clubName })
+        let copied = false
+        try { await navigator.clipboard.writeText(text); copied = true } catch { /* 剪贴板不可用时直接显示令牌和文档地址。 */ }
+        ui.notice = copied
+          ? '已复制 Agent 接入说明（令牌 + API 文档链接 + 游戏简介），直接粘贴给 AI 即可。'
+          : `剪贴板不可用，请手动复制：令牌 ${token} · 文档 ${window.location.origin}/api/agent/docs`
         render()
       }).catch((error) => { ui.notice = error instanceof Error ? error.message : '生成失败'; render() })
       break

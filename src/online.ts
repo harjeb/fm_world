@@ -1,6 +1,7 @@
 import type { Auction, AuctionResult } from './game/auction.ts'
 import type { AITeam, Attributes, FacilityId, GameState, Player, SeasonTableRow, Fixture, TierId, ConferenceId } from './game/types.ts'
 import { setRemoteSaver, saveGame } from './game/state.ts'
+import { dueRound } from './game/season.ts'
 
 const TOKEN_KEY = 'fm-online-token'
 
@@ -395,8 +396,20 @@ export function isOnlineMode(): boolean {
   return onlineState.status === 'online'
 }
 
+/** 联机时本轮还没到全服开赛时间（服务器会拒绝 start_league）。用服务器时间判断，避免本机时钟偏差。 */
+export function onlineKickoffPending(game: GameState): boolean {
+  return isOnlineMode() && game.season.round > dueRound(game, serverNow())
+}
+
 export async function leagueActionOnline(body: Record<string, unknown>): Promise<GameState> {
   return onlineGameAction('/api/match/action', body)
+}
+
+/** 联机改俱乐部名字：服务器检查字数和重名，成功后全服看到的新名字一起更新。 */
+export async function renameClubOnline(name: string): Promise<GameState> {
+  const game = await onlineGameAction('/api/club/rename', { name })
+  void refreshPublicWorld()
+  return game
 }
 
 /** 注册后选队：服务端会按共享世界重建账号存档，只允许在还没踢过联赛时调用。 */

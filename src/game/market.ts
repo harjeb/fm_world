@@ -121,6 +121,20 @@ export function clubAsking(game: Pick<GameState, 'cards'>, player: Player): numb
   return Math.round(bestMarketValue(game, player) * CLUB_BUYOUT_RATIO)
 }
 
+/**
+ * 转会页“从 AI 球队买人”能谈判的球员：前 6 支 AI 球队（联机时跳过有教练执教的）各前 3 人。
+ * 手动界面和 Agent 共用这份列表，保证两边能买的人一样。
+ */
+export function aiTransferOffers(
+  game: Pick<GameState, 'aiTeams' | 'cards'>,
+  isManaged: (clubId: string) => boolean = () => false,
+): { team: GameState['aiTeams'][number]; player: Player; asking: number }[] {
+  return game.aiTeams
+    .filter((team) => !isManaged(team.id))
+    .slice(0, 6)
+    .flatMap((team) => team.players.slice(0, 3).map((player) => ({ team, player, asking: clubAsking(game, player) })))
+}
+
 /** 阵容上限：签人不拦，开赛前必须裁到 25 人以内。 */
 export function squadLimitError(game: Pick<GameState, 'roster'>): string | null {
   if (game.roster.length <= SQUAD_LIMIT) return null

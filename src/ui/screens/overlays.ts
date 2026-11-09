@@ -5,7 +5,8 @@ import { equippedCard, playerCards } from '../../game/cards.ts'
 import { attrRating, initialDisplayCA, mainAttrsFor } from '../../game/rating.ts'
 import { MAIN_FIELD_ATTRS, MAIN_GK_ATTRS } from '../../game/scale.ts'
 import type { ClubPreview } from '../../game/world.ts'
-import { onlineState, publicConfig, publicWorld } from '../../online.ts'
+import { marketState, onlineState, publicConfig, publicWorld } from '../../online.ts'
+import { AUCTION_EXTEND_MS, auctionRaiseFee } from '../../game/auction.ts'
 import { economyOf } from '../../game/economy.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, TIER_LABELS, negotiationDemands, negotiationTerms, type SeasonGoal, type SquadRole } from '../../game/negotiation.ts'
 import { CA_STOPS, attrHeadCell, attributeRadar, attrHeat, caHeat, cardName, cardRoute, countryLabel, crest, eraLabel, findAnyPlayer, heatLegend, icon, injuryLabel, mainAttrs, meter, positionMap, posBadge, primaryPosition, skillGroups, skillTag, tag, traitLabel } from '../components.ts'
@@ -163,8 +164,8 @@ export function renderAccountOverlay(): string {
         ${online ? `
           <p>当前账号：<b>${esc(onlineState.user?.username ?? '')}</b> · ${onlineState.connected ? '实时同步中' : '正在重连服务器'}</p>
           <p class="hint">另一台设备保存后会自动同步到这里。冲突时服务器版本优先。</p>
-          <div class="btn-row"><button class="btn primary" data-action="agent-token">生成 / 复制 Agent 令牌</button><button class="btn ghost" data-action="agent-revoke">重置令牌</button></div>
-          <p class="hint">把 fm_... 令牌交给 Claude / Cursor 的 MCP 配置；不需要给账号密码。令牌可随时重置。</p>
+          <div class="btn-row"><button class="btn primary" data-action="agent-token">复制给 AI（令牌 + 文档 + 简介）</button><button class="btn ghost" data-action="agent-revoke">重置令牌</button></div>
+          <p class="hint">复制的内容包含 fm_... 令牌、API 文档链接和游戏简介，直接粘贴给能发 HTTP 请求的 AI（Claude / ChatGPT / Cursor），或把令牌填进 MCP 配置；不需要给账号密码。令牌可随时重置。</p>
           <div class="btn-row"><button class="btn ghost" data-action="account-logout">退出登录</button><button class="btn" data-action="account-close">关闭</button></div>
         ` : `
           <p class="hint">登录后存档保存到服务器，并用 SSE 在多个页面/设备间同步。离线时仍可玩本地存档。</p>
@@ -304,7 +305,10 @@ export function renderNegotiationOverlay(): string {
     demands.minTier ? `<p class="warn-text small">${icon('star', 13)} 他要求至少踢 <b>${TIER_LABELS[demands.minTier]}</b>（你现在是 ${TIER_LABELS[tier]}）。</p>` : '',
   ].join('')
   const reasons = terms.reasons.map((line) => `<li>${esc(line)}</li>`).join('')
-  const canPay = economyOf(game).balance >= draft.offer
+  // 全服竞拍里已经有人出过价：这口是跟价，要另交不退还的手续费；最后 10 分钟内跟价，倒计时重新回到 10 分钟。
+  const auction = draft.kind === 'bid' ? marketState.auctions.find((item) => item.playerId === draft.playerId && item.bids.length > 0) : undefined
+  const fee = auction ? auctionRaiseFee(draft.offer) : 0
+  const canPay = economyOf(game).balance >= draft.offer + fee
   return `
     <div class="overlay" data-action="nego-cancel">
       <div class="modal nego-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="球员谈判">
@@ -324,7 +328,8 @@ export function renderNegotiationOverlay(): string {
         </div>
         <ul class="nego-reasons">${reasons}</ul>
         ${draft.message ? `<p class="warn-text">${esc(draft.message)}</p>` : ''}
-        ${!canPay ? '<p class="warn-text small">余额不够这个报价。</p>' : ''}
+        ${fee ? `<p class="warn-text small">${icon('coin', 13)} 跟价手续费 <b>${fee.toLocaleString()}</b>（出价的 2%，至少 1,000），出价成功立即扣除、不退还；如果离落槌不到 ${AUCTION_EXTEND_MS / 60_000} 分钟，倒计时重新回到 ${AUCTION_EXTEND_MS / 60_000} 分钟。</p>` : ''}
+        ${!canPay ? `<p class="warn-text small">余额不够这个报价${fee ? '（含手续费）' : ''}。</p>` : ''}
         <div class="btn-row">
           <button class="btn primary" data-action="nego-confirm" ${canPay ? '' : 'disabled'}>${draft.kind === 'bid' ? '确认出价' : '确认谈判'}</button>
           <button class="btn ghost" data-action="nego-cancel">再想想</button>
@@ -345,12 +350,13 @@ export function renderOnlineClubPickOverlay(): string {
   const free = (publicWorld?.clubs ?? [])
     .filter((club) => club.tier === 'division2' && !club.managed)
     .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0) || a.name.localeCompare(b.name, 'zh-CN'))
-  const mine = publicWorld?.clubs.find((club) => club.managed)
+  // managed 表示“有人执教”（可能是别的玩家），自己的队要用 ownClubId 找。
+  const mine = publicWorld?.ownClubId ? publicWorld.clubs.find((club) => club.id === publicWorld!.ownClubId) : undefined
   const row = (club: NonNullable<typeof publicWorld>['clubs'][number]) => {
     const players = [...club.players].sort((a, b) => b.ca - a.ca).slice(0, 3)
     return `<div class="club-pick-row" data-key="${esc(club.id)}">
       <div class="club-pick-name"><i class="swatch" style="background:${esc(club.color)}"></i><b>${esc(club.name)}</b><small>${esc(CONFERENCE_LABELS[club.conference ?? ''] ?? club.conference ?? '')} · RANK ${club.rating ?? '—'}</small></div>
-      <div class="club-pick-players">${players.map((player) => `${posBadge(player.positions.GK > 0 ? 'GK' : 'CM')} ${esc(player.name)} <span class="muted">CA ${player.ca}</span>`).join(' · ') || '<span class="muted small">名单加载中</span>'}</div>
+      <div class="club-pick-players">${players.map((player) => `${posBadge(primaryPosition(player))} ${esc(player.name)} <span class="muted">CA ${player.ca}</span>`).join(' · ') || '<span class="muted small">名单加载中</span>'}</div>
       <button class="btn small primary" data-action="online-club-pick" data-club="${esc(club.id)}">执教这支</button>
     </div>`
   }

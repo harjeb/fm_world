@@ -24,7 +24,7 @@ import type { TrainingActionId } from '../game/training.ts'
 import type { TrainingActivityId } from '../game/training-calendar.ts'
 
 export type Screen = 'club' | 'transfer' | 'home' | 'academy' | 'inventory' | 'training' | 'lineup' | 'season' | 'world' | 'challenge' | 'review' | 'match'
-export type ClubTab = 'facilities' | 'contracts'
+export type ClubTab = 'facilities' | 'contracts' | 'history'
 export type TransferTab = 'market' | 'free'
 export type SquadSortKey = 'pos' | 'name' | 'age' | 'ca' | 'condition' | 'energy' | 'value' | `attr${number}`
 

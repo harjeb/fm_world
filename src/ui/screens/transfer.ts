@@ -1,9 +1,9 @@
 import type { Player } from '../../game/types.ts'
 import { economyOf } from '../../game/economy.ts'
-import { AUCTION_EXTEND_MS, committedFunds, leadingBid, minimumBid } from '../../game/auction.ts'
+import { AUCTION_DURATION_MS, AUCTION_EXTEND_MS, auctionRaiseFee, committedFunds, leadingBid, minimumBid } from '../../game/auction.ts'
 import { traitEffectText } from '../../game/data/skill-effects.ts'
 import { traitNameOf } from '../../game/data/star-traits.ts'
-import { SQUAD_LIMIT, bestMarketValue, clubAsking, freeAgentAsking, saleChance, suggestedPrice, transferWindowOpen } from '../../game/market.ts'
+import { SQUAD_LIMIT, aiTransferOffers, bestMarketValue, freeAgentAsking, saleChance, suggestedPrice, transferWindowOpen } from '../../game/market.ts'
 import { isOnMarketToday } from '../../game/market-window.ts'
 import { caHeat, clubName, countryLabel, emptyState, icon, pageHead, panel, posBadge, primaryPosition, tag, traitLabel } from '../components.ts'
 import { countdownText, esc, playerCA } from '../format.ts'
@@ -40,8 +40,8 @@ function marketTab(): string {
       <td class="num">${suggestedPrice(game, player).toLocaleString()}</td>
       <td class="price-cell"><input type="number" class="compact" min="1" max="9007199254740991" step="1" value="${suggestedPrice(game, player)}" aria-label="${esc(player.name)} 的要价" data-club-price="${esc(player.id)}"><button class="btn small" data-action="club-list" data-player="${esc(player.id)}">挂牌</button></td>
     </tr>`).join('')}</tbody></table></div>`
-  const buyRows = game.aiTeams.filter((team) => !isOnlineMode() || !publicWorld?.clubs.find((club) => club.id === team.id)?.managed).slice(0, 6).flatMap((team) => team.players.slice(0, 3).map((player) => {
-    const price = clubAsking(game, player)
+  const managed = (clubId: string) => isOnlineMode() && !!publicWorld?.clubs.find((club) => club.id === clubId)?.managed
+  const buyRows = aiTransferOffers(game, managed).map(({ team, player, asking: price }) => {
     return `<tr data-key="${esc(player.id)}">
       <td>${clubName(team.id, 16)}</td>
       <td>${posBadge(primaryPosition(player))}</td>
@@ -50,7 +50,7 @@ function marketTab(): string {
       <td class="num">${price.toLocaleString()}</td>
       <td class="num"><button class="btn small" data-action="club-buy-ai" data-team="${esc(team.id)}" data-player="${esc(player.id)}" ${!open ? 'disabled' : ''}>谈判</button></td>
     </tr>`
-  })).join('')
+  }).join('')
   return `<div class="banner ${open ? 'good' : 'muted'}">${icon('swap', 16)}<b>${game.world ? (open ? '转会窗口开放' : '转会窗口关闭') : '市场开放'}</b><span>仅与本地 NPC 交易，并非玩家之间的市场。${game.world ? '转会窗口：第 1-10 轮、20-30 轮。' : ''}</span></div>
     <div class="grid two">
       <div class="dash-col">
@@ -85,7 +85,7 @@ function auctionTab(): string {
       <td class="num strong">${lead.amount.toLocaleString()}</td>
       <td>${mine ? tag('你领先', 'good') : esc(lead.club)}</td>
       <td class="num"><span class="countdown ${left < AUCTION_EXTEND_MS ? 'urgent' : ''}" data-countdown-end="${auction.endsAt}">${countdownText(left)}</span></td>
-      <td class="num"><span class="bid-cell">${mine ? '<span class="muted small">等待结束</span>' : `<input class="bid-input" type="number" min="${next}" step="1" value="${next}" data-bid-amount aria-label="出价金额"><button class="btn small primary" data-action="auction-bid" data-player="${esc(player.id)}" ${canTrade ? '' : 'disabled'}>加价</button>`}</span></td>
+      <td class="num"><span class="bid-cell">${mine ? '<span class="muted small">等待结束</span>' : `<input class="bid-input" type="number" min="${next}" step="1" value="${next}" data-bid-amount aria-label="出价金额"><button class="btn small primary" data-action="auction-bid" data-player="${esc(player.id)}" ${canTrade ? '' : 'disabled'}>加价</button><small class="muted">手续费 ${auctionRaiseFee(next).toLocaleString()}</small>`}</span></td>
     </tr>`
   }).join('')
   const query = ui.clubSearch.trim().toLowerCase()
@@ -109,6 +109,7 @@ function auctionTab(): string {
   }).join('')
   const logRows = marketState.log.slice(0, 8).map((item) => `<li>${item.club ? `<b>${esc(item.club)}</b> 以 ${item.amount.toLocaleString()} 签下 ${esc(item.playerName)}` : `${esc(item.playerName)} 流拍，回到市场`}</li>`).join('')
   return `
+    <p class="hint">${icon('clock', 13)} 第一口出价开始 ${AUCTION_DURATION_MS / 3_600_000} 小时倒计时，全服可见；最后 ${AUCTION_EXTEND_MS / 60_000} 分钟内有人跟价，倒计时重新回到 ${AUCTION_EXTEND_MS / 60_000} 分钟。跟价每次至少加 5%，并交出价 2%（至少 1,000）的手续费，手续费不退还。</p>
     ${running.length ? panel(`竞拍中 <small>${running.length}</small>`, `<div class="table-scroll"><table class="dt auction-table"><thead><tr><th>位置</th><th>球员</th><th class="num">龄</th><th class="num">CA</th><th>特性</th><th class="num">当前价</th><th>领先</th><th class="num">倒计时</th><th class="num">出价</th></tr></thead><tbody>${auctionRows}</tbody></table></div>`, { flush: true }) : ''}
     ${panel(`自由球员 <small>${agents.length}</small>`, `
       <div class="toolbar in-panel">
