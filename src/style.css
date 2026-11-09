@@ -124,6 +124,11 @@ abbr[title] { text-decoration: none; cursor: help; }
 .offer-alert-row b { color: var(--text); font-weight: 600; }
 .offer-alert-row:hover { border-color: var(--bad); }
 .offer-alert-time { margin-left: auto; font-size: 12px; }
+/* 欠薪：同一套红色提示块，底色更深。 */
+.arrears-alert { background: rgba(242, 112, 106, 0.16); }
+.arrears-detail { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--text-2); font-size: 12.5px; }
+.arrears-detail b { color: var(--text); }
+.arrears-detail .link { margin-left: auto; }
 .side-foot { display: flex; align-items: center; gap: 9px; padding: 12px 14px; border-top: 1px solid var(--line); }
 .brand-mark {
   width: 24px; height: 24px; display: grid; place-items: center; flex: none;

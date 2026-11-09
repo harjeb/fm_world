@@ -790,6 +790,8 @@ export type EconomyState = {
   /** 最近一次拿到的排名奖金。 */
   lastPrize?: number
   lastFanChange?: number
+  /** 欠球员的工资（发薪时余额不够的部分）；不为 0 时球员在比赛里只发挥一半。 */
+  wageArrears?: number
   /** 设施用的是“阶段”数值（1–25）；2 表示已从旧的 1–5 等级迁移过；3 加了心理/战术两座设施。 */
   stageVersion?: number
   stadium: number

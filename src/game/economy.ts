@@ -267,3 +267,44 @@ export function awardRoundIncome(game: GameState, round: number): number {
   economy.lastIncomeRound = round
   return income
 }
+
+/* ---------- 欠薪 ---------- */
+
+/** 欠薪期间球员在比赛里只能发挥这么多（比赛属性按这个比例打折）。 */
+export const UNPAID_PERFORMANCE = 0.5
+
+/**
+ * 发工资：先补以前的欠薪，再发这一轮的；余额不够的部分记成欠薪（wageArrears），下次发薪或手动补发时再还。
+ * 单机每轮结束和联机服务器结算共用。返回实付金额。
+ */
+export function payWageBill(economy: EconomyState, total: number): number {
+  const due = Math.max(0, Math.round(total)) + Math.max(0, economy.wageArrears ?? 0)
+  if (due <= 0) return 0
+  const paid = Math.min(Math.max(0, economy.balance), due)
+  economy.balance -= paid
+  const owed = due - paid
+  if (owed > 0) economy.wageArrears = owed
+  else delete economy.wageArrears
+  return paid
+}
+
+/** 还欠球员多少工资（0 = 没有欠薪）。 */
+export function wageArrearsOf(game: Pick<GameState, 'economy'>): number {
+  return Math.max(0, game.economy?.wageArrears ?? 0)
+}
+
+/** 这支球队现在在比赛里能发挥几成：欠薪时只有一半。 */
+export function matchPerformanceOf(game: Pick<GameState, 'economy'>): number {
+  return wageArrearsOf(game) > 0 ? UNPAID_PERFORMANCE : 1
+}
+
+/** 手动补发全部欠薪：余额必须够一次还清（只还一部分，球员照样只发挥一半）。 */
+export function payWageArrears(game: GameState): { ok: boolean; error?: string; paid?: number } {
+  const owed = wageArrearsOf(game)
+  if (owed <= 0) return { ok: false, error: '没有欠薪' }
+  const economy = economyOf(game)
+  if (economy.balance < owed) return { ok: false, error: `余额不足：欠薪 ${owed.toLocaleString()}，还差 ${(owed - economy.balance).toLocaleString()}` }
+  economy.balance -= owed
+  delete economy.wageArrears
+  return { ok: true, paid: owed }
+}

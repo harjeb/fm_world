@@ -99,6 +99,8 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     facilityId: z.enum(['stadium', 'academy', 'medical', 'shop', 'sponsor', 'psychology', 'tactics']),
   }, (args) => action('upgrade_facility', args))
 
+  register('pay_wage_arrears', '补发欠薪', '发薪时余额不够会欠薪（state.economy.wageArrears）；欠薪期间球员在比赛里所有属性减半（只发挥 50%），联机按开球前 30 分钟锁定时的状态算。余额够时一次补清全部欠薪；下次发薪时余额够也会先自动补发。', {}, () => action('pay_wage_arrears', {}))
+
   register('bid_free_agent', '竞拍自由球员', '自由市场全服共用：第一个出价开始 1 小时倒计时，最后 10 分钟内有人跟价，倒计时重新回到 10 分钟；跟价每次至少加 5%，并交出价 2%（至少 1,000）的手续费，手续费不退还。时间到时最高价者得。amount 是出价总额。', {
     playerId: z.string().min(1), amount: z.number().int().positive().safe(),
   }, (args) => action('bid_free_agent', args))

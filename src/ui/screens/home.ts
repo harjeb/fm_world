@@ -1,4 +1,4 @@
-import { economyOf } from '../../game/economy.ts'
+import { UNPAID_PERFORMANCE, economyOf, wageArrearsOf } from '../../game/economy.ts'
 import { transferWindowOpen } from '../../game/market.ts'
 import { FORMATIONS } from '../../game/data/formations.ts'
 import { PLAYER_TEAM_ID, matchdayCountdown, nextMatchCountdown, playerFixture, seasonRoundLabel, teamName } from '../../game/season.ts'
@@ -174,6 +174,21 @@ function inboxItems(): InboxItem[] {
   return items
 }
 
+/** 欠薪时总览最上面的醒目提示：欠多少、球员只发挥一半、能不能马上补发。 */
+function wageArrearsAlert(): string {
+  const owed = wageArrearsOf(game)
+  if (owed <= 0) return ''
+  const balance = economyOf(game).balance
+  const canPay = balance >= owed
+  return `<section class="offer-alert arrears-alert" role="alert">
+    <div class="offer-alert-head">${icon('alert', 18)}<b>欠薪 ${owed.toLocaleString()}：球员只能发挥 ${Math.round(UNPAID_PERFORMANCE * 100)}%</b>
+      <span class="muted">欠薪期间所有比赛属性减半，直到全部补发${isOnlineMode() ? '（联机按开球前 30 分钟锁定时的状态算）' : ''}</span>
+      <button class="btn small danger" data-action="pay-wage-arrears" ${canPay ? '' : 'disabled'}>补发欠薪</button></div>
+    <p class="arrears-detail">余额 <b class="num-text">${balance.toLocaleString()}</b>${canPay ? '，够一次还清。' : `，还差 <b class="num-text">${(owed - balance).toLocaleString()}</b>。卖人、接受报价可以凑钱；下次发薪时余额够也会先自动补发。`}
+      <button class="link" data-action="go-transfer" data-tab="market">去卖人 ${icon('right', 12)}</button></p>
+  </section>`
+}
+
 /** 收到转会报价时总览最上面的醒目提示：列出待回复的报价，点任意一条去「收到的报价」。 */
 function offerAlert(): string {
   const offers = (game.transferOffers ?? []).filter((offer) => offer.status === 'pending').sort((a, b) => a.expiresAt - b.expiresAt)
@@ -234,6 +249,7 @@ export function renderHome(): string {
       kicker: `第 ${game.season.index} 赛季 · ${esc(divisionText())}`,
       title: esc(game.clubName),
     })}
+    ${wageArrearsAlert()}
     ${offerAlert()}
     <div class="dash">
       ${nextMatchPanel()}

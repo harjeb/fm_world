@@ -3,7 +3,7 @@ import type { TrainingRequest } from '../src/game/training.ts'
 import { trainingDate, trainingOptions, type TrainingActivityId } from '../src/game/training-calendar.ts'
 import type { SkillId } from '../src/game/types.ts'
 import { SKILLS } from '../src/game/data/skills.ts'
-import { economyOf, upgradeFacility, FACILITIES, facilityLevel, facilityRoundIncome, facilityStageChance, facilityStageInLevel, facilityUpgradeCost, type FacilityId } from '../src/game/economy.ts'
+import { economyOf, payWageArrears, upgradeFacility, FACILITIES, facilityLevel, facilityRoundIncome, facilityStageChance, facilityStageInLevel, facilityUpgradeCost, type FacilityId } from '../src/game/economy.ts'
 import { aiTransferOffers, previewClubSigning, bestMarketValue, buyFreeAgent, listPlayer, cancelListing, releasePlayer, renewContract, signClubPlayer, transferWindowOpen } from '../src/game/market.ts'
 import { negotiationDemands, negotiationTerms, SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../src/game/negotiation.ts'
 import { ALL_ATTRIBUTES, POSITIONS } from '../src/game/types.ts'
@@ -626,6 +626,11 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       const id = text(body.facilityId)
       if (!Object.hasOwn(FACILITIES, id)) return { ok: false, error: '无效的设施' }
       const result = upgradeFacility(game, id as FacilityId)
+      return result.ok ? { ok: true, result } : result
+    }
+    case 'pay_wage_arrears': {
+      // 欠薪期间球员只发挥一半；余额够时一次补清（和总览的「补发欠薪」按钮一样）。
+      const result = payWageArrears(game)
       return result.ok ? { ok: true, result } : result
     }
     case 'buy_free_agent':

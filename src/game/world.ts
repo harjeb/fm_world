@@ -23,7 +23,7 @@ import { equipAICards, mergeSignings, seedAIClubs } from './ai-club.ts'
 import { caOf } from './ca.ts'
 import { derivedRng, splitSeed, hashString } from './rng.ts'
 import { simulateAIvsAIState } from './match/setup.ts'
-import { economyOf } from './economy.ts'
+import { economyOf, payWageBill } from './economy.ts'
 import { AVERAGE_ROUND_GAME_DAYS, GAME_DAY_MS, KICKOFF_SCHEDULE, gameDayOfRound, kickoffAtForRound, latestKickoffAt, roundsKickedOff, seasonEndAt, seasonGameDays } from './calendar.ts'
 
 export const WORLD_ROUNDS = 38
@@ -1218,12 +1218,8 @@ function expireContracts(game: GameState): void {
 
 function payWorldWages(game: GameState, round: number): number {
   if (!game.world || game.world.seasonIndex <= 1) return 0 // 首个赛季由董事会承担工资
-  const economy = economyOf(game)
-  const total = game.roster.reduce((sum, player) => sum + (player.contract?.wage ?? 0), 0)
-  if (total <= 0) return 0
-  const paid = Math.min(economy.balance, total)
-  economy.balance -= paid
-  return paid
+  // 先补欠薪再发本轮的，钱不够的记成欠薪（见 economy.ts）。
+  return payWageBill(economyOf(game), worldWageBill(game))
 }
 
 export function worldWageBill(game: GameState): number {

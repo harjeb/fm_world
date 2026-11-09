@@ -6,7 +6,7 @@ import crypto from 'node:crypto'
 import { createInitialGame, GAME_VERSION, upgradeLegacySignatures } from '../src/game/state.ts'
 import { ensureCards } from '../src/game/cards.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
-import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, wageForPlayer, worldForClub, worldSlots } from '../src/game/world.ts'
+import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, wageForPlayer, worldForClub, worldSlots, worldWageBill } from '../src/game/world.ts'
 import { lineupLockState } from '../src/game/season.ts'
 import type { AIClubState, AITeam, Player, WorldState } from '../src/game/types.ts'
 import { caOf } from '../src/game/ca.ts'
@@ -15,7 +15,7 @@ import { displayCA, mainAttrsFor } from '../src/game/rating.ts'
 import { GAME_DAY_MS, kickoffAtForRound, postseasonStartAt, roundsKickedOff, seasonEndAt } from '../src/game/calendar.ts'
 import { settleCondition } from '../src/game/condition.ts'
 import { splitSeed } from '../src/game/rng.ts'
-import { awardRoundIncome, awardSeasonPrize, economyOf } from '../src/game/economy.ts'
+import { awardRoundIncome, awardSeasonPrize, economyOf, matchPerformanceOf, payWageBill } from '../src/game/economy.ts'
 import { advanceLeagueRealtime } from '../src/game/realtime.ts'
 import { validateAutoSubPlan } from '../src/game/match/management.ts'
 import type { GameState, PlayerCard } from '../src/game/types.ts'
@@ -420,6 +420,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       injuries,
       suspended: Object.entries(bans).filter(([, ban]) => ban.matches > 0).map(([id]) => id),
       medical: game ? economyOf(game).medical : sharedWorld.aiClubs?.[clubId]?.economy.medical ?? 1,
+      // 锁定时还欠薪：这场只发挥一半。
+      ...(game && matchPerformanceOf(game) < 1 ? { performance: matchPerformanceOf(game) } : {}),
     }
   }
 
@@ -448,7 +450,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const economy = economyOf(game)
       if (coached && fixture.round > economy.lastIncomeRound) {
         awardRoundIncome(game, fixture.round)
-        if (game.season.index > 1) economy.balance -= Math.min(economy.balance, game.roster.reduce((sum, player) => sum + (player.contract?.wage ?? 0), 0))
+        // 先补欠薪再发本轮工资，钱不够的记成欠薪（欠薪期间球员只发挥一半，见 world.ts）。
+        if (game.season.index > 1) payWageBill(economy, worldWageBill(game))
         settleMarket(game, fixture.round)
       }
       applied.add(id)

@@ -7,6 +7,7 @@ import { PesEngine, type GameEngine } from '../pes/engine.ts'
 import { autoFillLineup, validateLineup } from '../squad.ts'
 import { prepareMatchInjuries } from '../injury.ts'
 import { LOGIC_MATCH_SECONDS } from './time.ts'
+import { matchPerformanceOf } from '../economy.ts'
 
 export type TeamIdentity = { id: string; name: string; color: string; accent: string }
 
@@ -156,8 +157,22 @@ export function fixtureScorers(state: ReturnType<MatchEngine['serialize']>): {
  * 创建一场比赛的引擎。没有指定 rulesVersion 时用新引擎（pes2d 物理 + 现有结算内核）；
  * 指定了就用对应版本的现有引擎（后台 AI 对 AI 用 v2，只要赛果）。
  */
+/**
+ * 比赛里按 factor 发挥的球员副本：所有比赛属性同比例打折（欠薪时 0.5）。存档里的球员不变。
+ * 要在建队（校验阵容）之前替换整份名单，自定义摆位按球员对象记，用副本校验就会记到副本上。
+ */
+export function playersAtPerformance(players: Player[], factor: number): Player[] {
+  if (!(factor > 0) || factor >= 1) return players
+  return players.map((player) => ({
+    ...player,
+    attrs: Object.fromEntries(Object.entries(player.attrs).map(([key, value]) => [key, value * factor])) as Player['attrs'],
+  }))
+}
+
 export function buildMatchEngineForGame(game: GameState, context: MatchContext, ai: AITeam, now = Date.now(), suspended?: Set<string>, rulesVersion?: number): GameEngine {
-  const playerInput = teamInputFromLineup(game.roster, game.lineup, {
+  // 欠薪：一线队在比赛里只能发挥一半（见 economy.ts）。
+  const roster = playersAtPerformance(game.roster, matchPerformanceOf(game))
+  const playerInput = teamInputFromLineup(roster, game.lineup, {
     id: 'player',
     name: game.clubName,
     color: '#34d399',

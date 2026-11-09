@@ -128,6 +128,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 `state.economy` 提供余额、球迷数、设施 `stage`（1–25）、`level`、`stageInLevel`、`growthChance`、`roundIncome` 及 `upgradeCost`；`state.market.freeAgents` 和 `state.market.listings` 提供价格及经过可见字段过滤的球员信息。市场是**本地 NPC 市场，不是跨账号交易**；赛季结束后不能新挂牌。每轮收入 = 1500 + 球迷 × 2 + 各设施收入（按阶段比例并随球迷最多放大 4 倍），另有每球 500 和胜场奖金（1000 + 球迷数 35%）；友谊赛没有收入也没有球迷变化。
 
 - `upgrade_facility` — `facilityId`: `stadium`、`academy`、`medical`、`psychology`、`tactics`、`shop` 或 `sponsor`。
+- `pay_wage_arrears` — 无参数：补发全部欠薪。每轮结束发工资时先补以前的欠薪再发本轮的，余额不够的部分记在 `state.economy.wageArrears`。**欠薪期间球员在比赛里所有属性减半（只发挥 50%）**，联机按开球前 30 分钟锁定时的状态算。余额必须够一次还清；下次发薪时余额够也会先自动补发。
 - `bid_free_agent` — `playerId`、`amount`：竞拍自由球员。自由市场全服共用，`market.freeAgents[].price` 是这名球员现在至少要出的价。第一个出价开始 **1 小时**倒计时，全服可见；每次跟价至少加 5%；**最后 10 分钟内**有人跟价，倒计时重新回到 10 分钟（离结束还早时跟价不改倒计时）；时间到时最高价者得。跟价要交**手续费**：出价的 2%，至少 1,000，出价成功时立即从余额扣除，**不退还**（开拍的第一口不收）；余额必须够「出价 + 手续费」。领先的出价占用余额。`market.auctions` 列出正在进行的竞拍（当前价、领先球队、剩余秒数），`market.recentDeals` 是最近 8 条成交 / 流拍记录（`club` 为 `null` 表示流拍）。电脑球队也会参与竞拍：同位置明显更强、价格远低于阵容均价或人手不足时才会跟价，出价上限是估值乘所在级别系数，并且永远留着底钱，不会为了抬价乱加。
 - `list_player` — `playerId`、`price`：正的安全整数价格，且不得高于球员估值（买家只按估值折价收购；建议价 = 估值 × 0.9，按建议价挂牌必定成交）；挂牌还受阵容、训练和比赛规则限制。
 - `cancel_listing` — `playerId`：取消挂牌并将球员放回阵容。

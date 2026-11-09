@@ -44,7 +44,7 @@ import { fetchFriendlyTeam, isOnlineMode } from '../online.ts'
 import { advanceLeagueRealtime, leagueDisplayClock } from '../game/realtime.ts'
 import { displayClock } from '../game/match/time.ts'
 import { emptyAutoSubs } from '../game/match/management.ts'
-import { upgradeFacility, type FacilityId } from '../game/economy.ts'
+import { payWageArrears, upgradeFacility, type FacilityId } from '../game/economy.ts'
 import { leadingBid, type Auction, type AuctionResult } from '../game/auction.ts'
 import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPlayer, playerMarketValue, refreshClubMarket, releasePlayer, renewContract, signClubPlayer, signFreeAgent } from '../game/market.ts'
 import { minimumBid } from '../game/auction.ts'
@@ -972,6 +972,12 @@ document.addEventListener('click', async (event) => {
       const result = upgradeFacility(game, actionEl.dataset.facility as FacilityId)
       if (result.ok) persist()
       showNotice(result.ok ? '设施已升级。' : `升级失败：${result.error ?? '未知错误'}`)
+      break
+    }
+    case 'pay-wage-arrears': {
+      const result = payWageArrears(game)
+      if (result.ok) persist()
+      showNotice(result.ok ? `已补发欠薪 ${result.paid!.toLocaleString()}，球员恢复正常发挥。` : `补发失败：${result.error ?? '未知错误'}`)
       break
     }
     case 'auction-bid': {

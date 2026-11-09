@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import type { AITeam, AutoSubPlan, Fixture, MatchRecord, Suspension } from '../src/game/types.ts'
 import { MatchEngine } from '../src/game/match/engine.ts'
-import { createMatchRecord, fixtureScorers, teamInputFromAI } from '../src/game/match/setup.ts'
+import { createMatchRecord, fixtureScorers, playersAtPerformance, teamInputFromAI } from '../src/game/match/setup.ts'
 import { prepareMatchInjuries } from '../src/game/injury.ts'
 import { facilityLevel } from '../src/game/economy.ts'
 import { LOGIC_MATCH_SECONDS, matchRealSeconds } from '../src/game/match/time.ts'
@@ -22,6 +22,8 @@ export type LockedTeam = {
   injuries: Record<string, number>
   suspended: string[]
   medical: number
+  /** 锁定时这支队能发挥几成（欠薪 0.5）；没有这一项按 1 算。 */
+  performance?: number
 }
 export type MatchJob = {
   id: string
@@ -52,7 +54,10 @@ export function matchJobId(season: number, divisionId: string, fixture: Pick<Fix
 /** 纯计算：只读锁定快照，不访问账号、共享世界、网络或真实时钟。 */
 export function computeMatchJob(job: MatchJob): MatchJobResult {
   const input = (locked: LockedTeam) => {
-    const team = teamInputFromAI(locked.team, new Set(locked.suspended))
+    // 欠薪的球队按锁定时的状态只发挥一半（见 economy.ts）。
+    const factor = locked.performance ?? 1
+    const squad = factor < 1 ? { ...locked.team, players: playersAtPerformance(locked.team.players, factor) } : locked.team
+    const team = teamInputFromAI(squad, new Set(locked.suspended))
     if (locked.autoSubs) team.autoSubs = structuredClone(locked.autoSubs)
     return team
   }
