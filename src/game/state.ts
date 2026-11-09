@@ -15,6 +15,7 @@ import { economyOf } from './economy.ts'
 import { addLegacySignature } from './data/players.ts'
 import { ensureCards } from './cards.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION, upgradeBurstAttr, upgradeNames, upgradeStarTraits } from './names.ts'
+import { ensurePve } from './pve.ts'
 
 // 游戏改名后仍沿用旧键，改了已有存档就读不到了。
 export const SAVE_KEY = 'fm-seven-a-side-save-v3'
@@ -78,6 +79,7 @@ export function createInitialGame(seed?: number, clubName = '青石'): GameState
     ui: { screen: 'home' },
   }
   economyOf(game)
+  ensurePve(game)
   return game
 }
 
@@ -156,8 +158,9 @@ export function loadGame(): GameState | null {
     const namesUpgraded = upgradeNames(parsed)
     const traitsUpgraded = upgradeStarTraits(parsed)
     const attrsUpgraded = upgradeBurstAttr(parsed)
+    const pveAdded = ensurePve(parsed)
     parsed.ui = parsed.ui ?? { screen: 'home' }
-    if (rescheduled || elevenUpgraded || repaired || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded) saveGame(parsed)
+    if (rescheduled || elevenUpgraded || repaired || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || pveAdded) saveGame(parsed)
     return parsed
   } catch {
     return null

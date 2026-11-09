@@ -14,6 +14,9 @@ import { caOf, positionMultiplier } from './ca.ts'
 import { lineupRating } from './club-rating.ts'
 import { advanceSeasonRound, finishActiveMatch, skipToMatchday, startChallenge, startChallengeAgainstTeam, startLeagueMatch, startNextSeason } from './season.ts'
 import { cachedOwnerlessTeams } from './world.ts'
+import { legendTeamById } from './legend.ts'
+import { PEAK_STAGE_COUNT, buildPeakTeam } from './peak.ts'
+import { ensurePve } from './pve.ts'
 import { emptyAutoSubs, validateAutoSubPlan } from './match/management.ts'
 import { recordMatchInjuries } from './injury.ts'
 import { economyOf } from './economy.ts'
@@ -691,6 +694,36 @@ export function startWorldChallenge(game: GameState, clubId: string, now = Date.
   if (!ai) return { ok: false, error: '找不到这支球队' }
   const seed = splitSeed(game.seed, `world-friendly-${clubId}-${game.challengeHistory.length}`)
   const result = startChallengeAgainstTeam(game, ai, seed, now)
+  if (result.ok) saveGame(game)
+  return { ok: result.ok, error: result.error }
+}
+
+/** 传奇挑战：和静态复刻的历史俱乐部队踢一场。 */
+export function startLegendChallenge(game: GameState, legendId: string, now = Date.now()): { ok: boolean; error?: string } {
+  const error = validateAutoSubPlan(game.roster, game.lineup, game.autoSubs ?? emptyAutoSubs())[0]
+  if (error) return { ok: false, error: `自动换人规则无效：${error}` }
+  const ai = legendTeamById(legendId)
+  if (!ai) return { ok: false, error: '找不到这支传奇队' }
+  ensurePve(game)
+  const played = game.pve?.legends?.[legendId]?.played ?? 0
+  const seed = splitSeed(game.seed, `legend-${legendId}-${played}`)
+  const result = startChallengeAgainstTeam(game, ai, seed, now, 'legend')
+  if (result.ok) saveGame(game)
+  return { ok: result.ok, error: result.error }
+}
+
+/** 巅峰之路：只能打当前关；对手由全局冻结表提供。 */
+export function startPeakChallenge(game: GameState, stage: number, now = Date.now()): { ok: boolean; error?: string } {
+  const error = validateAutoSubPlan(game.roster, game.lineup, game.autoSubs ?? emptyAutoSubs())[0]
+  if (error) return { ok: false, error: `自动换人规则无效：${error}` }
+  const target = Math.round(stage)
+  ensurePve(game)
+  const cleared = game.pve?.peak.cleared ?? 0
+  if (target !== cleared + 1) return { ok: false, error: `只能挑战第 ${cleared + 1} 关` }
+  if (target < 1 || target > PEAK_STAGE_COUNT) return { ok: false, error: '关卡不存在' }
+  const ai = buildPeakTeam(target)
+  const seed = splitSeed(game.seed, `peak-match-${target}`)
+  const result = startChallengeAgainstTeam(game, ai, seed, now, 'peak', target, `${target}-${game.challengeHistory.length}`)
   if (result.ok) saveGame(game)
   return { ok: result.ok, error: result.error }
 }

@@ -86,12 +86,14 @@ export function createMatchRecord(game: { season?: { index: number }; lineup: Li
   const keyTypes = new Set(['goal', 'penalty', 'save', 'block', 'foul', 'injury', 'sub', 'tactic', 'half', 'full', 'kickoff', 'setpiece'])
   const keyEvents = state.log.filter((entry) => keyTypes.has(entry.type))
   return {
-    id: `m-${context.seed}-${context.isLeague ? `L${context.round ?? 0}` : 'C'}`,
+    id: `m-${context.recordKey ?? context.seed}-${context.isLeague ? `L${context.round ?? 0}` : 'C'}`,
     seed: context.seed,
     createdAt: Date.now(),
     seasonIndex: game.season?.index ?? 1,
     durationSeconds: state.durationSeconds,
     isLeague: context.isLeague,
+    mode: context.mode,
+    stage: context.stage,
     round: context.round,
     homeId: home.id,
     awayId: away.id,

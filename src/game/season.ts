@@ -11,6 +11,7 @@ import { awardSeasonPrize } from './economy.ts'
 import { squadLimitError } from './market.ts'
 import { AVERAGE_ROUND_GAME_DAYS, GAME_DAY_MS, KICKOFF_SCHEDULE, latestKickoffAt, elapsedGameDays, gameDayOfRound, kickoffAtForRound, seasonEndAt, roundsKickedOff, roundGapGameDays } from './calendar.ts'
 import { recordMatchInjuries } from './injury.ts'
+import { applyPveResult } from './pve.ts'
 import { awardRoundIncome, economyOf } from './economy.ts'
 import { playerMarketValue, settleMarket } from './market.ts'
 import { LOGIC_MATCH_SECONDS } from './match/time.ts'
@@ -625,12 +626,18 @@ export function startChallengeAgainstTeam(
   ai: AITeam,
   seed: number,
   now = Date.now(),
+  mode: MatchContext['mode'] = 'friendly',
+  stage?: number,
+  recordKey?: string | number,
 ): { ok: boolean; error?: string; context?: MatchContext } {
   if (game.activeMatch) return { ok: false, error: '已有进行中的比赛' }
   const overLimit = squadLimitError(game)
   if (overLimit) return { ok: false, error: overLimit }
   const context: MatchContext = {
     isLeague: false,
+    mode,
+    ...(stage ? { stage } : {}),
+    ...(recordKey !== undefined ? { recordKey } : {}),
     opponentId: ai.id,
     opponentName: ai.name,
     seed,
@@ -658,6 +665,7 @@ export function startChallenge(game: GameState, aiId: string, now = Date.now()):
   if (!ai) return { ok: false, error: '找不到对手' }
   const context: MatchContext = {
     isLeague: false,
+    mode: 'friendly',
     opponentId: ai.id,
     opponentName: ai.name,
     seed: splitSeed(game.seed, `friendly-${ai.id}-${game.challengeHistory.length}`),
@@ -721,6 +729,7 @@ export function finishActiveMatch(game: GameState, engine: GameEngine, now = Dat
     }
   } else {
     game.challengeHistory.unshift(record)
+    applyPveResult(game, record, active.context)
   }
   game.activeMatch = undefined
   return record

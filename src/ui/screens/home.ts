@@ -8,7 +8,7 @@ import { trainingActionsTotal } from '../../game/training.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
 import { isOnlineMode, onlineKickoffPending, serverNow } from '../../online.ts'
 import { boardMarkings, boardSpot, caHeat, clubLook, crest, emptyState, formPills, icon, injuryLabel, leagueTable, meter, pageHead, panel, recordResult, resultPill, teamForm, tile } from '../components.ts'
-import { countdownText, esc, playerCA, shortName } from '../format.ts'
+import { countdownText, esc, matchModeLabel, playerCA, pveModeLabel, shortName } from '../format.ts'
 import { game } from '../state.ts'
 import type { IconName } from '../icons.ts'
 
@@ -41,7 +41,7 @@ function nextMatchPanel(): string {
     const active = game.activeMatch
     return panel('比赛进行中', `<div class="nm-live">
       <div>${icon('live', 22)}</div>
-      <div><b>对阵 ${esc(active.context.opponentName)}</b><p class="muted">${active.context.isLeague ? `联赛第 ${active.context.round} 轮 · 按现实时间进行` : '友谊赛'} · 种子 ${active.context.seed}</p></div>
+      <div><b>对阵 ${esc(active.context.opponentName)}</b><p class="muted">${active.context.isLeague ? `联赛第 ${active.context.round} 轮 · 按现实时间进行` : pveModeLabel(active.context.mode, active.context.stage)} · 种子 ${active.context.seed}</p></div>
       <button class="btn primary" data-nav="match">${icon('play', 14)}继续比赛</button>
     </div>`, { className: 'next-match span-8' })
   }
@@ -108,7 +108,7 @@ function recentPanel(): string {
     : `<div class="rows">${records.map((record) => `<button class="row-btn result-row" data-action="open-review" data-record="${esc(record.id)}">
         ${resultPill(recordResult(record.result))}
         <span class="result-teams">${esc(record.homeName)} <b>${record.score.home}:${record.score.away}</b> ${esc(record.awayName)}${record.shootout ? ` <small class="muted">点球 ${record.shootout.home}:${record.shootout.away}</small>` : ''}</span>
-        <small class="muted">${record.round ? `第 ${record.round} 轮` : '友谊赛'}</small>
+        <small class="muted">${matchModeLabel(record)}</small>
       </button>`).join('')}</div>`
   return panel('最近比赛', body, { flush: true, aside: `<button class="link" data-nav="review">全部复盘 ${icon('right', 12)}</button>` })
 }
