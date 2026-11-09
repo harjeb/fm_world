@@ -147,39 +147,39 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 ### 比赛
 
-- `start_league` — 开始本轮联赛，创建 `activeMatch`。比赛显示为完整 90 分钟，联赛现实推进固定约 600 秒（约 10 分钟），逻辑时钟用于动作与体力计算；Agent 离线也不会暂停。**联机联赛现在到开赛时间由服务器自动结算**（用保存的阵容 / 战术 / 自动换人），通常不需要也不允许再手动开始；本地单机仍然可以用它手动开赛。
+- `start_league` — 仅用于本地单机的手动开赛。联机接口始终拒绝：联赛开球前 30 分钟锁定完整快照，服务器逐场提前计算，到固定开球时间统一公布，不创建可临场操作的新 `activeMatch`。
 - `get_match` — 不传 `matchId` 读取当前比赛（比分、90 分钟显示时钟、统计、场上球员、替补、战术、最近事件和截至当前的 `commentary`）；传 `matchId` 读取完整记录和复盘建议。
 - `advance_match` — 仅限友谊赛：按步推进（默认 1 步），终场时自动结算。联赛调用会报错。新引擎（`rulesVersion = 4`）一步约等于 1 个模拟秒（整场 900 步）；旧存档里进行中的 v3 比赛一步是一个动作。
   - `steps?`
-- `set_match_tactics` — 比赛中选择战术心态：`{ "action": "set_match_tactics", "mentality": "attack" }`（全体进攻）、`"balanced"`（均衡）或 `"defend"`（全体防守）。赛中不接受任意五维战术对象；赛前仍可设置完整战术。全体进攻使用直传、快速、高防线、高压；均衡使用均衡方向、混合传球、正常节奏、中防线和中等逼抢；全体防守使用短传、慢节奏、低防线、低压，场上非门将球员的整体站位也会相应前压或后撤。均衡是固定预设，并非恢复自定义的赛前战术。`activeMatch.mentality` 为当前心态，`null` 表示还在使用赛前战术。
-- `substitute` — 比赛中手动换人，与自动换人共用 5 次。
+- `set_match_tactics` — 用于进行中的友谊赛或升级前仍在进行的旧版联赛；新的联机队列比赛不能在锁定后修改。比赛中选择战术心态：`{ "action": "set_match_tactics", "mentality": "attack" }`（全体进攻）、`"balanced"`（均衡）或 `"defend"`（全体防守）。赛中不接受任意五维战术对象；赛前仍可设置完整战术。全体进攻使用直传、快速、高防线、高压；均衡使用均衡方向、混合传球、正常节奏、中防线和中等逼抢；全体防守使用短传、慢节奏、低防线、低压，场上非门将球员的整体站位也会相应前压或后撤。均衡是固定预设，并非恢复自定义的赛前战术。`activeMatch.mentality` 为当前心态，`null` 表示还在使用赛前战术。
+- `substitute` — 进行中的友谊赛（以及升级前仍在进行的旧版联赛）手动换人，与自动换人共用 5 次；新的联机队列比赛请在锁定前设置自动换人。
   - `outId`、`inId`：`get_match` 返回的带主客前缀的比赛球员 ID。
-- `coach_pause` — 仅限友谊赛：使用一次教练暂停，返回当前比赛。联赛不可暂停，可以直接调整战术或换人。
+- `coach_pause` — 仅限友谊赛：使用一次教练暂停，返回当前比赛。联赛不可暂停。
 - `start_friendly` — 和本分区 AI 球队开始一场友谊赛（挑战页）。
   - `teamId`: 来自 `state.teams[].id`
 - `start_world_friendly` — 和全服任意一支球队开始友谊赛（世界页「约战」），对手名单由服务器给出，可以约其他教练执教的球队。
   - `clubId`: 来自 `get_world` 的 `clubs[].id`
 - `play_match` — 仅限已有进行中的友谊赛：立即模拟至终场并结算。联赛不能跳过。
-- `simulate_round` — 只模拟本轮 AI 比赛；玩家比赛未完成时返回错误。
+- `simulate_round` — 本地单机只模拟本轮 AI 比赛；联机接口拒绝调用，全服比赛只由后台队列处理。
 
 `get_state` / `get_player` 的球员 `injuryUntil` 是预计恢复的 Unix 毫秒时间戳，`null` 表示当前没有伤病；易伤倾向的数值不公开。伤病由比赛对抗产生，基础恢复期为 1–60 个游戏日（大多数为 1–5 日；1 游戏日 = 现实 6 小时），防护技能和医疗设施可缩短新伤病恢复时间，伤病属于球员本人，换卡不变，联赛、友谊赛和 AI 对局均会应用。`get_match` 的 `injured` 包含赛前未恢复的伤病和本场新伤；带伤上场的有效能力降低 30%，可手动换入伤员或用受伤自动换人尝试将其换下。本场开始时的伤病状态保持到终场。伤病不会影响训练精力、培养行动、培养收益或球员卡属性。旧比赛记录不会被追溯为伤病。
 
 `commentary` 是按 `seq` 排序的已发生播报，每条含 90 分钟显示时钟、类型、文字、该时刻常规比分，以及（进入点球大战后）`shootoutScore`。多次读取时可用 `seq` 去重。一次 `advance_match` 可能产生多条；比赛结束后从结果的 `record.commentary`，或用 `get_match(matchId)` 获取完整记录。`recentLog` 的射门事件包含 `shotChance`（机会类型、基础射正、保底、上限、距离/角度/压力/封堵），`ratings` 包含最终射正、射正后进球、终结和门将评分。`goalDetails` 记录常规比赛进球（含机会类型 `chance`）：射门位置 `origin`（主队进攻方向为 x 增大，客队相反）、距离、左右脚或头球、射门方式、比赛情境和入球区域 `target`；入球区域左/右以进攻方为视角，不包含点球大战。
 
-联赛每天两轮：北京时间（UTC+8）12:00 和 20:00 开赛，相邻两轮隔 8 小时或 16 小时，一个赛季 38 轮约 19 天，常规赛结束后有 12 个游戏日（现实 3 天）的赛后休整。`state.season.currentFixture` 和赛程里的 `kickoffAt` 是开赛时间（Unix 毫秒）。已开始的联赛由服务器持续推进，关闭网页、断开 Agent 或重启服务器不会重置时钟；重启后按实际经过时间补算。轮询 `get_match` 或 `GET /api/agent/state` 观察已发生的播报，终场后从 `matchHistory` 的 `id` 调用 `get_match(matchId)`。到下一轮时才补算此前未开始的比赛；友谊赛保留手动推进与跳过。
+联赛每天两轮：北京时间（UTC+8）12:00 和 20:00 开赛，相邻两轮隔 8 小时或 16 小时，一个赛季 38 轮约 19 天，常规赛结束后有 12 个游戏日（现实 3 天）的赛后休整。`state.season.currentFixture` 和赛程里的 `kickoffAt` 是开赛时间（Unix 毫秒）。开球前 30 分钟，服务器持久化双方阵容、职责、战术、自动换人和球员属性/状态快照；低优先级单任务子进程提前计算，结果不外发，到开球时间才全服统一公布。之后的培养、换卡或转会不会改变本场已锁定的输入，也不会被发布时的旧快照覆盖。关闭网页或断开 Agent 不影响队列；重启复用已保存的输入和结果，未完成任务用原快照继续。读取 `GET /api/agent/state` 查看公布后的比分，再从 `matchHistory` 的 `id` 调用 `get_match(matchId)`。双方教练看到的是同一个任务、同一份比分；提前计算期间不会泄露伤病、停赛或出场记录。友谊赛保留手动推进与跳过。
 
 ### 全服世界
 
 - `get_world` — 读取全服快照，和世界页 / 球队详情一致：`ownClubId`、`clubs[]`（`id`、`name`、`tier`、`conference`、`managed` 是否有教练执教、`rating` RANK、`players` 公开名单、电脑球队的 `facilities`）以及 `divisions[]`（各分区 `round`、`table`、`fixtures`）。只读。
 - `rename_club` — `name`：联机时修改俱乐部名字。最多 8 个字（按字符算），去掉首尾空格；不能和全服任何其他球队重名（AI 球队或其他教练的球队，比较时忽略大小写和空格）；比赛进行中不能改。改名后全服看到的都是新名字。普通存档保存不能修改俱乐部名字。
-球队只能在注册时选择，注册完成后不能换队，Agent 也不能例外。注册前可用 `GET /api/registration/clubs` 预览空缺二级球队的公开名单，在 `POST /api/register` 中传入 `clubId` 确认；旧的 `choose_club` 操作与 `/api/world/choose-club` 接口均返回错误。错过的比赛由 AI 补算，不增加注册准备期，正式开球时间始终固定为北京时间 12:00 / 20:00。
+球队只能在注册时选择，注册完成后不能换队，Agent 也不能例外。注册前可用 `GET /api/registration/clubs` 预览空缺二级球队的公开名单，在 `POST /api/register` 中传入 `clubId` 确认；旧的 `choose_club` 操作与 `/api/world/choose-club` 接口均返回错误。注册只继承球队已经存在的全服战绩及已锁定比赛，不重算历史，不增加注册准备期，正式开球时间始终固定为北京时间 12:00 / 20:00。
 
 ## 4. 推荐流程
 
 1. `GET /api/agent/state`。
 2. 用 `auto_lineup` 或 `set_lineup` 确定首发和战术，并按需用 `set_auto_subs` 设置下场自动换人；`state.lineupAnalysis` 有合法性和位置折损。
 3. 对精力足够的球员 `start_training`，每次先用 `preview_training` 看收益，再 `training_action`；遇到事件用 `training_event_choice`；最后 `confirm_training`。
-4. 联机联赛在开赛时间由服务器用保存的阵容、战术和自动换人自动结算，开赛前 30 分钟锁定阵容；所以要在锁定前排好阵容和 `set_auto_subs`，之后从 `matchHistory` / `get_match` 看结果。单机可以 `start_league` 手动开赛。友谊赛可以使用 `advance_match` 或 `play_match`。
+4. 联机联赛开赛前 30 分钟锁定完整比赛快照，后台提前计算，到开赛时间才统一公布；要在锁定前排好阵容、装备好球员卡并设置 `set_auto_subs`，之后从 `matchHistory` / `get_match` 看结果。单机可以 `start_league` 手动开赛。友谊赛可以使用 `advance_match` 或 `play_match`。
 5. 用 `get_match` 看完整记录和复盘。
 6. 重复 1–5，直到赛季结束。
 

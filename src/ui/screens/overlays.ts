@@ -182,7 +182,7 @@ export function renderAccountOverlay(): string {
               ${clubs.map((club) => `<option value="${esc(club.id)}" ${selectedClub?.id === club.id ? 'selected' : ''}>${esc(club.name)} · ${esc(CONFERENCE_LABELS[club.conference ?? ''] ?? '')} · RANK ${club.rating ?? '—'}</option>`).join('')}
             </select></div>
             ${selectedClub ? `<p class="hint">${[...selectedClub.players].sort((a, b) => b.ca - a.ca).slice(0, 3).map((player) => `${posBadge(primaryPosition(player))} ${esc(player.name)} · CA ${player.ca}`).join(' / ')}</p>` : ''}
-            <p class="hint">球队在注册时确定，注册后不允许换队。错过的比赛由 AI 补算，开赛时间固定为北京时间 12:00 / 20:00。</p>
+            <p class="hint">球队在注册时确定，注册后不允许换队；直接继承球队已有战绩，不因注册另算比赛。开赛时间固定为北京时间 12:00 / 20:00。</p>
             <button class="btn ghost small" data-action="registration-clubs-refresh">刷新球队列表</button>
           ` : ''}
           ${registering && publicConfig.turnstileSiteKey ? '<div class="turnstile-slot" id="turnstile-slot" data-morph-skip></div>' : ''}

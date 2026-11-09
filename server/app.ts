@@ -6,16 +6,15 @@ import crypto from 'node:crypto'
 import { createInitialGame, GAME_VERSION, upgradeLegacySignatures } from '../src/game/state.ts'
 import { ensureCards } from '../src/game/cards.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
-import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, createOwnerlessWorld, createWorldGameFromWorld, advanceOwnerlessWorld, computeWorldTable, ensureWorldCalendar, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, wageForPlayer, worldForClub, WORLD_ROUNDS, worldSlots } from '../src/game/world.ts'
-import { lineupLockState, settleDuePlayerMatch } from '../src/game/season.ts'
+import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, wageForPlayer, worldForClub, worldSlots } from '../src/game/world.ts'
+import { lineupLockState } from '../src/game/season.ts'
 import type { AIClubState, AITeam, Player, WorldState } from '../src/game/types.ts'
 import { caOf } from '../src/game/ca.ts'
 import { repairLineup, validateLineup } from '../src/game/squad.ts'
 import { displayCA, mainAttrsFor } from '../src/game/rating.ts'
-import { catchUpSeason } from '../src/game/season.ts'
-import { latestKickoffAt, postseasonStartAt, roundsKickedOff, seasonEndAt } from '../src/game/calendar.ts'
+import { kickoffAtForRound, postseasonStartAt, roundsKickedOff, seasonEndAt } from '../src/game/calendar.ts'
 import { splitSeed } from '../src/game/rng.ts'
-import { economyOf } from '../src/game/economy.ts'
+import { awardRoundIncome, awardSeasonPrize, economyOf } from '../src/game/economy.ts'
 import { advanceLeagueRealtime } from '../src/game/realtime.ts'
 import { validateAutoSubPlan } from '../src/game/match/management.ts'
 import type { GameState, PlayerCard } from '../src/game/types.ts'
@@ -30,10 +29,13 @@ import { aiPoachRound, expireOffers, generateAIOffers, respondToOffer, type Mark
 import { marketDayOf, refreshFreeMarket } from '../src/game/free-market.ts'
 import { migrateGameSchedule, migrateWorldSchedule } from '../src/game/schedule.ts'
 import { aiBuysLeft, noteAIBuy } from '../src/game/transfer-rules.ts'
-import { signClubPlayer } from '../src/game/market.ts'
+import { settleMarket, signClubPlayer } from '../src/game/market.ts'
 import { elevenAITeam, upgradeElevenASide } from '../src/game/eleven.ts'
 import { elevenFormationFor, isLegacyFormation } from '../src/game/data/formations.ts'
 import { startChallengeWithOpponent } from '../src/game/actions.ts'
+import { MatchQueue, type MatchQueueOptions } from './match-queue.ts'
+import { MatchScheduler } from './match-scheduler.ts'
+import { emptyMatchBook, matchJobId, recordForClub, type LockedTeam, type MatchBook } from './match-job.ts'
 
 type Account = {
   id: string
@@ -44,6 +46,8 @@ type Account = {
   game: GameState
   revision: number
   lastUserRevision?: number
+  /** 已合并进本账号的公开比赛；和账号一起原子保存，重启不重复发钱/记战报。 */
+  appliedMatchIds?: string[]
   /** 上一次给这个账号发 AI 报价的“赛季:轮次”，每轮最多发一次。 */
   offerKey?: string
   createdAt: number
@@ -69,6 +73,8 @@ type SharedWorld = {
   aiClubs?: Record<string, AIClubState>
   /** 自由市场最近一次每日补充是第几个游戏日。 */
   freeMarketDay?: number
+  /** 仅含已经公布的比赛影响；未公布结果永远留在私有任务目录。 */
+  matchBook?: MatchBook
   /** 电脑球队已经算到第几轮，防止每个 tick 都推进一次。 */
   aiRound?: number
 }
@@ -79,6 +85,7 @@ export type AppServerOptions = {
   dataDir?: string
   staticDir?: string
   tickMs?: number
+  matchQueue?: MatchQueueOptions
   now?: () => number
   /** 注册入口：open 谁都能注册；invite 需要邀请码；closed 只能登录。默认 open。 */
   registration?: RegistrationMode
@@ -98,6 +105,8 @@ export type AppServer = {
   server: http.Server
   close: () => void
   accountCount: () => number
+  /** 运维 / 测试驱动一次后台队列，仍受服务器时间和统一公布规则约束。 */
+  runMatchQueue: () => Promise<void>
 }
 
 const SESSION_FILE = 'sessions.json'
@@ -124,8 +133,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   const loadedWorld = readJson<Partial<SharedWorld> | null>(worldPath, null)
   const sharedWorld: SharedWorld = {
     seed: loadedWorld?.seed ?? crypto.randomInt(1, 0x7fffffff),
-    // 新服务器从最近一个开赛时间点（北京时间 12:00 / 20:00）开始，第 1 轮马上开踢。
-    startedAt: loadedWorld?.startedAt ?? latestKickoffAt(now()),
+    // 全新世界从当前时间之后的固定开球点开始；已有世界沿用其赛程，不为注册补造比赛。
+    startedAt: loadedWorld?.startedAt ?? kickoffAtForRound(now(), 1),
     owners: loadedWorld?.owners ?? {},
     world: loadedWorld?.world as WorldState,
     teams: loadedWorld?.teams,
@@ -136,6 +145,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     marketVersion: loadedWorld?.marketVersion ?? 1,
     aiClubs: loadedWorld?.aiClubs,
     aiRound: loadedWorld?.aiRound,
+    matchBook: loadedWorld?.matchBook,
   }
   if (sharedWorld.world) ensureWorldCalendar(sharedWorld.world)
   if (!sharedWorld.world) {
@@ -192,8 +202,20 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
     if (accountsMigrated) writeJson(dbPath, db)
   }
+  if (!sharedWorld.matchBook) {
+    sharedWorld.matchBook = emptyMatchBook()
+    for (const account of db.accounts) {
+      Object.assign(sharedWorld.matchBook.injuries, account.game?.injuries)
+      Object.assign(sharedWorld.matchBook.suspensions, account.game?.suspensions)
+      Object.assign(sharedWorld.matchBook.yellowCounts, account.game?.yellowCounts)
+      Object.assign(sharedWorld.matchBook.appearances, account.game?.appearances)
+    }
+  }
   writeJson(worldPath, sharedWorld)
   const persistWorld = () => writeJson(worldPath, sharedWorld)
+  const matchQueue = new MatchQueue(path.join(dataDir, 'match-jobs'), options.matchQueue)
+  const matchScheduler = new MatchScheduler(matchQueue, sharedWorld, lockedTeamFor, persistWorld)
+  let closed = false
   const market: FreeMarket = {
     pool: sharedWorld.freeStars,
     auctions: sharedWorld.auctions ?? [],
@@ -207,12 +229,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     sharedWorld.marketVersion = market.version
     persistWorld()
   }
-  function activeClubIds(): Set<string> {
-    return new Set(Object.entries(sharedWorld.owners).filter(([clubId, id]) => db.accounts.some((account) => account.id === id && account.game.season.index === sharedWorld.world.seasonIndex && account.game.world?.clubs.some((club) => club.id === 'player' && club.squadKey === clubId))).map(([clubId]) => clubId))
-  }
-  function advanceSharedWorld(): void {
-    if (advanceOwnerlessWorld(sharedWorld.world, now(), activeClubIds(), sharedWorld.seed)) persistWorld()
+  function advanceSharedWorld(): boolean {
+    const changed = matchScheduler.refresh(now())
     advanceSharedAIClubs()
+    return changed
   }
 
   /**
@@ -220,7 +240,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
    * 练出来的卡当场装到共享名册上（每轮只改一次），对手这一轮踢球就用新卡，玩家也能在球队名单里看到。
    */
   const serverSeason = () => sharedWorld.world.seasonIndex
-  const worldRound = () => Math.min(38, Math.max(1, roundsKickedOff(sharedWorld.world.seasonStartedAt, now())))
+  const worldRound = () => Math.min(38, Math.max(0, roundsKickedOff(sharedWorld.world.seasonStartedAt, now())))
   /** 转会窗口：第 1–10 轮、20–30 轮（和账号里的 transferWindowOpen 一致）。 */
   const worldWindowOpen = () => {
     const round = worldRound()
@@ -374,6 +394,77 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     return Object.keys(sharedWorld.owners).find((id) => sharedWorld.owners[id] === account.id)
   }
 
+  /** 锁定的是整份比赛输入，不只首发 ID；之后训练、换卡或转会也不能改变已入队的本场。 */
+  function lockedTeamFor(clubId: string): LockedTeam | null {
+    const team = sharedWorld.teams?.[clubId]
+    if (!team) return null
+    const account = db.accounts.find((item) => item.id === sharedWorld.owners[clubId])
+    const valid = account?.game.world?.clubs.find((club) => club.id === 'player')?.squadKey === clubId
+    const game = valid ? account.game : undefined
+    const injuries = { ...sharedWorld.matchBook!.injuries }
+    for (const [id, until] of Object.entries(game?.injuries ?? {})) injuries[id] = Math.max(injuries[id] ?? 0, until)
+    const bans = { ...sharedWorld.matchBook!.suspensions }
+    for (const [id, ban] of Object.entries(game?.suspensions ?? {})) if (sharedWorld.matchBook!.conditionAt[id] === undefined) bans[id] = ban
+    const conditions = new Map(team.players.map((player) => [player.id, player.condition]))
+    return {
+      team: game ? { ...team, name: game.clubName, players: game.roster.map((player) => ({ ...player, condition: conditions.get(player.id) ?? player.condition })), lineup: game.lineup, formationId: game.lineup.formationId, tactics: game.lineup.tactics } : team,
+      autoSubs: game ? game.autoSubs ?? { timed: [], staminaBelow: null, onInjury: false } : undefined,
+      injuries,
+      suspended: Object.entries(bans).filter(([, ban]) => ban.matches > 0).map(([id]) => id),
+      medical: game ? economyOf(game).medical : sharedWorld.aiClubs?.[clubId]?.economy.medical ?? 1,
+    }
+  }
+
+  function inheritedMatchIds(game: GameState, clubId: string): string[] {
+    return game.season.fixtures.filter((fixture) => fixture.isPlayer && fixture.played).map((fixture) => fixture.matchId ?? matchJobId(game.season.index, game.season.divisionId!, {
+      round: fixture.round, homeId: fixture.homeId === 'player' ? clubId : fixture.homeId, awayId: fixture.awayId === 'player' ? clubId : fixture.awayId,
+    }))
+  }
+
+  /** 只合并已公开比赛的增量；不替换培养、球员卡、资金或设施的整份锁定快照。 */
+  function syncPublishedMatches(account: Account): boolean {
+    const clubId = ownedClubId(account)
+    if (!clubId) return false
+    const game = account.game
+    const applied = new Set(account.appliedMatchIds ?? [])
+    let changed = false
+    let coachedMatch = false
+    for (const fixture of game.season.fixtures.filter((item) => item.isPlayer && item.played).sort((a, b) => a.round - b.round)) {
+      const id = fixture.matchId
+      if (!id?.startsWith('q-') || applied.has(id) || !matchQueue.ready(id)) continue
+      const { input, result } = matchQueue.read(id)
+      if (input.kickoffAt > now()) continue
+      const coached = input.kickoffAt > account.createdAt
+      coachedMatch ||= coached
+      if (coached && !game.matchHistory.some((record) => record.id === id)) game.matchHistory.unshift(recordForClub(input, result, clubId))
+      const economy = economyOf(game)
+      if (coached && fixture.round > economy.lastIncomeRound) {
+        awardRoundIncome(game, fixture.round)
+        if (game.season.index > 1) economy.balance -= Math.min(economy.balance, game.roster.reduce((sum, player) => sum + (player.contract?.wage ?? 0), 0))
+        settleMarket(game, fixture.round)
+      }
+      applied.add(id)
+      changed = true
+    }
+    if (changed) {
+      account.appliedMatchIds = [...applied]
+      const live = new Map((sharedWorld.teams?.[clubId]?.players ?? []).map((player) => [player.id, player]))
+      for (const player of game.roster) if (live.has(player.id)) player.condition = live.get(player.id)!.condition
+      if (coachedMatch && game.season.finished) awardSeasonPrize(game)
+    }
+    const book = sharedWorld.matchBook!
+    const ids = new Set([...game.roster, ...game.aiTeams.flatMap((team) => team.players)].map((player) => player.id))
+    const before = JSON.stringify([game.injuries, game.suspensions, game.yellowCounts, game.appearances])
+    for (const [id, until] of Object.entries(book.injuries)) (game.injuries ??= {})[id] = Math.max(game.injuries?.[id] ?? 0, until)
+    for (const id of ids) {
+      if (book.suspensions[id]) (game.suspensions ??= {})[id] = structuredClone(book.suspensions[id])
+      else if (book.conditionAt[id] !== undefined) delete game.suspensions?.[id]
+      if (book.yellowCounts[id] !== undefined) (game.yellowCounts ??= {})[id] = book.yellowCounts[id]
+      if (book.appearances[id]) (game.appearances ??= {})[id] = [...book.appearances[id]]
+    }
+    return changed || before !== JSON.stringify([game.injuries, game.suspensions, game.yellowCounts, game.appearances])
+  }
+
   /** 其他分区的赛程与积分同样以全服快照为准，不保留各账号各自抽象模拟的比分。 */
   function pullSharedWorld(account: Account): boolean {
     const clubId = ownedClubId(account)
@@ -398,13 +489,19 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const homeId = fixture.homeId === 'player' ? clubId : fixture.homeId
       const awayId = fixture.awayId === 'player' ? clubId : fixture.awayId
       const canonical = division.fixtures.find((item) => item.round === fixture.round && item.homeId === homeId && item.awayId === awayId)
-      // 别人的实战结果对双方生效；正在进行中的比赛不能被异步刷新中断。
-      if (mine && (!canonical?.reportedBy || canonical.reportedBy === account.id || account.game.activeMatch?.context.isLeague)) continue
-      if (!canonical?.played || !canonical.score || (fixture.played && fixture.score?.home === canonical.score.home && fixture.score?.away === canonical.score.away)) continue
-      fixture.played = true
-      fixture.score = { ...canonical.score }
+      // 所有已赛结果都以全服为准，包括接管前的 AI 战绩和本账号自己的旧比分。
+      // 仅保留旧版正在进行中的这一场，不让异步刷新中断比赛。
+      if (mine && account.game.activeMatch?.context.isLeague && account.game.activeMatch.context.round === fixture.round) continue
+      if (!canonical?.played || !canonical.score) continue
+      const next = { ...fixture, ...canonical, homeId: fixture.homeId, awayId: fixture.awayId, isPlayer: mine,
+        scorers: canonical.scorers?.map((item) => ({ ...item, teamId: item.teamId === clubId ? 'player' : item.teamId })),
+        assisters: canonical.assisters?.map((item) => ({ ...item, teamId: item.teamId === clubId ? 'player' : item.teamId })),
+      }
+      if (JSON.stringify(next) === JSON.stringify(fixture)) continue
+      Object.assign(fixture, next)
       changed = true
     }
+    if (!account.game.activeMatch?.context.isLeague && season.round !== division.round) { season.round = division.round; changed = true }
     if (changed) {
       const names = new Map(account.game.world?.clubs.map((club) => [club.id, club.name]) ?? [])
       season.table = computeWorldTable(season.clubIds ?? [], season.fixtures, names)
@@ -465,13 +562,16 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (division) {
       let fixturesChanged = false
       for (const fixture of account.game.season.fixtures) {
-        if (!fixture.played || !fixture.score || (fixture.homeId !== 'player' && fixture.awayId !== 'player')) continue
+        // 只有升级前已经在进行中的旧版联赛仍可回写；队列比赛的赛果只由统一发布事务写入。
+        if (!fixture.played || !fixture.score || !fixture.matchId || fixture.matchId.startsWith('q-') || (fixture.homeId !== 'player' && fixture.awayId !== 'player')) continue
         const homeId = fixture.homeId === 'player' ? clubId : fixture.homeId
         const awayId = fixture.awayId === 'player' ? clubId : fixture.awayId
         const canonical = division.fixtures.find((item) => item.round === fixture.round && item.homeId === homeId && item.awayId === awayId)
-        if (!canonical || canonical.reportedBy) continue
+        // 已结算的比赛不可重算或改写，接管球队不能把历史 AI 比分变成新教练的比赛。
+        if (!canonical || canonical.played || canonical.reportedBy) continue
         canonical.score = { ...fixture.score }
         canonical.played = true
+        canonical.autoSimulated = fixture.autoSimulated
         canonical.reportedBy = account.id
         fixturesChanged = true
       }
@@ -501,6 +601,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   // 清理旧版新账号准备期；正式开球时间不因注册或登录而变化。
   let removedPreparation = false
   for (const account of db.accounts) {
+    const clubId = ownedClubId(account)
+    if (clubId && !account.appliedMatchIds) {
+      account.appliedMatchIds = inheritedMatchIds(account.game, clubId)
+      removedPreparation = true
+    }
     if (account.game?.settings && 'autoSettle' in account.game.settings) {
       delete (account.game.settings as { autoSettle?: unknown }).autoSettle
       removedPreparation = true
@@ -641,7 +746,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   const publicAccount = (account: Account) => ({ id: account.id, username: account.username })
   /** 世界页 / 球队详情看到的全服快照；手动界面和 Agent 的 get_world 共用。 */
   function worldSnapshot(account?: Account) {
-    advanceSharedWorld()
+    advanceAllMatches()
     return {
       seasonIndex: sharedWorld.world.seasonIndex,
       ownClubId: account ? ownedClubId(account) ?? null : null,
@@ -818,15 +923,13 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const sharedTeamsChanged = pullSharedTeams(account)
       const sharedFixturesChanged = pullSharedFixtures(account)
       const sharedWorldChanged = pullSharedWorld(account)
-      let migrated = markedShared || elevenUpgraded || signaturesAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || sharedTeamsChanged || sharedFixturesChanged || sharedWorldChanged || absorbInto(account)
+      const publishedMatchesChanged = syncPublishedMatches(account)
+      let migrated = markedShared || elevenUpgraded || signaturesAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || sharedTeamsChanged || sharedFixturesChanged || sharedWorldChanged || publishedMatchesChanged || absorbInto(account)
       const economyAdded = account.game.economy == null || account.game.economy.fans === undefined
       economyOf(account.game)
       const progressingLeague = !!account.game.activeMatch?.context.isLeague
-      const changed = progressingLeague
-        ? advanceLeagueRealtime(account.game, now())
-        : !account.game.activeMatch && !account.game.season.finished && catchUpSeason(account.game, now()).advanced > 0
-      // 联机联赛到点自动踢：玩家不用手动开赛，登录即可看到当前轮比分。
-      const autoSettled = progressingLeague ? null : settleDuePlayerMatch(account.game, now())
+      // 新联赛只消费全服已经发布的结果，注册 / 登录 / 保存都不能触发本账号单独模拟。
+      const changed = progressingLeague ? advanceLeagueRealtime(account.game, now()) : false
       // 补算里卖给 NPC 或合同到期的球员，这一步进市场。
       if (absorbInto(account)) migrated = true
       // 报价：过期的按拒绝处理；每轮最多来一份新报价（本联赛没有教练执教的 AI 俱乐部，按需出价）。
@@ -837,7 +940,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         const ids = (account.game.season.clubIds ?? []).filter((id) => id !== 'player')
         if (generateAIOffers({ game: account.game, clubs: sharedMarketClubs(ids), season: serverSeason(), round: account.game.season.round, now: now(), seed: splitSeed(sharedWorld.seed, `offers-${account.id}`) })) migrated = true
       }
-      if (!changed && !autoSettled && !migrated && !economyAdded) return false
+      if (!changed && !migrated && !economyAdded) return false
       publishClub(account)
       // 补算 / 自动结算会改动本地那份对手名单（体能、伤病）：同一次推进里就换回共享名册，
       // 免得下一次请求再同步一次、版本号又涨，客户端随后的保存被当成冲突。
@@ -857,15 +960,19 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
   }
 
+  /** 同步全服公开赛果；仿真只在后台队列子进程中运行，和是否有人在线无关。 */
+  function advanceAllMatches(): void {
+    advanceSharedWorld()
+    for (const account of db.accounts) advanceAccount(account)
+  }
+
   /** 最近一次全服换季的时间，用来让“开始下一赛季”请求在自动换季后保持幂等。 */
   let lastRollAt = -Infinity
 
   /** 全服赛季一次性结算：先在副本中算完升降级和所有教练的阵容，再一起发布。 */
   function rollSharedSeason(force = false): { ok: boolean; error?: string } {
     const old = sharedWorld.world
-    const owned = activeClubIds()
-    const pendingCoachMatches = old.divisions.some((division) => division.fixtures.some((fixture) => (owned.has(fixture.homeId) || owned.has(fixture.awayId)) && !fixture.played))
-    if (force && !pendingCoachMatches && advanceOwnerlessWorld(old, postseasonStartAt(old.seasonStartedAt), owned, sharedWorld.seed)) persistWorld()
+    // 即使强制请求换季，也不能绕过任务队列临时生成未结算的比分。
     if (!old.divisions.every((division) => division.fixtures.every((fixture) => fixture.played))) return { ok: false, error: '全服本赛季仍有比赛未完成' }
     const managed = db.accounts.flatMap((account) => {
       const clubId = ownedClubId(account)
@@ -922,6 +1029,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       sharedWorld.reserveStars = representative.reserveStars ?? []
       for (const { account, game } of drafts) {
         account.game = game
+        account.appliedMatchIds = []
         account.revision++
         account.lastUserRevision = account.revision
         account.updatedAt = now()
@@ -938,6 +1046,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       }
       sharedWorld.startedAt = next.seasonStartedAt
       sharedWorld.aiRound = 0
+      sharedWorld.matchBook!.suspensions = {}
+      sharedWorld.matchBook!.yellowCounts = {}
       // 电脑球队也过了一个赛季：清掉已经并进名单的签入，账本和设施继续滚。
       for (const state of Object.values(sharedWorld.aiClubs ?? {})) state.signings = []
       persistWorld()
@@ -955,9 +1065,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   function autoRollSharedSeason(): void {
     // 常规赛结束后先留 12 个游戏日给升级附加赛和友谊赛，窗口走完才开新赛季。
     if (now() < seasonEndAt(sharedWorld.world.seasonStartedAt) || now() - lastSeasonCheck < 5000) return
+    // 停服恢复可能仍在逐场处理旧任务：不要提前尝试换季，也不阻塞后台队列。
+    if (sharedWorld.world.divisions.some((division) => division.fixtures.some((fixture) => !fixture.played))) return
     lastSeasonCheck = now()
-    advanceSharedWorld()
-    for (const account of db.accounts) advanceAccount(account)
+    advanceAllMatches()
     rollSharedSeason()
   }
 
@@ -967,6 +1078,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     // 休整窗口已经走完时会立刻换季，没必要再单独算一次附加赛。
     if (now() >= seasonEndAt(sharedWorld.world.seasonStartedAt)) return
     if (sharedWorld.world.promotionPlayoff?.seasonIndex === sharedWorld.world.seasonIndex) return
+    if (sharedWorld.world.divisions.some((division) => division.fixtures.some((fixture) => !fixture.played))) return
     const managed = db.accounts.flatMap((account) => {
       const clubId = ownedClubId(account)
       return clubId ? [{ account, clubId }] : []
@@ -1116,6 +1228,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   }
 
   async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+    advanceSharedWorld()
     autoRollSharedSeason()
     autoPlayoff()
     if (url.pathname === '/api/health') {
@@ -1124,7 +1237,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
 
     if (url.pathname === '/api/world' && req.method === 'GET') {
-      advanceSharedWorld()
+      advanceAllMatches()
       json(res, 200, {
         seed: sharedWorld.seed,
         startedAt: sharedWorld.startedAt,
@@ -1178,7 +1291,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (password.length < 6) return json(res, 400, { error: '密码至少 6 位' })
       if (db.accounts.some((account) => account.username.toLowerCase() === username.toLowerCase())) return json(res, 409, { error: '用户名已存在' })
       const salt = crypto.randomBytes(16).toString('hex')
-      advanceSharedWorld()
+      // 接管前把全服到点的比赛统一结算，账号只继承球队已有战绩，注册本身不产生比赛。
+      advanceAllMatches()
       // 选队在注册事务内完成；注册成功后球队归属固定，不能再换队。
       const requestedClubId = typeof body.clubId === 'string' ? body.clubId.trim() : ''
       let club = requestedClubId ? sharedWorld.world.clubs.find((item) => item.id === requestedClubId) : undefined
@@ -1194,6 +1308,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         club = pickFreeClubForNewAccount(sharedWorld.world, sharedWorld.owners, aliveAccountIds())
         if (!club) {
           expandWorldConference(sharedWorld.world, splitSeed(sharedWorld.seed, `expand-${sharedWorld.world.seasonIndex}-${Object.keys(sharedWorld.owners).length}`))
+          // 扩赛区后也必须补齐全服唯一名册，否则新球队的任务会阻塞同轮统一公布。
+          for (const item of sharedWorld.world.clubs) if (!sharedWorld.aiClubs![item.id]) sharedWorld.aiClubs![item.id] = createAIClub(item, splitSeed(sharedWorld.seed, `ai-club-${item.id}`))
+          const expandedTeams = buildOwnerlessTeams(sharedWorld.world, sharedWorld.seed, sharedWorld.aiClubs)
+          for (const [id, team] of Object.entries(expandedTeams)) if (!sharedWorld.teams![id]) sharedWorld.teams![id] = team
           club = pickFreeClubForNewAccount(sharedWorld.world, sharedWorld.owners, aliveAccountIds())
         }
       }
@@ -1222,6 +1340,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         account.game.lineup = structuredClone(initialTeam.lineup)
       }
       forgetMarketAges(account)
+      account.appliedMatchIds = inheritedMatchIds(account.game, club.id)
       db.accounts.push(account)
       const token = createSession(account.id)
       persistDb()
@@ -1298,6 +1417,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
           json(res, outcome.ok ? 200 : 400, { ...outcome, revision: agentAccount.revision, game: agentState() })
           return
         }
+        if (body.action === 'start_league' || body.action === 'simulate_round') return json(res, 400, { error: '联赛由服务器提前排队计算、到点统一公布，不能手动开赛或模拟' })
         if (body.action === 'buy_free_agent') return json(res, 400, { error: '联机时自由球员要竞拍，请用 bid_free_agent 出价' })
         if (body.action === 'bid_free_agent') {
           const bid = bidFor(agentAccount, body.playerId, body.amount)
@@ -1443,6 +1563,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (url.pathname === '/api/match/action' && req.method === 'POST') {
       const body = await readJsonBody(req)
       if (!['start_league', 'set_match_tactics', 'substitute'].includes(String(body.action))) return json(res, 400, { error: '不支持的比赛操作' })
+      if (body.action === 'start_league') return json(res, 400, { error: '联赛由服务器提前排队计算、到点统一公布，不需要手动开赛' })
       advanceAccount(account)
       if (body.action !== 'start_league' && !account.game.activeMatch?.context.isLeague) return json(res, 400, { error: '当前没有进行中的联赛' })
       const outcome = applyAgentAction(account.game, body, now())
@@ -1480,6 +1601,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         return
       }
       if (!isGameState(body.game)) return json(res, 400, { error: '无效的游戏存档' })
+      // 比赛公布会改变收入、球迷、市场等：不能把公布前的整份旧经济覆盖回去。
+      // 这种少见的并发保存需要客户端重新加载权威存档，而不是静默丢失服务器结算。
+      if (body.game.economy && account.game.economy && body.game.economy.lastIncomeRound < account.game.economy.lastIncomeRound) {
+        return json(res, 409, { error: '存档已在另一设备更新：比赛已结算，请重新加载', revision: account.revision, game: publicGame(account) })
+      }
       // 旧页面再次保存时也不能把已取消的新账号准备期带回来。
       if (body.game.settings) delete (body.game.settings as { autoSettle?: unknown }).autoSettle
       const assignedId = ownedClubId(account)
@@ -1493,16 +1619,13 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       }
       if (account.game.activeMatch?.context.isLeague) {
         body.game.activeMatch = account.game.activeMatch
-        body.game.season = account.game.season
-        body.game.matchHistory = account.game.matchHistory
       } else if (body.game.activeMatch?.context.isLeague) {
         return json(res, 400, { error: '联赛必须由服务器开始' })
       }
-      // 还没刷新的旧页面交上来的是旧赛程，或者带着单机“跳至比赛日”的时钟偏移：赛季和世界以服务器为准。
-      if (body.game.season?.kickoffSchedule !== account.game.season.kickoffSchedule || body.game.season?.clockShift || body.game.world?.clockShift) {
-        body.game.season = account.game.season
-        if (body.game.world && account.game.world) body.game.world = account.game.world
-      }
+      // 联赛赛程、比分和战报只由服务器产生；旧页面保存不能回滚已赛结果、伪造未来比分或重踢。
+      body.game.season = account.game.season
+      body.game.matchHistory = account.game.matchHistory
+      if (body.game.world && account.game.world) body.game.world = account.game.world
       // 联机改名只能走 /api/club/rename（要查重名和字数），普通保存不能顺手改掉。
       if (body.game.world) body.game.clubName = account.game.clubName
       // 伤病是服务器记录的：旧客户端根本不知道这个字段，保存时清空也不能把已知伤病抹掉。
@@ -1527,8 +1650,12 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       // 报价、出场记录、球员的不满都以服务器为准。
       incomingGame.transferOffers = account.game.transferOffers
       incomingGame.appearances = account.game.appearances
+      incomingGame.suspensions = account.game.suspensions
+      incomingGame.yellowCounts = account.game.yellowCounts
       for (const player of incomingGame.roster) {
         const known = account.game.roster.find((item) => item.id === player.id)
+        // 联机比赛体能由已发布的服务器结果决定；旧页面不能把赛后体能恢复成赛前值。
+        if (known && sharedWorld.matchBook!.conditionAt[player.id] !== undefined) player.condition = known.condition
         if (known?.unhappy) player.unhappy = known.unhappy
         else delete player.unhappy
       }
@@ -1615,12 +1742,23 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     else res.end(fs.readFileSync(target))
   }
 
+  async function runMatchQueue(): Promise<void> {
+    if (closed) return
+    const changed = advanceSharedWorld()
+    await matchQueue.pump(now())
+    if (closed) return
+    const published = matchScheduler.refresh(now())
+    // 空闲或仅在提前计算时，不必每秒复制所有账号的整份存档。
+    if (changed || published) for (const account of db.accounts) advanceAccount(account)
+    autoRollSharedSeason()
+    autoPlayoff()
+  }
+
   const server = http.createServer((req, res) => void handle(req, res))
   const tickMs = options.tickMs ?? 30_000
   const timer = tickMs > 0
     ? setInterval(() => {
-        advanceSharedWorld()
-        for (const account of db.accounts) advanceAccount(account)
+        advanceAllMatches()
         autoRollSharedSeason()
         autoPlayoff()
         aiAuctionTick()
@@ -1632,17 +1770,30 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     settleDueAuctions()
   }, 1000) : null
   matchTimer?.unref?.()
+  const jobTimer = tickMs > 0 ? setInterval(() => {
+    void runMatchQueue().catch((error) => console.error('比赛队列推进失败', error))
+  }, Math.min(1000, tickMs)) : null
+  jobTimer?.unref?.()
+
+  // 启动时恢复的是整个共享世界，而不是等账号注册 / 登录时再为它单独生成比分。
+  advanceAllMatches()
+  autoRollSharedSeason()
+  autoPlayoff()
 
   return {
     server,
     close: () => {
+      closed = true
       if (timer) clearInterval(timer)
       if (matchTimer) clearInterval(matchTimer)
+      if (jobTimer) clearInterval(jobTimer)
+      matchQueue.close()
       for (const group of clients.values()) for (const res of group) res.end()
       clients.clear()
       server.close()
     },
     accountCount: () => db.accounts.length,
+    runMatchQueue,
   }
 }
 

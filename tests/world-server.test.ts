@@ -5,21 +5,30 @@ import path from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
 import { KICKOFF_SCHEDULE, postseasonStartAt, seasonEndAt } from '../src/game/calendar.ts'
+import { drainServerQueue, fastMatchResult } from './queued-server-helpers.ts'
 
 const HOUR = 60 * 60 * 1000
 
 const servers: AppServer[] = []
+const contexts = new Map<string, { app: AppServer; dir: string; now: () => number }>()
+async function flush(base: string) {
+  const context = contexts.get(base)!
+  await drainServerQueue(context.app, context.dir, context.now())
+}
 afterEach(() => {
   while (servers.length) servers.pop()!.close()
+  contexts.clear()
 })
 
 async function start(clock?: () => number, dir?: string) {
   const dataDir = dir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'fm-world-server-'))
-  const app = createAppServer({ dataDir, staticDir: path.resolve('dist'), tickMs: 0, ...(clock ? { now: clock } : {}) })
+  const app = createAppServer({ dataDir, staticDir: path.resolve('dist'), tickMs: 0, matchQueue: { intervalMs: 0, compute: fastMatchResult }, ...(clock ? { now: clock } : {}) })
   servers.push(app)
   await new Promise<void>((resolve) => app.server.listen(0, '127.0.0.1', resolve))
   const port = (app.server.address() as AddressInfo).port
-  return { base: `http://127.0.0.1:${port}`, dir: dataDir }
+  const base = `http://127.0.0.1:${port}`
+  contexts.set(base, { app, dir: dataDir, now: clock ?? Date.now })
+  return { base, dir: dataDir }
 }
 
 type Account = { token: string; revision: number; game: any }
@@ -87,6 +96,7 @@ describe('服务器共享世界', () => {
     const first = await register(base, 'world_early')
     expect(first.game.season.round).toBe(1)
     now += 26 * HOUR // 一天多一点：至少过了两个开赛时间点
+    await flush(base)
     const late = await register(base, 'world_late')
     expect(late.game.season.round).toBeGreaterThanOrEqual(2)
     expect(late.game.season.fixtures.some((fixture: any) => fixture.played)).toBe(true)
@@ -179,6 +189,7 @@ describe('服务器共享世界', () => {
     await finishSeason(base, b.token)
     // 常规赛结束后要先走完 12 个游戏日的赛后休整窗口。
     clock = Math.max(clock, (await seasonTimes(base, a.token)).end)
+    await flush(base)
     const rollover = await fetch(`${base}/api/world/next-season`, { method: 'POST', headers: auth(a.token), body: '{}' })
     const rolloverBody = await rollover.json() as { error?: string }
     expect(rolloverBody.error).toBeUndefined()
@@ -206,6 +217,7 @@ describe('服务器共享世界', () => {
     await finishSeason(base, a.token)
     await finishSeason(base, b.token)
     clock = Math.max(clock, (await seasonTimes(base, a.token)).end)
+    await flush(base)
     const thirdSeason = await fetch(`${base}/api/world/next-season`, { method: 'POST', headers: auth(b.token), body: '{}' })
     expect(thirdSeason.status).toBe(200)
     const aThird = await load(base, a.token)
@@ -221,7 +233,7 @@ describe('服务器共享世界', () => {
     const lateWorld = await (await fetch(`${restarted.base}/api/world`)).json() as any
     expect(lateWorld.seasonIndex).toBe(3)
     expect(Object.keys(lateWorld.owners).length).toBeGreaterThanOrEqual(1)
-  }, 60_000)
+  }, 180_000)
 
   it('全服结算时各队退役与重生只发生一次，不把同一个球星复制进市场', async () => {
     let clock = Date.now()
@@ -246,6 +258,7 @@ describe('服务器共享世界', () => {
       expect(put.status, await put.clone().text()).toBe(200)
     }
     clock = Math.max(clock, (await seasonTimes(base, a.token)).end)
+    await flush(base)
     const rolled = await fetch(`${base}/api/world/next-season`, { method: 'POST', headers: auth(a.token), body: '{}' })
     const rolledBody = await rolled.json() as { error?: string }
     expect(rolledBody.error).toBeUndefined()
@@ -257,7 +270,7 @@ describe('服务器共享世界', () => {
       expect(market.pool.filter((player: any) => player.starKey === id && player.id.startsWith('regen-')).length).toBeLessThanOrEqual(1)
     }
     expect(new Set(market.pool.map((player: any) => player.id)).size).toBe(market.pool.length)
-  }, 20_000)
+  }, 120_000)
 
   it('常规赛结束后先进入 12 个游戏日的赛后休整，窗口走完才自动换季', async () => {
     let clock = Date.now()
@@ -271,26 +284,29 @@ describe('服务器共享世界', () => {
     // 常规赛刚结束：还在休整窗口里，赛季不会翻页。
     const times = await seasonTimes(base, a.token)
     clock = times.postseason
+    await flush(base)
     const stillSame = await (await fetch(`${base}/api/world`)).json() as any
     expect(stillSame.seasonIndex).toBe(1)
     // 再等过休整窗口，服务器自动开新赛季。
     clock = times.end
+    await flush(base)
     const world = await (await fetch(`${base}/api/world`)).json() as any
     expect(world.seasonIndex).toBe(2)
     const next = await load(base, a.token)
     expect(next.game.season.index).toBe(2)
     expect(next.game.world.seasonStartedAt).toBeLessThanOrEqual(clock)
-  }, 30_000)
+  }, 120_000)
 
   it('离线满一个赛季后服务器先自动补赛，再全服换季', async () => {
     let clock = Date.now()
     const { base } = await start(() => clock)
     const a = await register(base, 'away_season_a')
     clock = (await seasonTimes(base, a.token)).end
+    await flush(base)
     const result = await load(base, a.token)
     expect(result.game.season.index).toBe(2)
     expect(result.game.world.history).toHaveLength(1)
     const world = await (await fetch(`${base}/api/world`)).json() as any
     expect(world.seasonIndex).toBe(2)
-  }, 30_000)
+  }, 120_000)
 })

@@ -62,7 +62,7 @@ export function simulateAIvsAI(home: AITeam, away: AITeam, seed: number): { home
   return { ...simulateAIvsAIState(home, away, seed).score }
 }
 
-export function createMatchRecord(game: GameState, state: ReturnType<MatchEngine['serialize']>, context: MatchContext): MatchRecord {
+export function createMatchRecord(game: { season?: { index: number }; lineup: Lineup }, state: ReturnType<MatchEngine['serialize']>, context: MatchContext): MatchRecord {
   normalizePossession(state)
   const home = state.teams[0]
   const away = state.teams[1]

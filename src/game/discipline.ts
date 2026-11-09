@@ -6,7 +6,7 @@ export function suspendedPlayerIds(game: GameState): Set<string> {
   return new Set(Object.entries(game.suspensions ?? {}).filter(([, value]) => value.matches > 0).map(([id]) => id))
 }
 
-export function recordMatchDiscipline(game: GameState, state: LogState): void {
+export function recordMatchDiscipline(game: Pick<GameState, 'suspensions' | 'yellowCounts'> & { season?: { round: number } }, state: LogState): void {
   game.suspensions ??= {}
   game.yellowCounts ??= {}
   const round = game.season?.round ?? 1

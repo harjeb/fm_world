@@ -9,6 +9,7 @@ import { createWorldGame } from '../src/game/world.ts'
 import { LINEUP_LOCK_MS, lineupLockState, nextMatchCountdown, playerFixture, settleDuePlayerMatch } from '../src/game/season.ts'
 import { kickoffAtForRound, seasonStartForRound } from '../src/game/calendar.ts'
 import type { GameState } from '../src/game/types.ts'
+import { drainServerQueue, fastMatchResult } from './queued-server-helpers.ts'
 
 const servers: AppServer[] = []
 afterEach(() => { while (servers.length) servers.pop()!.close() })
@@ -48,8 +49,10 @@ describe('开赛前 30 分钟锁阵容', () => {
 
   it('服务端拒绝锁定期间的阵容修改，解锁后恢复；Agent 也一样', async () => {
     let clock = 1_000_000_000
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-lineup-lock-'))
     const app = createAppServer({
-      dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'fm-lineup-lock-')),
+      dataDir,
+      matchQueue: { intervalMs: 0, compute: fastMatchResult },
       staticDir: path.resolve('dist'),
       tickMs: 0,
       now: () => clock,
@@ -68,6 +71,7 @@ describe('开赛前 30 分钟锁阵容', () => {
 
     // 到第 2 轮开球时间：第 1、2 轮自动结算，当前第 2 轮已踢，锁的是第 3 轮。
     clock = kickoff(2) + 1000
+    await drainServerQueue(app, dataDir, clock)
     const loaded = await (await fetch(`${base}/api/game`, { headers: auth })).json() as { game: GameState; revision: number }
     expect(loaded.game.season.round).toBe(2)
     expect(playerFixture(loaded.game, 2)!.played).toBe(true)
@@ -96,6 +100,7 @@ describe('开赛前 30 分钟锁阵容', () => {
 
     // 第 3 轮开球并自动结算后解锁
     clock = kickoff(3) + 1000
+    await drainServerQueue(app, dataDir, clock)
     const after = await (await fetch(`${base}/api/game`, { headers: auth })).json() as { game: GameState; revision: number }
     expect(playerFixture(after.game, 3)!.played).toBe(true)
     expect(lineupLockState(after.game, clock).locked).toBe(false)

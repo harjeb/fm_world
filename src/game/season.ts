@@ -521,6 +521,12 @@ export function shortCountdown(ms: number): string {
  * 本轮结算后显示下一轮开球时间。
  */
 export function nextMatchCountdown(game: GameState, now = Date.now()): string {
+  if (game.shared) {
+    const future = game.season.fixtures.filter((fixture) => fixture.isPlayer && !fixture.played && roundKickoffAt(game, fixture.round) > now)
+      .sort((a, b) => a.round - b.round)[0]
+    if (future) return shortCountdown(roundKickoffAt(game, future.round) - now)
+    return game.season.finished ? '赛季结束' : '结果结算中'
+  }
   const fixture = playerFixture(game, game.season.round)
   if (fixture && !fixture.played) {
     const kickoff = roundKickoffAt(game, game.season.round)
@@ -539,6 +545,14 @@ export const LINEUP_LOCK_MS = 30 * 60_000
  * 本轮已经结算（fixture.played）后立即解锁，方便准备下一轮。
  */
 export function lineupLockState(game: GameState, now = Date.now()): { locked: boolean; lockAt: number; kickoffAt: number } {
+  if (game.shared) {
+    const future = game.season.fixtures.filter((fixture) => fixture.isPlayer && !fixture.played && roundKickoffAt(game, fixture.round) > now)
+      .sort((a, b) => a.round - b.round)[0]
+    const kickoffAt = roundKickoffAt(game, future?.round ?? Math.min(ROUNDS, game.season.round + 1))
+    const lockAt = kickoffAt - LINEUP_LOCK_MS
+    // 已开球的场次输入已经持久化；即使重启恢复时尚在排队，也能准备下一场。
+    return { locked: !!future && now >= lockAt, lockAt, kickoffAt }
+  }
   const current = playerFixture(game, game.season.round)
   if (current && !current.played) {
     const kickoff = roundKickoffAt(game, game.season.round)

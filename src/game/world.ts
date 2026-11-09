@@ -735,8 +735,8 @@ export function createWorldGameFromWorld(
 
 /** 服务器共享世界按现实时间抽象推进；返回是否有变化。 */
 export function advanceOwnerlessWorld(world: WorldState, now = Date.now(), ownedClubs: ReadonlySet<string> = new Set(), seed = world.seasonStartedAt): boolean {
-  // 第 n 轮在第 n+1 轮开赛时结算（和以前“开赛后一轮间隔”一致）。
-  const completed = Math.min(38, Math.max(0, roundsKickedOff(world.seasonStartedAt, now, world.clockShift) - 1))
+  // 无主球队也在本轮固定开球时刻结算，不等下一轮，更不等新教练注册。
+  const completed = Math.min(38, Math.max(0, roundsKickedOff(world.seasonStartedAt, now, world.clockShift)))
   let changed = false
   const clubs = new Map(world.clubs.map((club) => [club.id, club]))
   for (const division of world.divisions) {
@@ -749,6 +749,7 @@ export function advanceOwnerlessWorld(world: WorldState, now = Date.now(), owned
       const score = abstractScore(home, away, matchSeed)
       fixture.score = score
       fixture.played = true
+      fixture.autoSimulated = true
       const tally = abstractTally(seed, world.seasonIndex, fixture.homeId, fixture.awayId, score, matchSeed)
       fixture.scorers = tally.scorers
       fixture.assisters = tally.assisters
@@ -756,7 +757,7 @@ export function advanceOwnerlessWorld(world: WorldState, now = Date.now(), owned
     }
     const names = new Map(division.clubIds?.map((id) => [id, clubs.get(id)?.name ?? id]) ?? [])
     division.table = computeWorldTable(division.clubIds ?? [], division.fixtures, names)
-    const nextRound = Math.min(38, completed + 1)
+    const nextRound = Math.min(38, Math.max(1, completed))
     if (division.round !== nextRound) changed = true
     division.round = nextRound
     division.finished = division.fixtures.every((fixture) => fixture.played)

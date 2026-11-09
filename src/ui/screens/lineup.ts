@@ -775,7 +775,7 @@ export function renderLineup(): string {
   const lockMinutes = Math.max(0, Math.ceil((lock.lockAt - Date.now()) / 60_000))
   const lockBanner = isOnlineMode()
     ? (onlineLock
-      ? `<div class="banner warn">${icon('lock', 16)}<b>本轮阵容已锁定</b><span>开赛前 ${LINEUP_LOCK_MS / 60_000} 分钟起不能修改首发、替补、职责、战术和自动换人；比赛由服务器在开赛时间自动结算，结算后解锁准备下一轮。</span></div>`
+      ? `<div class="banner warn">${icon('lock', 16)}<b>本轮阵容已锁定</b><span>开赛前 ${LINEUP_LOCK_MS / 60_000} 分钟起不能修改首发、替补、职责、战术和自动换人；服务器用锁定时的阵容、球员属性与状态快照提前排队计算，开赛时公布结果；之后的培养和装备调整只影响后续比赛。</span></div>`
       : `<div class="banner muted">${icon('clock', 16)}<b>距阵容锁定 ${lockMinutes} 分钟</b><span>开赛前 ${LINEUP_LOCK_MS / 60_000} 分钟会锁定本轮阵容，请提前保存。</span></div>`)
     : ''
   return `
