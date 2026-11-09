@@ -51,15 +51,11 @@ const TIER_PROFILE: Record<TierId, TierProfile> = {
 export const aiTierProfile = (tier: TierId): TierProfile => TIER_PROFILE[tier]
 
 /**
- * 一次训练 = 玩家的一整轮培养（30 个时段，只练这一个人），不是一次行动。
+ * 一次训练 = 玩家的一整轮培养（30 个时段，只练这一个人），所有级别完全一样，不是一次行动。
  * 玩家自动培养一轮约 +100～150 CA；这里按同样的量级给基础值，再乘设施系数。
- * 每天练几个人由 perDay 决定，级别差距在人数，不在单次力度。
+ * 每天练几个人由 perDay 决定；成长只受球员自己的 PA 上限约束，没有额外的目标或放缓。
  */
 const AI_CA_PER_PROGRAM = 100
-/** 每个级别 AI 的目标 CA：练到这里就放缓，避免一个赛季内顶到 PA 把玩家甩开。 */
-const AI_TARGET_CA: Record<TierId, number> = { division2: 450, division1: 480, champions: 520 }
-/** 离目标还剩这么多 CA 以内时成长逐渐放缓。 */
-const AI_TARGET_TAPER = 80
 /** 电脑球队阵容上限：比玩家的 25 人低，抢人时会留出位置。 */
 /** 电脑球队名单上限：25 人名单再留 4 个签人的空位。 */
 export const AI_SQUAD_LIMIT = 29
@@ -226,14 +222,12 @@ export function mergeSignings(state: AIClubState, players: Player[]): Player[] {
 
 const growableAttrs = (gk: boolean): readonly AttrKey[] => costAttrs(gk)
 
-function growCard(state: AIClubState, card: AICard, gk: boolean, rng: ReturnType<typeof derivedRng>, target?: number): number {
+function growCard(state: AIClubState, card: AICard, gk: boolean, rng: ReturnType<typeof derivedRng>, pa?: number): number {
   const before = caOf(card.attrs, gk)
   const facilityScale = 0.6 + facilityLevel(state.economy.stadium) / 5 + facilityLevel(state.economy.academy) / 10
-  // 离本级目标越近越难涨；没有名单（只有账本）时按满力度算。
-  const taper = target === undefined ? 1 : Math.max(0, Math.min(1, (target - before) / AI_TARGET_TAPER))
-  const rolled = AI_CA_PER_PROGRAM * facilityScale * (0.8 + rng.float() * 0.4) * taper
-  // 一次训练不要越过本级目标太多：最后一段按剩余差距截断。
-  const gain = target === undefined ? rolled : Math.min(rolled, Math.max(0, target - before))
+  const rolled = AI_CA_PER_PROGRAM * facilityScale * (0.8 + rng.float() * 0.4)
+  // 和玩家一样：能练多少练多少，只被球员自己的 PA 上限截断。
+  const gain = pa === undefined ? rolled : Math.min(rolled, Math.max(0, pa - before))
   if (!(gain > 0)) return before
   const keys = growableAttrs(gk)
   // 把“提升 X 点能力评分”换算成属性比例：评分近似和属性评分的平方成正比。
@@ -256,7 +250,15 @@ function growCard(state: AIClubState, card: AICard, gk: boolean, rng: ReturnType
   const boost = 0.6 + 0.4 * ((rolls.stadium < chances.stadium ? 1 : 0) + (rolls.academy < chances.academy ? 1 : 0) + (rolls.medical < chances.medical ? 1 : 0) + (rolls.psychology < chances.psychology ? 1 : 0) + (rolls.tactics < chances.tactics ? 1 : 0)) / 5
   for (const key of keys) card.attrs[key] = Math.round(card.attrs[key] * (1 + (factor - 1) * boost))
   clampAttrs(card.attrs, gk)
-  return caOf(card.attrs, gk)
+  let after = caOf(card.attrs, gk)
+  // 属性取整可能让 CA 稍微越过 PA：按平方比例压回来，和玩家的硬上限一致。
+  for (let guard = 0; guard < 3 && pa !== undefined && after > pa && after > 0; guard++) {
+    const scale = Math.sqrt(pa / after)
+    for (const key of keys) card.attrs[key] = Math.round(card.attrs[key] * scale)
+    clampAttrs(card.attrs, gk)
+    after = caOf(card.attrs, gk)
+  }
+  return after
 }
 
 /** 挑一个最该练的槽位：评分最低的那几个里随机一个，青训好的队会顺带照顾年轻人。 */
@@ -314,7 +316,7 @@ export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | '
     const card = cardOf(state, slot, base)
     const gk = base.positions.GK > 0
     const before = card.rating
-    const after = growCard(state, card, gk, rng, AI_TARGET_CA[club.tier ?? 'division2'])
+    const after = growCard(state, card, gk, rng, base.pa)
     if (after <= before + 0.4) continue
     state.cards[String(slot)] = { rating: after, attrs: { ...card.attrs }, owner: card.owner }
     trained += 1

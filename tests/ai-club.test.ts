@@ -119,8 +119,7 @@ describe('电脑球队的经营节奏', () => {
     expect(counted.division1).toBeLessThan(counted.champions)
   })
 
-  it('每次训练是一整轮（30 时段）只练一个人；卡只套自己的槽位，练到本级目标就放缓', () => {
-    const target: Record<string, number> = { division2: 450, division1: 480, champions: 520 }
+  it('每次训练是一整轮（30 时段）只练一个人；卡只套自己的槽位，只受个人 PA 上限约束', () => {
     for (const tier of ['division2', 'champions'] as const) {
       const base = game()
       const team = base.aiTeams[0]
@@ -132,10 +131,9 @@ describe('电脑球队的经营节奏', () => {
       team.players.forEach((player, slot) => {
         const delta = playerCa(player) - before[slot]
         expect(delta, `${tier} slot ${slot}`).toBeGreaterThanOrEqual(-0.5)
-        // 每个被练到的人一次就是 +80～140 CA；6 轮下来涨一两百点正常，但不能越过本级目标太多，
-        // 也不能是别人的卡套过来的异常值。
-        expect(delta, `${tier} slot ${slot}`).toBeLessThan(400)
-        expect(playerCa(player), `${tier} slot ${slot}`).toBeLessThanOrEqual(target[tier] + 30)
+        // 每个被练到的人一次就是 +80～140 CA；6 轮下来可能涨好几百点，
+        // 但和玩家一样不能超过球员自己的 PA。
+        if (Number.isFinite(player.pa)) expect(playerCa(player), `${tier} slot ${slot}`).toBeLessThanOrEqual(player.pa! + 3)
         // 装上的卡就是这个槽位自己的卡。
         const card = ai.cards[String(slot)]
         expect(Math.abs(playerCa(player) - card.rating), `${tier} slot ${slot}`).toBeLessThan(1)
