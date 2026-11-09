@@ -50,6 +50,13 @@ describe('联机联赛到点自动结算', () => {
     expect(firstFixture?.played).toBe(false)
     expect(first.game.activeMatch).toBeUndefined()
 
+    // 30 分钟准备时间过后，当前轮自动踢（不用等到下一轮开球）
+    clock += 31 * 60_000
+    const prepared = await (await fetch(`${base}/api/game`, { headers: auth })).json() as { game: GameState }
+    const preparedFixture = prepared.game.season.fixtures.find((fixture) => fixture.isPlayer && fixture.round === prepared.game.season.round)
+    expect(preparedFixture?.played).toBe(true)
+    expect(prepared.game.season.round).toBe(1)
+
     // 下一轮开球时间到了：登录时先自动补上第 1 轮，再自动踢第 2 轮
     clock += ROUND_MS
     const second = await (await fetch(`${base}/api/game`, { headers: auth })).json() as { game: GameState }
