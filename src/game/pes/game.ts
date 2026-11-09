@@ -9,15 +9,49 @@
 import { ROLES } from '../data/roles.ts'
 import { customSpotFor } from '../squad.ts'
 import { MATCH_MENTALITY_LABELS, MATCH_TACTICS, autoSubDisplaySeconds } from '../match/management.ts'
-import { opponentSide } from '../match/team.ts'
+import { inBox, progressOf, wideZone } from '../match/pitch.ts'
+import { opponentSide, PITCH_LENGTH, PITCH_WIDTH } from '../match/team.ts'
 import { LOGIC_MATCH_SECONDS } from '../match/time.ts'
 import type { MatchMentality, Tactics } from '../types.ts'
 import type { MatchPlayerState, MatchSide, MatchState, MatchTeamInput, MatchTeamState } from '../match/types.ts'
-import { abilityOf } from './ability.ts'
+import { MotionRatings } from './ability.ts'
 import { formationRows } from './formation.ts'
 import { PesSettlement, type PesSettlementJSON } from './settle.ts'
 import { PesMatch, type PesTeamInit } from './sim.ts'
-import { GAME_RULES, makePitch7, type PesMatchSnapshot, type PesRules, type PesTactics, type PitchSpec } from './spec.ts'
+import { GAME_RULES, makePitch7, type PesEvent, type PesMatchSnapshot, type PesRules, type PesTactics, type PitchSpec } from './spec.ts'
+
+function motionAbilities(player: MatchPlayerState, ratings: MotionRatings) {
+  return ratings.abilities(player, {
+    wide: wideZone(player),
+    finalThird: progressOf(player.side, player.x) > 0.65,
+    inBox: inBox(player.side, player),
+  })
+}
+
+function refreshMotionAbilities(m: PesMatch, settlement: PesSettlement): void {
+  const g = settlement.game
+  // Time/score/roster can change without a contact (and hence without a new g.step).
+  delete g.teamTraitStep
+  const ratings = new MotionRatings(() => g, () => g.durationSeconds)
+  const flip = m.teams[0].dir < 0 ? -1 : 1
+  for (const team of m.teams) for (const q of team.players) {
+    const player = settlement.gamePlayer(q.pid)
+    q.ab = motionAbilities({
+      ...player,
+      x: (q.pos.x * flip + m.spec.HL) * PITCH_LENGTH / m.spec.L,
+      y: (q.pos.y * flip + m.spec.HW) * PITCH_WIDTH / m.spec.W,
+      stamina: q.stamina * player.maxStamina,
+    }, ratings)
+  }
+}
+
+/** Observe injury events after settlement has marked every card of the same person. */
+class MotionSettlement extends PesSettlement {
+  override onEvent(m: PesMatch, e: PesEvent): void {
+    super.onEvent(m, e)
+    if (e.type === 'injury') refreshMotionAbilities(m, this)
+  }
+}
 
 /** 我们的 5 个战术枚举 → pes2d 滑杆（计划 5.1）。 */
 export function tacticsOf(tactics: Tactics): PesTactics {
@@ -52,7 +86,7 @@ export interface PesGameOptions {
   spec?: PitchSpec
 }
 
-function pesTeam(input: MatchTeamInput, team: MatchTeamState): PesTeamInit {
+function pesTeam(input: MatchTeamInput, team: MatchTeamState, ratings: MotionRatings): PesTeamInit {
   const custom: Record<string, { x: number; y: number }> = {}
   for (const starter of input.starters) {
     const spot = customSpotFor(starter.player)
@@ -70,7 +104,7 @@ function pesTeam(input: MatchTeamInput, team: MatchTeamState): PesTeamInit {
         nx: row.nx,
         ny: row.ny,
         line: row.line,
-        abilities: abilityOf(player.attrs),
+        abilities: motionAbilities(player, ratings),
         num: player.number,
         stamina: player.stamina / Math.max(1, player.maxStamina),
         ref: player.id,
@@ -85,12 +119,12 @@ export class PesGame {
 
   constructor(source: PesGameOptions | { snapshot: PesMatchSnapshot }) {
     if ('snapshot' in source) {
-      this.settlement = new PesSettlement(source.snapshot.contact as PesSettlementJSON)
+      this.settlement = new MotionSettlement(source.snapshot.contact as PesSettlementJSON)
       this.match = PesMatch.restore(source.snapshot, { contact: this.settlement })
       return
     }
     const duration = source.durationSeconds ?? LOGIC_MATCH_SECONDS
-    this.settlement = new PesSettlement({
+    this.settlement = new MotionSettlement({
       seed: source.seed,
       home: source.home,
       away: source.away,
@@ -101,15 +135,18 @@ export class PesGame {
       now: source.now,
     })
     const game = this.settlement.game
+    const ratings = new MotionRatings(() => game, () => game.durationSeconds)
     this.match = new PesMatch({
       spec: source.spec ?? makePitch7(duration),
       seed: source.seed,
-      home: pesTeam(source.home, game.teams[0]),
-      away: pesTeam(source.away, game.teams[1]),
+      home: pesTeam(source.home, game.teams[0], ratings),
+      away: pesTeam(source.away, game.teams[1], ratings),
       recordHz: source.recordHz,
       rules: { ...GAME_RULES, offside: source.offside ?? false, ...source.rules },
       contact: this.settlement,
     })
+    // Kickoff placement may differ from the lineup's nominal coordinates.
+    refreshMotionAbilities(this.match, this.settlement)
     this.settlement.markStarters(this.match)
     this.settlement.note('kickoff', 'none', `${game.teams[0].name} 对 ${game.teams[1].name}，比赛开始。`, {}, 0)
   }
@@ -140,11 +177,12 @@ export class PesGame {
     const g = this.state
     g.clock = m.time
     g.half = m.half
-    // 每个模拟秒：自动换人检查、把控球 / 体力 / 比分同步到游戏层（比赛页的数据条读它们）。
+    // 每个模拟秒：自动换人、同步游戏层物理量、刷新运动能力的时钟 / 比分 / 空间上下文。
     // 用“这一步跨过了整数秒”判断，不需要额外状态，读档后行为一致
     if (Math.floor(m.time) !== second) {
       this.applyAutoSubs()
       this.syncLive()
+      refreshMotionAbilities(m, this.settlement)
     }
     if (m.finished) this.afterRegulation()
   }
@@ -269,7 +307,7 @@ export class PesGame {
     this.settlement.bind(outPid, outgoing)
     const physical = this.match.substitute(outPid, {
       name: incoming.name,
-      abilities: abilityOf(incoming.attrs),
+      abilities: motionAbilities(incoming, new MotionRatings(() => g, () => g.durationSeconds)),
       stamina: incoming.stamina / Math.max(1, incoming.maxStamina),
       ref: incoming.id,
       num: incoming.number,
@@ -277,6 +315,7 @@ export class PesGame {
     this.settlement.bind(physical.pid, incoming)
     this.settlement.markLeft(outPid, this.match.time)
     this.settlement.markJoined(physical.pid, this.match.time)
+    refreshMotionAbilities(this.match, this.settlement)
     const reason = autoReason ? `自动换人（${{ injury: '受伤', timed: '定时', stamina: '体力' }[autoReason]}）` : '换人'
     this.settlement.note('sub', side, `${reason}：${incoming.name} 换下 ${out.name}。`, { playerId: incoming.id }, at ?? this.match.time)
     return { ok: true }

@@ -203,6 +203,57 @@ describe('新球场：联赛画面引擎', () => {
     expect(eventsOf(pitch.pesViewEngine(next)).length).toBeLessThanOrEqual(next.game.match.events.length)
   })
 
+  it.each([1, 2] as const)('半场 %i 时钟封顶后仍播放已结算射门，不丢进球也不提前进入后续比赛', async half => {
+    const { ui, pitch, target } = await leagueAt(56, 0)
+    const auth = ui.matchEngine as PesEngine
+    const m = auth.game.match
+    m.half = half
+    m.teams[0].dir = half === 1 ? 1 : -1
+    m.teams[1].dir = half === 1 ? -1 : 1
+    const end = m.spec.HALF * half
+    m.time = end - m.spec.DT / 2
+    m.phase = 'play'; m.restart = null; m.setPiece = null
+    for (const p of m.players) {
+      p.pos = { x: -24, y: -15 }; p.target = { ...p.pos }; p.vel = { x: 0, y: 0 }
+      p.noClaim = p.stun = p.urgency = 0; p.decideT = 1e9
+    }
+    const shooter = m.teams[0].players[6]
+    shooter.pos = { x: 22 * m.teams[0].dir, y: 0 }; shooter.target = { ...shooter.pos }
+    Object.assign(m.ball, { frozen: false, owner: shooter.pid, x: shooter.pos.x, y: 0, z: 0, meta: null, lastTouch: shooter.pid })
+    vi.spyOn(auth.game.settlement, 'shot').mockReturnValue({ result: 'goal', blocker: -1, xg: 0.3, hold: true, meta: {} })
+    ;(m as unknown as { execShot(p: typeof shooter, press: number): void }).execShot(shooter, 0)
+    auth.game.step()
+    expect(m.time).toBe(end)
+    expect(m.ball.meta?.result).toBe('goal')
+    expect(auth.state.finished).toBe(false)
+    vi.setSystemTime(1_000_000 + 300_000 * half)
+    expect(target()).toBe(end)
+    pitch.drawPesPitch(fakeCanvas, auth, kits)
+    const view = pitch.pesDisplayEngine()!
+    const x = view.game.match.ball.x
+    runFrame(1000)
+    runFrame(1050)
+    expect(view.game.match.ball.x).not.toBe(x)
+    let now = 1050
+    for (let index = 0; index < 200 && view.game.match.half === half && !view.state.finished; index++) {
+      now += 50
+      runFrame(now)
+    }
+    expect(pitch.pesDisplayEngine()).toBe(view) // No equal-clock resync was needed.
+    expect(view.game.match.time).toBe(end)
+    expect(view.state.score.home).toBe(1)
+    expect(view.game.match.events.filter(e => e.type === 'goal')).toHaveLength(1)
+    expect(view.state.finished).toBe(half === 2)
+    expect(view.game.match.half).toBe(2)
+    // Only show the goal in HTML once the authoritative copy confirms it.
+    expect(pitch.pesViewEngine(auth)).toBe(auth)
+    auth.advanceTo(end)
+    pitch.drawPesPitch(fakeCanvas, auth, kits)
+    expect(pitch.pesDisplayEngine()).toBe(view)
+    expect(pitch.pesViewEngine(auth)).toBe(view)
+    expect(view.state.score).toEqual(auth.state.score)
+  })
+
   it('比赛页读的引擎：画面引擎走在权威存档前面（事件更多）时以权威存档为准', async () => {
     const { ui, pitch } = await leagueAt(54, 40_000)
     const auth = ui.matchEngine as PesEngine

@@ -2,13 +2,35 @@
  * 我们的 22 个属性（0–100 评分）→ pes2d 运动层的 9 个合成能力（0–1）。计划 4.2。
  *
  * 换算：先把每个属性线性映射到 0–1（典型球员落在 0.65 附近），再按 4.2 的公式加权合成。
- * 输入一般传 `eff(player, key) `（已含体力折损、位置熟练度、伤病、技能和特性），
- * 这样这些因素在新引擎里继续起作用；这里不关心输入从哪来，缺的属性按“典型球员”处理。
+ * `abilityOf` 保留纯属性校准入口；游戏层用 `MotionRatings.abilities` 加入位置、伤病和特性。
+ * 运动能力不再扣体力（物理层已处理疲劳）；接触点技能和成败仍由结算内核处理。
  *
  * 运动层只负责“跑得多快、拿球多稳”这类演出；传球 / 射门 / 抢断的**成败**由结算内核按原始属性裁决（计划 3、4）。
  */
-import type { AttrKey } from '../types.ts'
+import type { TraitCondition } from '../data/star-traits.ts'
+import { MatchRatings } from '../match/ratings.ts'
+import type { MatchEventContext, MatchPlayerState } from '../match/types.ts'
+import { ALL_ATTRIBUTES, type AttrKey } from '../types.ts'
 import type { Abilities } from './spec.ts'
+
+/** Shared effective ratings, without applying the physics layer's fatigue penalty twice. */
+export class MotionRatings extends MatchRatings {
+  private readonly livePlayers = new WeakMap<MatchPlayerState, MatchPlayerState>()
+
+  abilities(player: MatchPlayerState, ctx: MatchEventContext = {}): Abilities {
+    const rested = { ...player, stamina: player.maxStamina }
+    this.livePlayers.set(rested, player)
+    const attrs: AttrRecord = {}
+    for (const key of ALL_ATTRIBUTES) attrs[key] = this.eff(rested, key, ctx)
+    return abilityOf(attrs)
+  }
+
+  override traitConditionMet(player: MatchPlayerState, when: TraitCondition, ctx: MatchEventContext = {}): boolean {
+    // Only effectiveAttr sees full stamina. Fresh/tired traits still see the live player;
+    // aura carriers (which aren't the temporary copy) retain their own conditions too.
+    return super.traitConditionMet(this.livePlayers.get(player) ?? player, when, ctx)
+  }
+}
 
 export type AttrRecord = Partial<Record<AttrKey, number>>
 

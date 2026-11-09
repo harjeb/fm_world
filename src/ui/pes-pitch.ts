@@ -231,7 +231,10 @@ function advanceLeague(sim: PesEngine, dt: number): void {
   pv.acc -= steps
   if (steps > MAX_STEPS_PER_FRAME) steps = MAX_STEPS_PER_FRAME
   for (let index = 0; index < steps && !g.finished; index++) {
-    if (m.phase === 'play' && m.time >= target) break
+    // The clock stays capped while a pre-whistle shot finishes. Keep animating
+    // that flight at the cap, but never advance into play beyond the wall clock.
+    const closingHalf = target >= m.time && m.time >= m.spec.HALF * m.half
+    if (m.phase === 'play' && m.time >= target && !closingHalf) break
     g.step()
   }
 }

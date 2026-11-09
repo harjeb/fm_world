@@ -287,7 +287,11 @@ export class PesSettlement implements ContactModel {
     const odds = this.kernel.passOdds(model, kind, to, to)
     const roll = m.rng.float()
     if (roll < odds.p) return { result: 'ok', interceptor: -1, p: odds.p }
-    if (model.interceptor) return { result: 'icpt', interceptor: this.pidOf(model.interceptor), p: odds.p }
+    if (roll < odds.p + odds.intercepted) {
+      return model.interceptor
+        ? { result: 'icpt', interceptor: this.pidOf(model.interceptor), p: odds.p }
+        : { result: 'miss', interceptor: -1, p: odds.p }
+    }
     if (roll < odds.p + odds.intercepted + odds.out) return { result: 'out', interceptor: -1, p: odds.p }
     return { result: 'miss', interceptor: -1, p: odds.p }
   }

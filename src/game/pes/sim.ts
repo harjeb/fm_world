@@ -264,8 +264,22 @@ export class PesMatch {
     const P = this.spec
     const dt = P.DT
 
+    // Settled shots already emitted their verdict. At the whistle only finish
+    // that flight: no decisions, tackles, claims or restarts may create play.
+    if (this.contact && this.time >= P.HALF * this.half) {
+      this.time = P.HALF * this.half
+      this.finishHalfFlight()
+      return
+    }
+
     if (this.phase === 'kickoff' || this.phase === 'restart') this.updateRestart(dt)
     else this.time += dt
+
+    if (this.contact && this.time >= P.HALF * this.half) {
+      this.time = P.HALF * this.half
+      this.finishHalfFlight()
+      return
+    }
 
     this.updateShape()
 
@@ -460,7 +474,11 @@ export class PesMatch {
     this.players.push(inc)
     const b = this.ball
     if (b.owner === out.pid) b.owner = inc.pid
+    // Live responsibilities follow the replacement; historical touches and event actors do not.
+    if (b.meta?.intended === out.pid) b.meta.intended = inc.pid
+    if (b.meta?.icpt === out.pid) b.meta.icpt = inc.pid
     if (this.restart && this.restart.taker === out.pid) this.restart.taker = inc.pid
+    if (this.setPiece?.taker === out.pid) this.setPiece.taker = inc.pid
     this.event('sub', out.ti, [inc.pid, out.pid])
     return inc
   }
@@ -1353,9 +1371,9 @@ export class PesMatch {
 
   /* ---- 防线/越位线 ---- */
   private secondLastLx(team: PesTeam, oppTeam: PesTeam): number {
-    // 以 team 的进攻坐标系，对方（不含门将）倒数第二名防守者的 lx
-    const xs = oppTeam.players.filter((o) => o.role !== 'GK').map((o) => o.pos.x * team.dir).sort((a, b) => b - a)
-    return xs.length > 1 ? xs[1] : (xs[0] == null ? -this.spec.HL : xs[0])
+    // 倒数第二名对手，包含门将；门将出击 / 被罚下时也按实际位置排序。
+    const xs = oppTeam.players.map((o) => o.pos.x * team.dir).sort((a, b) => b - a)
+    return xs[1] ?? -this.spec.HL
   }
 
   private spaceBehindLine(p: PesPlayer, oppTeam: PesTeam): number {
@@ -1518,16 +1536,38 @@ export class PesMatch {
       aimY = (this.rng.float() < 0.5 ? -1 : 1) * (P.GOAL_HALF + 0.5 + 2.2 * this.rng.float())
       tz = 0.3 + 1.5 * this.rng.float()
     }
-    const u = norm(g.x - p.pos.x, aimY - p.pos.y)
     const speed = req.header ? 15 + 4 * this.rng.float() : clamp(23 + p.ab.shooting * 8 - dist(p.pos, g) * 0.10, 17, 32)
     const z0 = req.header ? 1.8 : dist(p.pos, g) < 16 * K ? 0.05 : 0.35
-    const tl = Math.max(0.12, Math.abs(g.x - p.pos.x) / Math.max(1, Math.abs(u.x) * speed))
-    b.x = p.pos.x + u.x * 0.55
-    b.y = p.pos.y + u.y * 0.55
+    const plane = t.dir * (P.HL - 0.1)
+    // Restored/custom placements may be on the goal plane: keep the launch finite and in front of it.
+    const originX = Math.min(p.pos.x * t.dir, P.HL - 0.2) * t.dir
+    const launch = () => {
+      const u = norm(plane - originX, aimY - p.pos.y)
+      // Do not spawn an extremely close shot beyond the goal plane.
+      const offset = Math.min(0.55, Math.max(0, (plane - originX) / u.x) * 0.5)
+      const x = originX + u.x * offset
+      const y = p.pos.y + u.y * offset
+      const drag = Math.exp(-0.05 * P.DT)
+      const span = Math.abs(plane - x) * (1 - drag) / (Math.abs(u.x) * speed * P.DT * drag)
+      const frames = Math.max(1, Math.ceil(Math.log(Math.max(1e-9, 1 - span)) / Math.log(drag)))
+      const flight = frames * P.DT
+      // Match updateBall's discrete drag/gravity, starting at the actual launch point.
+      const vz = (tz - z0) / flight + 9.81 * (frames + 1) * P.DT / 2
+      return { x, y, vx: u.x * speed, vy: u.y * speed, vz }
+    }
+    let flight = launch()
+    if (v.result === 'miss' && tz > P.GOAL_H && flight.vz > 12) {
+      // Too close to lift above the bar within the vertical-speed limit: stage a wide miss instead.
+      aimY = (Math.sign(p.pos.y) || Math.sign(aimY) || 1) * (P.GOAL_HALF + 1.5)
+      tz = 0.3
+      flight = launch()
+    }
+    b.x = flight.x
+    b.y = flight.y
     b.z = z0
-    b.vx = u.x * speed
-    b.vy = u.y * speed
-    b.vz = clamp((tz - z0 + 4.905 * tl * tl) / tl, req.header ? -9 : 0, 12)
+    b.vx = flight.vx
+    b.vy = flight.vy
+    b.vz = clamp(flight.vz, req.header ? -9 : 0, 12)
     b.meta = { type: 'shot', from: p.pid, xg: v.xg, result: v.result, hold: v.hold, header: req.header }
     b.lastTouch = p.pid
     b.looseT = 0
@@ -1726,21 +1766,25 @@ export class PesMatch {
     const mt = this.contact ? b.meta : null
     const decided = !!mt && mt.type === 'pass' && !mt.cross // 传中的球不预先指定谁拿：落点争顶 / 谁先到谁拿
     const forced = (q: PesPlayer): boolean => decided && ((mt!.result === 'ok' && q.pid === mt!.intended) || (mt!.result === 'icpt' && q.pid === mt!.icpt))
+    // All claiming paths, including the anti-stall fallback, share the same protection.
+    const eligible = (p: PesPlayer): boolean => {
+      if (p.noClaim > 0) return false
+      if (!mt?.result) return true
+      if (mt.type === 'shot' && b.looseT < 2.5) return false
+      if (decided && b.looseT < 3.0) {
+        if (mt.result === 'ok') return p.pid === mt.intended
+        if (mt.result === 'icpt') return p.pid === mt.icpt
+        if (mt.result === 'miss') return p.pid !== mt.intended
+        if (mt.result === 'out') return false
+      }
+      return true
+    }
     const claimants: PesPlayer[] = []
     let best: PesPlayer | null = null
     let bd = 1e9
     for (const t of this.teams) {
       for (const p of t.players) {
-        if (p.noClaim > 0) continue
-        if (mt && mt.result) {
-          // 射门只由门将处理（2.5 秒后放开，防止球卡住）；传球只有该拿球的人能拿
-          if (mt.type === 'shot' && b.looseT < 2.5) continue
-          if (decided && b.looseT < 3.0) {
-            if (mt.result === 'ok' && p.pid !== mt.intended) continue
-            if (mt.result === 'icpt' && p.pid !== mt.icpt) continue
-            if (mt.result === 'miss' && p.pid === mt.intended) continue
-          }
-        }
+        if (!eligible(p)) continue
         const d = dist(p.pos, b)
         let reach = 0.78 + p.ab.control * 0.45 + (sp < 6 ? 0.35 : 0)
         if (b.meta && b.meta.intended === p.pid) reach += 0.35 // 接球人更容易拿到
@@ -1767,6 +1811,7 @@ export class PesMatch {
         let nd = 1e9
         for (const t of this.teams) {
           for (const p of t.players) {
+            if (!eligible(p)) continue
             const d = dist(p.pos, b)
             if (d < nd) {
               nd = d
@@ -1904,10 +1949,12 @@ export class PesMatch {
   private tryTackles(): void {
     const P = this.spec
     const att = this.ball.owner >= 0 ? this.players[this.ball.owner] : null
-    if (!att || att.stun > 0) return
+    if (!att || att.stun > 0 || this.ball.frozen) return
     for (const t of this.teams) {
       if (t === this.teams[att.ti]) continue
       for (const d of t.players) {
+        // A foul/restart, keeper claim or successful tackle ends this contest immediately.
+        if (this.ball.frozen || this.ball.owner !== att.pid || att.stun > 0) return
         if (d.stun > 0 || d.tackleCd > 0) continue
         if (d.role === 'GK') {
           // 门将出击：禁区内近身直接没收
@@ -2041,7 +2088,7 @@ export class PesMatch {
 
     // 射正统计（球越过门线平面；打高的球不算射正）
     if (b.meta && b.meta.type === 'shot' && Math.abs(b.x) > P.HL - 0.1) {
-      if (!b.meta.counted && Math.abs(b.y) < P.GOAL_HALF + 0.15 && b.z < P.GOAL_H) this.teams[this.players[b.meta.from].ti].stats.shotsOn++
+      if (!b.meta.counted && (this.contact ? b.meta.result === 'goal' : Math.abs(b.y) < P.GOAL_HALF + 0.15 && b.z < P.GOAL_H)) this.teams[this.players[b.meta.from].ti].stats.shotsOn++
       b.meta.counted = true
     }
 
@@ -2191,6 +2238,32 @@ export class PesMatch {
       }
       return
     }
+  }
+
+  /** Clock + ball metadata fully describe closing, including after JSON restore. */
+  private finishHalfFlight(): void {
+    const P = this.spec
+    const b = this.ball
+    const mt = b.meta
+    if (this.phase === 'play' && !b.frozen && b.owner < 0 && mt?.type === 'shot' && mt.result) {
+      this.updateBall(P.DT)
+      // A long/slow shot can stop short under drag, or a save can miss its
+      // keeper window. Bound the wait by the serialized flight age, then put
+      // the ball at the committed endpoint and use the usual outcome rules.
+      if (b.looseT >= Math.max(8, P.L / 8)) {
+        const team = this.teams[this.players[mt.from].ti]
+        const keeper = this.keeperOf(this.other(team))
+        b.x = team.dir * (P.HL - (mt.result === 'save' && keeper ? P.K : 0))
+        b.y = mt.result === 'goal' ? 0 : mt.result === 'save' && keeper ? 0 : P.GOAL_HALF + 1
+        b.z = mt.result === 'miss' ? P.GOAL_H + 1 : 0.5
+        b.vx = team.dir
+        b.vy = b.vz = b.spin = b.saveCd = 0
+      }
+      this.checkRules()
+      this.collect(P.DT)
+      if (this.phase === 'play' && !b.frozen && b.owner < 0 && b.meta === mt) return
+    }
+    this.onHalfEnd()
   }
 
   private onHalfEnd(): void {

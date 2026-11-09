@@ -74,11 +74,15 @@ export class PesEngine {
    * 推进到目标比赛时刻（模拟秒）：比赛时钟没到 target 就继续走物理步，到了就停。
    * 最多只会越过 target 一个物理步（1/60 秒），文字直播的时钟精确到 0.1 秒，所以不会出现 target 之后的条目。
    * 死球（界外、角球、开球）期间时钟不走，会连着走到球重新发出。
+   * 半/终场时钟封顶后，仍须完成已结算射门的飞行，再结束该半场。
    */
   advanceTo(targetClock: number): { changed: boolean; entries: MatchLogEntry[] } {
     const logStart = this.state.log.length
     let steps = 0
-    while (!this.game.finished && this.game.match.time < targetClock && steps < 400_000) {
+    const m = this.game.match
+    while (!this.game.finished && steps < 400_000 && (
+      m.time < targetClock || (targetClock >= m.time && m.time >= m.spec.HALF * m.half)
+    )) {
       this.game.step()
       steps++
     }

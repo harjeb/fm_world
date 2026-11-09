@@ -4,7 +4,7 @@
  * 原版在 F:\FIFA_test\pes2d\sim.js（你的项目，这里不改它、也不拷进仓库），路径可用环境变量 PES2D_SRC 指定。
  * 加载时对原文做三类**字符串补丁**，补丁清单本身就是“我们对原版改了什么”的完整说明：
  *   A. 确定性：去掉构造函数里的 Math.random（球员初始反应计时由调用方给）；
- *   B. 规则缺陷（计划 6.7）：出界归属写反两处、射正统计把打高的球算进去；
+ *   B. 规则缺陷（计划 6.7）：出界归属、射正统计、越位线包含门将、死球后停止抢断、拿球保护；
  *   C. 7 人制标定（计划 6.4）：场地参数外置，约 50 处战术距离乘 K（只在 `scaled: true` 时打）。
  * 随机数：原版用 mulberry32；TS 版的发生器是注入的，这里也注入同一个 mulberry32，两边抽到的数完全一样，
  * 于是每一帧每个球员、球的位置都应当逐位相同。
@@ -62,6 +62,12 @@ const BASE_PATCHES: [string, string][] = [
   ['if (last && last.team === attacking) {', 'if (last && last.team === defending) {'],
   // 射正统计：打高的球不算，同一脚射门只统计一次
   ['if (Math.abs(b.y) < P.GOAL_HALF + 0.15) b.meta.from.team.stats.shotsOn++;', 'if (!b.meta.counted && Math.abs(b.y) < P.GOAL_HALF + 0.15 && b.z < P.GOAL_H) b.meta.from.team.stats.shotsOn++;'],
+  // 同步共享规则修复，仅在内存中修补参照实现，不改原版文件。
+  ["const xs = oppTeam.players.filter(o => o.role !== 'GK').map(o => o.pos.x * team.dir).sort((a, b) => b - a);", 'const xs = oppTeam.players.map(o => o.pos.x * team.dir).sort((a, b) => b - a);'],
+  ['return xs.length > 1 ? xs[1] : (xs[0] == null ? -P.HL : xs[0]);', 'return xs[1] ?? -P.HL;'],
+  ['if (!att || att.stun > 0) return;', 'if (!att || att.stun > 0 || this.ball.frozen) return;'],
+  ['for (const d of t.players) {\n        if (d.stun > 0 || d.tackleCd > 0) continue;', 'for (const d of t.players) {\n        if (this.ball.frozen || this.ball.owner !== att || att.stun > 0) return;\n        if (d.stun > 0 || d.tackleCd > 0) continue;'],
+  ['for (const t of this.teams) for (const p of t.players) {\n          const d = dist(p.pos, b);', 'for (const t of this.teams) for (const p of t.players) {\n          if (p.noClaim > 0) continue;\n          const d = dist(p.pos, b);'],
 ]
 
 /* ---------- C：7 人制标定（原 make_sim7.py 的替换清单） ---------- */
