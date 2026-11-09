@@ -54,9 +54,11 @@ export function renderSeason(): string {
     game.activeMatch ? `<button class="btn primary" data-nav="match">${icon('play', 14)}继续比赛</button>` : '',
     season.finished ? `<button class="btn primary" data-action="next-season">${icon('play', 14)}开始下一赛季</button>` : '',
     !season.finished && fixture && !fixture.played && !game.activeMatch
-      ? (isOnlineMode() && season.round > dueRound(game)
-        ? `<span class="continue-wait">${icon('clock', 14)}本轮还没开赛 · ${esc(matchdayCountdown(game))}</span>`
-        : `<button class="btn primary" data-action="start-league">${icon('play', 14)}${isOnlineMode() ? '对阵' : '跳至比赛日 · 对阵'} ${esc(teamName(game, fixture.homeId === PLAYER_TEAM_ID ? fixture.awayId : fixture.homeId))}</button>`)
+      ? (isOnlineMode()
+        ? (season.round > dueRound(game)
+          ? `<span class="continue-wait">${icon('clock', 14)}下一轮 · ${esc(matchdayCountdown(game))}</span>`
+          : `<span class="continue-wait">${icon('live', 14)}本轮由服务器自动结算</span>`)
+        : `<button class="btn primary" data-action="start-league">${icon('play', 14)}跳至比赛日 · 对阵 ${esc(teamName(game, fixture.homeId === PLAYER_TEAM_ID ? fixture.awayId : fixture.homeId))}</button>`)
       : '',
     !fixture && !season.finished && !game.activeMatch ? '<button class="btn" data-action="sim-round">模拟本轮</button>' : '',
   ].join('')

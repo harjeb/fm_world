@@ -7,6 +7,7 @@ import { createInitialGame, GAME_VERSION, upgradeLegacySignatures } from '../src
 import { ensureCards } from '../src/game/cards.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
 import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, createOwnerlessWorld, createWorldGameFromWorld, advanceOwnerlessWorld, computeWorldTable, ensureWorldCalendar, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, wageForPlayer, worldForClub, WORLD_ROUNDS, worldSlots } from '../src/game/world.ts'
+import { settleDuePlayerMatch } from '../src/game/season.ts'
 import type { AIClubState, AITeam, Player, WorldState } from '../src/game/types.ts'
 import { caOf } from '../src/game/ca.ts'
 import { repairLineup, validateLineup } from '../src/game/squad.ts'
@@ -33,6 +34,8 @@ type Account = {
   game: GameState
   revision: number
   lastUserRevision?: number
+  /** 新账号从这一轮开始自动结算（留出选队 / 排阵容的时间）。 */
+  autoSettle?: { season: number; fromRound: number }
   createdAt: number
   updatedAt: number
 }
@@ -523,9 +526,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const changed = progressingLeague
         ? advanceLeagueRealtime(account.game, now())
         : !account.game.activeMatch && !account.game.season.finished && catchUpSeason(account.game, now()).advanced > 0
+      // 联机联赛到点自动踢：玩家不用手动开赛，登录即可看到当前轮比分。
+      const autoSettled = progressingLeague ? null : settleDuePlayerMatch(account.game, now(), account.autoSettle)
       // 补算里卖给 NPC 或合同到期的球员，这一步进市场。
       if (absorbInto(account)) migrated = true
-      if (!changed && !migrated && !economyAdded) return false
+      if (!changed && !autoSettled && !migrated && !economyAdded) return false
       publishClub(account)
       pullSharedFixtures(account)
       pullSharedWorld(account)
@@ -884,6 +889,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         account.game.lineup = structuredClone(initialTeam.lineup)
       }
       forgetMarketAges(account)
+      // 刚注册的这一轮先不自动踢，给玩家选队和排阵容的时间；下一轮开始自动结算。
+      account.autoSettle = { season: account.game.season.index, fromRound: account.game.season.round + 1 }
       db.accounts.push(account)
       const token = createSession(account.id)
       persistDb()
@@ -1046,6 +1053,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         account.game.lineup = structuredClone(chosenTeam.lineup)
       }
       forgetMarketAges(account)
+      account.autoSettle = { season: account.game.season.index, fromRound: account.game.season.round + 1 }
       persistWorld()
       account.revision++
       account.lastUserRevision = account.revision

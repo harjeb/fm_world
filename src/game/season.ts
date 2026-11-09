@@ -450,6 +450,29 @@ export function advanceSeasonRound(game: GameState, now = Date.now()): { ok: boo
   return { ok: true }
 }
 
+/**
+ * 联机：到了开赛时间还没踢的当前轮比赛由服务器自动结算（用玩家已保存的阵容 / 战术 / 自动换人），
+ * 玩家下次打开页面直接看到比分。更早的轮次由 catchUpSeason 补算；有进行中的比赛时不抢。
+ */
+export function settleDuePlayerMatch(
+  game: GameState,
+  now = Date.now(),
+  /** 新注册 / 刚换队的账号：本赛季这一轮之前不自动结算，留时间选队和排阵容。 */
+  skip?: { season: number; fromRound: number },
+): MatchRecord | null {
+  if (game.activeMatch || game.season.finished) return null
+  const round = game.season.round
+  if (skip && game.season.index === skip.season && round < skip.fromRound) return null
+  if (now < roundKickoffAt(game, round)) return null
+  const fixture = playerFixture(game, round)
+  if (!fixture || fixture.played) return null
+  const record = simulateFixture(game, fixture, true, roundKickoffAt(game, round))
+  if (!record) return null
+  game.matchHistory.unshift(record)
+  updateSeasonTable(game)
+  return record
+}
+
 export function startLeagueMatch(game: GameState, now = Date.now()): { ok: boolean; error?: string; context?: MatchContext } {
   if (game.activeMatch) return { ok: false, error: '已有进行中的比赛' }
   if (game.season.finished) return { ok: false, error: '赛季已经结束' }

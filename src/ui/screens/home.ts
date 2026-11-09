@@ -65,9 +65,9 @@ function nextMatchPanel(): string {
         <div class="nm-meta">${homeIsMe ? '主场' : '客场'} · ${esc(divisionText())}</div>
         ${played
           ? `<div class="nm-meta">下一轮 ${esc(matchdayCountdown(game))}</div>`
-          : isOnlineMode() && game.season.round > dueRound(game)
-            ? `<div class="nm-meta">${icon('clock', 13)} 本轮还没开赛 · 距下一轮 ${esc(matchdayCountdown(game))}</div><span class="muted small">全服时钟到了才能开打</span>`
-            : `<div class="nm-meta">${icon('clock', 13)} 距自动结算 ${esc(matchdayCountdown(game))}</div><button class="btn primary nm-go" data-action="start-league">${icon('play', 14)}${isOnlineMode() ? '开始本轮比赛' : '跳至比赛日'}</button>`}
+          : isOnlineMode()
+            ? `<div class="nm-meta">${icon(isOnlineMode() && game.season.round > dueRound(game) ? 'clock' : 'live', 13)} ${game.season.round > dueRound(game) ? `距下一轮 ${esc(matchdayCountdown(game))}` : '本轮由服务器自动结算'}</div><span class="muted small">比赛由共享世界时钟自动进行，登录即可看比分</span>`
+            : `<div class="nm-meta">${icon('clock', 13)} 距自动结算 ${esc(matchdayCountdown(game))}</div><button class="btn primary nm-go" data-action="start-league">${icon('play', 14)}跳至比赛日</button>`}
       </div>
       ${nextMatchSide(fixture.awayId, 'right', !homeIsMe)}
     </div>`, { aside: `<span class="muted">${esc(seasonRoundLabel(game))}</span>`, className: 'next-match span-8' })
