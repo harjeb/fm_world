@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { GAME_DAY_MS } from '../src/game/calendar.ts'
 import { matchConditionLoss, settleCondition } from '../src/game/condition.ts'
-import { playerFixture, settleGameConditions, simulateFixture } from '../src/game/season.ts'
+import { finishActiveMatch, playerFixture, settleGameConditions, simulateFixture } from '../src/game/season.ts'
+import { restoreActiveEngine, startSingleChallenge } from '../src/game/actions.ts'
 import { createWorldGame } from '../src/game/world.ts'
 
 const HOUR = GAME_DAY_MS / 6
@@ -53,6 +54,22 @@ describe('体能：踢满一场掉 70，一个游戏日恢复 30（每小时结�
       const player = [...game.roster, ...game.aiTeams.flatMap((team) => team.players)].find((item) => item.id === stat.sourceId)!
       expect(player.condition).toBeCloseTo(100 - (70 * stat.minutes) / 90, 6)
     }
+  })
+
+  it('挑战里的比赛（友谊赛）不扣体能', () => {
+    const game = createWorldGame(5152)
+    for (const player of [...game.roster, ...game.aiTeams.flatMap((team) => team.players)]) {
+      player.condition = 80
+      delete player.recoveryAt
+    }
+    const now = Date.now()
+    expect(startSingleChallenge(game, game.aiTeams[0].id, now).ok).toBe(true)
+    const engine = restoreActiveEngine(game)!
+    engine.simulate()
+    const record = finishActiveMatch(game, engine, now)!
+    expect(record.isLeague).toBe(false)
+    expect(record.playerStats.some((stat) => stat.minutes >= 90)).toBe(true)
+    for (const player of [...game.roster, ...game.aiTeams.flatMap((team) => team.players)]) expect(player.condition).toBe(80)
   })
 
   it('休息按时间恢复：一整个游戏日补 30', () => {
