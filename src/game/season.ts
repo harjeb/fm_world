@@ -706,8 +706,9 @@ export function finishActiveMatch(game: GameState, engine: GameEngine, now = Dat
   economyOf(game)
   recordMatchInjuries(game, state, active.context.isLeague ? active.startedAt : now, active.context.isLeague)
   const record = createMatchRecord(game, state, active.context)
-  // 只有联赛扣体能：挑战里的比赛（友谊赛、单场挑战、世界挑战）都不扣。
-  if (active.context.isLeague) applyMatchConditions(game, record.playerStats)
+  // 挑战赛先把休息恢复结算到比赛结束，再扣这场的消耗；联赛由开球/发布流程结算。
+  if (!active.context.isLeague) settleGameConditions(game, now)
+  applyMatchConditions(game, record.playerStats)
   if (active.context.isLeague) {
     const home = active.context.homeAway === 'home' ? PLAYER_TEAM_ID : active.context.opponentId
     recordAppearances(game, home, home === PLAYER_TEAM_ID ? active.context.opponentId : PLAYER_TEAM_ID, record.playerStats)
