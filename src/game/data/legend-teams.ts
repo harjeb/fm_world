@@ -29,6 +29,8 @@ export type LegendTeamDef = {
   color: string
   accent: string
   note: string
+  /** 生成队的首发平均 CA 目标；历史球队不填。 */
+  targetCa?: number
   players: LegendPlayerTuple[]
 }
 

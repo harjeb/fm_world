@@ -239,7 +239,7 @@ function buildPlayer(def: LegendTeamDef, tuple: LegendPlayerTuple, index: number
   }
 }
 
-function buildTeam(def: LegendTeamDef): AITeam {
+export function buildHistoricTeam(def: LegendTeamDef): AITeam {
   const players = def.players.map((tuple, index) => buildPlayer(def, tuple, index))
   if (players.length !== 16) throw new Error(`${def.id}: 需要 16 名球员，实际 ${players.length}`)
   const formation = FORMATIONS[def.formationId]
@@ -261,11 +261,11 @@ function buildTeam(def: LegendTeamDef): AITeam {
   const ranked = [...players].sort((a, b) => caOf(b.attrs, b.positions.GK > 0) - caOf(a.attrs, a.positions.GK > 0))
   return {
     id: `legend-${def.id}`,
-    name: `${def.club} ${def.season}`,
+    name: def.season ? `${def.club} ${def.season}` : def.club,
     short: def.club.slice(0, 2),
     color: def.color,
     accent: def.accent,
-    style: `传奇 · ${def.tier}`,
+    style: def.season ? `传奇 · ${def.tier}` : `生成 · ${def.tier}`,
     formationId: def.formationId,
     tactics: { ...def.tactics },
     strength: 5,
@@ -284,7 +284,7 @@ export function legendTeamById(id: string): AITeam | undefined {
   if (cached) return cached
   const def = LEGEND_TEAMS.find((team) => team.id === id)
   if (!def) return undefined
-  const team = buildTeam(def)
+  const team = buildHistoricTeam(def)
   cache.set(id, team)
   return team
 }
