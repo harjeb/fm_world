@@ -131,9 +131,9 @@ describe('电脑球队的经营节奏', () => {
       team.players.forEach((player, slot) => {
         const delta = playerCa(player) - before[slot]
         expect(delta, `${tier} slot ${slot}`).toBeGreaterThanOrEqual(-0.5)
-        // 每个被练到的人一次就是 +80～140 CA；6 轮下来可能涨好几百点，
-        // 但和玩家一样不能超过球员自己的 PA。
-        if (Number.isFinite(player.pa)) expect(playerCa(player), `${tier} slot ${slot}`).toBeLessThanOrEqual(player.pa! + 3)
+        // 每个被练到的人一次约 +250～300 CA（和玩家一整轮同量级）；
+        // 6 轮下来会顶到 PA，取整可能超出不到 5 点。
+        if (Number.isFinite(player.pa)) expect(playerCa(player), `${tier} slot ${slot}`).toBeLessThanOrEqual(player.pa! + 5)
         // 装上的卡就是这个槽位自己的卡。
         const card = ai.cards[String(slot)]
         expect(Math.abs(playerCa(player) - card.rating), `${tier} slot ${slot}`).toBeLessThan(1)

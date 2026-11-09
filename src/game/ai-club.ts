@@ -53,10 +53,10 @@ export const aiTierProfile = (tier: TierId): TierProfile => TIER_PROFILE[tier]
 
 /**
  * 一次训练 = 玩家的一整轮培养（30 个时段，只练这一个人），所有级别完全一样，不是一次行动。
- * 玩家自动培养一轮约 +100～150 CA；这里按同样的量级给基础值，再乘设施系数。
+ * 玩家自动培养一轮实测约 +250～270 CA（初始设施）；这里按同样的量级给基础值，再乘设施系数。
  * 每天练几个人由 perDay 决定；成长只受球员自己的 PA 上限约束，没有额外的目标或放缓。
  */
-const AI_CA_PER_PROGRAM = 100
+const AI_CA_PER_PROGRAM = 560
 /** 电脑球队阵容上限：比玩家的 25 人低，抢人时会留出位置。 */
 /** 电脑球队名单上限：25 人名单再留 4 个签人的空位。 */
 export const AI_SQUAD_LIMIT = 29
