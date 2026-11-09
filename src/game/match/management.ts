@@ -1,6 +1,7 @@
 import type { AutoSubPlan, Lineup, MatchMentality, Player, Tactics } from '../types.ts'
 import { FORMATIONS } from '../data/formations.ts'
 import { MATCH_DISPLAY_SECONDS } from './time.ts'
+import { MAX_SUBS } from '../squad.ts'
 
 export const MATCH_TACTICS: Record<MatchMentality, Tactics> = {
   attack: { attack: 'balanced', passing: 'direct', tempo: 'fast', line: 'high', press: 'high' },
@@ -26,7 +27,7 @@ export function validateAutoSubPlan(roster: Player[], lineup: Lineup, plan: unkn
     if (typeof p.onInjury !== 'boolean') errors.push('onInjury 必须是布尔值')
     if (p.staminaBelow !== null && (typeof p.staminaBelow !== 'number' || !Number.isFinite(p.staminaBelow) || p.staminaBelow < 1 || p.staminaBelow > 99)) errors.push('体力阈值必须为 null 或 1-99')
     if (!Array.isArray(p.timed)) return [...errors, 'timed 必须是数组']
-    if (p.timed.length > 3) errors.push('定时换人最多三条')
+    if (p.timed.length > MAX_SUBS) errors.push(`定时换人最多 ${MAX_SUBS} 条`)
     const outs = new Set<string>(), ins = new Set<string>()
     for (const item of p.timed) {
       if (!item || typeof item !== 'object' || Array.isArray(item)) { errors.push('定时规则格式错误'); continue }

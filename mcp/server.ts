@@ -46,7 +46,7 @@ const tacticsSchema = z.object({
 })
 
 const autoSubsSchema = z.object({
-  timed: z.array(z.object({ atMinute: z.number().gt(0).lt(90), outId: z.string(), inId: z.string() })).max(3)
+  timed: z.array(z.object({ atMinute: z.number().gt(0).lt(90), outId: z.string(), inId: z.string() })).max(5)
     .describe('指定首发换下和替补换上的比赛分钟数（0-90），达到后在事件边界执行'),
   staminaBelow: z.number().min(1).max(99).nullable().describe('体力百分比低于此值时换人；null 为关闭'),
   onInjury: z.boolean().describe('发生比赛内伤病时自动换人'),
@@ -135,20 +135,20 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
   }, (args) => action('release_player', args))
 
   register('auto_lineup', '自动排阵容', '按指定阵型自动选择首发、替补和默认战术。', {
-    formationId: z.enum(['1-2-3-1', '1-3-2-1', '1-2-2-2']).optional().describe('不填则沿用当前阵型'),
+    formationId: z.enum(['4-4-2', '4-3-3', '4-2-3-1', '3-5-2']).optional().describe('不填则沿用当前阵型'),
   }, (args) => action('auto_lineup', args))
 
-  register('set_lineup', '提交阵容', '提交完整首发、替补和战术。首发必须 7 人并占满阵型的位置，替补最多 5 人；任何球员都能踢任何位置，没学过的位置属性按 60% 发挥。', {
+  register('set_lineup', '提交阵容', '提交完整首发、替补和战术。首发必须 11 人并占满阵型的位置，替补最多 7 人；任何球员都能踢任何位置，没学过的位置属性按 60% 发挥。', {
     lineup: z.object({
-      formationId: z.enum(['1-2-3-1', '1-3-2-1', '1-2-2-2']),
-      starters: z.array(z.object({ slotId: z.string(), playerId: z.string(), role: z.string().optional() })).describe('7 名首发；role 可省略，服务器会选该位置默认职责'),
+      formationId: z.enum(['4-4-2', '4-3-3', '4-2-3-1', '3-5-2']),
+      starters: z.array(z.object({ slotId: z.string(), playerId: z.string(), role: z.string().optional() })).describe('11 名首发；role 可省略，服务器会选该位置默认职责'),
       bench: z.array(z.string()).max(5),
       tactics: tacticsSchema.optional(),
     }),
     autoSubs: autoSubsSchema.optional().describe('可同时提交与新阵容匹配的自动换人计划'),
   }, (args) => action('set_lineup', args))
 
-  register('set_auto_subs', '设置赛前自动换人', '设置比赛分钟、体力阈值和受伤自动换人；新计划从下一场比赛生效，自动和手动共用 3 次额度。', {
+  register('set_auto_subs', '设置赛前自动换人', '设置比赛分钟、体力阈值和受伤自动换人；新计划从下一场比赛生效，自动和手动共用 5 次额度。', {
     plan: autoSubsSchema,
   }, (args) => action('set_auto_subs', args))
 
@@ -239,7 +239,7 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     mentality: z.enum(['attack', 'balanced', 'defend']).describe('attack=全体进攻，balanced=均衡，defend=全体防守'),
   }, (args) => action('set_match_tactics', args))
 
-  register('substitute', '比赛中换人', '在比赛进行中换人；被换下球员不能再次上场，自动和手动换人共用最多 3 次。', {
+  register('substitute', '比赛中换人', '在比赛进行中换人；被换下球员不能再次上场，自动和手动换人共用最多 5 次。', {
     outId: z.string().describe('场上球员 ID，来自 get_match 的 onPitch'),
     inId: z.string().describe('可用替补 ID，来自 get_match 的 availableBench'),
   }, (args) => action('substitute', args))
@@ -254,7 +254,7 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
 
   server.registerResource('agent-api', 'fm://agent-api.md', {
     mimeType: 'text/markdown',
-    description: 'FM 世界（七人制足球经理）Agent API：令牌、HTTP 动作、训练/阵容/比赛流程与 MCP 配置。',
+    description: 'FM 世界（11 人制足球经理）Agent API：令牌、HTTP 动作、训练/阵容/比赛流程与 MCP 配置。',
   }, async (uri) => ({
     contents: [{ uri: uri.href, text: readFileSync(new URL('../docs/agent-api.md', import.meta.url), 'utf8'), mimeType: 'text/markdown' }],
   }))

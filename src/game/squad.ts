@@ -1,10 +1,18 @@
 import type { FormationId, Lineup, Player, Position, RoleId, Tactics, TacticPreset } from './types.ts'
-import { FORMATIONS } from './data/formations.ts'
-import { ROLES, ROLES_BY_POSITION, roleFit } from './data/roles.ts'
+import { FORMATIONS, type FormationSlot } from './data/formations.ts'
+import { ROLES, ROLES_BY_POSITION, roleFit, rolesForSlot } from './data/roles.ts'
 import { PLAYABLE_PROFICIENCY, caOf, positionMultiplier } from './ca.ts'
 
-/** 替补席位数。比赛中最多换 3 次是另一条规则，不受它影响。 */
-export const BENCH_SIZE = 5
+/** 11 人制：首发人数（每个阵型都是 11 个槽位）。 */
+export const STARTERS = 11
+/** 替补席位数。 */
+export const BENCH_SIZE = 7
+/** 一场比赛最多换几次人（手动和自动共用）。 */
+export const MAX_SUBS = 5
+/** 一场比赛的完整名单：首发 + 替补。补青训、AI 名单都以它为下限。 */
+export const FULL_SQUAD = STARTERS + BENCH_SIZE
+/** 卖人 / 解约后至少要留几个人（首发 + 3 个替补）。 */
+export const MIN_SQUAD = STARTERS + 3
 
 export type LineupSlotView = {
   slotId: string
@@ -20,8 +28,8 @@ export function playerById(roster: Player[], id: string): Player | undefined {
   return roster.find((player) => player.id === id)
 }
 
-export function bestRoleForPlayer(player: Player, position: Position): { role: RoleId; fit: number } {
-  const roles = ROLES_BY_POSITION[position]
+export function bestRoleForPlayer(player: Player, position: Position, slot?: { position: Position; x: number }): { role: RoleId; fit: number } {
+  const roles = slot ? rolesForSlot(slot) : ROLES_BY_POSITION[position]
   let best = roles[0]
   let bestFit = -1
   for (const role of roles) {
@@ -39,7 +47,7 @@ export function autoFillLineup(
   formationId: FormationId,
   tactics?: Tactics,
   /** 旧阵容：同阵型时保留玩家自己摆的位置，并且总是保留命名预设。 */
-  previous?: Lineup,
+  previous?: LineupLike,
 ): Lineup {
   const formation = FORMATIONS[formationId]
   const used = new Set<string>()
@@ -54,7 +62,7 @@ export function autoFillLineup(
     const learned = free.filter((player) => player.positions[slot.position] >= PLAYABLE_PROFICIENCY)
     for (const player of learned.length ? learned : free) {
       const multiplier = positionMultiplier(player.positions[slot.position])
-      for (const role of ROLES_BY_POSITION[slot.position]) {
+      for (const role of rolesForSlot(slot)) {
         const score = roleFit(player.attrs, role, player.positions.GK > 0) * multiplier
         if (score > bestScore) {
           bestScore = score
@@ -141,10 +149,11 @@ function assignScore(player: Player, position: Position, role: RoleId, staminaWe
   return score
 }
 
-function bestRoleFor(player: Player, position: Position, defaultRole: RoleId, staminaWeight: number, context: AutoAssignContext): { role: RoleId; score: number } {
-  let best = defaultRole
+function bestRoleFor(player: Player, slot: FormationSlot, staminaWeight: number, context: AutoAssignContext): { role: RoleId; score: number } {
+  const position = slot.position
+  let best = slot.defaultRole
   let bestScore = -Infinity
-  for (const role of ROLES_BY_POSITION[position]) {
+  for (const role of rolesForSlot(slot)) {
     const score = assignScore(player, position, role, staminaWeight, context)
     if (score > bestScore) {
       bestScore = score
@@ -188,7 +197,7 @@ export function autoAssignLineup(
       let chosenScore = -Infinity
       for (const player of pool) {
         const minutes = context.minutes(player)
-        const { role, score } = bestRoleFor(player, slot.position, slot.defaultRole, 0.08, context)
+        const { role, score } = bestRoleFor(player, slot, 0.08, context)
         if (minutes < chosenMinutes || (minutes === chosenMinutes && score > chosenScore)) {
           chosen = player
           chosenRole = role
@@ -209,7 +218,7 @@ export function autoAssignLineup(
       let chosenRole: RoleId = slot.defaultRole
       let chosenScore = -Infinity
       for (const player of candidatesFor(free, slot.position, context)) {
-        const { role, score } = bestRoleFor(player, slot.position, slot.defaultRole, 0.08, context)
+        const { role, score } = bestRoleFor(player, slot, 0.08, context)
         if (score > chosenScore) {
           chosen = player
           chosenRole = role
@@ -258,7 +267,7 @@ function rotateTiredStarters(
     let chosenScore = -Infinity
     for (const player of pool) {
       // 体力权重大：就是要把体力多的替补顶上去。
-      const { role, score } = bestRoleFor(player, item.slot.position, item.slot.defaultRole, 0.6, context)
+      const { role, score } = bestRoleFor(player, item.slot, 0.6, context)
       if (score > chosenScore) {
         chosen = player
         chosenRole = role
@@ -465,7 +474,8 @@ export function validateLineup(roster: Player[], lineup: Lineup): LineupValidati
   const warnings: string[] = []
   const formation = FORMATIONS[lineup.formationId]
   if (!formation) errors.push('未知阵型')
-  if (lineup.starters.length !== 7) errors.push('首发必须是 7 人')
+  else if (formation.legacy) errors.push('旧的 7 人制阵型已经停用，请改用 11 人制阵型')
+  if (lineup.starters.length !== STARTERS) errors.push(`首发必须是 ${STARTERS} 人`)
   const slotMap = new Map(formation?.slots.map((slot) => [slot.id, slot]) ?? [])
   const playerIds = new Set<string>()
   let gkCount = 0

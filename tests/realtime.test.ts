@@ -60,7 +60,7 @@ describe('联赛现实时间', () => {
       expect(displayClock(clocks.at(-1)!, game.activeMatch!.context.durationSeconds ?? 900)).toBeLessThanOrEqual(MATCH_DISPLAY_SECONDS / 2)
     }
     // 12 个种子的半场回归（含后台赛程），不是性能断言；全套并行时需留出 CPU 争用余量。
-  }, 15_000)
+  }, 120_000)
 
   it('定时自动换人不提前，重启和分批推进与直接模拟结果一致', () => {
     for (let seed = 1; seed <= 8; seed++) {

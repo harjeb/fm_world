@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { STARTERS } from '../src/game/squad.ts'
 import { setLineup } from '../src/game/actions.ts'
 import { FORMATIONS } from '../src/game/data/formations.ts'
 import { roleFit } from '../src/game/data/roles.ts'
@@ -136,7 +137,7 @@ describe('任何球员都能踢任何位置', () => {
     const game = createInitialGame(57)
     for (const player of game.roster) player.positions.ST = 0
     const lineup = autoFillLineup(game.roster, game.lineup.formationId, game.lineup.tactics)
-    expect(lineup.starters).toHaveLength(7)
+    expect(lineup.starters).toHaveLength(STARTERS)
     expect(validateLineup(game.roster, lineup).valid).toBe(true)
   })
 

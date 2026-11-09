@@ -878,8 +878,8 @@ export class PesMatch {
     }
     const sCarry = this.carryValue(p, press, opps)
     if (sCarry > best.score) best = { type: 'carry', score: sCarry }
-    // 传中：边路持球者在传中区、禁区里有队友时可以选择传中
-    if (this.rules.cross) {
+    // 传中：边路持球者在传中区、禁区里有队友时可以选择传中。成败要走结算内核，没接结算的纯物理比赛不传中。
+    if (this.rules.cross && this.contact) {
       const option = this.crossOption(p, press)
       if (option && option.score > best.score) best = { type: 'cross', score: option.score, mate: option.mate, spot: option.spot }
     }

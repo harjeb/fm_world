@@ -129,7 +129,7 @@ describe('复制给 AI 的接入说明', () => {
     expect(text).toContain('Authorization: Bearer fm_test123')
     expect(text).toContain('https://fm.example.com/api/agent/docs')
     expect(text).toContain('https://fm.example.com/api/agent/state')
-    expect(text).toContain('七人制足球经理')
+    expect(text).toContain('11 人制足球经理')
     expect(text).toContain('青石')
   })
 })

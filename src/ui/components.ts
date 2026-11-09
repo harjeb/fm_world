@@ -478,12 +478,16 @@ export function boardMarkings(): string {
     ${stripes}
     <rect x="0" y="0" width="64" height="100" class="board-line"/>
     <line x1="0" y1="50" x2="64" y2="50" class="board-line"/>
-    <circle cx="32" cy="50" r="7" class="board-line"/>
+    <circle cx="32" cy="50" r="8.7" class="board-line"/>
     <circle cx="32" cy="50" r=".5" class="board-spot"/>
-    <rect x="17" y="0" width="30" height="18" class="board-line"/>
-    <rect x="17" y="82" width="30" height="18" class="board-line"/>
-    <rect x="26" y="-2" width="12" height="2" class="board-line"/>
-    <rect x="26" y="100" width="12" height="2" class="board-line"/>
+    <rect x="13" y="0" width="38" height="15.7" class="board-line"/>
+    <rect x="13" y="84.3" width="38" height="15.7" class="board-line"/>
+    <rect x="23.4" y="0" width="17.2" height="5.2" class="board-line"/>
+    <rect x="23.4" y="94.8" width="17.2" height="5.2" class="board-line"/>
+    <circle cx="32" cy="10.5" r=".5" class="board-spot"/>
+    <circle cx="32" cy="89.5" r=".5" class="board-spot"/>
+    <rect x="28.55" y="-2" width="6.9" height="2" class="board-line"/>
+    <rect x="28.55" y="100" width="6.9" height="2" class="board-line"/>
   </svg>`
 }
 

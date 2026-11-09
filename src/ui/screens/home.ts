@@ -85,7 +85,7 @@ function clubStatusPanel(): string {
     ${tile('联赛排名', rank ? `${rank}<small> / ${table.length}</small>` : '—', me ? `${me.points} 分` : '')}
     ${tile('战绩', me ? `${me.won}-${me.drawn}-${me.lost}` : '—', `净胜 ${diff > 0 ? '+' : ''}${diff}`)}
     ${tile('余额', economy.balance.toLocaleString(), `工资 ${wages.toLocaleString()} / 轮`)}
-    ${tile('阵容', `${game.roster.length}<small> / 25</small>`, sessions ? `${sessions} 人培养中` : '无人培养')}
+    ${tile('阵容', `${game.roster.length}<small> / ${SQUAD_LIMIT}</small>`, sessions ? `${sessions} 人培养中` : '无人培养')}
   </div>`, { className: 'club-status span-4' })
 }
 

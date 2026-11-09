@@ -3,7 +3,7 @@ import { economyOf } from './economy.ts'
 import { caOf } from './ca.ts'
 import { playerMarketValue } from './pricing.ts'
 export { VALUE_AT_CA_205, VALUE_GROWTH_PER_CA, VALUE_CAP, playerMarketValue } from './pricing.ts'
-import { autoFillLineup, repairLineup, validateLineup } from './squad.ts'
+import { MIN_SQUAD, autoFillLineup, repairLineup, validateLineup } from './squad.ts'
 import { wageForPlayer } from './world.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 import { closeFinishedTraining, destroyPlayerCards, untrainedPlayer } from './cards.ts'
@@ -68,7 +68,8 @@ export function saleChance(price: number, value: number): number {
 const fail = (error: string): MarketOutcome => ({ ok: false, error })
 const validBalance = (balance: number) => Number.isSafeInteger(balance) && balance >= 0
 const positive = (n: number) => Number.isSafeInteger(n) && n > 0
-export const SQUAD_LIMIT = 25
+/** 一线队人数上限（11 人制：25 人名单再留 5 个签人的空位）。 */
+export const SQUAD_LIMIT = 30
 
 export function transferWindowOpen(game: GameState): boolean {
   if (!game.world) return true
@@ -281,7 +282,7 @@ export function listPlayer(game: GameState, playerId: string, price: number): Ma
   const round = game.season?.round ?? 1
   if (!positive(round)) return fail('赛季轮次无效')
   const roster = game.roster.filter(p => p.id !== playerId)
-  if (roster.length < 10) return fail('阵容必须保留至少 10 人')
+  if (roster.length < MIN_SQUAD) return fail(`阵容必须保留至少 ${MIN_SQUAD} 人`)
   const repaired = repairLineup(roster, game.lineup)
   if (!validateLineup(roster, repaired.lineup).valid) return fail('挂牌后无法组成合法阵容')
   // 培养刚结束的新卡已在库存；挂牌期间卡先留着（撤牌回队还能用），真卖出去时才全部销毁。
@@ -420,7 +421,7 @@ export function renewContract(game: GameState, playerId: string, years = 2): Mar
 
 export function releasePlayer(game: GameState, playerId: string): MarketOutcome {
   if (game.activeMatch) return fail('比赛进行中不能解约')
-  if (game.roster.length <= 10) return fail('阵容必须保留至少 10 人')
+  if (game.roster.length <= MIN_SQUAD) return fail(`阵容必须保留至少 ${MIN_SQUAD} 人`)
   const player = game.roster.find((item) => item.id === playerId)
   if (!player) return fail('球员不在你的阵容')
   const roster = game.roster.filter((item) => item.id !== playerId)

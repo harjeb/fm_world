@@ -217,20 +217,25 @@ describe('培养', () => {
     expect(game.training[player.id]?.candidate.skills.length ?? 0).toBeLessThanOrEqual(4)
   })
   it('训练行动使用真实队友传承，拒绝本人和不存在的导师，候选确认前不替换球员', () => {
-    const game = createInitialGame(4)
-    const player = game.roster[0], mentor = game.roster[1]
-    mentor.skills = ['injury_prevention']
-    expect(startTraining(game, player.id, 1).ok).toBe(true)
-    delete game.training[player.id].scheduleVersion
-    const session = game.training[player.id]
-    const request = { kind: 'inherit', skill: 'injury_prevention' } as const
-    expect(trainingAction(game, player.id, { ...request, mentorId: 'missing' }).ok).toBe(false)
-    expect(trainingAction(game, player.id, { ...request, mentorId: player.id }).ok).toBe(false)
-    expect(session.action).toBe(0)
-    expect(trainingAction(game, player.id, { ...request, mentorId: mentor.id }).ok).toBe(true)
-    expect(session.candidate.skills).toContain('injury_prevention')
-    expect(player.skills).not.toContain('injury_prevention')
-    expect(game.candidates[player.id]).toBeUndefined()
+    // 传承有成功率：换几个培养种子，直到有一次传承成功（种子固定，结果可复现）。
+    let inherited = false
+    for (let trainingSeed = 1; trainingSeed <= 20 && !inherited; trainingSeed++) {
+      const game = createInitialGame(4)
+      const player = game.roster[0], mentor = game.roster[1]
+      mentor.skills = ['injury_prevention']
+      expect(startTraining(game, player.id, trainingSeed).ok).toBe(true)
+      delete game.training[player.id].scheduleVersion
+      const session = game.training[player.id]
+      const request = { kind: 'inherit', skill: 'injury_prevention' } as const
+      expect(trainingAction(game, player.id, { ...request, mentorId: 'missing' }).ok).toBe(false)
+      expect(trainingAction(game, player.id, { ...request, mentorId: player.id }).ok).toBe(false)
+      expect(session.action).toBe(0)
+      expect(trainingAction(game, player.id, { ...request, mentorId: mentor.id }).ok).toBe(true)
+      expect(player.skills).not.toContain('injury_prevention')
+      expect(game.candidates[player.id]).toBeUndefined()
+      inherited = session.candidate.skills.includes('injury_prevention')
+    }
+    expect(inherited).toBe(true)
   })
 
   it('新一轮培养固定使用开始时的青训设施等级', () => {

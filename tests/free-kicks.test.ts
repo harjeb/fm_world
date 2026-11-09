@@ -141,8 +141,8 @@ describe('任意球的数量', () => {
     expect(perMatch(total.injuries)).toBeLessThan(0.5)
     // 禁区内不会战术犯规，点球还是很少。
     expect(perMatch(total.penalties)).toBeLessThan(0.1)
-    // v3 一场约 0.33 秒，150 场要 50 秒左右（旧引擎只要 5 秒，原来的 30 秒是按它定的）。
-  }, 120_000)
+    // v3 一场约 0.33 秒（11 人制约 0.5 秒），150 场要 75 秒左右；全量并行跑时会慢好几倍，给足时间。
+  }, 400_000)
 })
 
 describe('战术犯规', () => {

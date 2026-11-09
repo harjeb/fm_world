@@ -90,7 +90,7 @@ const rows = (await Promise.all(jobs.map((job, id) => run(job, id)))).flat()
 
 const mean = (xs: number[]): number => xs.reduce((s, v) => s + v, 0) / (xs.length || 1)
 const f = (v: number, d = 1): string => v.toFixed(d)
-console.log(`新引擎（pes2d + 结算内核）统计：7 人制，D = ${duration} 模拟秒，每档 ${perFactor} 场，耗时 ${((Date.now() - started) / 1000).toFixed(0)} 秒\n`)
+console.log(`新引擎（pes2d + 结算内核）统计：11 人制，D = ${duration} 模拟秒，每档 ${perFactor} 场，耗时 ${((Date.now() - started) / 1000).toFixed(0)} 秒\n`)
 console.log('| 客队属性 | 主 / 平 / 客 | 每场进球 | 射门（射正） | 传球成功率 | 抢断 | 拦截 | 犯规 | 角球 | 黄牌 / 红牌 | 控球（主） | 单队跑动 | 0:0 | 耗时/场 |')
 console.log('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|')
 for (const factor of BASELINE_FACTORS) {

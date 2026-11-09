@@ -1,5 +1,5 @@
 /**
- * 新内核自由运行的统计表（npm run pes:freerun）：不接结算，看 pes2d 自己的物理 + 几何结算在 7 人制下的表现。
+ * 新内核自由运行的统计表（npm run pes:freerun）：不接结算，看 pes2d 自己的物理 + 几何结算在游戏场地（11 人制）下的表现。
  * 对应计划 6.6 的试跑表，用来确认移植后的内核和试跑时一样健康，也是阶段 4 校准前的起点。
  *
  *   npm run pes:freerun                 每组 12 场，D = 900 模拟秒
@@ -11,7 +11,7 @@
 import { fixtureTeam } from '../src/game/pes/fixtures.ts'
 import { FreeRunMonitor } from '../src/game/pes/health.ts'
 import { PesMatch } from '../src/game/pes/sim.ts'
-import { makePitch7, type PesTactics } from '../src/game/pes/spec.ts'
+import { makeGamePitch, type PesTactics } from '../src/game/pes/spec.ts'
 import type { FormationId } from '../src/game/types.ts'
 
 function option(name: string, fallback: number): number {
@@ -36,16 +36,16 @@ interface Case {
 }
 
 const cases: Case[] = [
-  { label: '镜像 1-2-3-1', home: '1-2-3-1', away: '1-2-3-1' },
-  { label: '1-3-2-1 对 1-2-2-2', home: '1-3-2-1', away: '1-2-2-2' },
-  { label: '高位逼抢 对 低位窄防', home: '1-2-3-1', away: '1-2-3-1', homeTactics: { line: 1, press: 1, tempo: 0.8 }, awayTactics: { line: 0, press: 0, width: 0.2, tempo: 0.3 } },
-  { label: '实力差（客队属性低约 7%）', home: '1-2-3-1', away: '1-2-3-1', awayLevel: 35.5 },
+  { label: '镜像 4-4-2', home: '4-4-2', away: '4-4-2' },
+  { label: '3-5-2 对 4-3-3', home: '3-5-2', away: '4-3-3' },
+  { label: '高位逼抢 对 低位窄防', home: '4-3-3', away: '4-2-3-1', homeTactics: { line: 1, press: 1, tempo: 0.8 }, awayTactics: { line: 0, press: 0, width: 0.2, tempo: 0.3 } },
+  { label: '实力差（客队属性低约 7%）', home: '4-4-2', away: '4-4-2', awayLevel: 35.5 },
 ]
 
 const mean = (xs: number[]): number => xs.reduce((s, v) => s + v, 0) / (xs.length || 1)
 const f = (v: number, digits = 1): string => v.toFixed(digits)
 
-console.log(`自由运行：7 人制 60×40 米，D = ${duration} 模拟秒，每组 ${perCase} 场\n`)
+console.log(`自由运行：11 人制 105×68 米，D = ${duration} 模拟秒，每组 ${perCase} 场\n`)
 console.log('| 对阵 | 进球 | 射门（射正） | 传球成功率 | 角球 | 球门球 | 越位 | 犯规 | 抢断 | 扑救 | 单队跑动 | 平局 / 0:0 | 耗时/场 |')
 console.log('|---|---|---|---|---|---|---|---|---|---|---|---|---|')
 
@@ -60,7 +60,7 @@ for (const [index, c] of cases.entries()) {
   for (let n = 0; n < perCase; n++) {
     const seed = 1000 * (index + 1) + n
     const m = new PesMatch({
-      spec: makePitch7(duration),
+      spec: makeGamePitch(duration),
       seed,
       home: fixtureTeam(c.home, { seed: seed * 2 + 1, prefix: 'H', tactics: c.homeTactics, level: c.homeLevel }),
       away: fixtureTeam(c.away, { seed: seed * 2 + 2, prefix: 'A', tactics: c.awayTactics, level: c.awayLevel }),

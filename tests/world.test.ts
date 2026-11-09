@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { ELEVEN_SQUAD_SIZE } from '../src/game/eleven.ts'
 import { createWorldGame, payWorldWages, d2ClubChoices, createOwnerlessWorld, createWorldGameFromWorld, advanceOwnerlessWorld } from '../src/game/world.ts'
 import { ROUND_MS, startLeagueMatch, startNextSeason, updateSeasonTable } from '../src/game/season.ts'
 import { buyFreeAgent, joinRoster, releasePlayer, renewContract, transferWindowOpen, playerMarketValue } from '../src/game/market.ts'
@@ -35,7 +36,7 @@ describe('三级共享世界', () => {
     expect(game.world!.clubs.filter((club) => club.tier === 'division2' && club.conference === 'north')).toHaveLength(20)
     expect(game.world!.clubs.filter((club) => club.tier === 'division2' && club.conference === 'south')).toHaveLength(20)
     expect(game.world!.clubs.find((club) => club.id === 'player')?.tier).toBe('division2')
-    expect(game.roster).toHaveLength(18)
+    expect(game.roster).toHaveLength(ELEVEN_SQUAD_SIZE)
     expect(game.freeStars).toHaveLength(250)
     expect(game.reserveStars).toHaveLength(150)
     expect(game.world!.playerDivisionId).toBe('d2-north')

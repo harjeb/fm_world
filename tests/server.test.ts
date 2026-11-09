@@ -406,7 +406,7 @@ describe('联机服务器 / 账号 / SSE', () => {
     expect(current.game.season.finished).toBe(true)
     expect(current.game.season.round).toBe(38)
     expect(current.game.matchHistory).toHaveLength(38)
-  }, 45_000)
+  }, 180_000)
 })
 
 describe('Agent API', () => {
@@ -568,7 +568,9 @@ describe('Agent API', () => {
       body: JSON.stringify(body),
     })
 
-    expect((await action({ action: 'auto_lineup', formationId: '1-3-2-1' })).status).toBe(200)
+    // 旧的 7 人制阵型已经停用
+    expect((await action({ action: 'auto_lineup', formationId: '1-3-2-1' })).status).toBe(400)
+    expect((await action({ action: 'auto_lineup', formationId: '3-5-2' })).status).toBe(200)
     const trainee = state.game.roster.find((player) => player.energy >= 30)!
     const detail = await action({ action: 'get_player', playerId: trainee.id })
     expect(detail.status).toBe(200)
@@ -588,7 +590,7 @@ describe('Agent API', () => {
     const live = await action({ action: 'get_match' })
     expect(live.status).toBe(200)
     const liveBody = await live.json() as { result: { playerSide: string; onPitch: Array<{ id: string; position: string }>; availableBench: Array<{ id: string }>; commentary: Array<{ seq: number; clock: number }> } }
-    expect(liveBody.result.onPitch).toHaveLength(7)
+    expect(liveBody.result.onPitch).toHaveLength(11)
     expect([...liveBody.result.onPitch, ...liveBody.result.availableBench].every((player) => player.id.startsWith(`${liveBody.result.playerSide}:`))).toBe(true)
     expect(liveBody.result.commentary.every((line) => line.clock === 0)).toBe(true)
     expect((await action({ action: 'advance_match', steps: 25 })).status).toBe(400)

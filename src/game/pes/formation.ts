@@ -5,6 +5,7 @@
  * x = 距本方球门线的比例（0 = 本方球门线，1 = 对方球门线），y = 横向（0 = 左，1 = 右）。
  */
 import { FORMATIONS } from '../data/formations.ts'
+import { FULL_BACK_DEPTH } from '../data/roles.ts'
 import type { FormationId, Position } from '../types.ts'
 import type { PesRole } from './spec.ts'
 
@@ -20,13 +21,26 @@ export interface FormationRow {
 
 const LINE_BY_POSITION: Record<Position, number> = { GK: 0, CB: 0.1, CM: 0.45, W: 0.8, ST: 0.9 }
 
-function roleOf(position: Position, ny: number): PesRole {
+/** 中场站得靠前就是前腰。 */
+const ATTACKING_MID_DEPTH = 0.5
+
+function lineOf(position: Position, x: number): number {
+  if (position === 'W' && x < FULL_BACK_DEPTH) return 0.2
+  if (position === 'W' && x < ATTACKING_MID_DEPTH) return 0.55
+  if (position === 'CM' && x >= ATTACKING_MID_DEPTH) return 0.65
+  if (position === 'CM' && x < 0.37) return 0.35
+  return LINE_BY_POSITION[position]
+}
+
+function roleOf(position: Position, x: number, ny: number): PesRole {
   switch (position) {
     case 'GK': return 'GK'
     case 'CB': return 'CB'
     case 'CM': return 'CM'
     case 'ST': return 'ST'
-    case 'W': return ny < 0.5 ? 'LW' : 'RW'
+    case 'W':
+      if (x < FULL_BACK_DEPTH) return ny < 0.5 ? 'LB' : 'RB'
+      return ny < 0.5 ? 'LW' : 'RW'
   }
 }
 
@@ -41,9 +55,9 @@ export function formationRows(formationId: FormationId, custom?: Record<string, 
     const spot = custom?.[slot.id]
     const nx = spot?.x ?? slot.x
     const ny = spot?.y ?? slot.y
-    let line = LINE_BY_POSITION[slot.position]
+    let line = lineOf(slot.position, slot.x)
     // 三中卫里居中的那个更靠后（拖后中卫）
     if (slot.position === 'CB' && centreBacks.length === 3 && slot.y === 0.5) line = 0.08
-    return { slotId: slot.id, position: slot.position, role: roleOf(slot.position, slot.y), nx, ny, line }
+    return { slotId: slot.id, position: slot.position, role: roleOf(slot.position, slot.x, slot.y), nx, ny, line }
   })
 }

@@ -3,7 +3,8 @@ import { ALL_ATTRIBUTES } from './types.ts'
 import { isMainAttr } from './scale.ts'
 import { buildLeague } from './data/ai-teams.ts'
 import { autoFillLineup, validateLineup } from './squad.ts'
-import { FORMATIONS } from './data/formations.ts'
+import { elevenFormationFor } from './data/formations.ts'
+import { upgradeElevenASide } from './eleven.ts'
 import { validateAutoSubPlan } from './match/management.ts'
 import { createSeason } from './season.ts'
 import { ensureWorldCalendar } from './world.ts'
@@ -140,6 +141,8 @@ export function loadGame(): GameState | null {
       // 越位规则固定开启：旧存档里关掉过的也改回来。
       parsed.settings = { ...(parsed.settings ?? {}), offside: true }
     }
+    // 7 人制存档迁移到 11 人制：补随机球员、换阵型（只在还有旧阵型时动手）。
+    const elevenUpgraded = upgradeElevenASide(parsed)
     const repaired = repairLoadedLineup(parsed)
     const signaturesAdded = upgradeLegacySignatures(parsed)
     const economyAdded = parsed.economy == null
@@ -149,7 +152,7 @@ export function loadGame(): GameState | null {
     const traitsUpgraded = upgradeStarTraits(parsed)
     const attrsUpgraded = upgradeBurstAttr(parsed)
     parsed.ui = parsed.ui ?? { screen: 'home' }
-    if (repaired || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded) saveGame(parsed)
+    if (elevenUpgraded || repaired || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded) saveGame(parsed)
     return parsed
   } catch {
     return null
@@ -216,7 +219,7 @@ function scaleAttrs(attrs: Attributes, gk: boolean): Attributes {
 
 function repairLoadedLineup(game: GameState): boolean {
   if (validateLineup(game.roster, game.lineup).valid) return false
-  const formation = FORMATIONS[game.lineup.formationId] ? game.lineup.formationId : '1-2-3-1'
+  const formation = elevenFormationFor(game.lineup.formationId)
   game.lineup = autoFillLineup(game.roster, formation, game.lineup.tactics)
   if (game.autoSubs && validateAutoSubPlan(game.roster, game.lineup, game.autoSubs).length) delete game.autoSubs
   return true

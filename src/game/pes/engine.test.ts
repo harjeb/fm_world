@@ -154,7 +154,7 @@ describe('整场结果', () => {
   it('淘汰赛踢平会进点球大战；结果状态和旧引擎同一种类型，可直接生成战报', () => {
     let shootouts = 0
     for (let seed = 1; seed <= 12 && shootouts < 1; seed++) {
-      const e = make(seed, 120, true)
+      const e = make(seed, 300, true)
       const state = e.simulate()
       expect(state.finished).toBe(true)
       expect(state.stats.home.shots + state.stats.away.shots).toBeGreaterThan(0)

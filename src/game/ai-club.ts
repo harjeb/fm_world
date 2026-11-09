@@ -6,7 +6,7 @@ import { playerMarketValue } from './pricing.ts'
 import { isOnMarketToday } from './market-window.ts'
 import { attrMax, attrRating } from './scale.ts'
 import { ALL_ATTRIBUTES, type AICard, type AIClubState, type AITeam, type AttrKey, type Attributes, type FacilityId, type GameState, type Player, type TierId, type WorldClub, type WorldState } from './types.ts'
-import { repairLineup, validateLineup } from './squad.ts'
+import { FULL_SQUAD, repairLineup, validateLineup } from './squad.ts'
 import { cachedOwnerlessTeams } from './world.ts'
 
 /**
@@ -58,7 +58,10 @@ const AI_CA_PER_SESSION = 6
 /** 离潜力（PA）还剩这么多 CA 以内时成长逐渐放缓，免得每天练好几次的顶级球队涨到离谱。 */
 const AI_PA_TAPER = 120
 /** 电脑球队阵容上限：比玩家的 25 人低，抢人时会留出位置。 */
-export const AI_SQUAD_LIMIT = 22
+/** 电脑球队名单上限：25 人名单再留 4 个签人的空位。 */
+export const AI_SQUAD_LIMIT = 29
+/** 名单少于这个数就算“人手不够”，会去自由市场补人（比赛名单 18 人再多几个轮换）。 */
+const AI_DEPTH_TARGET = FULL_SQUAD + 4
 /** 一个赛季最多攒下几个外来球员，免得存档越滚越大。 */
 const AI_SIGNING_LIMIT = 6
 const AI_BALANCE_CAP = 60_000_000
@@ -424,7 +427,7 @@ export function aiBidFor(input: AIBidInput): number | null {
   if (same.length === 0) reasons.push('missing')
   else if (need >= Math.max(12, ca * 0.04)) reasons.push('upgrade')
   if (averageValue > 0 && value <= averageValue * 0.8) reasons.push('bargain')
-  if (squad.length < 15) reasons.push('depth')
+  if (squad.length < AI_DEPTH_TARGET) reasons.push('depth')
   if (!reasons.length) return null
   // 明显不如现有球员、也不缺人，就不花这个钱。
   if (need < -ca * 0.03 && !reasons.includes('depth') && !reasons.includes('missing')) return null

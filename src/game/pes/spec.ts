@@ -151,6 +151,12 @@ export const makePitch7 = (duration = 900): PitchSpec => makePitchSpec({ duratio
 export const makePitch11 = (duration = 5400): PitchSpec =>
   makePitchSpec({ length: 105, width: 68, goalHalf: 3.66, penDepth: 16.5, penWidth: 40.32, circle: 9.15, duration })
 
+/**
+ * 游戏用的 11 人制场地（标准 105×68 米，战术距离不缩放，K = 1）。
+ * 比赛时长 D 和体力系数都按这块场地标定；改场地时要一起重测进球数和体能曲线。
+ */
+export const makeGamePitch = (duration = 900): PitchSpec => makePitch11(duration)
+
 export interface PesPlayer {
   /** 全场唯一序号：主队 0..n-1，客队 n..2n-1 */
   pid: number
@@ -325,13 +331,13 @@ export interface PesRules {
 
 export const NATIVE_RULES: PesRules = { fatigue: 'native', fatiguePerMeter: 2.0e-4, cross: false, offside: true, penalties: false }
 /**
- * 玩法体力标定（D = 900）：普通外场球员满体力踢完显示的 90 分钟，
- * 计入中场 +5% 恢复后平均消耗约 70%。原来的 2e-4 只消耗约三成。
+ * 玩法体力标定（D = 900，11 人制 105×68 场地）：普通外场球员满体力踢完显示的 90 分钟，
+ * 计入中场 +5% 恢复后平均消耗约 70%（7 人制时是 4e-4；11 人制场地大、人均跑动多约一成，降到 3.8e-4）。原来的 2e-4 只消耗约三成。
  * 仍按实际跑动 / 速度 / 耐力扣除，不在终场强制改数：前场多跑更累、
  * 门将少跑消耗更少，替补只扣上场后的消耗；模拟时长缩放由 sim.ts 处理。
  * 比赛存档自带 fatiguePerMeter，因此进行中的旧比赛保持原来的消耗系数。
  */
-export const GAME_FATIGUE_PER_METER = 4.0e-4
+export const GAME_FATIGUE_PER_METER = 3.8e-4
 export const GAME_RULES: PesRules = { fatigue: 'distance', fatiguePerMeter: GAME_FATIGUE_PER_METER, cross: true, offside: true, penalties: true }
 
 /** 刚开出的任意球：发球人在这段时间内按定位球的规则出球（直接射门 / 传中 / 短传）。 */

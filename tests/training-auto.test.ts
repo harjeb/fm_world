@@ -144,7 +144,7 @@ describe('自动培养', () => {
       }
       expect(keyGain / keyCount, mode).toBeGreaterThan((otherGain / otherCount) * 1.5)
     }
-  }, 180_000)
+  }, 400_000)
 
   it('只有一轮没结束的培养才会被开关继续推进，不会自己开新一轮', () => {
     const { game, field } = setup(8)

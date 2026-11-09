@@ -33,22 +33,32 @@ export type RandomPlayerOptions = {
  * 属性由名字决定，重名的两个人长得一模一样，看起来就是同一个球员。
  * reserved 里的名字已经有人用了（比如玩家阵容里的老队员），不会再发。
  */
-export function buildNameBook(seed: number, clubs: number, perClub: number, reserved: ReadonlySet<string> = new Set()): SquadName[][] {
+export function buildNameBook(
+  seed: number,
+  clubs: number,
+  perClub: number,
+  reserved: ReadonlySet<string> = new Set(),
+  /** 每支队已经用掉的姓（追加名册时传入，尽量不和同队的老队员同姓）。 */
+  familiesByClub: readonly (readonly string[])[] = [],
+): SquadName[][] {
   const rng = derivedRng(seed, 'name-book')
   const used = new Set(reserved)
-  return Array.from({ length: clubs }, () => {
-    const families = new Set<string>()
+  // 追加名册（传了老队员的姓）时更严格：英文名的最后一个词也算进去，东亚名字的“名”撞了看起来也像同姓。
+  const strict = familiesByClub.length > 0
+  const keysOf = (name: SquadName): string[] => (strict ? [name.family, name.enName.split(' ').at(-1) ?? name.family] : [name.family])
+  return Array.from({ length: clubs }, (_, club) => {
+    const families = new Set<string>(familiesByClub[club] ?? [])
     return Array.from({ length: perClub }, () => {
       let picked = pickRandomName(rng)
       for (let attempt = 0; attempt < 5000; attempt++) {
         // 球场上只显示姓，所以同队的姓也尽量不重复；实在挑不出来时才放宽。
-        const familyFree = attempt >= 50 || !families.has(picked.family)
+        const familyFree = attempt >= 50 || !keysOf(picked).some((key) => families.has(key))
         if (familyFree && !used.has(picked.name) && !used.has(picked.enName) && !STAR_EN_NAMES.has(picked.enName)) break
         picked = pickRandomName(rng)
       }
       used.add(picked.name)
       used.add(picked.enName)
-      families.add(picked.family)
+      for (const key of keysOf(picked)) families.add(key)
       return picked
     })
   })
@@ -96,8 +106,17 @@ export function createRandomPlayer(options: RandomPlayerOptions): Player {
   return player
 }
 
+/** 7 人制时代的 18 人名单。11 人制的名单在它后面追加，前 18 个槽位的人和名字保持不变。 */
+const LEGACY_SQUAD_TEMPLATE: Position[] = ['GK', 'GK', 'CB', 'CB', 'CB', 'CB', 'W', 'W', 'W', 'W', 'CM', 'CM', 'CM', 'CM', 'ST', 'ST', 'ST', 'ST']
+/** 11 人制追加的 7 个槽位：第三门将、两个中卫、三个边路（边后卫 / 边前卫）、一个中场。 */
+const ELEVEN_EXTENSION: Position[] = ['GK', 'CB', 'CB', 'W', 'W', 'W', 'CM']
+
+/** 迁移前每队的人数。 */
+export const LEGACY_SQUAD_SIZE = LEGACY_SQUAD_TEMPLATE.length
+
+/** 每支球队的位置模板（25 人：门将 3、中卫 6、边路 7、中场 5、前锋 4）。 */
 export function randomSquadPositionTemplate(): Position[] {
-  return ['GK', 'GK', 'CB', 'CB', 'CB', 'CB', 'W', 'W', 'W', 'W', 'CM', 'CM', 'CM', 'CM', 'ST', 'ST', 'ST', 'ST']
+  return [...LEGACY_SQUAD_TEMPLATE, ...ELEVEN_EXTENSION]
 }
 
 export function randomPositionFor(index: number): Position {

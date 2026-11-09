@@ -7,6 +7,8 @@ import { conferenceLabel } from '../../game/data/world-clubs.ts'
 import { divisionIdForTier } from '../../game/data/world-clubs.ts'
 import { inPostseason, nextSeasonCountdown } from '../../game/season.ts'
 import { onlineState } from '../../online.ts'
+import { DEFAULT_FORMATION } from '../../game/data/formations.ts'
+import { STARTERS } from '../../game/squad.ts'
 
 function strengthStars(value: number): string {
   const level = Math.max(0, Math.min(5, Math.round(value)))
@@ -16,7 +18,7 @@ function strengthStars(value: number): string {
 function teamRow(team: Pick<AITeam, 'id' | 'name' | 'formationId' | 'tactics' | 'strength' | 'style'> & { players?: AITeam['players'] }): string {
   const players = team.players ?? []
   const best = [...players].sort((a, b) => playerCA(b) - playerCA(a))
-  const average = best.length ? best.slice(0, 7).reduce((sum, player) => sum + playerCA(player), 0) / Math.min(7, best.length) : 0
+  const average = best.length ? best.slice(0, STARTERS).reduce((sum, player) => sum + playerCA(player), 0) / Math.min(STARTERS, best.length) : 0
   return `<tr data-key="${esc(team.id)}">
     <td title="${esc(team.style)}">${clubName(team.id)}</td>
     <td class="dim">${esc(team.formationId)}</td>
@@ -52,7 +54,7 @@ function divisionTeams(divisionId: string | null): (Pick<AITeam, 'id' | 'name' |
       return {
         id,
         name: club?.name ?? id,
-        formationId: club?.formationId ?? '1-2-3-1',
+        formationId: club?.formationId ?? DEFAULT_FORMATION,
         tactics: club?.tactics ?? { attack: 'balanced', passing: 'mixed', tempo: 'normal', line: 'mid', press: 'mid' },
         strength: club?.strength ?? 2,
         style: club?.style ?? 'balanced',

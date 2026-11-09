@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { MAX_SUBS } from '../src/game/squad.ts'
 import { createInitialGame } from '../src/game/state.ts'
 import { MatchEngine } from '../src/game/match/engine.ts'
 import type { MatchPlayerState, MatchTeamState } from '../src/game/match/types.ts'
@@ -76,18 +77,18 @@ describe('比赛管理', () => {
     expect(() => again.step()).not.toThrow()
   })
 
-  it('手动与自动共享三次额度，且没有合适替补时不换人', () => {
+  it('手动与自动共享换人额度（MAX_SUBS），且没有合适替补时不换人', () => {
     const { engine: e } = engine()
     const { team, out, incoming } = compatible(e)
     expect(e.substitute(out.id, incoming.id).ok).toBe(true)
     for (const p of team.players) p.stamina = p.maxStamina * 0.5
     team.autoSubs = { timed: [], staminaBelow: 99, onInjury: false }
     e.step()
-    expect(team.subsUsed).toBe(3)
+    expect(team.subsUsed).toBe(MAX_SUBS)
     const next = compatible(e)
     expect(e.substitute(next.out.id, next.incoming.id).ok).toBe(false)
     e.step()
-    expect(team.subsUsed).toBe(3)
+    expect(team.subsUsed).toBe(MAX_SUBS)
 
     const other = engine().engine
     const t = other.getTeam('home')

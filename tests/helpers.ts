@@ -3,12 +3,13 @@ import type { MatchTeamInput } from '../src/game/match/types.ts'
 import { PLAYER_SEEDS, createPlayerFromSeed } from '../src/game/data/players.ts'
 import { autoFillLineup } from '../src/game/squad.ts'
 import { teamInputFromLineup } from '../src/game/match/setup.ts'
+import { DEFAULT_FORMATION } from '../src/game/data/formations.ts'
 
 export function allPlayers(): Player[] {
   return PLAYER_SEEDS.map(createPlayerFromSeed)
 }
 
-export function makeTeams(count = 200, formation: Lineup['formationId'] = '1-2-3-1') {
+export function makeTeams(count = 200, formation: Lineup['formationId'] = DEFAULT_FORMATION) {
   const roster = allPlayers().slice(0, count)
   const lineup = autoFillLineup(roster, formation)
   return { roster, lineup }

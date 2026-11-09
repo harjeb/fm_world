@@ -1,5 +1,6 @@
 import { PLAYER_SEEDS, createPlayerFromSeed } from '../src/game/data/players.ts'
 import { autoFillLineup } from '../src/game/squad.ts'
+import { DEFAULT_FORMATION } from '../src/game/data/formations.ts'
 import { MatchEngine, normalizePossession } from '../src/game/match/engine.ts'
 import { teamInputFromLineup } from '../src/game/match/setup.ts'
 import type { FailureReason } from '../src/game/types.ts'
@@ -18,7 +19,7 @@ function parseArgs(): Args {
 declare const process: { argv: string[]; exitCode?: number }
 const { matches, seed: baseSeed } = parseArgs()
 const roster = PLAYER_SEEDS.map(createPlayerFromSeed)
-const lineup = autoFillLineup(roster, '1-2-3-1')
+const lineup = autoFillLineup(roster, DEFAULT_FORMATION)
 const home = teamInputFromLineup(roster, lineup, { id: 'home', name: 'Home', color: '#34d399', accent: '#052e1b' })
 const away = teamInputFromLineup(roster, lineup, { id: 'away', name: 'Away', color: '#f87171', accent: '#450a0a' })
 

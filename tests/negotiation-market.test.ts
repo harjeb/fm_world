@@ -33,7 +33,8 @@ describe('身价曲线', () => {
     const pick = (q: number) => values[Math.min(values.length - 1, Math.floor(values.length * q))]
     expect(pick(0.05)).toBeGreaterThanOrEqual(100_000)
     expect(pick(0.05)).toBeLessThan(400_000)
-    expect(pick(0.5)).toBeGreaterThan(400_000)
+    // 11 人制每队多了 7 个随机球员（多是替补级别），中位数比 7 人制时低一些。
+    expect(pick(0.5)).toBeGreaterThan(200_000)
     expect(pick(0.5)).toBeLessThan(2_000_000)
     // 二级开局看得到的最贵球星在自由市场里；千万级的大牌在更高级别的球队手里。
     expect(values[values.length - 1]).toBeGreaterThanOrEqual(5_000_000)

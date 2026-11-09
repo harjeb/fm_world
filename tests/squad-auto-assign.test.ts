@@ -13,7 +13,8 @@ function stubLocalStorage(): void {
 
 function setup(seed = 2024) {
   const game = createWorldGame(seed)
-  return { game, roster: game.roster, formationId: game.lineup.formationId, tactics: game.lineup.tactics }
+  // 用有单中锋（st）槽位的阵型，下面的用例按槽位 id 检查。
+  return { game, roster: game.roster, formationId: '4-3-3' as const, tactics: game.lineup.tactics }
 }
 
 function context(overrides: Partial<Record<string, { condition?: number; minutes?: number }>> = {}, extra: Partial<AutoAssignContext> = {}): AutoAssignContext {

@@ -8,9 +8,9 @@ import { addTrainedCard, closeFinishedTraining, deleteCard, equipCard, untrained
 import { newTrainingSeed, saveGame } from './state.ts'
 import { nextSeasonCountdown } from './season.ts'
 import { seasonEndAt } from './calendar.ts'
-import { autoFillLineup, validateLineup } from './squad.ts'
+import { autoFillLineup, bestRoleForPlayer, validateLineup } from './squad.ts'
 import { FORMATIONS } from './data/formations.ts'
-import { positionMultiplier } from './ca.ts'
+import { caOf, positionMultiplier } from './ca.ts'
 import { lineupRating } from './club-rating.ts'
 import { advanceSeasonRound, finishActiveMatch, skipToMatchday, startChallenge, startChallengeAgainstTeam, startLeagueMatch, startNextSeason } from './season.ts'
 import { cachedOwnerlessTeams } from './world.ts'
@@ -55,7 +55,7 @@ function primaryPositionOf(player: Player): Position {
 }
 
 /**
- * 系统给主角自动挑 6 名陪练：按当前阵型的其他位置各挑一个，
+ * 系统给主角自动挑 6 名陪练：按当前阵型的其他位置轮流挑（中卫、边路、中场、前锋各先来一个，再按阵型补），
  * 同一位置优先熟练度高的人，但只在排名靠前的几个人里随机选，保证每轮不完全一样。
  * 主角是门将时只挑外场；主角是外场时必带 1 名其他门将。
  */
@@ -73,16 +73,23 @@ export function pickSupportPartners(
 
   const formation = FORMATIONS[game.lineup.formationId]
   const outfield = formation.slots.filter((slot) => slot.position !== 'GK').map((slot) => slot.position)
-  let needs: Position[]
-  if (player.positions.GK > 0) {
-    needs = [...outfield]
-  } else {
-    const primary = primaryPositionOf(player)
-    const rest = [...outfield]
-    const same = rest.indexOf(primary)
-    if (same >= 0) rest.splice(same, 1)
-    needs = ['GK', ...rest]
+  if (player.positions.GK === 0) {
+    const same = outfield.indexOf(primaryPositionOf(player))
+    if (same >= 0) outfield.splice(same, 1)
   }
+  // 11 人制的阵型位置多：各条线轮流挑，避免 6 个陪练全是后卫。
+  const remaining = new Map<Position, number>()
+  for (const position of outfield) remaining.set(position, (remaining.get(position) ?? 0) + 1)
+  const rounds: Position[] = []
+  while (rounds.length < outfield.length) {
+    for (const position of ['CB', 'W', 'CM', 'ST'] as const) {
+      const left = remaining.get(position) ?? 0
+      if (left <= 0) continue
+      rounds.push(position)
+      remaining.set(position, left - 1)
+    }
+  }
+  const needs: Position[] = player.positions.GK > 0 ? rounds : ['GK', ...rounds]
   // 门将位置优先从真正的门将里挑，绝不拿外场球员凑。
   const rng = derivedRng(seed, 'support-partners', playerId)
   const chosen: string[] = []
@@ -193,22 +200,37 @@ export function pickExchangeOpponent(teams: AITeam[], ownRating: number, week: n
   return pool.sort((x, y) => Math.abs(x.rating - target) - Math.abs(y.rating - target) || x.team.id.localeCompare(y.team.id))[0]
 }
 
+/** 交流赛阵容：保存的首发，培养中的球员不在首发时替下同位置（没有就任意外场）CA 最低的那个。 */
+function exchangeLineup(game: GameState, playerId: string): Lineup {
+  const lineup = structuredClone(game.lineup)
+  if (lineup.starters.some((starter) => starter.playerId === playerId)) return lineup
+  const trainee = game.roster.find((player) => player.id === playerId)
+  if (!trainee) return lineup
+  const slots = FORMATIONS[lineup.formationId]?.slots ?? []
+  const positionOf = (slotId: string) => slots.find((slot) => slot.id === slotId)?.position
+  const isGk = trainee.positions.GK > 0
+  const candidates = lineup.starters.filter((starter) => (isGk ? positionOf(starter.slotId) === 'GK' : positionOf(starter.slotId) !== 'GK'))
+  const same = candidates.filter((starter) => positionOf(starter.slotId) === primaryPositionOf(trainee))
+  const pool = same.length ? same : candidates
+  const caOfId = (id: string) => {
+    const player = game.roster.find((item) => item.id === id)
+    return player ? caOf(player.attrs, player.positions.GK > 0) : 0
+  }
+  const weakest = [...pool].sort((a, b) => caOfId(a.playerId) - caOfId(b.playerId))[0]
+  if (!weakest) return lineup
+  lineup.bench = lineup.bench.filter((id) => id !== playerId)
+  weakest.playerId = playerId
+  const slot = slots.find((item) => item.id === weakest.slotId)
+  weakest.role = bestRoleForPlayer(trainee, slot?.position ?? 'CM', slot).role
+  return validateLineup(game.roster, lineup).valid ? lineup : game.lineup
+}
+
 function simulateTrainingExchange(game: GameState, session: TrainingSession): TrainingExchange {
   const week = trainingDate(session.action + 1).week
   const scheduleSeed = session.scheduleSeed ?? session.seed
-  // 小队培养时交流赛就用这 7 个人（含门将）当前装备的属性，不用保存的首发。
-  const squad = [session.playerId, ...(session.partnerIds ?? [])]
-    .map((id) => game.roster.find((player) => player.id === id))
-    .filter((player): player is NonNullable<typeof player> => !!player)
-  let roster = game.roster
-  let lineup = game.lineup
-  if (squad.length === 7) {
-    const auto = autoFillLineup(squad, game.lineup.formationId, game.lineup.tactics)
-    if (validateLineup(squad, auto).valid) {
-      roster = squad
-      lineup = auto
-    }
-  }
+  // 交流赛用当前保存的首发（各自当前装备的属性）；培养中的球员一定上场，不在首发就顶替同位置最弱的人。
+  const roster = game.roster
+  const lineup = exchangeLineup(game, session.playerId)
   // 对手按RANK接近：我方RANK（上场首发的 CA 之和，含这名培养球员当前的 CA）乘当周比例，对手一律用基础卡属性。
   const ownRating = lineupRating(roster, lineup)
   const picked = pickExchangeOpponent(game.aiTeams, ownRating, week, (session.exchangeMatches ?? []).map((match) => match.opponentId))

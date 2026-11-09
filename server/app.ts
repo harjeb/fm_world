@@ -25,6 +25,8 @@ import { lineupRating } from '../src/game/club-rating.ts'
 import { AI_SQUAD_LIMIT, advanceAIClub, aiBidFor, createAIClub, playerValue, recordAISigning, seedAIClubs } from '../src/game/ai-club.ts'
 import { agentView, applyAgentAction, playerView, type AgentOptions } from './agent.ts'
 import { clubNameError, normalizeClubName } from '../src/game/club-name.ts'
+import { elevenAITeam, upgradeElevenASide } from '../src/game/eleven.ts'
+import { elevenFormationFor, isLegacyFormation } from '../src/game/data/formations.ts'
 import { startChallengeWithOpponent } from '../src/game/actions.ts'
 
 type Account = {
@@ -151,6 +153,26 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       club.starPlayerIds = club.starPlayerIds.filter((id) => !held.has(id))
       team.lineup = repairLineup(team.players, team.lineup).lineup
     }
+  }
+  // 7 人制 → 11 人制：先迁移每个账号（玩家球队补随机球员、换阵型），有教练的球队名单直接用账号里的新名单，
+  // 其余 AI 球队各自补人、换阵型，世界里各队的阵型也一起换。迁移过一次之后这里什么都不做。
+  {
+    let accountsMigrated = false
+    for (const account of db.accounts) {
+      if (account.game && upgradeElevenASide(account.game)) accountsMigrated = true
+    }
+    for (const club of sharedWorld.world.clubs) {
+      if (isLegacyFormation(club.formationId)) club.formationId = elevenFormationFor(club.formationId)
+    }
+    for (const [clubId, team] of Object.entries(sharedWorld.teams ?? {})) {
+      if (!isLegacyFormation(team.formationId) && !isLegacyFormation(team.lineup?.formationId ?? '')) continue
+      const owner = db.accounts.find((account) => account.id === sharedWorld.owners[clubId])
+      const ownsIt = owner?.game?.world?.clubs.find((club) => club.id === 'player')?.squadKey === clubId
+      sharedWorld.teams![clubId] = ownsIt && owner
+        ? { ...team, formationId: owner.game.lineup.formationId, players: structuredClone(owner.game.roster), lineup: structuredClone(owner.game.lineup) }
+        : elevenAITeam(team, sharedWorld.seed)
+    }
+    if (accountsMigrated) writeJson(dbPath, db)
   }
   writeJson(worldPath, sharedWorld)
   const persistWorld = () => writeJson(worldPath, sharedWorld)
@@ -653,6 +675,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   function advanceAccount(account: Account): boolean {
     try {
       if (!account.game) return false
+      // 7 人制存档迁移到 11 人制（只在还有旧阵型时动手）。
+      const elevenUpgraded = upgradeElevenASide(account.game)
       const signaturesAdded = upgradeLegacySignatures(account.game)
       const cardsAdded = ensureCards(account.game)
       const namesUpgraded = upgradeNames(account.game)
@@ -661,7 +685,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const sharedTeamsChanged = pullSharedTeams(account)
       const sharedFixturesChanged = pullSharedFixtures(account)
       const sharedWorldChanged = pullSharedWorld(account)
-      let migrated = signaturesAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || sharedTeamsChanged || sharedFixturesChanged || sharedWorldChanged || absorbInto(account)
+      let migrated = elevenUpgraded || signaturesAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || sharedTeamsChanged || sharedFixturesChanged || sharedWorldChanged || absorbInto(account)
       const economyAdded = account.game.economy == null || account.game.economy.fans === undefined
       economyOf(account.game)
       const progressingLeague = !!account.game.activeMatch?.context.isLeague
@@ -1260,6 +1284,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (url.pathname === '/api/game' && req.method === 'PUT') {
       const body = await readJsonBody(req)
       advanceAccount(account)
+      // 还没刷新的旧页面可能交上来 7 人制的存档：按同样的规则迁移（补出来的人和服务器上的一模一样）。
+      if (body.game && typeof body.game === 'object') upgradeElevenASide(body.game as GameState)
       // 开赛前 30 分钟锁阵容：只拦阵容 / 自动换人，训练、转会、经济等其它改动照常保存。
       if (lineupLockState(account.game, now()).locked) {
         const incoming = body.game as GameState | undefined

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { ELEVEN_SQUAD_SIZE } from '../src/game/eleven.ts'
 import { applyGains, caCeilingOf, caOf, effectiveAttr, positionMultiplier } from '../src/game/ca.ts'
 import { attrRating, isMainAttr } from '../src/game/scale.ts'
 import { PLAYER_SEEDS, createPlayerFromSeed } from '../src/game/data/players.ts'
@@ -74,14 +75,14 @@ describe('CA / PA 与初始数据', () => {
     expect(none / full).toBeCloseTo(0.6, 5)
   })
 
-  it('200 名真实球星，20 队每队 18 人，每队 1-3 名真实球星', () => {
+  it('500 名真实球星，20 队每队 25 人（11 人制），每队 1-3 名真实球星', () => {
     expect(PLAYER_SEEDS).toHaveLength(500)
     expect(new Set(PLAYER_SEEDS.map((seed) => seed.name)).size).toBe(500)
     expect(new Set(PLAYER_SEEDS.map((seed) => seed.enName)).size).toBe(500)
     const game = createInitialGame(1)
-    expect(game.roster).toHaveLength(18)
+    expect(game.roster).toHaveLength(ELEVEN_SQUAD_SIZE)
     expect(game.aiTeams).toHaveLength(19)
-    expect(game.aiTeams.every((team) => team.players.length === 18)).toBe(true)
+    expect(game.aiTeams.every((team) => team.players.length === ELEVEN_SQUAD_SIZE)).toBe(true)
     expect(game.aiTeams.every((team) => team.starPlayerIds.length >= 1 && team.starPlayerIds.length <= 3)).toBe(true)
     expect(game.freeStars.length).toBeGreaterThan(0)
     expect(validateLineup(game.roster, game.lineup).valid).toBe(true)

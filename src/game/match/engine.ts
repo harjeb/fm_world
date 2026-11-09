@@ -17,6 +17,7 @@ import type {
 } from '../types.ts'
 import { MATCH_TACTICS, MATCH_MENTALITY_LABELS, autoSubDisplaySeconds } from './management.ts'
 import { FORMATIONS } from '../data/formations.ts'
+import { MAX_SUBS } from '../squad.ts'
 import { ROLES, ROLES_BY_POSITION } from '../data/roles.ts'
 import { SKILLS, TRAITS } from '../data/skills.ts'
 import { effectiveAttr, isGoalkeeper } from '../ca.ts'
@@ -2720,7 +2721,7 @@ export class MatchEngine {
       }
       if (plan.onInjury) {
         for (const out of team.players.filter(p => p.onPitch && p.injured).sort((a, b) => a.stamina / a.maxStamina - b.stamina / b.maxStamina)) {
-          if (team.subsUsed >= 3) break
+          if (team.subsUsed >= MAX_SUBS) break
           replace(out, 'injury')
         }
       }
@@ -2730,12 +2731,12 @@ export class MatchEngine {
         if (atLogic > this.state.clock) return true
         const out = team.players.find(p => p.sourceId === rule.outId && p.onPitch)
         const incoming = team.bench.find(p => p.sourceId === rule.inId && !p.cameOff && !p.onPitch)
-        if (!out || !incoming || incoming.injured || team.subsUsed >= 3) return false
+        if (!out || !incoming || incoming.injured || team.subsUsed >= MAX_SUBS) return false
         return !this.substitute(out.id, incoming.id, team.side, this.state.clock, 'timed').ok
       })
       if (plan.staminaBelow !== null) {
         for (const out of team.players.filter(p => p.onPitch && p.stamina / p.maxStamina * 100 < plan.staminaBelow!).sort((a, b) => a.stamina / a.maxStamina - b.stamina / b.maxStamina)) {
-          if (team.subsUsed >= 3) break
+          if (team.subsUsed >= MAX_SUBS) break
           replace(out, 'stamina')
         }
       }
@@ -2757,7 +2758,7 @@ export class MatchEngine {
   substitute(outId: string, inId: string, side: MatchSide = 'home', eventClock = this.state.clock, autoReason?: 'injury' | 'timed' | 'stamina'): { ok: boolean; error?: string } {
     if (this.state.finished) return { ok: false, error: '比赛已经结束' }
     const team = this.getTeam(side)
-    if (team.subsUsed >= 3) return { ok: false, error: '已经用完 3 次换人' }
+    if (team.subsUsed >= MAX_SUBS) return { ok: false, error: `已经用完 ${MAX_SUBS} 次换人` }
     const outIndex = team.players.findIndex((player) => player.id === outId && player.onPitch)
     if (outIndex < 0) return { ok: false, error: '被换下的球员不在场上' }
     const inPlayer = team.bench.find((player) => player.id === inId && !player.cameOff && !player.onPitch)

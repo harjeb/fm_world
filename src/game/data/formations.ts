@@ -1,4 +1,4 @@
-import type { FormationId, Position, RoleId, Tactics } from '../types.ts'
+import type { ElevenFormationId, FormationId, LegacyFormationId, Position, RoleId, Tactics } from '../types.ts'
 
 export type FormationSlot = {
   id: string
@@ -15,9 +15,93 @@ export type FormationDef = {
   desc: string
   slots: FormationSlot[]
   defaultTactics: Tactics
+  /** 旧 7 人制阵型：只读，不能再选。 */
+  legacy?: true
 }
 
-export const FORMATIONS: Record<FormationId, FormationDef> = {
+const slot = (id: string, position: Position, label: string, x: number, y: number, defaultRole: RoleId): FormationSlot => ({ id, position, label, x, y, defaultRole })
+
+/** 四后卫：两个边后卫（边路位置）+ 两个中卫。 */
+const BACK_FOUR = [
+  slot('gk', 'GK', '门将', 0.05, 0.5, 'gk_line'),
+  slot('lb', 'W', '左后卫', 0.22, 0.1, 'w_back'),
+  slot('cbl', 'CB', '左中卫', 0.19, 0.37, 'cb_cover'),
+  slot('cbr', 'CB', '右中卫', 0.19, 0.63, 'cb_stopper'),
+  slot('rb', 'W', '右后卫', 0.22, 0.9, 'w_back'),
+]
+
+const ELEVEN_FORMATIONS: Record<ElevenFormationId, FormationDef> = {
+  '4-4-2': {
+    id: '4-4-2',
+    label: '4-4-2',
+    desc: '四后卫 + 平行四中场 + 双前锋：攻守平衡、两条线紧凑，边路靠边前卫和边后卫配合，但中路人数容易被三中场压制。',
+    slots: [
+      ...BACK_FOUR,
+      slot('lm', 'W', '左前卫', 0.47, 0.12, 'w_winger'),
+      slot('cml', 'CM', '左中场', 0.42, 0.38, 'cm_organizer'),
+      slot('cmr', 'CM', '右中场', 0.42, 0.62, 'cm_box2box'),
+      slot('rm', 'W', '右前卫', 0.47, 0.88, 'w_support'),
+      slot('stl', 'ST', '左前锋', 0.7, 0.4, 'st_runner'),
+      slot('str', 'ST', '右前锋', 0.7, 0.6, 'st_target'),
+    ],
+    defaultTactics: { attack: 'balanced', passing: 'mixed', tempo: 'normal', line: 'mid', press: 'mid' },
+  },
+  '4-3-3': {
+    id: '4-3-3',
+    label: '4-3-3',
+    desc: '四后卫 + 三中场 + 两翼齐飞：宽度和前场逼抢最好，单前锋需要边锋内切支援，后腰身后的空当怕被打反击。',
+    slots: [
+      ...BACK_FOUR,
+      slot('cml', 'CM', '左中场', 0.43, 0.3, 'cm_box2box'),
+      slot('cm', 'CM', '后腰', 0.36, 0.5, 'cm_destroyer'),
+      slot('cmr', 'CM', '右中场', 0.43, 0.7, 'cm_organizer'),
+      slot('lw', 'W', '左边锋', 0.64, 0.14, 'w_inside'),
+      slot('st', 'ST', '中锋', 0.73, 0.5, 'st_finisher'),
+      slot('rw', 'W', '右边锋', 0.64, 0.86, 'w_winger'),
+    ],
+    defaultTactics: { attack: 'wing', passing: 'mixed', tempo: 'normal', line: 'mid', press: 'high' },
+  },
+  '4-2-3-1': {
+    id: '4-2-3-1',
+    label: '4-2-3-1',
+    desc: '双后腰保护防线，前腰和两个边路接应单前锋：防守最稳、中路组织好，但前锋容易孤立，进攻依赖前腰。',
+    slots: [
+      ...BACK_FOUR,
+      slot('dml', 'CM', '左后腰', 0.35, 0.38, 'cm_destroyer'),
+      slot('dmr', 'CM', '右后腰', 0.35, 0.62, 'cm_organizer'),
+      slot('lw', 'W', '左边路', 0.56, 0.14, 'w_inside'),
+      slot('am', 'CM', '前腰', 0.55, 0.5, 'cm_box2box'),
+      slot('rw', 'W', '右边路', 0.56, 0.86, 'w_winger'),
+      slot('st', 'ST', '中锋', 0.74, 0.5, 'st_target'),
+    ],
+    defaultTactics: { attack: 'middle', passing: 'short', tempo: 'normal', line: 'mid', press: 'mid' },
+  },
+  '3-5-2': {
+    id: '3-5-2',
+    label: '3-5-2',
+    desc: '三中卫 + 两个边翼卫 + 三中场 + 双前锋：中路人数多、禁区里有两个终结点，但边翼卫来回跑，体能消耗大、身后易被打。',
+    slots: [
+      slot('gk', 'GK', '门将', 0.05, 0.5, 'gk_sweeper'),
+      slot('cbl', 'CB', '左中卫', 0.2, 0.26, 'cb_stopper'),
+      slot('cbc', 'CB', '中卫', 0.18, 0.5, 'cb_cover'),
+      slot('cbr', 'CB', '右中卫', 0.2, 0.74, 'cb_ball'),
+      slot('lwb', 'W', '左翼卫', 0.42, 0.08, 'w_support'),
+      slot('cml', 'CM', '左中场', 0.43, 0.32, 'cm_box2box'),
+      slot('cm', 'CM', '中场', 0.38, 0.5, 'cm_organizer'),
+      slot('cmr', 'CM', '右中场', 0.43, 0.68, 'cm_destroyer'),
+      slot('rwb', 'W', '右翼卫', 0.42, 0.92, 'w_support'),
+      slot('stl', 'ST', '左前锋', 0.68, 0.4, 'st_runner'),
+      slot('str', 'ST', '右前锋', 0.68, 0.6, 'st_finisher'),
+    ],
+    defaultTactics: { attack: 'middle', passing: 'mixed', tempo: 'normal', line: 'mid', press: 'mid' },
+  },
+}
+
+/**
+ * 旧的 7 人制阵型。只为读取迁移前的存档、回放和进行中的旧比赛保留，界面和接口都不能再选，
+ * `validateLineup` 会拒绝它们；`elevenFormationFor` 给出迁移时对应的 11 人制阵型。
+ */
+const LEGACY_FORMATIONS: Record<LegacyFormationId, FormationDef> = {
   '1-2-3-1': {
     id: '1-2-3-1',
     label: '1-2-3-1',
@@ -31,6 +115,7 @@ export const FORMATIONS: Record<FormationId, FormationDef> = {
       { id: 'wr', position: 'W', label: '右边路', x: 0.58, y: 0.84, defaultRole: 'w_support' },
       { id: 'st', position: 'ST', label: '前锋', x: 0.73, y: 0.5, defaultRole: 'st_finisher' },
     ],
+    legacy: true,
     defaultTactics: { attack: 'balanced', passing: 'mixed', tempo: 'normal', line: 'mid', press: 'mid' },
   },
   '1-3-2-1': {
@@ -46,6 +131,7 @@ export const FORMATIONS: Record<FormationId, FormationDef> = {
       { id: 'cmr', position: 'CM', label: '右中场', x: 0.42, y: 0.65, defaultRole: 'cm_organizer' },
       { id: 'st', position: 'ST', label: '前锋', x: 0.68, y: 0.5, defaultRole: 'st_target' },
     ],
+    legacy: true,
     defaultTactics: { attack: 'middle', passing: 'mixed', tempo: 'normal', line: 'mid', press: 'mid' },
   },
   '1-2-2-2': {
@@ -61,11 +147,31 @@ export const FORMATIONS: Record<FormationId, FormationDef> = {
       { id: 'stl', position: 'ST', label: '左前锋', x: 0.66, y: 0.36, defaultRole: 'st_runner' },
       { id: 'str', position: 'ST', label: '右前锋', x: 0.66, y: 0.64, defaultRole: 'st_target' },
     ],
+    legacy: true,
     defaultTactics: { attack: 'balanced', passing: 'direct', tempo: 'normal', line: 'mid', press: 'mid' },
   },
 }
 
-export const FORMATION_LIST = Object.values(FORMATIONS)
+export const FORMATIONS: Record<FormationId, FormationDef> = { ...ELEVEN_FORMATIONS, ...LEGACY_FORMATIONS }
+
+/** 能选的阵型（11 人制）。 */
+export const FORMATION_LIST: FormationDef[] = Object.values(ELEVEN_FORMATIONS)
+
+/** 默认阵型。 */
+export const DEFAULT_FORMATION: ElevenFormationId = '4-4-2'
+
+export function isLegacyFormation(id: string): id is LegacyFormationId {
+  return Object.hasOwn(LEGACY_FORMATIONS, id)
+}
+
+/** 旧 7 人制阵型迁移到哪个 11 人制阵型：两中卫配三中场 → 4-3-3，三中卫 → 3-5-2，双前锋 → 4-4-2。 */
+const LEGACY_TO_ELEVEN: Record<LegacyFormationId, ElevenFormationId> = { '1-2-3-1': '4-3-3', '1-3-2-1': '3-5-2', '1-2-2-2': '4-4-2' }
+
+export function elevenFormationFor(id: string): ElevenFormationId {
+  if (Object.hasOwn(ELEVEN_FORMATIONS, id)) return id as ElevenFormationId
+  return LEGACY_TO_ELEVEN[id as LegacyFormationId] ?? DEFAULT_FORMATION
+}
+
 
 export const TACTIC_LABELS = {
   attack: { label: '进攻方向', options: { middle: '中路', wing: '边路', balanced: '均衡' } },

@@ -10,7 +10,7 @@ import { ALL_ATTRIBUTES, POSITIONS } from '../src/game/types.ts'
 import { caOf } from '../src/game/ca.ts'
 import { displayCA, displayAttr, displayGain, initialDisplayCA } from '../src/game/rating.ts'
 import { mainAttrsFor } from '../src/game/scale.ts'
-import { FORMATIONS, FORMATION_LIST } from '../src/game/data/formations.ts'
+import { FORMATIONS, FORMATION_LIST, isLegacyFormation } from '../src/game/data/formations.ts'
 import { ROLES, ROLES_BY_POSITION } from '../src/game/data/roles.ts'
 import { eventById } from '../src/game/data/events.ts'
 import { branchProbability, eventChance, trainingActionsTotal, eventGrowthScale, TRAINING_ACTION_INFO } from '../src/game/training.ts'
@@ -698,7 +698,10 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
     }
     case 'auto_lineup': {
       const requested = text(body.formationId)
-      const formationId = requested && FORMATIONS[requested as FormationId] ? requested as FormationId : game.lineup.formationId
+      if (requested && (!FORMATIONS[requested as FormationId] || isLegacyFormation(requested))) {
+        return { ok: false, error: `无效阵型：可选 ${FORMATION_LIST.map((formation) => formation.id).join(' / ')}` }
+      }
+      const formationId = requested ? requested as FormationId : game.lineup.formationId
       const result = autoLineup(game, formationId)
       return result.ok ? { ok: true, result: game.lineup } : { ok: false, error: result.errors.join('；') }
     }

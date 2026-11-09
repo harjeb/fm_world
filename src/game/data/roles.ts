@@ -111,6 +111,18 @@ export const ROLES: Record<RoleId, RoleDef> = {
     supportBias: 0.4,
     widthBias: 0.5,
   },
+  w_back: {
+    id: 'w_back',
+    position: 'W',
+    label: '边后卫',
+    desc: '守住边路、回追身后，有机会再插上传中',
+    weights: { tackling: 0.25, defPos: 0.2, speed: 0.2, passing: 0.15, endurance: 0.1, teamwork: 0.1 },
+    holdBack: false,
+    forwardRun: 0.35,
+    pressBias: 0.5,
+    supportBias: 0.6,
+    widthBias: 1,
+  },
   cm_organizer: {
     id: 'cm_organizer',
     position: 'CM',
@@ -188,9 +200,26 @@ export const ROLES: Record<RoleId, RoleDef> = {
 export const ROLES_BY_POSITION: Record<Position, RoleId[]> = {
   GK: ['gk_line', 'gk_sweeper'],
   CB: ['cb_stopper', 'cb_cover', 'cb_ball'],
-  W: ['w_winger', 'w_support', 'w_inside'],
+  W: ['w_winger', 'w_support', 'w_inside', 'w_back'],
   CM: ['cm_organizer', 'cm_destroyer', 'cm_box2box'],
   ST: ['st_finisher', 'st_target', 'st_runner'],
+}
+
+/** 边路站得比这个深度（0 = 本方球门线）还靠后，就是边后卫：引擎按后卫线位跑，自动排阵只给防守型职责。 */
+export const FULL_BACK_DEPTH = 0.35
+/** 比边后卫靠前、但还在中场线后面的边路是翼卫。 */
+export const WING_BACK_DEPTH = 0.45
+
+/**
+ * 某个阵型槽位上自动排阵可以挑的职责。边路分前后：后卫线上的边路只在“边后卫 / 边路接应”里挑，
+ * 靠前的边路不排“边后卫”，免得边后卫被排成突击边锋、一直压在前场。手动仍可以选该位置的任何职责。
+ */
+export function rolesForSlot(slot: { position: Position; x: number }): RoleId[] {
+  if (slot.position !== 'W') return ROLES_BY_POSITION[slot.position]
+  if (slot.x < FULL_BACK_DEPTH) return ['w_back', 'w_support']
+  // 翼卫（3-5-2 的边路）要上下来回跑：接应、回防或下底，不往中路内切。
+  if (slot.x < WING_BACK_DEPTH) return ['w_support', 'w_back', 'w_winger']
+  return ['w_winger', 'w_support', 'w_inside']
 }
 
 /** playerIsGk 决定属性按哪种尺度换算；门将和外场互相客串时不能用职责的位置来判断。 */

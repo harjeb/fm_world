@@ -7,7 +7,7 @@
  * 点球大战不进 2D，沿用现有引擎的纯结算（`SettlementKernel.shootoutOrder / shootoutKickOdds`）。
  */
 import { ROLES } from '../data/roles.ts'
-import { customSpotFor } from '../squad.ts'
+import { MAX_SUBS, customSpotFor } from '../squad.ts'
 import { MATCH_MENTALITY_LABELS, MATCH_TACTICS, autoSubDisplaySeconds } from '../match/management.ts'
 import { inBox, progressOf, wideZone } from '../match/pitch.ts'
 import { opponentSide, PITCH_LENGTH, PITCH_WIDTH } from '../match/team.ts'
@@ -18,7 +18,7 @@ import { MotionRatings } from './ability.ts'
 import { formationRows } from './formation.ts'
 import { PesSettlement, type PesSettlementJSON } from './settle.ts'
 import { PesMatch, type PesTeamInit } from './sim.ts'
-import { GAME_RULES, makePitch7, type PesEvent, type PesMatchSnapshot, type PesRules, type PesTactics, type PitchSpec } from './spec.ts'
+import { GAME_RULES, makeGamePitch, type PesEvent, type PesMatchSnapshot, type PesRules, type PesTactics, type PitchSpec } from './spec.ts'
 
 function motionAbilities(player: MatchPlayerState, ratings: MotionRatings) {
   return ratings.abilities(player, {
@@ -82,7 +82,7 @@ export interface PesGameOptions {
   recordHz?: number
   /** 覆盖默认的 GAME_RULES */
   rules?: Partial<PesRules>
-  /** 场地；默认 60×40 的 7 人制 */
+  /** 场地；默认 11 人制的游戏场地（makeGamePitch） */
   spec?: PitchSpec
 }
 
@@ -137,7 +137,7 @@ export class PesGame {
     const game = this.settlement.game
     const ratings = new MotionRatings(() => game, () => game.durationSeconds)
     this.match = new PesMatch({
-      spec: source.spec ?? makePitch7(duration),
+      spec: source.spec ?? makeGamePitch(duration),
       seed: source.seed,
       home: pesTeam(source.home, game.teams[0], ratings),
       away: pesTeam(source.away, game.teams[1], ratings),
@@ -275,7 +275,7 @@ export class PesGame {
     const g = this.state
     if (g.finished) return { ok: false, error: '比赛已经结束' }
     const team = g.teams[side === 'home' ? 0 : 1]
-    if (team.subsUsed >= 3) return { ok: false, error: '已经用完 3 次换人' }
+    if (team.subsUsed >= MAX_SUBS) return { ok: false, error: `已经用完 ${MAX_SUBS} 次换人` }
     const outIndex = team.players.findIndex((player) => player.id === outId && player.onPitch)
     if (outIndex < 0) return { ok: false, error: '被换下的球员不在场上' }
     const inPlayer = team.bench.find((player) => player.id === inId && !player.cameOff && !player.onPitch)
@@ -350,7 +350,7 @@ export class PesGame {
       this.syncStamina(team)
       if (plan.onInjury) {
         for (const out of team.players.filter((p) => p.onPitch && p.injured).sort((a, b) => a.stamina / a.maxStamina - b.stamina / b.maxStamina)) {
-          if (team.subsUsed >= 3) break
+          if (team.subsUsed >= MAX_SUBS) break
           replace(out, 'injury')
         }
       }
@@ -360,12 +360,12 @@ export class PesGame {
         if (atLogic > this.match.time) return true
         const out = team.players.find((p) => p.sourceId === rule.outId && p.onPitch)
         const incoming = team.bench.find((p) => p.sourceId === rule.inId && !p.cameOff && !p.onPitch)
-        if (!out || !incoming || incoming.injured || team.subsUsed >= 3) return false
+        if (!out || !incoming || incoming.injured || team.subsUsed >= MAX_SUBS) return false
         return !this.substitute(out.id, incoming.id, team.side, 'timed').ok
       })
       if (plan.staminaBelow !== null) {
         for (const out of team.players.filter((p) => p.onPitch && p.stamina / p.maxStamina * 100 < plan.staminaBelow!).sort((a, b) => a.stamina / a.maxStamina - b.stamina / b.maxStamina)) {
-          if (team.subsUsed >= 3) break
+          if (team.subsUsed >= MAX_SUBS) break
           replace(out, 'stamina')
         }
       }

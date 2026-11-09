@@ -6,6 +6,7 @@ import { displayClock, MATCH_DISPLAY_SECONDS } from '../../game/match/time.ts'
 import type { MatchPlayerState, MatchTeamState } from '../../game/match/types.ts'
 import { leagueDisplayClock } from '../../game/realtime.ts'
 import { PLAYER_TEAM_ID } from '../../game/season.ts'
+import { MAX_SUBS } from '../../game/squad.ts'
 import { clubLook, compareRow, crest, distinctKit, emptyState, icon, meter, panel, posBadge, primaryPosition } from '../components.ts'
 import { clockText, esc, positionLabel, tacticText } from '../format.ts'
 import { game, ui } from '../state.ts'
@@ -50,7 +51,7 @@ function playerStatusTable(team: MatchTeamState, title: string, color: string): 
     ].join('')
     return `<tr data-key="${esc(player.id)}"><td>${posBadge(player.position)}</td><td class="name-cell"><span class="name-plain">${esc(player.name)}</span>${marks}</td><td class="meter-cell">${meter(staminaOf(player))}</td></tr>`
   }).join('')
-  return `<div class="status-team"><div class="status-head"><i class="swatch" style="background:${esc(color)}"></i><b>${esc(title)}</b><span class="muted small">换人 ${team.subsUsed} / 3</span></div><table class="dt plain status-table"><tbody>${rows}</tbody></table></div>`
+  return `<div class="status-team"><div class="status-head"><i class="swatch" style="background:${esc(color)}"></i><b>${esc(title)}</b><span class="muted small">换人 ${team.subsUsed} / ${MAX_SUBS}</span></div><table class="dt plain status-table"><tbody>${rows}</tbody></table></div>`
 }
 
 function coachPanel(engine: GameEngine): string {
@@ -72,7 +73,7 @@ function coachPanel(engine: GameEngine): string {
         <button class="btn primary small" data-action="match-sub" ${bench.length === 0 ? 'disabled' : ''}>确认换人</button>
         <p class="hint">${game.activeMatch?.context.isLeague ? '联赛继续进行，调整立即生效' : `打开面板不消耗暂停；同一次暂停里第一次调整才用掉 1 次（还剩 ${game.activeMatch?.coachPausesLeft ?? 0} 次）`}；被换下球员不能再次上场。</p>
       </div>
-    </div>`, { className: 'coach-panel', aside: `<span class="muted small">换人 ${team.subsUsed} / 3 次（含自动）</span>` })
+    </div>`, { className: 'coach-panel', aside: `<span class="muted small">换人 ${team.subsUsed} / ${MAX_SUBS} 次（含自动）</span>` })
 }
 
 export function renderMatch(): string {

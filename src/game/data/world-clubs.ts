@@ -3,7 +3,7 @@ import { AI_TEAM_DEFS } from './ai-teams.ts'
 
 export type WorldClubDef = AITeamDef & { tier: TierId; conference?: ConferenceId; starCount: number }
 
-const FORMATIONS: FormationId[] = ['1-2-3-1', '1-3-2-1', '1-2-2-2']
+const FORMATIONS: FormationId[] = ['4-4-2', '4-3-3', '4-2-3-1', '3-5-2']
 const TACTICS: Tactics[] = [
   { attack: 'balanced', passing: 'mixed', tempo: 'normal', line: 'mid', press: 'mid' },
   { attack: 'wing', passing: 'direct', tempo: 'fast', line: 'high', press: 'high' },

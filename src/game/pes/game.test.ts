@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { MAX_SUBS, STARTERS } from '../squad.ts'
 import { baselineTeams } from './baseline.ts'
 import { PesGame } from './game.ts'
 import type { MatchPlayerState, MatchTeamInput } from '../match/types.ts'
@@ -167,7 +168,7 @@ describe('事件流与统计自洽（同一份数据）', () => {
           expect(team.offPlayers.some((q) => q.pid === pid)).toBe(true)
           expect(g.settlement.gamePlayer(pid).sentOff).toBe(true)
         }
-        expect(team.players.length + reds.length).toBe(7)
+        expect(team.players.length + reds.length).toBe(STARTERS)
       }
     }
   })
@@ -188,8 +189,8 @@ describe('事件流与统计自洽（同一份数据）', () => {
       for (const side of ['home', 'away'] as const) {
         const starters = g.state.teams[side === 'home' ? 0 : 1]
         const minutes = [...starters.players, ...starters.bench].reduce((total, p) => total + p.stats.minutes, 0)
-        expect(minutes).toBeLessThanOrEqual(7 * 90 + 0.01)
-        expect(minutes).toBeGreaterThan(7 * 90 - 90 * 2 * 3) // 最多少几个人踢一段时间
+        expect(minutes).toBeLessThanOrEqual(STARTERS * 90 + 0.01)
+        expect(minutes).toBeGreaterThan(STARTERS * 90 - 90 * 2 * 3) // 最多少几个人踢一段时间
       }
     }
   })
@@ -254,14 +255,14 @@ describe('换人、战术与点球大战', () => {
     const minutesIn = g.state.teams[0].players.find((p) => p.id === bench.id)!.stats.minutes
     expect(minutesOut).toBeGreaterThan(5)
     expect(minutesOut + minutesIn).toBeCloseTo(90, 0)
-    // 最多 3 次换人
+    // 最多 MAX_SUBS 次换人
     const g2 = game(52)
     let ok = 0
-    for (const out2 of g2.state.teams[0].players.filter((p) => p.position !== 'GK').slice(0, 4)) {
+    for (const out2 of g2.state.teams[0].players.filter((p) => p.position !== 'GK').slice(0, MAX_SUBS + 1)) {
       const inc = g2.availableBench('home').find((p) => p.positions[out2.position] > 0)
       if (inc && g2.substitute(out2.id, inc.id).ok) ok++
     }
-    expect(ok).toBeLessThanOrEqual(3)
+    expect(ok).toBeLessThanOrEqual(MAX_SUBS)
   })
 
   it('自动换人：定时规则到点执行；体力阈值规则在体力降到阈值以下时执行', () => {
@@ -283,7 +284,7 @@ describe('换人、战术与点球大战', () => {
     const g2 = new PesGame({ seed: 54, home: tired, away: clone(teams.away) })
     g2.run()
     expect(g2.state.teams[0].subsUsed).toBeGreaterThan(0)
-    expect(g2.state.teams[0].subsUsed).toBeLessThanOrEqual(3)
+    expect(g2.state.teams[0].subsUsed).toBeLessThanOrEqual(MAX_SUBS)
   })
 
   it('比赛中切换心态：战术滑杆立刻跟着变', () => {

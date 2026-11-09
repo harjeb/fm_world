@@ -24,7 +24,7 @@ function option(name: string, fallback: number): number {
 
 const n = option('n', 6)
 const duration = option('d', LOGIC_MATCH_SECONDS)
-const formations: FormationId[] = ['1-3-2-1', '1-2-3-1', '1-2-2-2']
+const formations: FormationId[] = ['4-4-2', '4-3-3', '4-2-3-1', '3-5-2']
 const baseline = baselineTeams(1)
 const mean = (values: number[]): number => values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length)
 

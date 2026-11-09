@@ -11,6 +11,7 @@ import { LINEUP_LOCK_MS, PLAYER_TEAM_ID, lineupLockState, matchdayCountdown, pla
 import { isOnlineMode } from '../../online.ts'
 import {
   BENCH_SIZE,
+  MAX_SUBS,
   applyTacticPreset,
   bestRoleForPlayer,
   clearSlotPositions,
@@ -367,8 +368,8 @@ function autoSubPanel(draft: Lineup): string {
       <label class="field-inline check-field" for="auto-sub-injury"><input type="checkbox" id="auto-sub-injury" ${autoSubs.onInjury ? 'checked' : ''}><span>受伤后自动换人</span></label>
     </div>
     ${timed}
-    <p class="hint">修改后请保存阵容，从下一场生效。手动与自动共用 3 次；按受伤、定时、体力顺序处理。受伤和体力换人只会选学过该位置的替补，体力换人还要求替补体力不低于阈值，避免连续换下新上场的球员；没有合适替补时不会换人。定时换人可以换上任何人，在到时后的下一个比赛事件边界执行。红牌停赛 2 场，累计 3 张黄牌停赛 1 场。伤病跟着球员走，换卡不变；恢复前带伤比赛能力下降 30%，不影响精力和培养。</p>
-  `, { aside: `<button class="btn small" data-action="auto-sub-add" ${autoSubs.timed.length >= 3 ? 'disabled' : ''}>${icon('plus', 13)}定时换人</button>` })
+    <p class="hint">修改后请保存阵容，从下一场生效。手动与自动共用 ${MAX_SUBS} 次；按受伤、定时、体力顺序处理。受伤和体力换人只会选学过该位置的替补，体力换人还要求替补体力不低于阈值，避免连续换下新上场的球员；没有合适替补时不会换人。定时换人可以换上任何人，在到时后的下一个比赛事件边界执行。红牌停赛 2 场，累计 3 张黄牌停赛 1 场。伤病跟着球员走，换卡不变；恢复前带伤比赛能力下降 30%，不影响精力和培养。</p>
+  `, { aside: `<button class="btn small" data-action="auto-sub-add" ${autoSubs.timed.length >= MAX_SUBS ? 'disabled' : ''}>${icon('plus', 13)}定时换人</button>` })
 }
 
 /* ---------- 战术预设 ---------- */
@@ -799,7 +800,7 @@ export function renderLineup(): string {
           <aside class="tac-bench">
             <h3>替补 <small>${draft.bench.length} / ${BENCH_SLOTS}</small></h3>
             ${Array.from({ length: BENCH_SLOTS }, (_, index) => benchCard(index, draft, formation, selectedId, look.color)).join('')}
-            <p class="hint flat">比赛中最多换 3 次。</p>
+            <p class="hint flat">比赛中最多换 ${MAX_SUBS} 次。</p>
           </aside>
         </div>
         ${notesSection(draft)}

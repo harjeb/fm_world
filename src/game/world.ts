@@ -15,10 +15,10 @@ import type {
   WorldState,
 } from './types.ts'
 import { PLAYER_SEEDS, createPlayerFromSeed, seedById } from './data/players.ts'
-import { buildNameBook, createRandomPlayer, randomSquadPositionTemplate, type SquadName } from './data/random-players.ts'
+import { LEGACY_SQUAD_SIZE, buildNameBook, createRandomPlayer, randomSquadPositionTemplate, type SquadName } from './data/random-players.ts'
 import { DIVISION_IDS, WORLD_CLUB_DEFS, conferenceOfDivision, divisionIdForTier, type WorldClubDef } from './data/world-clubs.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION } from './names.ts'
-import { autoFillLineup, validateLineup } from './squad.ts'
+import { FULL_SQUAD, MIN_SQUAD, autoFillLineup, validateLineup } from './squad.ts'
 import { equipAICards, mergeSignings, seedAIClubs } from './ai-club.ts'
 import { caOf } from './ca.ts'
 import { derivedRng, splitSeed, hashString } from './rng.ts'
@@ -272,14 +272,23 @@ const CLUB_INDEX = new Map(WORLD_CLUB_DEFS.map((def, index) => [def.id, index]))
 const SQUAD_SIZE = randomSquadPositionTemplate().length
 const nameBooks = new Map<string, SquadName[][]>()
 
-/** 这个种子、这个赛季的名册。没有要避开的名字时可以复用，选队预览和真正开局拿到的是同一本。 */
+/**
+ * 这个种子、这个赛季的名册。没有要避开的名字时可以复用，选队预览和真正开局拿到的是同一本。
+ * 前 18 个名字用 7 人制时代的同一本名册（已有的人名字不变），11 人制追加的槽位另用一本扩展名册。
+ */
 function nameBook(seed: number, seasonIndex: number, reserved: Player[] = []): SquadName[][] {
-  const bookSeed = splitSeed(seed, `name-book-${seasonIndex}`)
-  if (reserved.length) return buildNameBook(bookSeed, WORLD_CLUB_DEFS.length, SQUAD_SIZE, new Set(reserved.flatMap((player) => [player.name, player.enName])))
+  const build = (): SquadName[][] => {
+    const reservedNames = new Set(reserved.flatMap((player) => [player.name, player.enName]))
+    const base = buildNameBook(splitSeed(seed, `name-book-${seasonIndex}`), WORLD_CLUB_DEFS.length, LEGACY_SQUAD_SIZE, reservedNames)
+    const taken = new Set([...reservedNames, ...base.flat().flatMap((name) => [name.name, name.enName])])
+    const extra = buildNameBook(splitSeed(seed, `name-book-ext-${seasonIndex}`), WORLD_CLUB_DEFS.length, SQUAD_SIZE - LEGACY_SQUAD_SIZE, taken, base.map((names) => names.flatMap((name) => [name.family, name.enName.split(' ').at(-1) ?? name.family])))
+    return base.map((names, club) => [...names, ...extra[club]])
+  }
+  if (reserved.length) return build()
   const key = `${seed}|${seasonIndex}`
   let book = nameBooks.get(key)
   if (!book) {
-    book = buildNameBook(bookSeed, WORLD_CLUB_DEFS.length, SQUAD_SIZE)
+    book = build()
     if (nameBooks.size >= 8) nameBooks.clear()
     nameBooks.set(key, book)
   }
@@ -508,7 +517,7 @@ export function expandWorldConference(world: WorldState, seed: number): { confer
       color: ZONE_COLORS[rng.int(ZONE_COLORS.length)],
       accent: '#0b1220',
       style: rng.pick(['balanced', 'attack', 'defend', 'press']),
-      formationId: rng.pick(['1-2-3-1', '1-3-2-1', '1-2-2-2'] as const),
+      formationId: rng.pick(['4-4-2', '4-3-3', '4-2-3-1', '3-5-2'] as const),
       tactics: { attack: 'balanced', passing: 'mixed', tempo: 'normal', line: 'mid', press: 'mid' },
       strength: index < 5 ? 3 : index < 14 ? 2 : 1,
       playerNames: [],
@@ -754,10 +763,16 @@ export function d2ClubChoices(): { id: string; name: string; enName?: string; co
   return WORLD_CLUB_DEFS.filter((club) => club.tier === 'division2').map((club) => ({ id: club.id, name: club.name, enName: club.enName, conference: club.conference ?? 'north' }))
 }
 
+/**
+ * 11 人制每队 25 人（7 人制时 18 人）：单人工资按 18 / 25 缩放，整队工资总额和 7 人制时相当，
+ * 经济系统（收入、设施、AI 账本）不用跟着重调。
+ */
+export const SQUAD_WAGE_SCALE = 18 / 25
+
 export function wageForPlayer(player: Player): number {
-  // 身价涨到十万–千万级之后，工资也跟着走：CA 205 约 950/轮，270 约 9000/轮，292 约 2 万/轮。
+  // 身价涨到十万–千万级之后，工资也跟着走：CA 205 约 700/轮，270 约 6500/轮，292 约 1.45 万/轮。
   const ca = caOf(player.attrs, player.positions.GK > 0)
-  return Math.max(500, Math.round(800 * Math.pow(1.035, ca - 200) / 50) * 50)
+  return Math.max(500, Math.round((800 * SQUAD_WAGE_SCALE * Math.pow(1.035, ca - 200)) / 50) * 50)
 }
 
 export function syncPlayerDivision(game: GameState): void {
@@ -1145,8 +1160,9 @@ function makeRegen(player: Player): Player {
 function ensurePlayerSquad(game: GameState, rng: ReturnType<typeof derivedRng>): void {
   const used = new Set(game.roster.flatMap((p) => [p.name, p.enName]))
   let slot = 0
-  while (game.roster.length < 18) {
-    const position = randomSquadPositionTemplate()[slot % 18]
+  while (game.roster.length < FULL_SQUAD) {
+    const template = randomSquadPositionTemplate()
+    const position = template[slot % template.length]
     const player = createRandomPlayer({ seed: rng.int(0x7fffffff), position, tier: 2, usedNames: used, idPrefix: `youth-${game.season.index}-${slot}` })
     player.age = 16 + rng.int(5)
     player.contract = { clubId: 'player', wage: wageForPlayer(player), expiresSeason: game.season.index + 3 }
@@ -1181,7 +1197,7 @@ function expireContracts(game: GameState): void {
   const expired: Player[] = []
   game.roster = game.roster.filter((player) => {
     if (!player.contract || player.contract.clubId !== 'player' || player.contract.expiresSeason > index) return true
-    if (game.roster.length <= 12) {
+    if (game.roster.length <= MIN_SQUAD) {
       player.contract.expiresSeason = index + 2
       return true
     }
