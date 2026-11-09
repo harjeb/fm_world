@@ -13,7 +13,12 @@ import { makePitch7 } from '../src/game/pes/spec.ts'
 import type { MatchTeamInput } from '../src/game/match/types.ts'
 import type { AITeam, FormationId, GameState, LegacyFormationId, Player } from '../src/game/types.ts'
 
-const LEGACY_OF: Record<string, LegacyFormationId> = { '4-3-3': '1-2-3-1', '4-2-3-1': '1-2-3-1', '3-5-2': '1-3-2-1', '4-4-2': '1-2-2-2' }
+/** 测试用：把新阵型“倒推”成一个 7 人制阵型，造出迁移前的存档。 */
+const LEGACY_OF: Record<string, LegacyFormationId> = {
+  '4-3-3': '1-2-3-1', '4-2-3-1': '1-2-3-1', '4-1-4-1': '1-2-3-1',
+  '3-5-2': '1-3-2-1', '5-3-2': '1-3-2-1', '3-4-3': '1-3-2-1',
+  '4-4-2': '1-2-2-2', '4-1-2-1-2': '1-2-2-2',
+}
 const legacyOf = (id: FormationId): LegacyFormationId => (isLegacyFormation(id) ? id : LEGACY_OF[id])
 
 /** 7 人制的阵容：7 个首发 + 5 个替补（旧规则）。 */

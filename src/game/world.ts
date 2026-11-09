@@ -517,7 +517,7 @@ export function expandWorldConference(world: WorldState, seed: number): { confer
       color: ZONE_COLORS[rng.int(ZONE_COLORS.length)],
       accent: '#0b1220',
       style: rng.pick(['balanced', 'attack', 'defend', 'press']),
-      formationId: rng.pick(['4-4-2', '4-3-3', '4-2-3-1', '3-5-2'] as const),
+      formationId: rng.pick(['4-4-2', '4-3-3', '4-2-3-1', '3-5-2', '5-3-2', '4-1-4-1', '3-4-3', '4-1-2-1-2'] as const),
       tactics: { attack: 'balanced', passing: 'mixed', tempo: 'normal', line: 'mid', press: 'mid' },
       strength: index < 5 ? 3 : index < 14 ? 2 : 1,
       playerNames: [],

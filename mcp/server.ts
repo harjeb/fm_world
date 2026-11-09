@@ -130,17 +130,17 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     playerId: z.string().min(1),
   }, (args) => action('renew_contract', args))
 
-  register('release_player', '解约', '解约球员，球员进入自由市场；阵容至少保留 10 人。', {
+  register('release_player', '解约', '解约球员，球员进入自由市场；阵容至少保留 18 人（一套完整比赛名单）。', {
     playerId: z.string().min(1),
   }, (args) => action('release_player', args))
 
   register('auto_lineup', '自动排阵容', '按指定阵型自动选择首发、替补和默认战术。', {
-    formationId: z.enum(['4-4-2', '4-3-3', '4-2-3-1', '3-5-2']).optional().describe('不填则沿用当前阵型'),
+    formationId: z.enum(['4-4-2', '4-3-3', '4-2-3-1', '3-5-2', '5-3-2', '4-1-4-1', '3-4-3', '4-1-2-1-2']).optional().describe('不填则沿用当前阵型'),
   }, (args) => action('auto_lineup', args))
 
   register('set_lineup', '提交阵容', '提交完整首发、替补和战术。首发必须 11 人并占满阵型的位置，替补最多 7 人；任何球员都能踢任何位置，没学过的位置属性按 60% 发挥。', {
     lineup: z.object({
-      formationId: z.enum(['4-4-2', '4-3-3', '4-2-3-1', '3-5-2']),
+      formationId: z.enum(['4-4-2', '4-3-3', '4-2-3-1', '3-5-2', '5-3-2', '4-1-4-1', '3-4-3', '4-1-2-1-2']),
       starters: z.array(z.object({ slotId: z.string(), playerId: z.string(), role: z.string().optional() })).describe('11 名首发；role 可省略，服务器会选该位置默认职责'),
       bench: z.array(z.string()).max(5),
       tactics: tacticsSchema.optional(),

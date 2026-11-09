@@ -34,7 +34,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
   - `playerId`
 
 - `auto_lineup` — 自动按阵型选人。
-  - `formationId?`: `"4-4-2" | "4-3-3" | "4-2-3-1" | "3-5-2"`
+  - `formationId?`: `"4-4-2" | "4-3-3" | "4-2-3-1" | "3-5-2" | "5-3-2" | "4-1-4-1" | "3-4-3" | "4-1-2-1-2"`
 - `set_lineup` — 提交完整阵容。
   ```json
   {
@@ -139,7 +139,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
   - 返回 `value`、`asking`、`balance`、球员诉求 `demands`（想听的 `goal` / `role`、`wantsClubName` 想去的球队、`minTier` 最低联赛级别）、`chance` 成功率（0–1）和 `reasons`，和手动谈判框显示的一样。
 - `sign_club_player` — 按 `preview_signing` 的参数正式报价，转会窗口开放时可用。成功则球员加盟、扣除报价；失败返回 `error`、`chance`、`reasons`。同一份报价 + 同一组承诺的结果固定，换报价或承诺才会重新判定。
 - `renew_contract` — `playerId`：续约 2 年（和俱乐部页一致），工资至少上调到身价工资的 110%；返回新合同。
-- `release_player` — `playerId`：解约，球员进入自由市场；阵容至少保留 10 人，解约后必须还能组成合法阵容。
+- `release_player` — `playerId`：解约，球员进入自由市场；阵容至少保留 18 人（一套完整的比赛名单），解约后必须还能组成合法阵容。挂牌出售同样要求至少保留 18 人。
 
 ### 比赛
 

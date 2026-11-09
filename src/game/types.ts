@@ -52,7 +52,7 @@ export type RoleId =
   | 'st_runner'
 
 /** 11 人制阵型（不含门将的写法）。 */
-export type ElevenFormationId = '4-4-2' | '4-3-3' | '4-2-3-1' | '3-5-2'
+export type ElevenFormationId = '4-4-2' | '4-3-3' | '4-2-3-1' | '3-5-2' | '5-3-2' | '4-1-4-1' | '3-4-3' | '4-1-2-1-2'
 /** 旧的 7 人制阵型：只用来读取迁移前的存档和进行中的旧比赛，不能再选。 */
 export type LegacyFormationId = '1-2-3-1' | '1-3-2-1' | '1-2-2-2'
 export type FormationId = ElevenFormationId | LegacyFormationId

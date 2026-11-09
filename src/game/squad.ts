@@ -11,8 +11,8 @@ export const BENCH_SIZE = 7
 export const MAX_SUBS = 5
 /** 一场比赛的完整名单：首发 + 替补。补青训、AI 名单都以它为下限。 */
 export const FULL_SQUAD = STARTERS + BENCH_SIZE
-/** 卖人 / 解约后至少要留几个人（首发 + 3 个替补）。 */
-export const MIN_SQUAD = STARTERS + 3
+/** 卖人 / 解约后至少要留几个人：一套完整的比赛名单（首发 + 替补）。 */
+export const MIN_SQUAD = FULL_SQUAD
 
 export type LineupSlotView = {
   slotId: string
