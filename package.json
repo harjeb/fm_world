@@ -31,7 +31,8 @@
     "pes:game": "tsx scripts/pes-game.ts",
     "typecheck": "tsc --noEmit",
     "build:site": "vite build",
-    "build:safe": "bash scripts/build-safe.sh"
+    "build:safe": "bash scripts/build-safe.sh",
+    "pes:stamina": "tsx scripts/pes-stamina.ts"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
