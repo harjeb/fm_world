@@ -1,11 +1,12 @@
 import type { AITeam, AttrKey, Attributes, Foot, Player, Position, PositionTable, StyleId } from './types.ts'
 import { ALL_ATTRIBUTES, GK_ATTRIBUTES, POSITIONS } from './types.ts'
 import { caOf } from './ca.ts'
-import { attrStorage } from './scale.ts'
+import { attrRating, attrStorage } from './scale.ts'
 import { FORMATIONS } from './data/formations.ts'
 import { LEGEND_TEAMS, type LegendPlayerTuple, type LegendTeamDef } from './data/legend-teams.ts'
 import { bestRoleForPlayer, validateLineup } from './squad.ts'
 import { curatedProfileFor } from './data/profiles-curated.ts'
+import { fmProfileFor } from './data/fm-profiles.generated.ts'
 import { styleSkillFor, styleTraitFor, styleWeightsFor } from './data/players.ts'
 
 /**
@@ -44,59 +45,126 @@ const SECONDARY: Record<Position, Position[]> = {
   ST: ['W', 'CM'],
 }
 
-function weightsFor(tuple: LegendPlayerTuple): Record<AttrKey, number> {
+function weightsFor(tuple: LegendPlayerTuple, hidden = false): Record<AttrKey, number> {
   const style = tuple[4] as StyleId
   const isGk = tuple[3] === 'GK'
-  const curated = curatedProfileFor(tuple[1])
   const base = styleWeightsFor(style, isGk)
+  const fm = hidden ? fmProfileFor(tuple[1]) : undefined
+  const curated = curatedProfileFor(tuple[1])
+  const legendMain = LEGEND_MAIN_STYLE[style]
   const out = {} as Record<AttrKey, number>
   for (const key of ALL_ATTRIBUTES) {
-    out[key] = Math.max(0, (curated?.[key] ?? base[key] ?? 0) as number)
+    const profile = fm?.[key] ?? curated?.[key]
+    const fallback = legendMain[key] ?? base[key] ?? 0
+    const blended = profile === undefined ? fallback : 0.7 * profile + 0.3 * fallback
+    out[key] = Math.max(0, blended)
     if (!isGk && (GK_ATTRIBUTES as readonly string[]).includes(key)) out[key] = 0
   }
   return out
 }
 
-function attributesFor(targetCa: number, weights: Record<AttrKey, number>, isGk: boolean): Attributes {
-  const maxWeight = Math.max(0.0001, ...ALL_ATTRIBUTES.map((key) => weights[key] ?? 0))
-  const build = (floor: number): Attributes => {
-    const attrs = {} as Attributes
-    for (const key of ALL_ATTRIBUTES) {
-      if (!isGk && (GK_ATTRIBUTES as readonly string[]).includes(key)) {
-        attrs[key] = 0
-        continue
-      }
-      const normalized = (weights[key] ?? 0) / maxWeight
-      const rating = Math.max(1, Math.min(100, floor + (100 - floor) * normalized))
-      attrs[key] = Math.round(attrStorage(key, rating, isGk) * 10) / 10
-    }
-    return attrs
+const MAIN_FIELD_KEYS: AttrKey[] = ['passing', 'shooting', 'dribbling', 'tackling', 'strength', 'speed', 'acceleration']
+const MAIN_GK_KEYS: AttrKey[] = ['reflexes', 'handling', 'rushing', 'oneOnOne', 'passing', 'composure']
+
+/** 传奇队的主属性基准：按打法和位置给出 7 项（门将 6 项）的强弱，避免画像只写少数项时其余项被当成 0.3。 */
+const LEGEND_MAIN_STYLE: Record<StyleId, Partial<Record<AttrKey, number>>> = {
+  gk_wall: { reflexes: 1, handling: 1, rushing: 0.8, oneOnOne: 0.9, passing: 0.55, composure: 0.85 },
+  gk_shotstopper: { reflexes: 1, handling: 0.9, rushing: 0.75, oneOnOne: 0.95, passing: 0.55, composure: 0.8 },
+  gk_sweeper: { reflexes: 0.9, handling: 0.8, rushing: 1, oneOnOne: 0.8, passing: 0.9, composure: 0.85 },
+  cb_stopper: { passing: 0.6, shooting: 0.25, dribbling: 0.35, tackling: 1, strength: 0.95, speed: 0.65, acceleration: 0.6 },
+  cb_cover: { passing: 0.7, shooting: 0.3, dribbling: 0.45, tackling: 0.9, strength: 0.8, speed: 0.85, acceleration: 0.8 },
+  cb_ballplaying: { passing: 1, shooting: 0.4, dribbling: 0.6, tackling: 0.85, strength: 0.75, speed: 0.7, acceleration: 0.65 },
+  fb_attacking: { passing: 0.75, shooting: 0.5, dribbling: 0.8, tackling: 0.7, strength: 0.55, speed: 1, acceleration: 0.95 },
+  fb_playmaker: { passing: 1, shooting: 0.55, dribbling: 0.8, tackling: 0.7, strength: 0.55, speed: 0.85, acceleration: 0.8 },
+  w_dribbler: { passing: 0.7, shooting: 0.9, dribbling: 1, tackling: 0.4, strength: 0.5, speed: 0.95, acceleration: 1 },
+  w_crosser: { passing: 1, shooting: 0.7, dribbling: 0.75, tackling: 0.5, strength: 0.55, speed: 0.8, acceleration: 0.75 },
+  w_finisher: { passing: 0.7, shooting: 1, dribbling: 0.9, tackling: 0.35, strength: 0.6, speed: 0.9, acceleration: 0.95 },
+  w_playmaker: { passing: 1, shooting: 0.7, dribbling: 0.9, tackling: 0.5, strength: 0.5, speed: 0.8, acceleration: 0.75 },
+  w_engine: { passing: 0.75, shooting: 0.6, dribbling: 0.7, tackling: 0.7, strength: 0.65, speed: 0.9, acceleration: 0.85 },
+  cm_playmaker: { passing: 1, shooting: 0.75, dribbling: 0.85, tackling: 0.6, strength: 0.5, speed: 0.65, acceleration: 0.7 },
+  cm_creator: { passing: 1, shooting: 0.75, dribbling: 0.9, tackling: 0.5, strength: 0.5, speed: 0.7, acceleration: 0.75 },
+  cm_destroyer: { passing: 0.65, shooting: 0.4, dribbling: 0.5, tackling: 1, strength: 0.9, speed: 0.65, acceleration: 0.6 },
+  cm_box2box: { passing: 0.8, shooting: 0.7, dribbling: 0.75, tackling: 0.8, strength: 0.75, speed: 0.85, acceleration: 0.8 },
+  cm_mezzala: { passing: 0.9, shooting: 0.8, dribbling: 0.9, tackling: 0.55, strength: 0.55, speed: 0.8, acceleration: 0.8 },
+  cm_engine: { passing: 0.8, shooting: 0.55, dribbling: 0.7, tackling: 0.85, strength: 0.8, speed: 0.85, acceleration: 0.8 },
+  st_finisher: { passing: 0.6, shooting: 1, dribbling: 0.8, tackling: 0.25, strength: 0.7, speed: 0.85, acceleration: 0.9 },
+  st_poacher: { passing: 0.55, shooting: 1, dribbling: 0.75, tackling: 0.2, strength: 0.6, speed: 0.9, acceleration: 0.95 },
+  st_target: { passing: 0.65, shooting: 0.9, dribbling: 0.6, tackling: 0.35, strength: 1, speed: 0.6, acceleration: 0.55 },
+  st_runner: { passing: 0.6, shooting: 0.9, dribbling: 0.75, tackling: 0.25, strength: 0.5, speed: 1, acceleration: 1 },
+  st_false9: { passing: 0.9, shooting: 0.9, dribbling: 0.9, tackling: 0.35, strength: 0.5, speed: 0.75, acceleration: 0.8 },
+}
+
+function mainKeys(isGk: boolean): AttrKey[] {
+  return isGk ? MAIN_GK_KEYS : MAIN_FIELD_KEYS
+}
+
+function hiddenKeys(isGk: boolean): AttrKey[] {
+  const main = new Set(mainKeys(isGk))
+  return ALL_ATTRIBUTES.filter((key) => !main.has(key) && (isGk || !(GK_ATTRIBUTES as readonly string[]).includes(key)))
+}
+
+/** 按画像把一组属性展开到指定平均分；强项推到 100，弱项可以落到底。 */
+function ratingsFor(
+  targetAvg: number,
+  weights: Record<AttrKey, number>,
+  keys: AttrKey[],
+  spread: number,
+  minRating: number,
+): Partial<Record<AttrKey, number>> {
+  const maxWeight = Math.max(0.0001, ...keys.map((key) => weights[key] ?? 0))
+  const normalized = {} as Record<AttrKey, number>
+  for (const key of keys) normalized[key] = Math.max(0, (weights[key] ?? 0) / maxWeight)
+  const meanWeight = keys.reduce((sum, key) => sum + normalized[key], 0) / keys.length
+  const build = (base: number): Partial<Record<AttrKey, number>> => {
+    const out = {} as Partial<Record<AttrKey, number>>
+    for (const key of keys) out[key] = Math.max(minRating, Math.min(100, base + spread * (normalized[key] - meanWeight)))
+    return out
   }
-  let lo = 0
-  let hi = 100
+  const meanOf = (ratings: Partial<Record<AttrKey, number>>): number =>
+    keys.reduce((sum, key) => sum + (ratings[key] ?? 0), 0) / keys.length
+  let lo = -40
+  let hi = 140
   for (let i = 0; i < 60; i++) {
     const mid = (lo + hi) / 2
-    if (caOf(build(mid), isGk) < targetCa) lo = mid
+    if (meanOf(build(mid)) < targetAvg) lo = mid
     else hi = mid
   }
-  // 隐藏属性按 0.5 评分取整，CA 会跳档：在二分点附近取「落在 1250–1450 且最接近目标」的一档。
   const base = (lo + hi) / 2
-  const candidates = Array.from({ length: 13 }, (_, step) => build(Math.max(0, base - step * 0.1)))
-  const inRange = candidates.filter((attrs) => {
-    const ca = caOf(attrs, isGk)
-    return ca >= 1250 && ca <= 1450
-  })
-  const pool = inRange.length ? inRange : candidates
-  let best = pool[0]
+  const candidates = Array.from({ length: 13 }, (_, step) => build(base - step * 0.1))
+  let best = candidates[0]
   let bestDiff = Number.POSITIVE_INFINITY
-  for (const attrs of pool) {
-    const diff = Math.abs(caOf(attrs, isGk) - targetCa)
+  for (const ratings of candidates) {
+    const diff = Math.abs(meanOf(ratings) - targetAvg)
     if (diff < bestDiff) {
-      best = attrs
+      best = ratings
       bestDiff = diff
     }
   }
   return best
+}
+
+/**
+ * 7 项主属性（门将 6 项）按目标平均展开，保留强弱形状；
+ * 隐藏属性单独用更平的分布生成，不参与“平均属性 80–100”这个目标。
+ */
+function attributesFor(
+  targetAvg: number,
+  mainWeights: Record<AttrKey, number>,
+  hiddenWeights: Record<AttrKey, number>,
+  isGk: boolean,
+): Attributes {
+  const main = ratingsFor(targetAvg, mainWeights, mainKeys(isGk), 110, 40)
+  const hidden = ratingsFor(Math.max(50, targetAvg - 2), hiddenWeights, hiddenKeys(isGk), 35, 40)
+  const attrs = {} as Attributes
+  for (const key of ALL_ATTRIBUTES) {
+    if (!isGk && (GK_ATTRIBUTES as readonly string[]).includes(key)) {
+      attrs[key] = 0
+      continue
+    }
+    const rating = main[key] ?? hidden[key] ?? 60
+    attrs[key] = Math.round(attrStorage(key, rating, isGk) * 10) / 10
+  }
+  return attrs
 }
 
 function positionsFor(pos: Position, random: () => number): PositionTable {
@@ -129,10 +197,10 @@ function heightFor(pos: Position, random: () => number): number {
 }
 
 function buildPlayer(def: LegendTeamDef, tuple: LegendPlayerTuple, index: number): Player {
-  const [name, enName, country, pos, style, targetCa, foot] = tuple
+  const [name, enName, country, pos, style, targetAvg, foot] = tuple
   const isGk = pos === 'GK'
   const random = rngFrom(`${def.id}|${enName}|${index}`)
-  const attrs = attributesFor(targetCa, weightsFor(tuple), isGk)
+  const attrs = attributesFor(targetAvg, weightsFor(tuple), weightsFor(tuple, true), isGk)
   const positions = positionsFor(pos, random)
   const personality = {
     professionalism: 78 + Math.round(random() * 15),
