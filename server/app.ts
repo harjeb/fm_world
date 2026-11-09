@@ -13,7 +13,7 @@ import { caOf } from '../src/game/ca.ts'
 import { repairLineup, validateLineup } from '../src/game/squad.ts'
 import { displayCA, mainAttrsFor } from '../src/game/rating.ts'
 import { catchUpSeason, ROUND_MS } from '../src/game/season.ts'
-import { seasonEndAt, postseasonStartAt } from '../src/game/calendar.ts'
+import { averageRoundGameDays, postseasonStartAt, roundsKickedOff, seasonEndAt } from '../src/game/calendar.ts'
 import { splitSeed } from '../src/game/rng.ts'
 import { economyOf } from '../src/game/economy.ts'
 import { advanceLeagueRealtime } from '../src/game/realtime.ts'
@@ -28,6 +28,7 @@ import { clubNameError, normalizeClubName } from '../src/game/club-name.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../src/game/negotiation.ts'
 import { aiPoachRound, expireOffers, generateAIOffers, respondToOffer, type MarketClub } from '../src/game/transfers.ts'
 import { marketDayOf, refreshFreeMarket } from '../src/game/free-market.ts'
+import { migrateGameSchedule, migrateWorldSchedule } from '../src/game/schedule.ts'
 import { aiBuysLeft, noteAIBuy } from '../src/game/transfer-rules.ts'
 import { signClubPlayer } from '../src/game/market.ts'
 import { elevenAITeam, upgradeElevenASide } from '../src/game/eleven.ts'
@@ -163,6 +164,13 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       team.lineup = repairLineup(team.players, team.lineup).lineup
     }
   }
+  // 一天一轮 → 一天两轮（北京时间 12:00、20:00）：共享世界和每个账号的赛季一起挪，当前该踢的轮次不变。
+  {
+    const at = now()
+    let moved = migrateWorldSchedule(sharedWorld.world, at)
+    for (const account of db.accounts) if (account.game && migrateGameSchedule(account.game, at)) moved = true
+    if (moved) writeJson(dbPath, db)
+  }
   // 7 人制 → 11 人制：先迁移每个账号（玩家球队补随机球员、换阵型），有教练的球队名单直接用账号里的新名单，
   // 其余 AI 球队各自补人、换阵型，世界里各队的阵型也一起换。迁移过一次之后这里什么都不做。
   {
@@ -211,7 +219,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
    * 练出来的卡当场装到共享名册上（每轮只改一次），对手这一轮踢球就用新卡，玩家也能在球队名单里看到。
    */
   const serverSeason = () => sharedWorld.world.seasonIndex
-  const worldRound = () => Math.min(38, Math.max(1, Math.floor((now() - sharedWorld.world.seasonStartedAt) / ROUND_MS) + 1))
+  const worldRound = () => Math.min(38, Math.max(1, roundsKickedOff(sharedWorld.world.seasonStartedAt, now(), sharedWorld.world.kickoffSchedule)))
   /** 转会窗口：第 1–10 轮、20–30 轮（和账号里的 transferWindowOpen 一致）。 */
   const worldWindowOpen = () => {
     const round = worldRound()
@@ -233,7 +241,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
   function advanceSharedAIClubs(): void {
     const book = (sharedWorld.aiClubs ??= seedAIClubs(sharedWorld.world, sharedWorld.seed))
-    const round = Math.min(38, Math.max(1, Math.floor((now() - sharedWorld.world.seasonStartedAt) / ROUND_MS) + 1))
+    const round = worldRound()
     const previous = sharedWorld.aiRound ?? 0
     if (previous >= round) return
     const rounds = Math.min(round - previous, 38)
@@ -244,7 +252,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const state = (book[club.id] ??= createAIClub(club, splitSeed(sharedWorld.seed, `ai-club-${club.id}`)))
       const team = sharedWorld.teams?.[club.id]
       const before = `${state.economy.balance}|${state.trained}|${state.upgrades}`
-      advanceAIClub(state, club, team, rounds, splitSeed(sharedWorld.seed, `ai-advance-${club.id}-${round}`))
+      advanceAIClub(state, club, team, rounds, splitSeed(sharedWorld.seed, `ai-advance-${club.id}-${round}`), true, averageRoundGameDays(sharedWorld.world.kickoffSchedule))
       if (`${state.economy.balance}|${state.trained}|${state.upgrades}` !== before) changed = true
     }
     // 转会窗口里 AI 之间按需互相挖人（同级或更低级别），每轮全服最多 3 笔。
@@ -882,7 +890,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const old = sharedWorld.world
     const owned = activeClubIds()
     const pendingCoachMatches = old.divisions.some((division) => division.fixtures.some((fixture) => (owned.has(fixture.homeId) || owned.has(fixture.awayId)) && !fixture.played))
-    if (force && !pendingCoachMatches && advanceOwnerlessWorld(old, old.seasonStartedAt + WORLD_ROUNDS * ROUND_MS, owned, sharedWorld.seed)) persistWorld()
+    if (force && !pendingCoachMatches && advanceOwnerlessWorld(old, postseasonStartAt(old.seasonStartedAt, old.kickoffSchedule), owned, sharedWorld.seed)) persistWorld()
     if (!old.divisions.every((division) => division.fixtures.every((fixture) => fixture.played))) return { ok: false, error: '全服本赛季仍有比赛未完成' }
     const managed = db.accounts.flatMap((account) => {
       const clubId = ownedClubId(account)
@@ -971,7 +979,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   let lastSeasonCheck = -Infinity
   function autoRollSharedSeason(): void {
     // 常规赛结束后先留 12 个游戏日给升级附加赛和友谊赛，窗口走完才开新赛季。
-    if (now() < seasonEndAt(sharedWorld.world.seasonStartedAt) || now() - lastSeasonCheck < 5000) return
+    if (now() < seasonEndAt(sharedWorld.world.seasonStartedAt, sharedWorld.world.kickoffSchedule) || now() - lastSeasonCheck < 5000) return
     lastSeasonCheck = now()
     advanceSharedWorld()
     for (const account of db.accounts) advanceAccount(account)
@@ -980,9 +988,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
   /** 常规赛一结束就把升级杯算出来，让休整期间的世界页能看到赛果。 */
   function autoPlayoff(): void {
-    if (now() < postseasonStartAt(sharedWorld.world.seasonStartedAt)) return
+    if (now() < postseasonStartAt(sharedWorld.world.seasonStartedAt, sharedWorld.world.kickoffSchedule)) return
     // 休整窗口已经走完时会立刻换季，没必要再单独算一次附加赛。
-    if (now() >= seasonEndAt(sharedWorld.world.seasonStartedAt)) return
+    if (now() >= seasonEndAt(sharedWorld.world.seasonStartedAt, sharedWorld.world.kickoffSchedule)) return
     if (sharedWorld.world.promotionPlayoff?.seasonIndex === sharedWorld.world.seasonIndex) return
     const managed = db.accounts.flatMap((account) => {
       const clubId = ownedClubId(account)
@@ -1288,7 +1296,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         advanceAccount(agentAccount)
         if (body.action === 'start_next_season' && agentAccount.game.world) {
           const outcome = agentAccount.game.season.finished
-            ? (now() >= seasonEndAt(sharedWorld.world.seasonStartedAt)
+            ? (now() >= seasonEndAt(sharedWorld.world.seasonStartedAt, sharedWorld.world.kickoffSchedule)
               ? rollSharedSeason(true)
               : { ok: false, error: '赛后休整还没结束：窗口结束后会自动开新赛季' })
             : now() - lastRollAt < 15_000
@@ -1356,7 +1364,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
     if (url.pathname === '/api/world/next-season' && req.method === 'POST') {
       advanceAccount(account)
-      const postseasonOver = now() >= seasonEndAt(sharedWorld.world.seasonStartedAt)
+      const postseasonOver = now() >= seasonEndAt(sharedWorld.world.seasonStartedAt, sharedWorld.world.kickoffSchedule)
       const outcome = account.game.season.finished
         ? (postseasonOver
           ? rollSharedSeason(true)
@@ -1498,6 +1506,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         body.game.matchHistory = account.game.matchHistory
       } else if (body.game.activeMatch?.context.isLeague) {
         return json(res, 400, { error: '联赛必须由服务器开始' })
+      }
+      // 还没刷新的旧页面交上来的是旧赛程：赛季和世界以服务器为准。
+      if (body.game.season?.kickoffSchedule !== account.game.season.kickoffSchedule) {
+        body.game.season = account.game.season
+        if (body.game.world && account.game.world) body.game.world = account.game.world
       }
       // 联机改名只能走 /api/club/rename（要查重名和字数），普通保存不能顺手改掉。
       if (body.game.world) body.game.clubName = account.game.clubName

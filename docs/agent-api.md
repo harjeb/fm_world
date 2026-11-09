@@ -166,7 +166,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 `commentary` 是按 `seq` 排序的已发生播报，每条含 90 分钟显示时钟、类型、文字、该时刻常规比分，以及（进入点球大战后）`shootoutScore`。多次读取时可用 `seq` 去重。一次 `advance_match` 可能产生多条；比赛结束后从结果的 `record.commentary`，或用 `get_match(matchId)` 获取完整记录。`recentLog` 的射门事件包含 `shotChance`（机会类型、基础射正、保底、上限、距离/角度/压力/封堵），`ratings` 包含最终射正、射正后进球、终结和门将评分。`goalDetails` 记录常规比赛进球（含机会类型 `chance`）：射门位置 `origin`（主队进攻方向为 x 增大，客队相反）、距离、左右脚或头球、射门方式、比赛情境和入球区域 `target`；入球区域左/右以进攻方为视角，不包含点球大战。
 
-联赛每轮推进（4 个游戏日 = 现实 24 小时）。已开始的联赛由服务器持续推进，关闭网页、断开 Agent 或重启服务器不会重置时钟；重启后按实际经过时间补算。轮询 `get_match` 或 `GET /api/agent/state` 观察已发生的播报，终场后从 `matchHistory` 的 `id` 调用 `get_match(matchId)`。到下一轮时才补算此前未开始的比赛；友谊赛保留手动推进与跳过。
+联赛每天两轮：北京时间（UTC+8）12:00 和 20:00 开赛，相邻两轮隔 8 小时或 16 小时，一个赛季 38 轮约 19 天，常规赛结束后有 12 个游戏日（现实 3 天）的赛后休整。`state.season.currentFixture` 和赛程里的 `kickoffAt` 是开赛时间（Unix 毫秒）。已开始的联赛由服务器持续推进，关闭网页、断开 Agent 或重启服务器不会重置时钟；重启后按实际经过时间补算。轮询 `get_match` 或 `GET /api/agent/state` 观察已发生的播报，终场后从 `matchHistory` 的 `id` 调用 `get_match(matchId)`。到下一轮时才补算此前未开始的比赛；友谊赛保留手动推进与跳过。
 
 ### 全服世界
 

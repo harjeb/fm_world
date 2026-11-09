@@ -9,7 +9,7 @@ import { expireOffers, runLocalTransfers } from './transfers.ts'
 import { refreshLocalFreeMarket } from './free-market.ts'
 import { awardSeasonPrize } from './economy.ts'
 import { squadLimitError } from './market.ts'
-import { GAME_DAY_MS, ROUND_GAME_DAYS, ROUND_MS, elapsedGameDays, gameDayOfRound, kickoffAtForRound, seasonEndAt } from './calendar.ts'
+import { GAME_DAY_MS, ROUND_GAME_DAYS, ROUND_MS, elapsedGameDays, gameDayOfRound, kickoffAtForRound, seasonEndAt, roundsKickedOff, roundGapGameDays, DAILY_SCHEDULE } from './calendar.ts'
 import { recordMatchInjuries } from './injury.ts'
 import { awardRoundIncome, economyOf } from './economy.ts'
 import { playerMarketValue, settleMarket } from './market.ts'
@@ -43,6 +43,7 @@ export function createSeason(seed: number, aiTeams: AITeam[], clubName: string, 
     startedAt,
     gameDayMs: GAME_DAY_MS,
     roundGameDays: ROUND_GAME_DAYS,
+    kickoffSchedule: DAILY_SCHEDULE,
   }
   const names = new Map<string, string>([[PLAYER_TEAM_ID, clubName], ...aiTeams.map((team) => [team.id, team.name] as [string, string])])
   season.table = computeTable(ids, fixtures, names)
@@ -93,7 +94,7 @@ export function startNextSeason(game: GameState, now = Date.now()): { ok: boolea
   return { ok: true }
 }
 
-/** 20 队双循环：19 轮首循环 + 19 轮次循环，每 4 个游戏日一轮（现实 24 小时）。 */
+/** 20 队双循环：19 轮首循环 + 19 轮次循环，单机每 4 个游戏日一轮（现实 24 小时）。 */
 function buildFixtures(teamIds: string[], startedAt: number): Fixture[] {
   const ids = [...teamIds]
   const fixtures: Fixture[] = []
@@ -119,7 +120,7 @@ function buildFixtures(teamIds: string[], startedAt: number): Fixture[] {
       awayId: match.b,
       isPlayer: match.a === PLAYER_TEAM_ID || match.b === PLAYER_TEAM_ID,
       played: false,
-      gameDay: gameDayOfRound(match.round),
+      gameDay: gameDayOfRound(startedAt, match.round),
       kickoffAt: kickoffAtForRound(startedAt, match.round),
     })
   }
@@ -207,8 +208,8 @@ export function isRoundComplete(game: GameState, round = game.season.round): boo
 }
 
 export function dueRound(game: GameState, now = Date.now()): number {
-  const elapsed = Math.max(0, now - game.season.startedAt)
-  return Math.min(ROUNDS + 1, 1 + Math.floor(elapsed / ROUND_MS))
+  // 已经开过球的轮数（单机一天一轮，联机北京时间 12:00、20:00 各一轮）；赛季开始到第一轮开赛之间也算第 1 轮。
+  return Math.min(ROUNDS + 1, Math.max(1, roundsKickedOff(game.season.startedAt, now, game.season.kickoffSchedule)))
 }
 
 export function seasonDay(game: GameState, now = Date.now()): number {
@@ -216,7 +217,7 @@ export function seasonDay(game: GameState, now = Date.now()): number {
 }
 
 export function roundKickoffAt(game: GameState, round = game.season.round): number {
-  return kickoffAtForRound(game.season.startedAt, round)
+  return kickoffAtForRound(game.season.startedAt, round, game.season.kickoffSchedule)
 }
 
 /** 当前轮的结算时刻，也就是下一轮开赛的时刻。 */
@@ -226,7 +227,7 @@ export function nextMatchdayAt(game: GameState): number {
 
 /** 赛后休整还要多久（升级附加赛窗口）。 */
 export function nextSeasonCountdown(game: GameState, now = Date.now()): string {
-  const diff = Math.max(0, seasonEndAt(game.season.startedAt) - now)
+  const diff = Math.max(0, seasonEndAt(game.season.startedAt, game.season.kickoffSchedule) - now)
   const days = Math.floor(diff / GAME_DAY_MS)
   const hours = Math.floor((diff % GAME_DAY_MS) / 3_600_000)
   const minutes = Math.floor((diff % 3_600_000) / 60_000)
@@ -237,7 +238,7 @@ export function nextSeasonCountdown(game: GameState, now = Date.now()): string {
 
 /** 赛季结束后是否还在赛后休整窗口里（这期间只能踢友谊赛）。 */
 export function inPostseason(game: GameState, now = Date.now()): boolean {
-  return game.season.finished && now < seasonEndAt(game.season.startedAt)
+  return game.season.finished && now < seasonEndAt(game.season.startedAt, game.season.kickoffSchedule)
 }
 
 export function matchdayCountdown(game: GameState, now = Date.now()): string {
@@ -323,8 +324,8 @@ export function skipToMatchday(game: GameState, now = Date.now()): { ok: boolean
 /** 离线存档：把赛后休整快进到结束，之后就能开始下一赛季。 */
 export function skipToPostseasonEnd(game: GameState, now = Date.now()): { ok: boolean; error?: string; gameDays: number } {
   if (!game.season.finished) return { ok: false, error: '常规赛还没结束', gameDays: 0 }
-  if (now >= seasonEndAt(game.season.startedAt)) return { ok: true, gameDays: 0 }
-  return skipCalendar(game, seasonEndAt(game.season.startedAt) - now, now)
+  if (now >= seasonEndAt(game.season.startedAt, game.season.kickoffSchedule)) return { ok: true, gameDays: 0 }
+  return skipCalendar(game, seasonEndAt(game.season.startedAt, game.season.kickoffSchedule) - now, now)
 }
 
 /**
@@ -459,7 +460,7 @@ export function catchUpSeason(game: GameState, now = Date.now()): { advanced: nu
     advanced++
     if (round < ROUNDS && !game.season.finished) {
       game.season.round = round + 1
-      recoverConditions(game, ROUND_GAME_DAYS)
+      recoverConditions(game, roundGapGameDays(game.season.startedAt, round, game.season.kickoffSchedule))
     }
     updateSeasonTable(game)
   }
@@ -490,7 +491,7 @@ export function advanceSeasonRound(game: GameState, now = Date.now()): { ok: boo
   }
   if (!game.season.finished && round < ROUNDS) {
     game.season.round = round + 1
-    recoverConditions(game, ROUND_GAME_DAYS)
+    recoverConditions(game, roundGapGameDays(game.season.startedAt, round, game.season.kickoffSchedule))
   }
   updateSeasonTable(game)
   return { ok: true }
@@ -702,7 +703,7 @@ export function finishActiveMatch(game: GameState, engine: GameEngine, now = Dat
       }
       if (!game.season.finished && round < ROUNDS) {
         game.season.round = round + 1
-        recoverConditions(game, ROUND_GAME_DAYS)
+        recoverConditions(game, roundGapGameDays(game.season.startedAt, round, game.season.kickoffSchedule))
       }
       updateSeasonTable(game)
     }

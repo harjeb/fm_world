@@ -307,6 +307,8 @@ export type WorldState = {
   promotionPlayoff?: PromotionPlayoff
   lastPromotionPlayoff?: PromotionPlayoff
   history: WorldSeasonSummary[]
+  /** 赛程日历版本：2 = 一天两轮（北京时间 12:00、20:00）。 */
+  kickoffSchedule?: number
 }
 
 export type Suspension = {
@@ -742,6 +744,8 @@ export type SeasonState = {
   tier?: TierId
   conference?: ConferenceId
   clubIds?: string[]
+  /** 赛程日历版本：2 = 一天两轮（北京时间 12:00、20:00）。没有的是旧的一天一轮，读档时迁移。 */
+  kickoffSchedule?: number
 }
 
 export type AITeamDef = {

@@ -7,7 +7,7 @@ import { createAppServer, type AppServer } from '../server/app.ts'
 import { applyAgentAction } from '../server/agent.ts'
 import { createWorldGame } from '../src/game/world.ts'
 import { LINEUP_LOCK_MS, lineupLockState, playerFixture, settleDuePlayerMatch } from '../src/game/season.ts'
-import { ROUND_MS } from '../src/game/calendar.ts'
+import { BEIJING_SCHEDULE, ROUND_MS, kickoffAtForRound } from '../src/game/calendar.ts'
 import type { GameState } from '../src/game/types.ts'
 
 const servers: AppServer[] = []
@@ -58,15 +58,17 @@ describe('开赛前 30 分钟锁阵容', () => {
     })).json() as { token: string }
     const auth = { Authorization: `Bearer ${registered.token}`, 'Content-Type': 'application/json' }
     const worldStart = ((await (await fetch(`${base}/api/health`)).json()) as { worldSeasonStartedAt: number }).worldSeasonStartedAt
+    // 联机赛程：每天北京时间 12:00、20:00 各一轮。
+    const kickoff = (round: number) => kickoffAtForRound(worldStart, round, BEIJING_SCHEDULE)
 
     // 到第 2 轮开球时间：第 1、2 轮自动结算，当前第 2 轮已踢，锁的是第 3 轮。
-    clock = worldStart + ROUND_MS + 1000
+    clock = kickoff(2) + 1000
     const loaded = await (await fetch(`${base}/api/game`, { headers: auth })).json() as { game: GameState; revision: number }
     expect(loaded.game.season.round).toBe(2)
     expect(playerFixture(loaded.game, 2)!.played).toBe(true)
 
     // 第 3 轮开赛前 10 分钟：阵容锁定
-    clock = worldStart + 2 * ROUND_MS - 10 * minute
+    clock = kickoff(3) - 10 * minute
     const lockedGame = await (await fetch(`${base}/api/game`, { headers: auth })).json() as { game: GameState; revision: number }
     expect(lineupLockState(lockedGame.game, clock).locked).toBe(true)
     const changed = structuredClone(lockedGame.game)
@@ -88,7 +90,7 @@ describe('开赛前 30 分钟锁阵容', () => {
     expect(agent.error).toContain('锁定')
 
     // 第 3 轮开球并自动结算后解锁
-    clock = worldStart + 2 * ROUND_MS + 1000
+    clock = kickoff(3) + 1000
     const after = await (await fetch(`${base}/api/game`, { headers: auth })).json() as { game: GameState; revision: number }
     expect(playerFixture(after.game, 3)!.played).toBe(true)
     expect(lineupLockState(after.game, clock).locked).toBe(false)

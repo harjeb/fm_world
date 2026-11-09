@@ -6,7 +6,7 @@ import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
 import { createWorldGame } from '../src/game/world.ts'
 import { playerFixture, roundKickoffAt, settleDuePlayerMatch } from '../src/game/season.ts'
-import { ROUND_MS } from '../src/game/calendar.ts'
+import { BEIJING_SCHEDULE, kickoffAtForRound } from '../src/game/calendar.ts'
 import type { GameState } from '../src/game/types.ts'
 
 const servers: AppServer[] = []
@@ -29,7 +29,8 @@ describe('联机联赛到点自动结算', () => {
   })
 
   it('服务器在登录时自动踢掉到点的比赛，玩家不用手动开始；之后不能再手动开赛', async () => {
-    let clock = 1_000_000
+    // 北京时间 2026-11-09 12:00：服务器在开赛时间点上建世界，第 1 轮就在这一刻。
+    let clock = Date.UTC(2026, 10, 9, 4)
     const app = createAppServer({
       dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'fm-auto-match-')),
       staticDir: path.resolve('dist'),
@@ -57,8 +58,9 @@ describe('联机联赛到点自动结算', () => {
     expect(preparedFixture?.played).toBe(true)
     expect(prepared.game.season.round).toBe(1)
 
-    // 下一轮开球时间到了：登录时先自动补上第 1 轮，再自动踢第 2 轮
-    clock += ROUND_MS
+    // 下一轮开球时间（当天 20:00）到了：登录时先自动补上第 1 轮，再自动踢第 2 轮
+    expect(registered.game.world!.seasonStartedAt).toBe(Date.UTC(2026, 10, 9, 4))
+    clock = kickoffAtForRound(registered.game.world!.seasonStartedAt, 2, BEIJING_SCHEDULE)
     const second = await (await fetch(`${base}/api/game`, { headers: auth })).json() as { game: GameState }
     expect(second.game.season.round).toBe(2)
     for (const round of [1, 2]) {

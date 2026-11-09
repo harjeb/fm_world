@@ -591,7 +591,7 @@ export function autoLineup(game: GameState, formationId = game.lineup.formationI
 
 export function startNextSeasonAction(game: GameState, now = Date.now()): { ok: boolean; error?: string } {
   // 赛季结束后先过 12 个游戏日的休整窗口（升级附加赛 + 友谊赛），不能一点就开新赛季。
-  if (game.world && game.season.finished && now < seasonEndAt(game.season.startedAt)) {
+  if (game.world && game.season.finished && now < seasonEndAt(game.season.startedAt, game.season.kickoffSchedule)) {
     return { ok: false, error: `赛后休整还没结束：${nextSeasonCountdown(game, now)}后开始下一赛季` }
   }
   const result = startNextSeason(game, now)

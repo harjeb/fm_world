@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
-import { GAME_DAY_MS, ROUND_MS, SEASON_GAME_DAYS } from '../src/game/calendar.ts'
+import { BEIJING_SCHEDULE, ROUND_MS, postseasonStartAt, seasonEndAt } from '../src/game/calendar.ts'
 
 const servers: AppServer[] = []
 afterEach(() => {
@@ -41,6 +41,14 @@ async function load(base: string, token: string): Promise<{ game: any; revision:
 }
 
 /** 把这个账号的联赛赛程全部标成已赛；返回可 PUT 回去的存档。 */
+/** 共享世界当前赛季（联机赛程）的赛后休整开始、结束时间。 */
+async function seasonTimes(base: string, token: string): Promise<{ postseason: number; end: number }> {
+  const { game } = await load(base, token)
+  const start = game.world.seasonStartedAt
+  expect(game.world.kickoffSchedule).toBe(BEIJING_SCHEDULE)
+  return { postseason: postseasonStartAt(start, BEIJING_SCHEDULE), end: seasonEndAt(start, BEIJING_SCHEDULE) }
+}
+
 async function finishSeason(base: string, token: string) {
   const current = await load(base, token)
   for (const fixture of current.game.season.fixtures) {
@@ -76,7 +84,7 @@ describe('服务器共享世界', () => {
     const { base } = await start(() => now)
     const first = await register(base, 'world_early')
     expect(first.game.season.round).toBe(1)
-    now += ROUND_MS + 2 * 60 * 60 * 1000 // 一轮（现实 24 小时）多一点
+    now += ROUND_MS + 2 * 60 * 60 * 1000 // 一天多一点：至少过了两个开赛时间点
     const late = await register(base, 'world_late')
     expect(late.game.season.round).toBeGreaterThanOrEqual(2)
     expect(late.game.season.fixtures.some((fixture: any) => fixture.played)).toBe(true)
@@ -168,7 +176,7 @@ describe('服务器共享世界', () => {
     expect(premature.status, await premature.clone().text()).toBe(400)
     await finishSeason(base, b.token)
     // 常规赛结束后要先走完 12 个游戏日的赛后休整窗口。
-    clock += SEASON_GAME_DAYS * GAME_DAY_MS
+    clock = Math.max(clock, (await seasonTimes(base, a.token)).end)
     const rollover = await fetch(`${base}/api/world/next-season`, { method: 'POST', headers: auth(a.token), body: '{}' })
     const rolloverBody = await rollover.json() as { error?: string }
     expect(rolloverBody.error).toBeUndefined()
@@ -195,7 +203,7 @@ describe('服务器共享世界', () => {
     expect(publicA.divisions).toEqual(publicB.divisions)
     await finishSeason(base, a.token)
     await finishSeason(base, b.token)
-    clock += SEASON_GAME_DAYS * GAME_DAY_MS
+    clock = Math.max(clock, (await seasonTimes(base, a.token)).end)
     const thirdSeason = await fetch(`${base}/api/world/next-season`, { method: 'POST', headers: auth(b.token), body: '{}' })
     expect(thirdSeason.status).toBe(200)
     const aThird = await load(base, a.token)
@@ -235,7 +243,7 @@ describe('服务器共享世界', () => {
       const put = await fetch(`${base}/api/game`, { method: 'PUT', headers: auth(account.token), body: JSON.stringify({ game: current.game, baseRevision: current.revision }) })
       expect(put.status, await put.clone().text()).toBe(200)
     }
-    clock += SEASON_GAME_DAYS * GAME_DAY_MS
+    clock = Math.max(clock, (await seasonTimes(base, a.token)).end)
     const rolled = await fetch(`${base}/api/world/next-season`, { method: 'POST', headers: auth(a.token), body: '{}' })
     const rolledBody = await rolled.json() as { error?: string }
     expect(rolledBody.error).toBeUndefined()
@@ -259,11 +267,12 @@ describe('服务器共享世界', () => {
     const saved = await fetch(`${base}/api/game`, { method: 'PUT', headers: auth(a.token), body: JSON.stringify({ game: current.game, baseRevision: current.revision }) })
     expect(saved.status).toBe(200)
     // 常规赛刚结束：还在休整窗口里，赛季不会翻页。
-    clock += ROUND_MS * 38
+    const times = await seasonTimes(base, a.token)
+    clock = times.postseason
     const stillSame = await (await fetch(`${base}/api/world`)).json() as any
     expect(stillSame.seasonIndex).toBe(1)
     // 再等过休整窗口，服务器自动开新赛季。
-    clock += (SEASON_GAME_DAYS - 38) * GAME_DAY_MS
+    clock = times.end
     const world = await (await fetch(`${base}/api/world`)).json() as any
     expect(world.seasonIndex).toBe(2)
     const next = await load(base, a.token)
@@ -275,7 +284,7 @@ describe('服务器共享世界', () => {
     let clock = Date.now()
     const { base } = await start(() => clock)
     const a = await register(base, 'away_season_a')
-    clock += SEASON_GAME_DAYS * GAME_DAY_MS
+    clock = (await seasonTimes(base, a.token)).end
     const result = await load(base, a.token)
     expect(result.game.season.index).toBe(2)
     expect(result.game.world.history).toHaveLength(1)

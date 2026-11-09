@@ -6,7 +6,7 @@ import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
 import { ROUND_MS } from '../src/game/season.ts'
 import { personKey } from '../src/game/injury.ts'
-import { GAME_DAY_MS, SEASON_GAME_DAYS } from '../src/game/calendar.ts'
+import { BEIJING_SCHEDULE, seasonEndAt } from '../src/game/calendar.ts'
 import { FORMATIONS } from '../src/game/data/formations.ts'
 import { createInitialGame } from '../src/game/state.ts'
 import type { FormationId } from '../src/game/types.ts'
@@ -482,7 +482,7 @@ describe('Agent API', () => {
       expect(put.status).toBe(200)
       // 常规赛结束后要等 12 个游戏日的赛后休整窗口走完，才允许开始新赛季。
       expect((await client.callTool({ name: 'start_next_season', arguments: {} })).isError).toBe(true)
-      clock += SEASON_GAME_DAYS * GAME_DAY_MS
+      clock = Math.max(clock, seasonEndAt(account.game.world.seasonStartedAt, BEIJING_SCHEDULE))
       expect((await client.callTool({ name: 'start_next_season', arguments: {} })).isError).not.toBe(true)
       const saved = await (await fetch(`${base}/api/game`, { headers: { Authorization: `Bearer ${account.token}` } })).json() as { game: Record<string, any> }
       expect(saved.game.season.index).toBe(2)
