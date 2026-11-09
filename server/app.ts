@@ -872,7 +872,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       pullSharedFixtures(account)
       pullSharedWorld(account)
       account.revision++
-      if (migrated || economyAdded || !progressingLeague || !account.game.activeMatch) account.lastUserRevision = account.revision
+      // lastUserRevision 只记录“玩家自己保存”的版本；AI / 共享世界 / 自动结算的改动不算，
+      // 否则这些服务端变化会把玩家的下一次保存判成冲突。
       account.updatedAt = now()
       persistDb()
       broadcast(account)
@@ -1486,8 +1487,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         }
       }
       const baseRevision = Number(body.baseRevision)
-      const onlyLeagueProgress = account.game.activeMatch?.context.isLeague && baseRevision >= (account.lastUserRevision ?? account.revision) && baseRevision < account.revision
-      if (!Number.isInteger(baseRevision) || (baseRevision !== account.revision && !onlyLeagueProgress)) {
+      // 客户端基于“最后一次玩家保存”之后的版本都算安全：中间的 revision 增长来自服务器
+      // （AI 训练、共享赛程、自动结算），保存后服务端会重新拉取这些共享数据。
+      const serverAdvanced = baseRevision >= (account.lastUserRevision ?? account.revision)
+      const onlyLeagueProgress = account.game.activeMatch?.context.isLeague && serverAdvanced && baseRevision < account.revision
+      if (!Number.isInteger(baseRevision) || (baseRevision !== account.revision && !serverAdvanced && !onlyLeagueProgress)) {
         json(res, 409, { error: '存档已在另一设备更新', revision: account.revision, game: publicGame(account) })
         return
       }
