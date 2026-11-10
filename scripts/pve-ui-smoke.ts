@@ -84,7 +84,7 @@ try {
   await screenshot('legend-desktop')
   await click('[data-challenge-mode="peak"]')
   await click('[data-peak-preview="50"]')
-  await wait(`document.body.innerText.includes('足球小将') && document.body.innerText.includes('球星上限 1300–1500') && document.body.innerText.includes('第 50 关全明星奖励')`)
+  await wait(`document.body.innerText.includes('足球小将') && document.body.innerText.includes('第 50 关全明星奖励')`)
   await screenshot('peak-stage-50')
   await click('[data-peak-preview="100"]')
   await wait(`document.body.innerText.includes('1300') && document.querySelector('[data-action="start-peak-stage"]').disabled`)

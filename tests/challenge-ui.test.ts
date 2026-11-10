@@ -54,6 +54,8 @@ describe('挑战页面', () => {
     expect(html).toContain('第 50 关全明星奖励')
     expect(html).toContain('data-action="claim-peak-reward"')
     expect(html).toContain('当前 CA')
+    expect(html).not.toContain('上限 PA')
+    expect(html).not.toContain('球星上限')
   })
 
   it('传奇档位筛选和杯赛分组预览可渲染', () => {
