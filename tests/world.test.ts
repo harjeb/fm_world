@@ -57,6 +57,7 @@ describe('三级共享世界', () => {
     for (const player of game.roster) for (const key of Object.keys(player.attrs) as (keyof typeof player.attrs)[]) player.attrs[key] = 1500
     finishSeason(game)
     expect(next(game).ok).toBe(true)
+    expect(game.pve!.cupSeason?.seasonIndex).toBe(2)
     const playoff = game.world!.lastPromotionPlayoff!
     // 两个赛区各出 3 队：每区 2 场加赛，两个小组各 1 场，再加 1 场第二名决战。
     expect(playoff.teams).toHaveLength(6)

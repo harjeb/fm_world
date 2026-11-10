@@ -1,5 +1,6 @@
-import type { GameState, MatchContext, MatchRecord, PveLegendRecord, PveState } from './types.ts'
-import { recordCupResult } from './cup-run.ts'
+import type { AITeam, GameState, MatchContext, MatchRecord, PveLegendRecord, PveState } from './types.ts'
+import { ensureCupSeason } from './cup.ts'
+import { cupTeamAvailable, recordCupResult } from './cup-run.ts'
 import { archivePastCups } from './pve-season.ts'
 import { addLegendBook, awardLegendReward, ensureLegendBooks } from './legend-books.ts'
 import { PEAK_SKILL_STAGES, peakSkillForStage } from './data/peak-skills.ts'
@@ -9,7 +10,7 @@ import { awardPeakMilestone, ensurePeakMilestones } from './peak-milestones.ts'
 const EMPTY_LEGEND: PveLegendRecord = { played: 0, won: 0, drawn: 0, lost: 0, goals: 0, conceded: 0 }
 
 /** 旧存档补 PvE 字段；返回是否有改动。 */
-export function ensurePve(game: GameState): boolean {
+export function ensurePve(game: GameState, worldTeams?: readonly AITeam[]): boolean {
   let changed = false
   if (!game.pve) {
     game.pve = {
@@ -51,7 +52,7 @@ export function ensurePve(game: GameState): boolean {
     if (!run) continue
     if (!run.groups) { run.groups = []; changed = true }
     if (!run.participants) { run.participants = {}; changed = true }
-    if (run.status === 'active' && Object.values(run.participants).some((entry) => entry.kind !== 'player' && !entry.snapshot)) {
+    if (run.status === 'active' && Object.entries(run.participants).some(([id, entry]) => entry.kind !== 'player' && !cupTeamAvailable(game, run, id))) {
       run.status = 'void'
       changed = true
     }
@@ -67,7 +68,8 @@ export function ensurePve(game: GameState): boolean {
   const cupsChanged = ensureCupCeilingClaims(game)
   const peakChanged = ensurePeakMilestones(game)
   const archiveChanged = archivePastCups(game)
-  return booksChanged || cupsChanged || peakChanged || archiveChanged || changed
+  const fieldChanged = ensureCupSeason(game, worldTeams)
+  return booksChanged || cupsChanged || peakChanged || archiveChanged || fieldChanged || changed
 }
 
 export function legendRecordOf(game: GameState, legendId: string): PveLegendRecord {

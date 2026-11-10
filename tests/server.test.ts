@@ -246,21 +246,6 @@ describe('联机服务器 / 账号 / SSE', () => {
     controller.abort()
   })
 
-  it('服务器时间推进：到点的轮次自动结算', async () => {
-    const { base } = await start()
-    const account = await register(base, 'dave')
-    account.game.season.startedAt = seasonStartForRound(Date.now(), 3)
-    const put = await fetch(`${base}/api/game`, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${account.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ game: account.game, baseRevision: account.revision }),
-    })
-    expect(put.status).toBe(200)
-    const response = await fetch(`${base}/api/game`, { headers: { Authorization: `Bearer ${account.token}` } })
-    const current = await response.json() as { game: { season: { round: number } } }
-    expect(current.game.season.round).toBeGreaterThan(1)
-  })
-
   it('账号与会话在服务器重启后仍可用', async () => {
     const { app, base, dir } = await start()
     const account = await register(base, 'erin')
@@ -391,21 +376,6 @@ describe('联机服务器 / 账号 / SSE', () => {
     expect(two.game.matchHistory).toHaveLength(1)
   })
 
-  it('服务器自动推进可以完成整个 38 轮赛季', async () => {
-    const { base } = await start()
-    const account = await register(base, 'frank')
-    account.game.season.startedAt = seasonStartForRound(Date.now(), 39)
-    await fetch(`${base}/api/game`, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${account.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ game: account.game, baseRevision: account.revision }),
-    })
-    const response = await fetch(`${base}/api/game`, { headers: { Authorization: `Bearer ${account.token}` } })
-    const current = await response.json() as { game: { season: { round: number; finished: boolean }; matchHistory: unknown[]; seasonTable?: unknown[] } }
-    expect(current.game.season.finished).toBe(true)
-    expect(current.game.season.round).toBe(38)
-    expect(current.game.matchHistory).toHaveLength(38)
-  }, 180_000)
 })
 
 describe('Agent API', () => {

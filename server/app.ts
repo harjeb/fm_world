@@ -67,6 +67,8 @@ type SharedWorld = {
   world: WorldState
   /** 全服唯一的球队名册；已接管球队的名单由教练存档同步回来。 */
   teams?: Record<string, AITeam>
+  /** Opening rosters shared by all cup draws, including coaches joining midseason. */
+  cupOpening?: { seasonIndex: number; teams: Record<string, AITeam> }
   /** 全服共用的自由球员池，只有服务器能改。 */
   freeStars: Player[]
   reserveStars: Player[]
@@ -142,6 +144,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     owners: loadedWorld?.owners ?? {},
     world: loadedWorld?.world as WorldState,
     teams: loadedWorld?.teams,
+    cupOpening: loadedWorld?.cupOpening,
     freeStars: loadedWorld?.freeStars ?? [],
     reserveStars: loadedWorld?.reserveStars ?? [],
     auctions: loadedWorld?.auctions ?? [],
@@ -220,6 +223,13 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   }
   writeJson(worldPath, sharedWorld)
   const persistWorld = () => writeJson(worldPath, sharedWorld)
+  function cupOpeningTeams(): AITeam[] {
+    if (sharedWorld.cupOpening?.seasonIndex !== sharedWorld.world.seasonIndex) {
+      sharedWorld.cupOpening = { seasonIndex: sharedWorld.world.seasonIndex, teams: structuredClone(sharedWorld.teams ?? {}) }
+      persistWorld()
+    }
+    return Object.values(sharedWorld.cupOpening.teams)
+  }
   const matchQueue = new MatchQueue(path.join(dataDir, 'match-jobs'), options.matchQueue)
   const matchScheduler = new MatchScheduler(matchQueue, sharedWorld, lockedTeamFor, persistWorld)
   let closed = false
@@ -1029,7 +1039,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (markedShared) account.game.shared = true
       const signaturesAdded = upgradeLegacySignatures(account.game)
       const cardsAdded = ensureCards(account.game)
-      const pveAdded = ensurePve(account.game)
+      const pveAdded = ensurePve(account.game, cupOpeningTeams())
       const namesUpgraded = upgradeNames(account.game)
       const traitsUpgraded = upgradeStarTraits(account.game)
       const attrsUpgraded = upgradeBurstAttr(account.game)
@@ -1166,8 +1176,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       }
       sharedWorld.world = next
       sharedWorld.teams = teams
+      sharedWorld.cupOpening = { seasonIndex: next.seasonIndex, teams: structuredClone(teams) }
       sharedWorld.reserveStars = representative.reserveStars ?? []
       for (const { account, game } of drafts) {
+        ensurePve(game, cupOpeningTeams())
         account.game = game
         account.appliedMatchIds = []
         account.revision++
@@ -1936,6 +1948,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   jobTimer?.unref?.()
 
   // 启动时恢复的是整个共享世界，而不是等账号注册 / 登录时再为它单独生成比分。
+  cupOpeningTeams()
   advanceAllMatches()
   autoRollSharedSeason()
   autoPlayoff()

@@ -151,8 +151,53 @@ try {
   await evaluate(`(() => { const select = document.querySelector('#training-player-select'); const option = [...select.options].find((item) => item.value); if (!option) return false; select.value = option.value; select.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)
   await wait(`!!document.querySelector('[data-training-book]') && document.body.innerText.includes('传奇技能书槽')`)
   await screenshot('training-books')
+  const oldCup = await evaluate(`import('/src/ui/state.ts').then(m => ({
+    ids: m.game.pve.cupSeason.fields.community.randomDefs.map(def => def.id),
+    season: m.game.season.index,
+  }))`)
+  await evaluate(`import('/src/ui/state.ts').then(m => {
+    for (const fixture of m.game.season.fixtures) { fixture.played = true; fixture.score = { home: 0, away: 0 }; }
+    m.game.season.round = 38;
+    m.game.season.finished = true;
+  })`)
+  await click('[data-nav="home"]')
+  await click('[data-action="next-season"]')
+  await wait(`import('/src/ui/state.ts').then(m => m.game.season.index === ${oldCup.season + 1})`)
+  const freshCup = await evaluate(`import('/src/ui/state.ts').then(m => ({
+    ids: m.game.pve.cupSeason.fields.community.randomDefs.map(def => def.id),
+    poolSeason: m.game.pve.cupSeason.seasonIndex,
+    savedSeason: JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})).pve.cupSeason.seasonIndex,
+    archived: m.game.pve.cupHistory.some(run => run.cupId === 'community' && run.seasonIndex === ${oldCup.season}),
+  }))`)
+  assert.equal(freshCup.poolSeason, oldCup.season + 1)
+  assert.equal(freshCup.savedSeason, freshCup.poolSeason)
+  assert.ok(freshCup.archived)
+  assert.ok(freshCup.ids.every((id: string) => !oldCup.ids.includes(id)))
+  await click('[data-nav="challenge"]')
+  await click('[data-challenge-mode="cup"]')
+  await click('[data-action="cup-preview"][data-cup="community"]')
+  await wait(`document.body.innerText.includes('随机队每季重新生成') && !!document.querySelector('[data-action="enter-cup"][data-cup="community"]')`)
+  await screenshot('cup-new-season')
+  const storage = await evaluate(`(async () => {
+    const state = await import('/src/game/state.ts');
+    const world = await import('/src/game/world.ts');
+    const cups = await import('/src/game/cup-run.ts');
+    const probe = world.createWorldGame(3377);
+    for (const cup of ['community', 'league', 'champions']) {
+      const result = cups.enterCup(probe, cup);
+      if (!result.ok) throw new Error(result.error);
+    }
+    const saved = localStorage.getItem(state.SAVE_KEY);
+    try {
+      return { ok: state.saveGame(probe), characters: JSON.stringify(probe).length };
+    } finally {
+      if (saved !== null) localStorage.setItem(state.SAVE_KEY, saved);
+    }
+  })()`)
+  console.log('World save with all cups:', storage)
+  assert.ok(storage.ok, 'Season pools and all three cup runs must fit local storage')
   if (errors.length) throw new Error(errors.join('\n'))
-  console.log('PvE 浏览器冒烟通过：默认 B 档、自由切换档位、第 50 关足球小将/奖励选择、培养书槽、桌面/390px、筛选、7 项主属性、100 关预览、报名比赛、刷新续赛；不访问线上账号/数据。')
+  console.log('PvE headless smoke passed: legend filters, peak rewards and immediate saves, training books, desktop/mobile layouts, cup enrollment/reload, new-season opponents and archived history.')
 } catch (error) {
   await screenshot('failure').catch(() => {})
   console.error(await evaluate('document.body.innerText.slice(-4000)').catch(() => 'page unavailable'))

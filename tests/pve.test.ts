@@ -14,6 +14,7 @@ describe('PvE 挑战', () => {
       legends: {},
       peak: { cleared: 0, history: [], claimedMilestones: [], breakthroughCards: 0 },
       cups: {},
+      cupSeason: expect.objectContaining({ version: 1, seasonIndex: 1 }),
       cupCeilingClaims: {},
       cupCeilingVersion: 3,
       trophies: [],

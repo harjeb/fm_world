@@ -407,7 +407,9 @@ function createWorldGameFromSetup(setup: WorldSetup, seed: number, startedAt: nu
 
 export function createWorldGame(seed = Math.floor(Math.random() * 0x7fffffff), requestedClubId?: string, clubName?: string, startedAt = latestKickoffAt(Date.now())): GameState {
   const setup = createWorld(seed, requestedClubId, startedAt)
-  return createWorldGameFromSetup(setup, seed, startedAt, clubName, seedAIClubs(setup.world, seed))
+  const game = createWorldGameFromSetup(setup, seed, startedAt, clubName, seedAIClubs(setup.world, seed))
+  ensurePve(game)
+  return game
 }
 
 export type ClubPreview = {
@@ -1227,6 +1229,7 @@ export function worldWageBill(game: GameState): number {
 }
 
 import { archivePastCups } from './pve-season.ts'
+import { ensurePve } from './pve.ts'
 
 export function advanceWorldSeason(game: GameState, now = Date.now(), protectedClubs: ReadonlySet<string> = new Set(), fillMarket = true): { ok: boolean; error?: string } {
   if (!game.world) return { ok: false, error: '世界数据不存在' }
@@ -1265,7 +1268,7 @@ export function advanceWorldSeason(game: GameState, now = Date.now(), protectedC
   game.economy = economyOf(game)
   game.economy.lastIncomeRound = 0
   if (game.market) { game.market.lastSettledRound = 0; for (const listing of game.market.listings) listing.listedRound = 1 }
-  archivePastCups(game)
+  ensurePve(game)
   return { ok: true }
 }
 

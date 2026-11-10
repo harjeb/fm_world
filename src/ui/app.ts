@@ -73,7 +73,6 @@ import { game, replay, resetReplay, setGame, stopReplay, ui, type ClubTab, type 
 import { renderAcademy } from './screens/academy.ts'
 import { renderChallenge } from './screens/challenge.ts'
 import type { CupId } from '../game/data/cup-config.ts'
-import { buildCupField } from '../game/cup.ts'
 import { loadPveContent } from '../game/pve-content.ts'
 import { renderClub } from './screens/club.ts'
 import { renderTransfer } from './screens/transfer.ts'
@@ -1570,32 +1569,11 @@ document.addEventListener('click', async (event) => {
     case 'enter-cup': {
       const cupId = actionEl.dataset.cup as CupId | undefined
       if (!cupId) break
-      if (isOnlineMode()) {
-        void (async () => {
-          const season = game.season.index
-          const ids = buildCupField(cupId, game).filter((entry) => entry.kind === 'world').map((entry) => entry.id)
-          showNotice('正在获取杯赛世界队的最新阵容…')
-          try {
-            const results = await Promise.all(ids.map((id) => fetchFriendlyTeam(id)))
-            const failed = results.find((result) => 'error' in result)
-            if (failed && 'error' in failed) { showNotice(failed.error); return }
-            if (game.season.index !== season) { showNotice('赛季已变化，请重新报名。'); return }
-            const teams = results.flatMap((result) => 'team' in result ? [result.team] : [])
-            const result = enterCupAction(game, cupId, teams)
-            if (!result.ok) { showNotice(result.error ?? '无法报名杯赛'); return }
-            ui.notice = ''
-            ui.cupPreviewId = cupId
-            ui.cupHistorySeason = null
-            render()
-          } catch (error) { showNotice(`杯赛阵容获取失败：${String(error)}`) }
-        })()
-      } else {
-        const result = enterCupAction(game, cupId)
-        if (!result.ok) { showNotice(result.error ?? '无法报名杯赛'); break }
-        ui.cupPreviewId = cupId
-        ui.cupHistorySeason = null
-        render()
-      }
+      const result = enterCupAction(game, cupId)
+      if (!result.ok) { showNotice(result.error ?? '无法报名杯赛'); break }
+      ui.cupPreviewId = cupId
+      ui.cupHistorySeason = null
+      render()
       break
     }
     case 'start-cup-match': {

@@ -63,7 +63,7 @@ function makeName(rng: { float(): number; int(maxExclusive: number): number }, u
   return pickRandomName(rng)
 }
 
-function makeDef(spec: GeneratedTeamSpec): LegendTeamDef {
+export function generatedTeamDefinition(spec: GeneratedTeamSpec): LegendTeamDef {
   const formation = FORMATIONS[spec.formationId]
   const rng = derivedRng(spec.seed, 'generated-team', spec.id)
   const used = new Set<string>()
@@ -143,7 +143,7 @@ export function calibrateGeneratedTeam(def: LegendTeamDef, targetCa: number): { 
 }
 
 export function generateTeam(spec: GeneratedTeamSpec): { def: LegendTeamDef; actualCa: number } {
-  return calibrateGeneratedTeam(makeDef(spec), spec.targetCa)
+  return calibrateGeneratedTeam(generatedTeamDefinition(spec), spec.targetCa)
 }
 
 /** 按种子生成一个球队外观/阵型/战术（球员由 generateTeam 生成）。 */

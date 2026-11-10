@@ -50,7 +50,7 @@ function runView(run: CupRun): string {
 
 function preview(cupId: CupId): string {
   const groups = buildCupGroups(cupId, buildCupField(cupId, game), game.season.index)
-  return `<div class="cup-groups">${groups.map((group) => `<section class="cup-group"><h3>${String.fromCharCode(65 + group.index)} 组</h3><ul>${group.teams.map((entry) => `<li>${tag(entry.kind === 'player' ? '你' : entry.kind === 'world' ? '世界' : '随机', entry.kind === 'player' ? 'good' : '')} ${esc(entry.name)}</li>`).join('')}</ul></section>`).join('')}</div><p class="hint pad">每组 4 队单循环，3 轮；按你自己的节奏逐场比赛，不绑定现实开赛时间。</p>`
+  return `<div class="cup-groups">${groups.map((group) => `<section class="cup-group"><h3>${String.fromCharCode(65 + group.index)} 组</h3><ul>${group.teams.map((entry) => `<li>${tag(entry.kind === 'player' ? '你' : entry.kind === 'world' ? '世界' : '随机', entry.kind === 'player' ? 'good' : '')} ${esc(entry.name)}</li>`).join('')}</ul></section>`).join('')}</div><p class="hint pad">对手在赛季开始时确定：随机队每季重新生成，世界队使用季初阵容，本赛季保持不变。每组 4 队单循环，3 轮，按自己的节奏逐场比赛。</p>`
 }
 
 export function renderCup(): string {

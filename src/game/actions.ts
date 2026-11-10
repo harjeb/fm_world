@@ -751,10 +751,10 @@ export function startPeakChallenge(game: GameState, stage: number, now = Date.no
   return { ok: result.ok, error: result.error }
 }
 
-/** 报名杯赛：生成混合名单 + 小组赛，并提前结算 AI 对 AI。 */
-export function enterCupAction(game: GameState, cupId: CupId, worldTeams?: readonly AITeam[]): { ok: boolean; error?: string } {
+/** Enroll with the season-opening field; results remain hidden until each round is played. */
+export function enterCupAction(game: GameState, cupId: CupId): { ok: boolean; error?: string } {
   ensurePve(game)
-  const result = enterCup(game, cupId, worldTeams)
+  const result = enterCup(game, cupId)
   if (result.ok) saveGame(game)
   return { ok: result.ok, error: result.error }
 }
