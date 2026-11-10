@@ -1,5 +1,6 @@
 import type { CupRun, CupFixture } from '../game/types.ts'
 import { CUP_DEFS, CUP_SEED, type CupId } from '../game/data/cup-config.ts'
+import { CUP_CEILING_BONUS } from '../game/cup-rewards.ts'
 import { buildCupField, buildCupGroups } from '../game/cup.ts'
 import { cupPlayerFixture } from '../game/cup-run.ts'
 import { sortCupTable } from '../game/cup-table.ts'
@@ -63,7 +64,7 @@ export function renderCup(): string {
     const saved = game.pve?.cups[def.id]
     const run = saved?.seasonIndex === game.season.index ? saved : undefined
     const enter = !run || run.status === 'void'
-    return panel(def.name, `<p>${esc(def.description)}</p><div class="tag-row">${tag(`${def.size} 队`)}${tag(`${def.groups} 组`)}${tag(run ? STATUS[run.status] : '未报名', run?.status === 'champion' ? 'gold' : '')}</div><div class="cup-actions">
+    return panel(def.name, `<p>${esc(def.description)}</p><div class="tag-row">${tag(`${def.size} 队`)}${tag(`${def.groups} 组`)}${tag(`冠军上限 +${CUP_CEILING_BONUS[def.id]}`, game.pve?.cupCeilingClaims?.[def.id] ? 'good' : '')}${tag(run ? STATUS[run.status] : '未报名', run?.status === 'champion' ? 'gold' : '')}</div><div class="cup-actions">
       ${enter ? `<button class="btn small" data-action="enter-cup" data-cup="${def.id}" ${game.activeMatch || game.season.finished ? 'disabled' : ''}>报名</button>` : run?.status === 'active' ? `<button class="btn small" data-action="start-cup-match" data-cup="${def.id}" ${!cupPlayerFixture(run) || game.activeMatch ? 'disabled' : ''}>继续比赛</button>` : `<span class="muted small">本季已结束，下赛季可重新报名。</span>`}
       <button class="btn small ghost" data-action="cup-preview" data-cup="${def.id}">查看${run ? '赛程' : '分组'}</button></div>`)
   }).join('')}</div>

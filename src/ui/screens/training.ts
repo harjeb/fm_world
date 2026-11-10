@@ -278,6 +278,7 @@ function trainingHeader(current: Player, session: TrainingSession, cand: Player)
       <div class="stat-box"><span>当前 CA</span><b>${playerCA(current).toFixed(1)}</b></div>
       <div class="stat-box"><span>培养中 CA</span><b>${playerCA(cand).toFixed(1)}</b><small class="${playerCA(cand) >= playerCA(current) ? 'up' : 'down'}">${caDelta(current, cand)}</small></div>
       <div class="stat-box"><span>训练体力</span>${meter(stamina)}</div>
+      ${(session.cupCeilingBonus ?? 0) > 0 ? `<div class="stat-box"><span>奖杯上限</span><b>+${session.cupCeilingBonus}</b></div>` : ''}
       <div class="stat-box"><span>剩余精力</span>${meter(current.energy ?? 100)}</div>
       <div class="stat-box"><span>下次事件</span><b>${session.action >= total ? '—' : pct(eventP)}</b></div>
     </div>

@@ -2,6 +2,7 @@ import type { AttrKey, EventDef, LegendBook, LegendBookTier, PeakSkillId, Player
 import { SKILLS, canLearnSkill } from './data/skills.ts'
 import { LEGEND_SKILLS, MAX_BOOKS } from './data/legend-skills.ts'
 import { PEAK_SKILLS } from './data/peak-skills.ts'
+import { effectiveClubCeilings } from './cup-rewards.ts'
 import { attrHardLimit } from './scale.ts'
 import { attrLabel } from './data/attributes.ts'
 import { eventById } from './data/events.ts'
@@ -76,9 +77,12 @@ export function grantBookSkill(session: TrainingSession, book: LegendBook): { ok
     const gk = session.candidate.positions.GK > 0
     for (const attr of peak.pair) {
       const hard = attrHardLimit(attr, gk)
-      const ceiling = Math.min(hard, (session.candidate.ceilings[attr] ?? hard) + peak.ceiling)
-      const current = Math.min(ceiling, (session.candidate.attrs[attr] ?? 0) + peak.current)
-      session.candidate.ceilings = { ...session.candidate.ceilings, [attr]: ceiling }
+      // 先增加个人上限，再按“个人 + 俱乐部奖杯 + 技能”计算当前值可到达的上限；
+      // 奖杯本身不写进个人 ceilings，换队/入队后仍由俱乐部实时加成。
+      const personal = Math.min(hard, (session.candidate.ceilings[attr] ?? hard) + peak.ceiling)
+      session.candidate.ceilings = { ...session.candidate.ceilings, [attr]: personal }
+      const effective = effectiveClubCeilings(session.candidate, session.cupCeilingBonus ?? 0, 0)
+      const current = Math.min(effective[attr] ?? personal, (session.candidate.attrs[attr] ?? 0) + peak.current)
       session.candidate.attrs = { ...session.candidate.attrs, [attr]: current }
     }
   }

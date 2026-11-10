@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
-import { applyCupCeilingReward, ensureCupCeilingClaims, CUP_CEILING_BONUS } from '../src/game/cup-rewards.ts'
+import { startTraining } from '../src/game/actions.ts'
+import { applyCupCeilingReward, cupCeilingBonus, effectiveClubCeilings, ensureCupCeilingClaims, CUP_CEILING_BONUS } from '../src/game/cup-rewards.ts'
 import { attrHardLimit, mainAttrsFor } from '../src/game/rating.ts'
 import type { TrophyRecord } from '../src/game/types.ts'
 
 function mainCeilings(game: ReturnType<typeof createInitialGame>) {
-  return game.roster.map((player) => mainAttrsFor(player.positions.GK > 0).map((key) => player.ceilings[key]))
+  const bonus = cupCeilingBonus(game)
+  return game.roster.map((player) => mainAttrsFor(player.positions.GK > 0).map((key) => effectiveClubCeilings(player, bonus)[key]))
 }
 
 describe('杯赛冠军俱乐部上限奖励', () => {
@@ -16,6 +18,7 @@ describe('杯赛冠军俱乐部上限奖励', () => {
     expect(applyCupCeilingReward(game, 'league')).toBe(150)
     expect(applyCupCeilingReward(game, 'champions')).toBe(200)
     expect(applyCupCeilingReward(game, 'champions')).toBe(0)
+    expect(cupCeilingBonus(game)).toBe(450)
     const after = mainCeilings(game)
     for (let p = 0; p < after.length; p++) {
       for (let a = 0; a < after[p].length; a++) {
@@ -29,10 +32,43 @@ describe('杯赛冠军俱乐部上限奖励', () => {
     const game = createInitialGame(72)
     for (const player of game.roster) for (const key of mainAttrsFor(player.positions.GK > 0)) player.ceilings[key] = 1950
     applyCupCeilingReward(game, 'champions')
+    const bonus = cupCeilingBonus(game)
     for (const player of game.roster) for (const key of mainAttrsFor(player.positions.GK > 0)) {
-      expect(player.ceilings[key]).toBeLessThanOrEqual(attrHardLimit(key, player.positions.GK > 0))
-      expect(player.ceilings[key]).toBe(2000)
+      const effective = effectiveClubCeilings(player, bonus)[key]
+      expect(effective).toBeLessThanOrEqual(attrHardLimit(key, player.positions.GK > 0))
+      expect(effective).toBe(2000)
     }
+  })
+
+  it('之后加入的球员和进行中的培养也实时吃到奖杯加成', () => {
+    const game = createInitialGame(74)
+    applyCupCeilingReward(game, 'community')
+    const player = game.roster.find((item) => item.positions.GK === 0)!
+    const before = player.ceilings.passing
+    const rookie = structuredClone(player)
+    rookie.id = 'rookie'
+    game.roster.push(rookie)
+    expect(effectiveClubCeilings(rookie, cupCeilingBonus(game)).passing).toBe(before + 100)
+    const started = startTraining(game, player.id, 7)
+    expect(started.ok, started.error).toBe(true)
+    expect(game.training[player.id].cupCeilingBonus).toBe(100)
+    applyCupCeilingReward(game, 'league')
+    expect(game.training[player.id].cupCeilingBonus).toBe(250)
+  })
+
+  it('旧版直接写入个人上限的奖杯加成会迁移成俱乐部实时加成，不会叠加两次', () => {
+    const game = createInitialGame(75)
+    const player = game.roster[0]
+    const before = player.ceilings.passing
+    game.pve!.cupCeilingClaims = { league: true }
+    game.pve!.cupCeilingVersion = undefined
+    game.pve!.trophies = [{ cupId: 'league', cupName: '联盟杯', seasonIndex: 1, wonAt: 1, finalOpponent: 'x', finalScore: { home: 1, away: 0 } }]
+    player.ceilings.passing = before + 150
+    expect(ensureCupCeilingClaims(game)).toBe(true)
+    expect(player.ceilings.passing).toBe(before)
+    expect(effectiveClubCeilings(player, cupCeilingBonus(game)).passing).toBe(before + 150)
+    expect(game.pve!.cupCeilingVersion).toBe(2)
+    expect(game.pve!.legacyCupCeilings?.[player.id]).toBeTruthy()
   })
 
   it('旧存档已有奖杯时补发对应俱乐部上限', () => {
@@ -40,7 +76,8 @@ describe('杯赛冠军俱乐部上限奖励', () => {
     game.pve!.trophies = [{ cupId: 'league', cupName: '联盟杯', seasonIndex: 1, wonAt: 1, finalOpponent: 'x', finalScore: { home: 1, away: 0 } } as TrophyRecord]
     const before = game.roster[0].ceilings.passing
     expect(ensureCupCeilingClaims(game)).toBe(true)
-    expect(game.roster[0].ceilings.passing).toBe(before + 150)
+    expect(game.roster[0].ceilings.passing).toBe(before)
+    expect(effectiveClubCeilings(game.roster[0], cupCeilingBonus(game)).passing).toBe(before + 150)
     expect(game.pve!.cupCeilingClaims?.league).toBe(true)
     expect(ensureCupCeilingClaims(game)).toBe(false)
   })

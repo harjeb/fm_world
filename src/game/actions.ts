@@ -29,10 +29,10 @@ import { leagueMatchClockAt } from './realtime.ts'
 import { eventById } from './data/events.ts'
 import { attrLabel } from './data/attributes.ts'
 import { keyAttrsOf } from './data/key-attrs.ts'
-import { normalizeCeilings } from './data/attr-profile.ts'
 import { isGoalkeeper } from './ca.ts'
 import { canUseBookOnPlayer } from './legend-learning.ts'
-import { MAIN_ATTR_MAX, MAIN_ATTR_HARD_MAX, attrHardLimit, attrLimit, mainAttrsFor } from './rating.ts'
+import { cupCeilingBonus, effectiveTrainingCeilings } from './cup-rewards.ts'
+import { MAIN_ATTR_HARD_MAX, mainAttrsFor } from './rating.ts'
 import { settleEnergy } from './energy.ts'
 
 export function startTraining(game: GameState, playerId: string, seed?: number, bookKeys?: string[]): { ok: boolean; error?: string } {
@@ -59,6 +59,7 @@ export function startTraining(game: GameState, playerId: string, seed?: number, 
   // 每轮都从原始属性开始，和他现在装备哪张卡无关。
   const session = createTrainingSession(untrainedPlayer(player), seed ?? newTrainingSeed(game, playerId), { stadium: economy.stadium, academy: economy.academy, medical: economy.medical, shop: economy.shop, sponsor: economy.sponsor, psychology: economy.psychology, tactics: economy.tactics }, 1, books)
   session.scheduleSeed = splitSeed(game.seed, 'training-calendar')
+  session.cupCeilingBonus = cupCeilingBonus(game)
   // 候选卡只是一份属性快照：精力时钟和不满属于球员本人，不跟着进卡。
   delete session.candidate.energyAt
   delete session.candidate.unhappy
@@ -390,8 +391,7 @@ export function autoTrainingRunnable(game: GameState, playerId: string): boolean
 
 /** 本次培养里该球员各属性还能练到多少（球员个人上限）。 */
 function autoTrainableCeilings(session: TrainingSession): Attributes {
-  const gk = isGoalkeeper(session.candidate)
-  return normalizeCeilings(session.candidate.attrs, session.candidate.ceilings, (key) => attrHardLimit(key, gk))
+  return effectiveTrainingCeilings(session)
 }
 
 type AutoWeight = { key: AttrKey; weight: number }

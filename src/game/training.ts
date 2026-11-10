@@ -12,7 +12,6 @@ import type {
   SkillId,
 } from './types.ts'
 import { ATTR_META, RELATED_ATTRS, attrLabel } from './data/attributes.ts'
-import { normalizeCeilings } from './data/attr-profile.ts'
 import { EVENTS, ROUTE_LABELS, ROUTE_SKILL, eventById } from './data/events.ts'
 import { SKILLS, canLearnSkill } from './data/skills.ts'
 import { applyGains, attrText, caOf, isGoalkeeper } from './ca.ts'
@@ -20,9 +19,10 @@ import { derivedRng } from './rng.ts'
 import { PLAYER_COUNT } from './data/players.ts'
 import { FACILITY_STAGE_VERSION, MAX_FACILITY_LEVEL, MAX_FACILITY_STAGE, STAGES_PER_LEVEL, facilityLevel, facilityStageChance, type FacilityId } from './economy.ts'
 import { addTrainedCard, closeFinishedTraining, deleteCard, equipCard } from './cards.ts'
-import { attrLimit, attrHardLimit, attrMax, attrRating, CA_MAX, MAIN_ATTR_MAX, displayGain, isMainAttr, scaleAuthoredGains } from './rating.ts'
+import { attrMax, attrRating, CA_MAX, MAIN_ATTR_MAX, displayGain, isMainAttr, scaleAuthoredGains } from './rating.ts'
 import { inheritanceChances, mentorSkill, validateInheritance } from './inheritance.ts'
 import { bookEvents, bookLearnChance, eventForSession, grantBookSkill, bookTierLabel } from './legend-learning.ts'
+import { effectiveTrainingCeilings } from './cup-rewards.ts'
 import { legendMultiplier, legendValue } from './legend-bonus.ts'
 import { partnerAssignment, trainingDate, trainingLowMood, trainingOptions, type TrainingActivityId } from './training-calendar.ts'
 
@@ -254,15 +254,8 @@ export function partnerBonusPerMate(session: TrainingSession): number {
 }
 
 function trainingCeilings(session: TrainingSession): Player['ceilings'] {
-  const gk = candidateIsGk(session)
-  // 每个属性只练到球员自己的上限（由画像与星级决定），不再统一到 1500。
-  // 旧存档候选若缺少 ceilings，回退到该属性的绝对上限。
-  const ceilings = normalizeCeilings(session.candidate.attrs, session.candidate.ceilings, (key) => attrHardLimit(key, gk))
-  const breakBonus = legendValue(session.candidate, 'lg_ceiling_break', 200)
-  if (breakBonus > 0) {
-    for (const key of mainKeysForTraining(gk)) ceilings[key] = Math.min(attrHardLimit(key, gk), ceilings[key] + breakBonus)
-  }
-  return ceilings
+  // 奖杯是俱乐部实时加成，不写进球员个人 ceilings；旧培养/新培养统一走这里。
+  return effectiveTrainingCeilings(session)
 }
 
 // Authored gains are already in storage units. The facility bonus replaces the
@@ -342,12 +335,6 @@ export function trainingQuality(session: TrainingSession): { label: string; mult
 function gainSpread(session: TrainingSession, key: AttrKey): number {
   const roll = derivedRng(session.seed, 'training-gain-spread', session.playerId, session.action + 1, key).float()
   return 1 + (roll * 2 - 1) * GAIN_SPREAD
-}
-
-function mainKeysForTraining(gk: boolean): AttrKey[] {
-  return gk
-    ? ['reflexes', 'handling', 'rushing', 'oneOnOne', 'passing', 'composure']
-    : ['passing', 'shooting', 'dribbling', 'tackling', 'strength', 'speed', 'acceleration']
 }
 
 function trainingFatigueCost(session: TrainingSession, base: number): number {

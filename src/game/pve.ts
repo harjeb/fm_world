@@ -61,7 +61,7 @@ export function ensurePve(game: GameState): boolean {
     changed = true
   }
   for (const [stage, id] of Object.entries(PEAK_SKILL_STAGES)) {
-    if (pve.peak.cleared >= Number(stage)) addLegendBook(game, id, 'rainbow')
+    if (pve.peak.cleared >= Number(stage) && addLegendBook(game, id, 'rainbow')) changed = true
   }
   const booksChanged = ensureLegendBooks(game)
   const cupsChanged = ensureCupCeilingClaims(game)

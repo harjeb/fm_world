@@ -455,6 +455,8 @@ export type TrainingSession = {
   playerId: string
   seed: number
   candidate: Player
+  /** 当前所属俱乐部的奖杯上限加成；夺冠后会同步到进行中的培养。 */
+  cupCeilingBonus?: number
   /** 本轮携带的传奇技能书；书不消耗，只影响这轮事件。 */
   books?: LegendBook[]
   academyLevel?: number
@@ -994,8 +996,12 @@ export type PveState = {
   }
   cups: Record<string, CupRun>
   cupHistory?: CupRun[]
-  /** 每个杯赛首次夺冠的俱乐部上限奖励是否已发。 */
+  /** 已获得的俱乐部奖杯上限加成，每种杯赛只计一次。 */
   cupCeilingClaims?: Partial<Record<string, true>>
+  /** 奖杯上限模型：2 = 俱乐部实时加成。 */
+  cupCeilingVersion?: number
+  /** 旧版已直接修改的上限原始值备份；旧档有转会或截断时可追溯。 */
+  legacyCupCeilings?: Record<string, Attributes>
   trophies: TrophyRecord[]
 }
 
