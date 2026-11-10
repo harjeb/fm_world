@@ -70,7 +70,7 @@ export function negotiationKey(player: Pick<Player, 'id' | 'starKey'>): string {
 /** 这些诉求完全由球员本人和存档种子决定，存档重开或反复点谈判都不会变。 */
 export function negotiationDemands(game: Pick<GameState, 'seed' | 'world' | 'season'>, player: Player): NegotiationDemands {
   const rng = derivedRng(splitSeed(game.seed, 'negotiation-demands'), negotiationKey(player))
-  const ca = caOf(player.attrs, player.positions.GK > 0)
+  const ca = caOf(player.baseAttrs ?? player.attrs, (player.basePositions ?? player.positions).GK > 0)
   const goal: SeasonGoal = ca >= 262
     ? 'title'
     : ca >= 246

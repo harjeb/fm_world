@@ -113,7 +113,7 @@ export function renderDetailOverlay(): string {
         ${injury ? `<div class="banner bad">${icon('cross', 16)}<span>${injury}；带伤比赛能力下降 30%，不影响精力或培养。</span></div>` : ''}
         <div class="profile-grid">
           <section class="profile-col">
-            <h3>主属性（0–1500）${owned ? `<small>${worn ? esc(cardName(worn)) : '原始属性'}</small>` : ''}</h3>
+            <h3>主属性${owned ? `<small>${worn ? esc(cardName(worn)) : '原始属性'}</small>` : ''}</h3>
             ${attributeRadar(player)}
             ${attrGroups}
           </section>

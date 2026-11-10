@@ -134,9 +134,11 @@ export function renderTopbar(): string {
       <div class="top-stat optional"><span>转会窗</span><b class="${transferWindowOpen(game) ? 'ok' : 'muted'}">${transferWindowOpen(game) ? '开放' : '关闭'}</b></div>
     </div>
     <div class="top-actions">
-      ${auctionChip()}
-      <button class="btn ghost top-account" data-action="account-open">${icon('user', 15)}<span class="account-name">${account}</span>${sync ? `<span class="sync-state ${onlineState.connected ? 'ok' : 'muted'}">${sync}</span>` : ''}</button>
-      <button class="btn ghost" data-action="new-game" title="开始新游戏">${icon('newgame', 15)}<span class="optional">新游戏</span></button>
+      <div class="top-controls">
+        ${auctionChip()}
+        <button class="btn ghost top-account" data-action="account-open">${icon('user', 15)}<span class="account-name">${account}</span>${sync ? `<span class="sync-state ${onlineState.connected ? 'ok' : 'muted'}">${sync}</span>` : ''}</button>
+        <button class="btn ghost" data-action="new-game" title="开始新游戏">${icon('newgame', 15)}<span class="optional">新游戏</span></button>
+      </div>
       ${continueAction()}
     </div>
   </header>`

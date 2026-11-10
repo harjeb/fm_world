@@ -12,7 +12,7 @@ import { legendSkillForTeam } from '../../game/data/legend-skills.ts'
 import { legendBookLabel } from '../../game/legend-books.ts'
 import { cupTeam } from '../../game/cup-run.ts'
 import { startingCa } from '../../game/pve-strength.ts'
-import { PVE_CONTENT_VERSION, PVE_CONTENT_HASH, pveContentReady } from '../../game/pve-content.ts'
+import { pveContentReady } from '../../game/pve-content.ts'
 import { caHeat, clubName, icon, pageHead, panel, recordResult, resultPill, tag, tile } from '../components.ts'
 import { esc, playerCA, tacticText } from '../format.ts'
 import { game, ui } from '../state.ts'
@@ -25,7 +25,7 @@ import { coreNames, pveRoster, pveTeamButton } from '../pve-details.ts'
 
 const MODE_LABEL = { friendly: '友谊赛', legend: '传奇挑战', cup: '杯赛挑战', peak: '巅峰之路' }
 const MODE_SUB = {
-  friendly: '不计联赛积分，平局直接进入点球大战。挑战比赛不扣体能。',
+  friendly: '不计联赛积分，平局直接进入点球大战。',
   legend: '50 支历史俱乐部队；胜/平掉技能书，首胜发球迷/资金。固定阵容与属性，可查看完整首发、替补和 7 项主属性。',
   cup: '两个 16 队杯和一个 32 队杯。世界球队 + 随机队，小组循环后淘汰赛；决赛单场。',
   peak: '100 关，首发平均 CA 350→1300。前 80 关生成/特别，最后 20 关世界杯国家队，所有玩家对手相同。',
@@ -146,5 +146,5 @@ export function renderChallenge(): string {
   const body = !loaded ? '<p class="banner info" role="status">正在加载固定球队数据，请稍候…</p>' : mode === 'friendly' ? renderFriendly() : mode === 'legend' ? renderLegend() : mode === 'cup' ? renderCup() : renderPeak()
   return `${pageHead({ kicker: '挑战 · 纯 PvE', title: MODE_LABEL[mode], sub: MODE_SUB[mode] })}
     <div class="seg challenge-mode-tabs" aria-label="挑战模式">${(Object.keys(MODE_LABEL) as (keyof typeof MODE_LABEL)[]).map((key) => `<button data-challenge-mode="${key}" class="${key === mode ? 'active' : ''}">${MODE_LABEL[key]}</button>`).join('')}</div>
-    <p class="hint">挑战比赛不扣体能；传奇挑战胜/平掉技能书、首胜发球迷/资金；第 50 关首次通关可选 1 名全明星入队，杯赛冠军只记录奖杯荣誉。内容 v${PVE_CONTENT_VERSION} · ${PVE_CONTENT_HASH.slice(0, 8)}</p>${body}${loaded ? selectedRoster() : ''}`
+    ${body}${loaded ? selectedRoster() : ''}`
 }

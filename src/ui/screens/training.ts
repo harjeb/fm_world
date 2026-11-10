@@ -507,7 +507,7 @@ function eventPanel(session: TrainingSession, event: NonNullable<ReturnType<type
 function candidatePanel(current: Player, cand: Player, session: TrainingSession): string {
   const card = playerCards(game, current.id).find((item) => item.id === session.cardId)
   return panel(`新球员卡${card ? ` · ${esc(cardName(card))}` : ''}`, `
-    <p>本轮培养已结束，新卡已进入库存。现在换上，还是先留在库存？换卡不影响体能和精力。隐藏属性的变化不在表中公开。</p>
+    <p>本轮培养已结束，新卡已进入库存。现在换上，还是先留在库存？换卡不影响体能和精力。</p>
     <div class="candidate-layout">
       <div>${attrCompareTable(current, cand)}</div>
       <div class="candidate-side">
