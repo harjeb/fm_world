@@ -19,6 +19,7 @@ import { MatchRatings } from '../match/ratings.ts'
 import { SettlementKernel, pickByWeight, totalWeight } from '../match/resolution.ts'
 import { GOAL_Y, PITCH_LENGTH, PITCH_WIDTH, buildMatchTeam } from '../match/team.ts'
 import { distanceToSegment, goalXOf } from '../match/pitch.ts'
+import { legendMultiplier } from '../legend-bonus.ts'
 import type { GameState, GoalDetail, MatchLogEntry, MatchTeamStats, SkillId } from '../types.ts'
 import type { MatchPlayerState, MatchSide, MatchState, MatchTeamInput, MatchTeamState } from '../match/types.ts'
 import type { ContactModel, DuelVerdict, FoulVerdict, PassKind, PassVerdict, ShotRequest, ShotVerdict } from './contact.ts'
@@ -140,6 +141,7 @@ export class PesSettlement implements ContactModel {
   private mp: MatchPlayerState[] = []
   /** 游戏球员 id → pid（只含场上的人） */
   private pidById = new Map<string, number>()
+  private secondWindUsed = new Set<number>()
 
   constructor(source: PesSettlementInit | PesSettlementJSON) {
     if ('game' in source) {
@@ -248,6 +250,11 @@ export class PesSettlement implements ContactModel {
         const at = this.toGame(m, q.pos)
         player.x = at.x
         player.y = at.y
+        if (player.skills.includes('lg_second_win') && !this.secondWindUsed.has(q.pid) && q.stamina < 0.4) {
+          q.stamina = Math.min(1, q.stamina + (12 * legendMultiplier(player, 'lg_second_win')) / Math.max(1, player.maxStamina))
+          this.secondWindUsed.add(q.pid)
+          this.markSkill(player, 'lg_second_win', true, true)
+        }
         player.stamina = q.stamina * player.maxStamina
       }
     }
@@ -478,6 +485,18 @@ export class PesSettlement implements ContactModel {
   }
 
   /* ---------- 事件流 → 统计 ---------- */
+  private recover(player: MatchPlayerState, m: PesMatch, skillId: SkillId, amount: number): void {
+    if (!player.skills.includes(skillId)) return
+    const add = amount * legendMultiplier(player, skillId)
+    player.stamina = Math.min(player.maxStamina, player.stamina + add)
+    const pid = this.pidById.get(player.id)
+    if (pid !== undefined) {
+      const q = m.players[pid]
+      if (q) q.stamina = Math.min(1, q.stamina + add / Math.max(1, player.maxStamina))
+    }
+    this.markSkill(player, skillId, true, true)
+  }
+
   onEvent(m: PesMatch, e: PesEvent): void {
     const g = this.game
     g.clock = e.t
@@ -533,7 +552,9 @@ export class PesSettlement implements ContactModel {
             assister.stats.assists = (assister.stats.assists ?? 0) + 1
             e.actors.push(last.passer)
             e.meta = { ...e.meta, assist: last.passer }
+            this.recover(assister, m, 'lg_assist_second_wind', 6)
           }
+          this.recover(scorer, m, 'lg_goal_second_wind', 8)
         }
         this.extra.lastPass = null
         {
@@ -569,12 +590,14 @@ export class PesSettlement implements ContactModel {
         const tackler = this.mp[e.actors[0]]
         tackler.stats.tackles++
         g.stats[tackler.side].tackles++
+        this.recover(tackler, m, 'lg_tackle_second_wind', 1.5)
         this.extra.lastPass = null
         break
       }
       case 'save': {
         if (e.meta?.claim === true) break
         const keeper = this.mp[e.actors[0]]
+        this.recover(keeper, m, 'lg_save_second_wind', 3)
         const shooter = e.actors[1] !== undefined ? this.mp[e.actors[1]] : null
         const detail = e.meta?.hold === true ? '，稳稳抱住' : e.meta?.corner === true ? '，托出底线形成角球' : '，但没有抱稳'
         this.note('save', keeper.side, `${keeper.name} 扑出${shooter ? ` ${shooter.name} 的` : ''}射门${detail}。`, { playerId: keeper.id, probabilities: { goal: this.extra.lastShot?.xg ?? 0 } }, e.t)
@@ -622,6 +645,7 @@ export class PesSettlement implements ContactModel {
         this.note('setpiece', sideOf(e.ti as TeamIndex), `${g.teams[e.ti as TeamIndex].name} 获得角球。`, {}, e.t)
         break
       case 'half':
+        for (const team of g.teams) for (const player of team.players) if (player.onPitch) this.recover(player, m, 'lg_halftime_recovery', 8)
         this.note('half', 'none', '上半场结束，双方交换半场。', {}, e.t)
         break
       case 'offside':

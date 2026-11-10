@@ -6,6 +6,8 @@ import { PEAK_STAGE_COUNT, peakStageDef, buildPeakTeam } from '../../game/peak.t
 import { PEAK_REWARD_STAGE, peakRewardReady } from '../../game/peak-reward.ts'
 import { SQUAD_LIMIT } from '../../game/market.ts'
 import { legendRecordOf } from '../../game/pve.ts'
+import { legendSkillForTeam } from '../../game/data/legend-skills.ts'
+import { legendBookLabel } from '../../game/legend-books.ts'
 import { cupTeam } from '../../game/cup-run.ts'
 import { startingCa } from '../../game/pve-strength.ts'
 import { PVE_CONTENT_VERSION, PVE_CONTENT_HASH, pveContentReady } from '../../game/pve-content.ts'
@@ -22,7 +24,7 @@ import { coreNames, pveRoster, pveTeamButton } from '../pve-details.ts'
 const MODE_LABEL = { friendly: '友谊赛', legend: '传奇挑战', cup: '杯赛挑战', peak: '巅峰之路' }
 const MODE_SUB = {
   friendly: '不计联赛积分，平局直接进入点球大战。挑战比赛不扣体能。',
-  legend: '50 支历史俱乐部队；固定阵容与属性，可查看完整首发、替补和 7 项主属性。',
+  legend: '50 支历史俱乐部队；胜/平掉技能书，首胜发球迷/资金。固定阵容与属性，可查看完整首发、替补和 7 项主属性。',
   cup: '两个 16 队杯和一个 32 队杯。世界球队 + 随机队，小组循环后淘汰赛；决赛单场。',
   peak: '100 关，首发平均 CA 350→1300。前 80 关生成/特别，最后 20 关世界杯国家队，所有玩家对手相同。',
 }
@@ -49,6 +51,12 @@ function renderFriendly(): string {
     }).join('')}</tbody></table></div>`, { flush: true })}${recordsPanel(game.challengeHistory.filter((record) => !record.mode || record.mode === 'friendly'))}</div>`
 }
 
+function legendBooksPanel(): string {
+  const books = game.legendBooks ?? []
+  if (!books.length) return ''
+  return panel(`传奇技能书 <small>${books.length}</small>`, `<div class="rows">${books.map((book) => `<div class="row-line"><span>${book.tier === 'rainbow' ? tag('彩', 'gold') : tag('金', 'info')} ${esc(legendBookLabel(book))}</span><small class="muted">可在培养页带进书槽</small></div>`).join('')}</div>`, { flush: true })
+}
+
 function renderLegend(): string {
   const eras = [...new Set(LEGEND_TEAMS.map((def) => `${Math.floor(Number(def.season.slice(0, 4)) / 10) * 10}`))].sort()
   const countries = [...new Set(LEGEND_TEAMS.map((def) => def.country).filter((country): country is string => !!country))].sort()
@@ -58,10 +66,11 @@ function renderLegend(): string {
     (ui.legendEra === 'ALL' || def.season.startsWith(ui.legendEra.slice(0, 3))) &&
     (!search || [def.club, def.clubEn, def.season, def.coach, ...def.players.flatMap((p) => [p[0], p[1], p[2]])].join(' ').toLocaleLowerCase().includes(search)))
   return `<div class="toolbar"><select id="legend-country" aria-label="俱乐部国家"><option value="ALL">全部国家</option>${countries.map((country) => `<option ${country === ui.legendCountry ? 'selected' : ''} value="${country}">${country}</option>`).join('')}</select><input id="legend-search" type="search" aria-label="搜索传奇队" placeholder="球队、球员、国家或年份" value="${esc(ui.legendSearch)}"><select id="legend-era" aria-label="传奇队年代"><option value="ALL">全部年代</option>${eras.map((era) => `<option value="${era}" ${ui.legendEra === era ? 'selected' : ''}>${era} 年代</option>`).join('')}</select><div class="seg">${(['ALL', 'S+', 'S', 'A', 'B'] as const).map((tier) => `<button data-legend-tier="${tier}" class="${ui.legendTier === tier ? 'active' : ''}">${tier === 'ALL' ? '全部' : tier}</button>`).join('')}</div></div>
-    ${panel(`传奇球队 <small>${teams.length}</small>`, teams.length ? `<div class="table-scroll"><table class="dt"><thead><tr><th>球队</th><th>赛季</th><th>教练</th><th>首发 CA</th><th>核心球员</th><th>战绩</th><th></th></tr></thead><tbody>${teams.map((def) => {
+    ${panel(`传奇球队 <small>${teams.length}</small>`, teams.length ? `<div class="table-scroll"><table class="dt"><thead><tr><th>球队</th><th>赛季</th><th>教练</th><th>首发 CA</th><th>核心球员</th><th>掉落技能书</th><th>战绩</th><th></th></tr></thead><tbody>${teams.map((def) => {
       const team = legendTeamById(def.id)!, record = legendRecordOf(game, def.id)
-      return `<tr><td>${tag(def.tier, def.tier === 'S+' ? 'gold' : '')} ${pveTeamButton(`legend:${def.id}`, def.club)}<details><summary>历史注解</summary>${esc(def.note)}</details></td><td>${def.season}</td><td>${esc(def.coach)}</td><td>${caHeat(startingCa(team))}</td><td>${esc(coreNames(team))}</td><td>${record.played ? `${record.won}胜 ${record.drawn}平 ${record.lost}负 · ${record.goals}:${record.conceded}` : '尚未挑战'}</td><td><button class="btn small" data-action="start-legend-challenge" data-team="${def.id}" ${game.activeMatch ? 'disabled' : ''}>开战</button></td></tr>`
+      return `<tr><td>${tag(def.tier, def.tier === 'S+' ? 'gold' : '')} ${pveTeamButton(`legend:${def.id}`, def.club)}<details><summary>历史注解</summary>${esc(def.note)}</details></td><td>${def.season}</td><td>${esc(def.coach)}</td><td>${caHeat(startingCa(team))}</td><td>${esc(coreNames(team))}</td><td>${(() => { const drop = legendSkillForTeam(def.id); return drop ? `${tag(drop.name, def.tier === 'S+' ? 'gold' : 'info')}` : '—' })()}</td><td>${record.played ? `${record.won}胜 ${record.drawn}平 ${record.lost}负 · ${record.goals}:${record.conceded}` : '尚未挑战'}</td><td><button class="btn small" data-action="start-legend-challenge" data-team="${def.id}" ${game.activeMatch ? 'disabled' : ''}>开战</button></td></tr>`
     }).join('')}</tbody></table></div>` : '<p class="muted pad">没有符合条件的球队，请修改筛选。</p>', { flush: true })}
+    ${legendBooksPanel()}
     ${recordsPanel(game.challengeHistory.filter((record) => record.mode === 'legend'), '传奇战报')}`
 }
 
@@ -119,5 +128,5 @@ export function renderChallenge(): string {
   const body = !loaded ? '<p class="banner info" role="status">正在加载固定球队数据，请稍候…</p>' : mode === 'friendly' ? renderFriendly() : mode === 'legend' ? renderLegend() : mode === 'cup' ? renderCup() : renderPeak()
   return `${pageHead({ kicker: '挑战 · 纯 PvE', title: MODE_LABEL[mode], sub: MODE_SUB[mode] })}
     <div class="seg challenge-mode-tabs" aria-label="挑战模式">${(Object.keys(MODE_LABEL) as (keyof typeof MODE_LABEL)[]).map((key) => `<button data-challenge-mode="${key}" class="${key === mode ? 'active' : ''}">${MODE_LABEL[key]}</button>`).join('')}</div>
-    <p class="hint">挑战比赛不扣体能、不发金钱或技能卡；第 50 关首次通关可选 1 名全明星入队，杯赛冠军只记录奖杯荣誉。内容 v${PVE_CONTENT_VERSION} · ${PVE_CONTENT_HASH.slice(0, 8)}</p>${body}${loaded ? selectedRoster() : ''}`
+    <p class="hint">挑战比赛不扣体能；传奇挑战胜/平掉技能书、首胜发球迷/资金；第 50 关首次通关可选 1 名全明星入队，杯赛冠军只记录奖杯荣誉。内容 v${PVE_CONTENT_VERSION} · ${PVE_CONTENT_HASH.slice(0, 8)}</p>${body}${loaded ? selectedRoster() : ''}`
 }

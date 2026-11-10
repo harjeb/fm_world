@@ -5,6 +5,7 @@ import { MAIN_ATTR_SCALE } from '../scale.ts'
 import { TRAITS } from '../data/skills.ts'
 import { effectiveAttr } from '../ca.ts'
 import { derivedRng } from '../rng.ts'
+import { legendMultiplier } from '../legend-bonus.ts'
 import { opponentSide } from './team.ts'
 import { clamp, progressOf, wideZone } from './pitch.ts'
 import type { MatchEventContext, MatchPlayerState, MatchSide, MatchState } from './types.ts'
@@ -33,6 +34,14 @@ export class MatchRatings {
     if (star?.kind === 'attr' && star.attr === key && this.traitConditionMet(player, star.when, ctx) && this.traitRoll(player, 'attr', star.chance)) value += star.bonus / MAIN_ATTR_SCALE
     if (star?.kind === 'hotStreak' && key === 'shooting') value += (star.bonus / MAIN_ATTR_SCALE) * player.stats.goals
     value += this.teamTraitBonus(player.side, key)
+    if (player.skills.includes('lg_vision_master') && key === 'vision' && (ctx.passing || ctx.finalThird)) value += 7 * legendMultiplier(player, 'lg_vision_master')
+    if (player.skills.includes('lg_game_management') && key === 'passing' && ctx.passing && this.stateOf().score[player.side] > this.stateOf().score[opponentSide(player.side)]) value += 3 * legendMultiplier(player, 'lg_game_management')
+    if (player.skills.includes('lg_clutch') && (key === 'shooting' || key === 'composure') && this.matchProgress() >= 75 / 90) value += 5 * legendMultiplier(player, 'lg_clutch')
+    if (key === 'decisions' && this.stateOf().score[player.side] < this.stateOf().score[opponentSide(player.side)]) {
+      const team = this.stateOf().teams.find((entry) => entry.side === player.side)
+      const leader = team?.players.find((entry) => entry.onPitch && entry.skills.includes('lg_leader'))
+      if (leader) value += 4 * legendMultiplier(leader, 'lg_leader')
+    }
     const trait = TRAITS[player.traitId as BaseTraitId]
     if (trait) {
       switch (trait.effect) {

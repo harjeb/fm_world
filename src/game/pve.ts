@@ -1,6 +1,7 @@
 import type { GameState, MatchContext, MatchRecord, PveLegendRecord, PveState } from './types.ts'
 import { recordCupResult } from './cup-run.ts'
 import { archivePastCups } from './pve-season.ts'
+import { awardLegendReward, ensureLegendBooks } from './legend-books.ts'
 
 const EMPTY_LEGEND: PveLegendRecord = { played: 0, won: 0, drawn: 0, lost: 0, goals: 0, conceded: 0 }
 
@@ -56,7 +57,7 @@ export function ensurePve(game: GameState): boolean {
     pve.peak.cleared = 0
     changed = true
   }
-  return archivePastCups(game) || changed
+  return ensureLegendBooks(game) || archivePastCups(game) || changed
 }
 
 export function legendRecordOf(game: GameState, legendId: string): PveLegendRecord {
@@ -77,6 +78,7 @@ export function applyPveResult(game: GameState, record: MatchRecord, context: Ma
     // 引擎里的球队 id 是 legend-<defId>；存档按数据文件的 defId 记战绩。
     const key = context.opponentId.startsWith('legend-') ? context.opponentId.slice('legend-'.length) : context.opponentId
     const row = pve.legends[key] ?? { ...EMPTY_LEGEND }
+    const firstWin = row.won === 0
     row.played += 1
     if (record.result === 'win') row.won += 1
     else if (record.result === 'draw') row.drawn += 1
@@ -84,6 +86,7 @@ export function applyPveResult(game: GameState, record: MatchRecord, context: Ma
     row.goals += goals
     row.conceded += conceded
     pve.legends[key] = row
+    awardLegendReward(game, key, record.result, firstWin)
     return
   }
 

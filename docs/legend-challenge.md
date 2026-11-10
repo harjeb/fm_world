@@ -376,10 +376,10 @@
 
 ### 7.1 数据层
 
-1. `src/game/types.ts`：`SkillId` 联合类型加 50 个 `lg_` id（**不加**独立槽字段）；`TrainingSession.books?: { id: LegendSkillId; tier: SkillTier }[]`；`GameState.legendBooks: { id: LegendSkillId; tier: SkillTier }[]`。
+1. `src/game/types.ts`：`SkillId` 联合类型加 50 个 `lg_` id（**不加**独立槽字段）；`TrainingSession.books?: LegendBook[]`；`GameState.legendBooks: LegendBook[]`（`LegendBook = { id; tier: 'gold' | 'rainbow' }`）。
 2. `src/game/data/legend-skills.ts`（新文件）：`LEGEND_SKILLS` 注册表 —— `SkillDef` + `family`（`growth | iq | move | range | recovery | economy`）+ `legendTeam` + `gold`/`rainbow` + `requires: { attr: AttrKey; gold: number; rainbow: number }[]` + `scope: 'field' | 'gk' | 'any'`。
 3. `src/game/data/legend-teams.ts`：**不动**。50 支队伍、16 人阵容、`tier` 都已经在 `feat/pve-challenge` 上，冻结在 `pve-snapshots.generated.json`（`scripts/freeze-pve.ts` 会校验档位 CA 与阵容）。
-   掉落技能不要塞进这个 1600 行文件，单独建 `src/game/data/legend-skill-drops.ts`：`Record<LegendTeamDef['id'], LegendSkillId>`，50 条，和第 3 节表格一一对应。这样增删技能不会碰快照哈希。
+   掉落技能不要塞进这个 1600 行文件，本实现把 `LEGEND_SKILL_DROPS: Record<LegendTeamDef['id'], LegendSkillId>` 放在 `src/game/data/legend-skills.ts` 里，50 条和第 3 节表格一一对应，避免再拆一个只做映射的文件；增删技能不会碰快照哈希。
 4. `src/ui/state.ts` / `src/ui/screens/challenge.ts`：**不做档位解锁**。挑战页 `legendTier` 初始为 `'B'`（默认显示 B 档），所有档位可直接切换/约战；不实现 `tierUnlocked`，也不按彩书集合锁 UI。
 5. `src/game/data/skills.ts`：`skillCategory()` 对 `lg_*` 一律返回 `'main'`（占现有 4 槽），并让 `canLearnSkill()` 对“同 id 升档”放行。
 
@@ -414,7 +414,7 @@
 
 ### 7.5 测试
 
-17. `tests/legend-skills.test.ts`：50 个 `lg_` id 全覆盖、家族计数 8/10/14/4/6/8、**50 队 ↔ 50 技能一一对应且不重复**、每队只挂 1 个 `skill`、每个技能的 `requires` 都合法（`scope` 与属性刻度匹配）、`legend-skill-drops.ts` 的 key 必须覆盖 `LEGEND_TEAMS` 全部 50 个 id（多一个少一个都报错）。
+17. `tests/legend-skills.test.ts`：50 个 `lg_` id 全覆盖、家族计数 8/10/14/4/6/8、**50 队 ↔ 50 技能一一对应且不重复**、每队只挂 1 个 `skill`、每个技能的 `requires` 都合法（`scope` 与属性刻度匹配）、`LEGEND_SKILL_DROPS` 的 key 必须覆盖 `LEGEND_TEAMS` 全部 50 个 id（多一个少一个都报错）。
 18. `tests/challenge-ui.test.ts`：默认显示 B 档；切到 S+ 后所有队伍仍可直接开战（不出现解锁门槛/锁定按钮）；顺带锁住 `LEGEND_TIER_CA` 的档位不重叠。
 19. `tests/legend-book.test.ts`：`bookLearnChance` 的边界（达标 100%、平方曲线关键点 855/810/765/720、`0.65T` 以下 2% 地板、混合几何平均）、保底触发（4 本书在 18 次行动内必定各出 1 次）、**成功与失败都不扣书**、同一本书教第二个球员能再次触发、槽满时不能学、同 id 升档不占新槽。
 20. `npm run pes:equiv`：任何落在 `resolution.ts` 的改动都要跑。新技能在旧规则路径下**必须**走 `if (!legacyRules)` 分支。
@@ -432,3 +432,14 @@
 7. **上限 +200 只对没顶格的球员有意义。** 1500 是比赛评分的硬顶（`effectiveAttr` 夹 100），UI 必须写清“最多到 1500”。
 8. **书的强度要能被槽位成本抵消。** 4 个主技能槽是稀缺资源：如果某个传奇技能强到“无脑必带”，说明它超模了，而不是说明其他技能弱。
 9. **书是永久保留，别用“消耗”做平衡旋钮。** 一本彩书理论上能教满整个阵容，所以稀缺性必须靠“拿到彩书难”（胜场 + 属性门槛），而不是“用一次就没了”。真正的天然上限是：每个球员 4 个主槽 + 每轮培养只有 4 个书槽、每本最多 2 次触发。
+
+---
+
+## 9. 实装状态（feat/pve-challenge）
+
+- **数据**：50 个 `lg_` 技能、50 队掉落映射、逐技能的 `requires`/scope/金彩档说明已落在 `src/game/data/legend-skills.ts`；`tests/legend-skills.test.ts` 校验数量、家族、掉落一一对应。
+- **赛果奖励**：传奇挑战平局直接结束；胜→彩书，平→金书，重复彩书转球迷 +800；首胜按 B/A/S/S+ 发球迷/资金。库存为 `game.legendBooks`，书不消耗。
+- **培养**：训练开始页有 4 个书槽，可勾选库存；`TrainingSession.books` 带入本轮。每本书在 12/14/16/18 次行动有保底事件，动态事件由 `legend-learning.ts` 生成，`resolveTrainingEvent` 用 `bookLearnChance()` 的平方曲线判定；成功/失败都不扣书。
+- **匹配**：射门、传球、盘带、争顶、门将和体力等挂点已接入传奇技能；`lg_` 在旧规则路径默认不改变行为，避免影响旧比赛。
+- **UI**：挑战页显示每队掉落技能书与已获得书清单；培养页显示书槽、要求和当前成功率；学习事件显示成功率/要求；失败可再触发一次。
+- **平衡**：成长类技能只影响培养，减耗按乘算处理；上限突破最多把主属性顶到 1500。

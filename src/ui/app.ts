@@ -543,6 +543,7 @@ function completeMatch(): void {
 function openTraining(playerId: string): void {
   ui.trainingPlayerId = playerId
   ui.trainingTeammateIds = []
+  ui.trainingBookIds = []
   ui.trainingKind = 'drill'
   ui.trainingAttr = 'passing'
   ui.coachPanel = false
@@ -555,7 +556,7 @@ function openTraining(playerId: string): void {
 
 function startTrainingFor(playerId: string): void {
   // 每轮都由系统自动挑 6 名陪练（含门将），不消耗他们的精力。
-  const result = startTrainingWithSupport(game, playerId)
+  const result = startTrainingWithSupport(game, playerId, undefined, ui.trainingBookIds)
   if (!result.ok) {
     showNotice(result.error ?? '无法开始培养')
     return
@@ -1214,7 +1215,7 @@ document.addEventListener('click', async (event) => {
       saveGame(game)
       setTeamPickPending(false)
       ui.newGameRequired = false
-      Object.assign(ui, { screen: 'home', trainingPlayerId: null, trainingTeammateIds: [], detailPlayerId: null, reviewId: null, lineupDraft: null, lineupSlot: null, autoSubsDraft: null, notice: '新游戏已创建。', matchEngine: null, matchPlaying: false, completing: false, coachPanel: false, seasonRound: null, worldDivision: null, worldClubId: null, worldPlayerId: null, newGameOpen: false, newGameClubId: null })
+      Object.assign(ui, { screen: 'home', trainingPlayerId: null, trainingBookIds: [], trainingTeammateIds: [], detailPlayerId: null, reviewId: null, lineupDraft: null, lineupSlot: null, autoSubsDraft: null, notice: '新游戏已创建。', matchEngine: null, matchPlaying: false, completing: false, coachPanel: false, seasonRound: null, worldDivision: null, worldClubId: null, worldPlayerId: null, newGameOpen: false, newGameClubId: null })
       render()
       break
     case 'detail':
@@ -1717,6 +1718,13 @@ document.addEventListener('click', async (event) => {
 
 document.addEventListener('change', (event) => {
   const target = event.target as HTMLSelectElement | HTMLInputElement
+  if (target.dataset.trainingBook) {
+    const key = target.dataset.trainingBook
+    const checked = (target as HTMLInputElement).checked
+    ui.trainingBookIds = checked ? [...new Set([...ui.trainingBookIds, key])].slice(0, 4) : ui.trainingBookIds.filter((item) => item !== key)
+    render()
+    return
+  }
   if (target.id === 'legend-era') { ui.legendEra = target.value; render(); return }
   if (target.id === 'legend-country') { ui.legendCountry = target.value; render(); return }
   if (target.id === 'account-club') {
@@ -1784,6 +1792,7 @@ document.addEventListener('change', (event) => {
   }
   if (target.id === 'training-player-select') {
     ui.trainingTeammateIds = []
+    ui.trainingBookIds = []
     ui.trainingPlayerId = target.value || null
     ui.trainingKind = 'drill'
     ui.trainingAttr = 'passing'

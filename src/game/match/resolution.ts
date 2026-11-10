@@ -6,6 +6,7 @@ import { injuryProneness, injuryRecoveryDays, injuryRisk } from '../injury.ts'
 import type { PCG32 } from '../rng.ts'
 import { chooseShotFoot, chooseShotTarget, isWeakShotFoot } from './shooting.ts'
 import { GOAL_WIDTH, GOAL_Y, PITCH_LENGTH, PITCH_WIDTH, skillTierMultiplier } from './team.ts'
+import { legendMultiplier } from '../legend-bonus.ts'
 import { clamp, dirOf, distance, distanceToSegment, goalXOf, inBox, logit, ownGoalXOf, progressOf, sigmoid, weakFoot, wideZone } from './pitch.ts'
 import type { MatchRatings } from './ratings.ts'
 import type { MatchPlayerState, MatchSide, MatchTeamState } from './types.ts'
@@ -186,6 +187,25 @@ export class SettlementKernel {
     } else if (carrier.skills.includes('weak_foot')) {
       if (markSkills) this.hooks.markSkill(carrier, 'weak_foot', false, false)
     }
+    if (!this.hooks.legacyRules) {
+      if (carrier.skills.includes('lg_pass_vision') && type === 'through') {
+        const m = legendMultiplier(carrier, 'lg_pass_vision')
+        p0 += 0.02 * m
+        a += 6 * m
+        if (markSkills) this.hooks.markSkill(carrier, 'lg_pass_vision', true, true)
+      }
+      if (carrier.skills.includes('lg_trivela') && type === 'cross') {
+        const m = legendMultiplier(carrier, 'lg_trivela')
+        a += 4 * m
+        c += 2 * m
+        if (markSkills) this.hooks.markSkill(carrier, 'lg_trivela', true, true)
+      }
+      if (carrier.position === 'GK' && carrier.skills.includes('lg_quick_throw')) {
+        const m = legendMultiplier(carrier, 'lg_quick_throw')
+        a += 6 * m
+        if (markSkills) this.hooks.markSkill(carrier, 'lg_quick_throw', true, true)
+      }
+    }
     const p = clamp(sigmoid(logit(p0) + (a - d + c) / 30) + this.passTraitDelta(carrier, main, type, pressure, dist), 0.05, 0.97)
     return { p, a, d, c, p0, interceptor: main, support, weakFoot: weak }
   }
@@ -237,13 +257,32 @@ export class SettlementKernel {
     }
     let c = -pressure * 2 - (weak ? 3 : 0)
     if (carrier.skills.includes('weak_foot') && weak) c += 2 * skillTierMultiplier(carrier, 'weak_foot')
+    if (!this.hooks.legacyRules) {
+      if (carrier.skills.includes('lg_rainbow_flick') && wing) {
+        const m = legendMultiplier(carrier, 'lg_rainbow_flick')
+        a += 6 * m
+        if (markSkills) this.hooks.markSkill(carrier, 'lg_rainbow_flick', true, true)
+      }
+      if (carrier.skills.includes('lg_roulette') && pressure) {
+        const m = legendMultiplier(carrier, 'lg_roulette')
+        a += 6 * m
+        if (markSkills) this.hooks.markSkill(carrier, 'lg_roulette', true, true)
+      }
+      if (defender.skills.includes('lg_slide_tackle')) {
+        const m = legendMultiplier(defender, 'lg_slide_tackle')
+        d += 5 * m
+        if (markSkills) this.hooks.markSkill(defender, 'lg_slide_tackle', true, true)
+      }
+    }
     if (defender.role === 'cb_stopper' || defender.role === 'cm_destroyer') c -= 1
     let traitDelta = 0
     const dribbler = STAR_TRAITS[carrier.traitId]
     if (dribbler?.kind === 'dribble' && this.ratings.traitConditionMet(carrier, dribbler.when)) traitDelta += dribbler.success / 100
     const stopper = STAR_TRAITS[defender.traitId]
     if (stopper?.kind === 'defend' && this.ratings.traitConditionMet(defender, stopper.when)) traitDelta -= stopper.success / 100
-    return { p: clamp(sigmoid(logit(0.72) + (a - d + c) / 30) + traitDelta, 0.12, 0.95), a, d }
+    const floor = 0.12 + (carrier.skills.includes('lg_elastico') && !this.hooks.legacyRules ? 0.08 * legendMultiplier(carrier, 'lg_elastico') : 0)
+    if (carrier.skills.includes('lg_elastico') && markSkills && !this.hooks.legacyRules) this.hooks.markSkill(carrier, 'lg_elastico', true, true)
+    return { p: clamp(sigmoid(logit(0.72) + (a - d + c) / 30) + traitDelta, floor, 0.95), a, d }
   }
 
   /** 旧活动比赛恢复路径：只用于没有 rulesVersion 的存档。 */
@@ -422,6 +461,23 @@ export class SettlementKernel {
         if (!gkOut) gkScore += 5 * skillTierMultiplier(gk, 'gk_reflexes')
         if (markSkills) this.hooks.markSkill(gk, 'gk_reflexes', true, true)
       }
+      if (!this.hooks.legacyRules) {
+        if (gkOut && shooter.skills.includes('lg_chip') && dist > 10) {
+          const m = legendMultiplier(shooter, 'lg_chip')
+          goalGiven += 0.12 * m
+          if (markSkills) this.hooks.markSkill(shooter, 'lg_chip', true, true)
+        }
+        if (gkOut && dist > 25 && shooter.skills.includes('lg_halfway_lob')) {
+          const m = legendMultiplier(shooter, 'lg_halfway_lob')
+          goalGiven += 0.25 * m
+          if (markSkills) this.hooks.markSkill(shooter, 'lg_halfway_lob', true, true)
+        }
+        if (shooter.skills.includes('lg_cannon_shot')) {
+          const m = legendMultiplier(shooter, 'lg_cannon_shot')
+          gkScore -= 4 * m
+          if (markSkills) this.hooks.markSkill(shooter, 'lg_cannon_shot', true, true)
+        }
+      }
     } else {
       goalGiven = 1
     }
@@ -451,6 +507,52 @@ export class SettlementKernel {
       onTarget += 0.05 * skillTierMultiplier(shooter, 'penalty_specialist')
       goalGiven += 0.04 * skillTierMultiplier(shooter, 'penalty_specialist')
       if (markSkills) this.hooks.markSkill(shooter, 'penalty_specialist', true, true)
+    }
+    if (!this.hooks.legacyRules) {
+      if (shooter.skills.includes('lg_low_drive') && inBoxShot && !opts.header && !opts.penalty) {
+        const m = legendMultiplier(shooter, 'lg_low_drive')
+        onTarget += 0.03 * m
+        goalGiven += 0.02 * m
+        if (markSkills) this.hooks.markSkill(shooter, 'lg_low_drive', true, true)
+      }
+      if (opts.header && shooter.skills.includes('lg_diving_header')) {
+        const m = legendMultiplier(shooter, 'lg_diving_header')
+        onTarget += 0.05 * m
+        goalGiven += 0.03 * m
+        if (markSkills) this.hooks.markSkill(shooter, 'lg_diving_header', true, true)
+      }
+      if (opts.header && shooter.skills.includes('lg_bicycle')) {
+        const m = legendMultiplier(shooter, 'lg_bicycle')
+        onTarget += 0.04 * m
+        if (markSkills) this.hooks.markSkill(shooter, 'lg_bicycle', true, true)
+      }
+      if (weak && shooter.skills.includes('lg_rabona')) {
+        const m = legendMultiplier(shooter, 'lg_rabona')
+        onTarget += 0.02 * m
+        if (markSkills) this.hooks.markSkill(shooter, 'lg_rabona', true, true)
+      }
+      if (opts.freeKick && shooter.skills.includes('lg_knuckleball')) {
+        const m = legendMultiplier(shooter, 'lg_knuckleball')
+        onTarget += 0.06 * m
+        goalGiven += 0.04 * m
+        if (markSkills) this.hooks.markSkill(shooter, 'lg_knuckleball', true, true)
+      }
+      if (dist >= 20 && shooter.skills.includes('lg_rising_shot')) {
+        const m = legendMultiplier(shooter, 'lg_rising_shot')
+        goalGiven += 0.03 * m
+        if (markSkills) this.hooks.markSkill(shooter, 'lg_rising_shot', true, true)
+      }
+      if (inBoxShot && shooter.skills.includes('lg_volley')) {
+        const m = legendMultiplier(shooter, 'lg_volley')
+        onTarget += 0.05 * m
+        if (markSkills) this.hooks.markSkill(shooter, 'lg_volley', true, true)
+      }
+      if (!inBoxShot && shooter.skills.includes('lg_super_long_shot')) {
+        const m = legendMultiplier(shooter, 'lg_super_long_shot')
+        onTarget += 0.02 * m
+        goalGiven += 0.02 * m
+        if (markSkills) this.hooks.markSkill(shooter, 'lg_super_long_shot', true, true)
+      }
     }
     // 先调整普通射门的基础转化率，再叠加技能/专属特性的固定加成。
     if (!this.hooks.legacyRules && !noKeeper && (chance.type === 'normal' || chance.type === 'difficult')) goalGiven *= 0.75
@@ -486,7 +588,7 @@ export class SettlementKernel {
       if (dist > 5.2) continue
       const between = (player.x - shooter.x) * (target.x - shooter.x) >= 0 && (player.x - shooter.x) * (target.x - shooter.x) <= (target.x - shooter.x) ** 2 + 0.1
       if (!between) continue
-      scores.push(this.ratings.eff(player, 'defPos') * 0.45 + this.ratings.eff(player, 'anticipation') * 0.35 + (5.2 - dist) * 4)
+      scores.push(this.ratings.eff(player, 'defPos') * 0.45 + this.ratings.eff(player, 'anticipation') * 0.35 + (5.2 - dist) * 4 + (player.skills.includes('lg_goal_line_clearance') && !this.hooks.legacyRules ? 8 * legendMultiplier(player, 'lg_goal_line_clearance') : 0))
     }
     scores.sort((a, b) => b - a)
     return scores
@@ -517,12 +619,13 @@ export class SettlementKernel {
 
   /** 传成功之后，接球人离落点多远以内还接得住（超过就变成落点争抢）。传中落点本来就在人群里，放宽。 */
   receptionReach(receiver: MatchPlayerState, type: PassType | undefined): number {
-    return type === 'cross' ? 8 : 3.4 + this.ratings.eff(receiver, 'anticipation') * 0.02
+    const base = type === 'cross' ? 8 : 3.4 + this.ratings.eff(receiver, 'anticipation') * 0.02
+    return base + (receiver.skills.includes('lg_anticipate') && !this.hooks.legacyRules ? 1.2 * legendMultiplier(receiver, 'lg_anticipate') : 0)
   }
 
   /** 前场任意球传中到禁区，球能不能传到位。 */
   freeKickDeliveryChance(taker: MatchPlayerState, point: { x: number; y: number }): number {
-    const quality = 0.6 + (this.ratings.eff(taker, 'passing', { passing: true, crossing: true }) - 50) * 0.006
+    const quality = 0.6 + (this.ratings.eff(taker, 'passing', { passing: true, crossing: true }) - 50) * 0.006 + (taker.skills.includes('lg_set_piece_iq') && !this.hooks.legacyRules ? 0.06 * legendMultiplier(taker, 'lg_set_piece_iq') : 0)
     return clamp(quality + this.passTraitDelta(taker, null, 'cross', 0, distance(taker, point), true), 0.3, 0.95)
   }
 
@@ -702,7 +805,8 @@ export class SettlementKernel {
           0.2 * this.ratings.eff(player, 'anticipation') +
           0.1 * this.ratings.eff(player, 'offBall') +
           Math.max(0, player.height - 175) * 0.2 +
-          (player.skills.includes('aerial') ? 5 * skillTierMultiplier(player, 'aerial') : 0)
+          (player.skills.includes('aerial') ? 5 * skillTierMultiplier(player, 'aerial') : 0) +
+          (player.skills.includes('lg_off_ball_iq') && !this.hooks.legacyRules ? 6 * legendMultiplier(player, 'lg_off_ball_iq') : 0)
         contestants.push({ player, weight: weight * (0.85 + jitter() * 0.3), side: attackingSide })
         if (player.skills.includes('aerial')) this.hooks.markSkill(player, 'aerial', true, true)
       }
@@ -742,6 +846,7 @@ export class SettlementKernel {
               0.2 * this.ratings.eff(player, 'strength') +
               0.07 * this.ratings.eff(player, 'speed') +
               0.08 * this.ratings.eff(player, 'acceleration') +
+              (player.skills.includes('lg_off_ball_iq') && !this.hooks.legacyRules ? 6 * legendMultiplier(player, 'lg_off_ball_iq') : 0) +
               Math.max(0, player.height - 175) * 0.15
           candidates.push({ player, weight: weight * (0.75 + jitter() * 0.5) })
         }

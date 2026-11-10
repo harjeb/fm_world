@@ -73,8 +73,62 @@ export type SkillId =
   | 'penalty_specialist'
   | 'injury_prevention'
   | 'injury_resilience'
+  | 'lg_drill_master'
+  | 'lg_fast_learner'
+  | 'lg_physical_gift'
+  | 'lg_technical_gift'
+  | 'lg_ceiling_break'
+  | 'lg_iron_constitution'
+  | 'lg_recovery_pro'
+  | 'lg_match_ready'
+  | 'lg_vision_master'
+  | 'lg_calm_mind'
+  | 'lg_opportunist'
+  | 'lg_anticipate'
+  | 'lg_leader'
+  | 'lg_game_management'
+  | 'lg_clutch'
+  | 'lg_pass_vision'
+  | 'lg_off_ball_iq'
+  | 'lg_set_piece_iq'
+  | 'lg_rabona'
+  | 'lg_bicycle'
+  | 'lg_diving_header'
+  | 'lg_rainbow_flick'
+  | 'lg_elastico'
+  | 'lg_roulette'
+  | 'lg_low_drive'
+  | 'lg_chip'
+  | 'lg_knuckleball'
+  | 'lg_trivela'
+  | 'lg_slide_tackle'
+  | 'lg_goal_line_clearance'
+  | 'lg_quick_throw'
+  | 'lg_volley'
+  | 'lg_super_long_shot'
+  | 'lg_cannon_shot'
+  | 'lg_rising_shot'
+  | 'lg_halfway_lob'
+  | 'lg_goal_second_wind'
+  | 'lg_assist_second_wind'
+  | 'lg_tackle_second_wind'
+  | 'lg_save_second_wind'
+  | 'lg_second_win'
+  | 'lg_halftime_recovery'
+  | 'lg_marathon'
+  | 'lg_second_half_legs'
+  | 'lg_defensive_economy'
+  | 'lg_off_ball_economy'
+  | 'lg_press_machine'
+  | 'lg_wing_engine'
+  | 'lg_gk_economy'
+  | 'lg_stamina_regen'
+
+export type LegendSkillId = Extract<SkillId, `lg_${string}`>
 
 export type SkillTier = 'silver' | 'gold' | 'rainbow'
+export type LegendBookTier = 'gold' | 'rainbow'
+export type LegendBook = { id: LegendSkillId; tier: LegendBookTier }
 
 export type TraitEffect =
   | 'vision'
@@ -394,6 +448,8 @@ export type TrainingSession = {
   playerId: string
   seed: number
   candidate: Player
+  /** 本轮携带的传奇技能书；书不消耗，只影响这轮事件。 */
+  books?: LegendBook[]
   academyLevel?: number
   stadiumLevel?: number
   /** 培养快照里的设施阶段；旧存档/旧课程可能缺新增的两个设施。 */
@@ -432,6 +488,7 @@ export type EventEffect = {
   route?: { id: RouteId; points: number }
   routeOwn?: number
   skill?: SkillId
+  bookSkill?: { id: LegendSkillId; tier: LegendBookTier }
   routeSkill?: boolean
   position?: { pos: Position; amount: number }
   personality?: Partial<Personality>
@@ -458,6 +515,8 @@ export type EventOption = {
   hint: string
   effect?: EventEffect
   branch?: EventBranch
+  /** 传奇技能书：动态概率由 bookLearnChance() 计算，不走 branch 的线性公式。 */
+  book?: { id: LegendSkillId; tier: LegendBookTier }
 }
 
 export type EventTrigger = {
@@ -941,6 +1000,8 @@ export type GameState = {
   lineup: Lineup
   autoSubs?: AutoSubPlan
   training: Record<string, TrainingSession>
+  /** 已获得的传奇技能书；只增不减，学习不消耗。 */
+  legendBooks?: LegendBook[]
   injuries?: Record<string, number>
   /** 最近 20 场的出场分钟（按球员 id，玩家和本联赛 AI 球队的都记），俱乐部判断放不放人用。 */
   appearances?: Record<string, number[]>
@@ -1013,6 +1074,8 @@ export type MatchContext = {
   cupFixtureId?: string
   /** 小组赛、两回合首回合允许平局；次回合根据总比分决胜。 */
   knockout?: boolean
+  /** 传奇挑战：90 分钟平局直接结束，不点球。 */
+  allowDraw?: boolean
   shootoutOffset?: { home: number; away: number }
   /** 记录 id 的去重键；比赛种子仍用 seed（巅峰重试时对手/结果不变）。 */
   recordKey?: string | number

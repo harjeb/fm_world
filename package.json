@@ -23,7 +23,7 @@
     "balance:pve": "tsx scripts/balance-pve.ts",
     "pve:freeze": "tsx scripts/freeze-pve.ts",
     "smoke:pve": "tsx scripts/pve-ui-smoke.ts",
-    "test:pve": "vitest run tests/pve.test.ts tests/pve-content.test.ts tests/pve-knockout.test.ts tests/cup.test.ts tests/cup-run.test.ts tests/challenge-ui.test.ts tests/club-trophy.test.ts tests/legend-teams.test.ts tests/peak-reward.test.ts tests/peak-stages.test.ts",
+    "test:pve": "vitest run tests/pve.test.ts tests/pve-content.test.ts tests/pve-knockout.test.ts tests/cup.test.ts tests/cup-run.test.ts tests/challenge-ui.test.ts tests/club-trophy.test.ts tests/legend-teams.test.ts tests/peak-reward.test.ts tests/peak-stages.test.ts tests/legend-skills.test.ts tests/legend-book.test.ts tests/legend-reward.test.ts tests/training-book-ui.test.ts tests/legend-draw.test.ts",
     "mcp": "tsx mcp/index.ts",
     "fm:import": "tsx scripts/import-fm.ts",
     "legend:preview": "tsx scripts/legend-preview.ts",

@@ -1,6 +1,7 @@
 import type { BaseTraitId, SkillId, SkillTier, TraitEffect, TraitId } from '../types.ts'
 import { MAIN_ATTR_SCALE } from '../scale.ts'
 import { TRAITS } from './skills.ts'
+import { LEGEND_SKILLS } from './legend-skills.ts'
 import { starTraitOf, starTraitText } from './star-traits.ts'
 
 /**
@@ -14,7 +15,7 @@ const TIER_MULTIPLIER: Record<SkillTier, number> = { silver: 1, gold: 1.2, rainb
 /** 去掉浮点误差和多余的 0：4.800000000000001 → 4.8。 */
 const num = (value: number) => String(Math.round(value * 10) / 10)
 
-const SKILL_EFFECTS: Record<SkillId, (m: number) => string> = {
+const SKILL_EFFECTS: Partial<Record<SkillId, (m: number) => string>> = {
   through_ball: (m) => `直塞时：传球评分 +${num(5 * m)}，成功率约 +${num(3.5 * m)}%。`,
   safe_pass: (m) => `受压时短传：传球评分 +${num(4 * m)}，成功率约 +${num(2.5 * m)}%。`,
   one_touch: (m) => `身边没人逼抢、接球后直接传：处理时间缩短 ${num(m)} 秒。`,
@@ -33,7 +34,12 @@ const SKILL_EFFECTS: Record<SkillId, (m: number) => string> = {
 }
 
 export function skillEffectText(id: SkillId, tier: SkillTier = 'silver'): string {
-  return SKILL_EFFECTS[id](TIER_MULTIPLIER[tier])
+  const fn = SKILL_EFFECTS[id]
+  if (fn) return fn(TIER_MULTIPLIER[tier])
+  const legend = LEGEND_SKILLS[id as keyof typeof LEGEND_SKILLS]
+  if (!legend) return ''
+  const text = legend.effect.replace(/(\d+\.\d{2,})/g, (_match, value: string) => String(Math.round(Number(value) * 10) / 10))
+  return `${text}（金 ×1 / 彩 ×1.4）`
 }
 
 /** 铁肺不是按倍数算的，单独说明。 */

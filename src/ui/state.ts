@@ -71,6 +71,8 @@ export type UIState = {
   worldClubId: string | null
   worldPlayerId: string | null
   trainingPlayerId: string | null
+  /** 本轮培养准备携带的传奇技能书 key（id:tier）。 */
+  trainingBookIds: string[]
   trainingKind: TrainingActionId
   trainingActivity: TrainingActivityId | null
   trainingTeammateIds: string[]
@@ -172,6 +174,7 @@ export const ui: UIState = {
   worldClubId: null,
   worldPlayerId: null,
   trainingPlayerId: null,
+  trainingBookIds: [],
   trainingKind: 'drill',
   trainingActivity: null,
   trainingTeammateIds: [],

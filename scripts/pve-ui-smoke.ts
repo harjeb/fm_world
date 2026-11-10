@@ -63,6 +63,7 @@ try {
   await send('Page.enable'); await send('Runtime.enable')
   const game = createInitialGame(71520)
   game.pve!.peak.cleared = 50
+  game.legendBooks = [{ id: 'lg_drill_master', tier: 'rainbow' }, { id: 'lg_low_drive', tier: 'gold' }]
   const delta = 86400000
   game.season.startedAt += delta
   for (const fixture of game.season.fixtures) if (fixture.kickoffAt) fixture.kickoffAt += delta
@@ -105,8 +106,12 @@ try {
   await click('[data-action="cup-preview"][data-cup="community"]')
   await wait(`document.body.innerText.includes('小组赛') && document.body.innerText.includes('战报')`)
   await screenshot('cup-mobile-resume')
+  await click('[data-nav="training"]')
+  await evaluate(`(() => { const select = document.querySelector('#training-player-select'); const option = [...select.options].find((item) => item.value); if (!option) return false; select.value = option.value; select.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)
+  await wait(`!!document.querySelector('[data-training-book]') && document.body.innerText.includes('传奇技能书槽')`)
+  await screenshot('training-books')
   if (errors.length) throw new Error(errors.join('\n'))
-  console.log('PvE 浏览器冒烟通过：默认 B 档、自由切换档位、第 50 关足球小将/奖励选择、桌面/390px、筛选、7 项主属性、100 关预览、报名比赛、刷新续赛；不访问线上账号/数据。')
+  console.log('PvE 浏览器冒烟通过：默认 B 档、自由切换档位、第 50 关足球小将/奖励选择、培养书槽、桌面/390px、筛选、7 项主属性、100 关预览、报名比赛、刷新续赛；不访问线上账号/数据。')
 } catch (error) {
   await screenshot('failure').catch(() => {})
   console.error(await evaluate('document.body.innerText.slice(-4000)').catch(() => 'page unavailable'))

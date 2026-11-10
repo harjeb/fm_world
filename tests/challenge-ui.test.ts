@@ -58,6 +58,21 @@ describe('挑战页面', () => {
     expect(html).not.toContain('球星上限')
   })
 
+  it('传奇表显示掉落技能书，已获得书在挑战页可见', () => {
+    game.legendBooks = [{ id: 'lg_drill_master', tier: 'rainbow' }]
+    ui.challengeMode = 'legend'
+    ui.legendTier = 'ALL'
+    ui.legendSearch = '阿贾克斯'
+    ui.legendCountry = 'ALL'
+    ui.legendEra = 'ALL'
+    const html = renderChallenge()
+    expect(html).toContain('掉落技能书')
+    expect(html).toContain('传奇技能书')
+    expect(html).toContain('训练狂人')
+    expect(html).toContain('彩')
+    ui.legendSearch = ''
+  })
+
   it('传奇档位筛选和杯赛分组预览可渲染', () => {
     ui.challengeMode = 'legend'
     ui.legendTier = 'S+'

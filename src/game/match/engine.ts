@@ -1266,12 +1266,14 @@ export class MatchEngine {
       candidates.push(choice)
     }
 
-    if (carrier.position !== 'GK' && carrierGoalDistance <= 56 && Math.abs(carrier.y - GOAL_Y) < 36) {
+    const shootRange = carrier.skills.includes('lg_super_long_shot') ? (carrier.skillTiers?.lg_super_long_shot === 'rainbow' ? 70 : 66) : 56
+    if (carrier.position !== 'GK' && carrierGoalDistance <= shootRange && Math.abs(carrier.y - GOAL_Y) < 36) {
       const goal = { x: goalXOf(carrier.side), y: GOAL_Y }
       const model = this.shotModel(carrier, team, opp, { point: carrier, header: false, penalty: false, freeKick: false })
       const p = model.pGoal
       const tactical = carrier.role === 'st_finisher' ? 0.02 : 0
-      const chanceValue = this.shotChanceValue(model.chance.type)
+      const opportunist = carrier.skills.includes('lg_opportunist') ? (carrier.skillTiers?.lg_opportunist === 'rainbow' ? 1.5 : 1.35) : 1
+      const chanceValue = this.shotChanceValue(model.chance.type) * opportunist
       const choice: ActionChoice = {
         kind: 'shoot',
         point: goal,
@@ -1283,7 +1285,8 @@ export class MatchEngine {
         chanceType: model.chance.type,
       }
       // 远距离的低质量起脚不再和禁区里的机会等价：距离越远，越倾向再传一脚。
-      const distancePenalty = Math.max(0, carrierGoalDistance - 20) * 0.002
+      let distancePenalty = Math.max(0, carrierGoalDistance - 20) * 0.002
+      if (carrier.skills.includes('lg_super_long_shot')) distancePenalty *= carrier.skillTiers?.lg_super_long_shot === 'rainbow' ? 0.5 : 0.65
       choice.q = p * 1 + (1 - p) * -0.03 + chanceValue * 0.22 - distancePenalty - 3 * 0.0012 - 0.2 * 0.0005 + tactical
       candidates.push(choice)
     }
@@ -1319,7 +1322,8 @@ export class MatchEngine {
     }
 
     const decisionQuality = this.eff(carrier, 'decisions', { pressured: pressure > 0.4 })
-    const sigma = 0.012 + (100 - decisionQuality) * 0.0011
+    let sigma = 0.012 + (100 - decisionQuality) * 0.0011
+    if (carrier.skills.includes('lg_calm_mind')) sigma *= carrier.skillTiers?.lg_calm_mind === 'rainbow' ? 0.69 : 0.78
     const scored = candidates.map((candidate) => {
       const q = (candidate as ActionChoice & { q?: number }).q ?? 0
       const qHat = q + this.decisionRng.range(-sigma, sigma)

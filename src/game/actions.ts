@@ -31,10 +31,11 @@ import { attrLabel } from './data/attributes.ts'
 import { keyAttrsOf } from './data/key-attrs.ts'
 import { normalizeCeilings } from './data/attr-profile.ts'
 import { isGoalkeeper } from './ca.ts'
+import { canUseBookOnPlayer } from './legend-learning.ts'
 import { MAIN_ATTR_MAX, attrLimit, mainAttrsFor } from './rating.ts'
 import { settleEnergy } from './energy.ts'
 
-export function startTraining(game: GameState, playerId: string, seed?: number): { ok: boolean; error?: string } {
+export function startTraining(game: GameState, playerId: string, seed?: number, bookKeys?: string[]): { ok: boolean; error?: string } {
   const running = game.training[playerId]
   if (running && !running.completed) return { ok: false, error: '该球员已有一轮培养' }
   const player = game.roster.find((item) => item.id === playerId)
@@ -49,8 +50,14 @@ export function startTraining(game: GameState, playerId: string, seed?: number):
   if (running?.completed || game.candidates[playerId]) closeFinishedTraining(game, playerId)
   player.energy = Math.max(0, energy - TRAINING_ENERGY_COST)
   const economy = economyOf(game)
+  const keys = [...new Set(bookKeys ?? [])]
+  const books = keys.map((key) => game.legendBooks?.find((book) => `${book.id}:${book.tier}` === key)).filter((book): book is NonNullable<typeof book> => !!book)
+  if (books.length !== keys.length) return { ok: false, error: '技能书不在库存里，可能已被移除' }
+  if (books.length > 4) return { ok: false, error: '一轮培养最多带 4 本技能书' }
+  const unusable = books.find((book) => !canUseBookOnPlayer(player, book).ok)
+  if (unusable) return { ok: false, error: `这本书当前不能使用：${canUseBookOnPlayer(player, unusable).reason ?? '位置或技能槽不匹配'}` }
   // 每轮都从原始属性开始，和他现在装备哪张卡无关。
-  const session = createTrainingSession(untrainedPlayer(player), seed ?? newTrainingSeed(game, playerId), { stadium: economy.stadium, academy: economy.academy, medical: economy.medical, shop: economy.shop, sponsor: economy.sponsor, psychology: economy.psychology, tactics: economy.tactics })
+  const session = createTrainingSession(untrainedPlayer(player), seed ?? newTrainingSeed(game, playerId), { stadium: economy.stadium, academy: economy.academy, medical: economy.medical, shop: economy.shop, sponsor: economy.sponsor, psychology: economy.psychology, tactics: economy.tactics }, 1, books)
   session.scheduleSeed = splitSeed(game.seed, 'training-calendar')
   // 候选卡只是一份属性快照：精力时钟和不满属于球员本人，不跟着进卡。
   delete session.candidate.energyAt
@@ -125,13 +132,13 @@ export function pickSupportPartners(
 }
 
 /** 开始一轮带陪练的培养：系统自动选 6 人，陪练不消耗精力、不涨属性。 */
-export function startTrainingWithSupport(game: GameState, playerId: string, seed?: number): { ok: boolean; error?: string } {
+export function startTrainingWithSupport(game: GameState, playerId: string, seed?: number, bookKeys?: string[]): { ok: boolean; error?: string } {
   const running = game.training[playerId]
   if (running && !running.completed) return { ok: false, error: '该球员已有一轮培养' }
   const trainingSeed = seed ?? newTrainingSeed(game, playerId)
   const partners = pickSupportPartners(game, playerId, trainingSeed)
   if (!partners) return { ok: false, error: '陪练队友不足：需要 6 名其他球员，外场球员还要有至少 1 名其他门将' }
-  const result = startTraining(game, playerId, trainingSeed)
+  const result = startTraining(game, playerId, trainingSeed, bookKeys)
   if (!result.ok) return result
   game.training[playerId].partnerIds = partners
   saveGame(game)
@@ -709,7 +716,7 @@ export function startLegendChallenge(game: GameState, legendId: string, now = Da
   ensurePve(game)
   const played = game.pve?.legends?.[legendId]?.played ?? 0
   const seed = splitSeed(game.seed, `legend-${legendId}-${played}`)
-  const result = startChallengeAgainstTeam(game, ai, seed, now, 'legend')
+  const result = startChallengeAgainstTeam(game, ai, seed, now, 'legend', undefined, undefined, { allowDraw: true })
   if (result.ok) saveGame(game)
   return { ok: result.ok, error: result.error }
 }

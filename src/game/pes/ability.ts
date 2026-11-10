@@ -9,6 +9,8 @@
  */
 import type { TraitCondition } from '../data/star-traits.ts'
 import { MatchRatings } from '../match/ratings.ts'
+import { legendMultiplier } from '../legend-bonus.ts'
+import { progressOf, wideZone } from '../match/pitch.ts'
 import type { MatchEventContext, MatchPlayerState } from '../match/types.ts'
 import { ALL_ATTRIBUTES, type AttrKey } from '../types.ts'
 import type { Abilities } from './spec.ts'
@@ -22,7 +24,18 @@ export class MotionRatings extends MatchRatings {
     this.livePlayers.set(rested, player)
     const attrs: AttrRecord = {}
     for (const key of ALL_ATTRIBUTES) attrs[key] = this.eff(rested, key, ctx)
-    return abilityOf(attrs)
+    const abilities = abilityOf(attrs)
+    let stamina = abilities.stamina
+    if (player.skills.includes('lg_marathon')) stamina += 0.08 * legendMultiplier(player, 'lg_marathon')
+    if (player.skills.includes('lg_second_half_legs') && this.matchProgress() >= 0.5) stamina += 0.15 * legendMultiplier(player, 'lg_second_half_legs')
+    if (player.position === 'GK' && player.skills.includes('lg_gk_economy')) stamina += 0.08 * legendMultiplier(player, 'lg_gk_economy')
+    if (player.skills.includes('lg_defensive_economy') && progressOf(player.side, player.x) < 0.5) stamina += 0.2 * legendMultiplier(player, 'lg_defensive_economy')
+    if (player.skills.includes('lg_off_ball_economy') && !ctx.inBox) stamina += 0.15 * legendMultiplier(player, 'lg_off_ball_economy')
+    if (player.skills.includes('lg_press_machine')) stamina += 0.15 * legendMultiplier(player, 'lg_press_machine')
+    if (player.skills.includes('lg_wing_engine') && wideZone(player)) stamina += 0.2 * legendMultiplier(player, 'lg_wing_engine')
+    if (player.skills.includes('lg_stamina_regen')) stamina += 0.1 * legendMultiplier(player, 'lg_stamina_regen')
+    abilities.stamina = clamp01(stamina)
+    return abilities
   }
 
   override traitConditionMet(player: MatchPlayerState, when: TraitCondition, ctx: MatchEventContext = {}): boolean {

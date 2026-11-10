@@ -9,6 +9,7 @@ import { partnerAssignment, trainingDate, trainingOptions, type TrainingActivity
 import { baseBuild, playerCards } from '../../game/cards.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
 import { getSkillTier } from '../../game/inheritance.ts'
+import { bookKey, bookLearnChance, bookName, bookRequirementText, bookTierLabel, canUseBookOnPlayer, eventForSession } from '../../game/legend-learning.ts'
 import { keyAttrsOf } from '../../game/data/key-attrs.ts'
 import { activityColor, attrColor, attributeRadar, attrHeat, caHeat, cardName, cardSelect, icon, mainAttrs, meter, pageHead, panel, posBadge, primaryPosition, skillGroups, skillTierLabel, tag, tile, traitLabel } from '../components.ts'
 import { attrLabel, attrValue, caDelta, displayEventHint, esc, gainText, pct, playerCA, positionLabel, skillName, trainingLogText } from '../format.ts'
@@ -173,6 +174,30 @@ function attrCompareTable(current: Player, candidate: Player): string {
   return `<table class="dt"><thead><tr><th>属性</th><th class="num">当前</th><th class="num">新卡</th><th class="num">变化</th></tr></thead><tbody>${rows}</tbody></table>`
 }
 
+function bookPicker(player: Player): string {
+  const books = game.legendBooks ?? []
+  if (!books.length) return ''
+  const selected = new Set(ui.trainingBookIds)
+  const rows = books.map((book) => {
+    const key = bookKey(book)
+    const check = canUseBookOnPlayer(player, book)
+    const checked = selected.has(key)
+    const chance = bookLearnChance(player, book)
+    const reason = check.ok ? '' : ` · ${check.reason}`
+    return `<label class="check-field ${check.ok ? '' : 'muted'}" title="${esc(reason)}">
+      <input type="checkbox" data-training-book="${esc(key)}" ${checked ? 'checked' : ''} ${!check.ok || (!checked && selected.size >= 4) ? 'disabled' : ''}>
+      <span><b>${esc(bookTierLabel(book.tier))}·${esc(bookName(book.id))}</b><small class="muted"> 要求 ${esc(bookRequirementText(book))} · 成功率 ${Math.round(chance * 100)}%${esc(reason)}</small></span>
+    </label>`
+  }).join('')
+  return panel(`传奇技能书槽 <small>${selected.size} / 4</small>`, `<p class="hint pad">每轮最多带 4 本；书不会消耗，学习成功与否都留在库存。失败后同一本还能再触发一次。</p><div class="check-grid">${rows}</div>`, { flush: true })
+}
+
+function bookLoadout(session: TrainingSession): string {
+  if (!session.books?.length) return ''
+  const rows = session.books.map((book) => `<div class="row-line"><span>${esc(bookTierLabel(book.tier))} · ${esc(bookRequirementText(book))}</span><b>${Math.round(bookLearnChance(session.candidate, book) * 100)}%</b></div>`).join('')
+  return panel(`本轮技能书槽 <small>${session.books.length} / 4</small>`, `<div class="rows">${rows}</div><p class="hint pad">书不消耗；12/14/16/18 次行动前各有一次保底学习事件。</p>`, { flush: true })
+}
+
 function renderTrainingStart(player: Player): string {
   const energy = player.energy ?? 100
   const enough = energy >= TRAINING_ENERGY_COST
@@ -189,6 +214,7 @@ function renderTrainingStart(player: Player): string {
       </div>
     `, { className: 'training-start', aside: posBadge(primaryPosition(player)) })}
     ${panel('培养起点：原始属性', `<div class="radar-pair">${attributeRadar(base, undefined, 208, true)}<div>${attrList(base)}</div></div>`)}
+    ${bookPicker(player)}
   </div>`
 }
 
@@ -202,7 +228,7 @@ function renderTrainingPlayer(player: Player): string {
   if (!session && !candidate) return renderTrainingStart(player)
   const currentSession = session!
   const cand = candidate ?? currentSession.candidate
-  const pendingEvent = currentSession.pendingEventId ? eventById(currentSession.pendingEventId) : null
+  const pendingEvent = currentSession.pendingEventId ? eventForSession(currentSession, currentSession.pendingEventId) : null
   const showAction = !pendingEvent && !currentSession.completed && !candidate
   return `
     ${trainingHeader(player, currentSession, cand)}
@@ -221,6 +247,7 @@ function renderTrainingPlayer(player: Player): string {
           </div>
           ${currentSession.completed || candidate ? '' : `${attrCompareTable(player, cand)}<div class="side-skills">${skillGroups(cand)}</div>`}
         `, { aside: `<span class="muted small">CA ${playerCA(player).toFixed(1)} → ${playerCA(cand).toFixed(1)}</span>` })}
+        ${bookLoadout(currentSession)}
         ${currentSession.scheduleVersion === 1 && currentSession.exchangeMatches?.length ? panel('交流赛记录', `<div class="rows">${currentSession.exchangeMatches.map((match) => `<div class="row-line"><span>第 ${match.week} 周 · ${esc(match.opponentName)}${match.ownRating !== undefined ? ` <small class="muted">RANK ${match.ownRating} 对 ${match.opponentRating}</small>` : ''}</span><b>${match.homeScore}:${match.awayScore}</b><span class="form f-${match.result === 'win' ? 'W' : match.result === 'loss' ? 'L' : 'D'}">${{ win: '胜', draw: '平', loss: '负' }[match.result]}</span></div>`).join('')}</div>`, { flush: true }) : ''}
       </div>
     </div>
@@ -465,11 +492,11 @@ function eventPanel(session: TrainingSession, event: NonNullable<ReturnType<type
     <p class="event-text">${esc(event.text)}</p>
     <div class="options">
       ${event.options.map((option) => {
-        const p = option.branch ? branchProbability(session, option.branch.check, option.branch.p) : undefined
+        const p = option.book ? bookLearnChance(session.candidate, option.book) : option.branch ? branchProbability(session, option.branch.check, option.branch.p) : undefined
         return `<button class="option" data-action="event-option" data-option="${esc(option.id)}">
-          <span class="option-head"><b>${esc(option.label)}</b>${p !== undefined ? `<span class="prob">${esc(option.branch?.chanceText ?? '成功率')} ${pct(p, 0)}</span>` : ''}</span>
+          <span class="option-head"><b>${esc(option.label)}</b>${p !== undefined ? `<span class="prob">${option.book ? '成功率' : esc(option.branch?.chanceText ?? '成功率')} ${pct(p, 0)}</span>` : ''}</span>
           <span class="option-hint">${esc(displayEventHint(option.hint, isGk, eventGrowthScale(session)))}</span>
-          ${option.branch ? `<span class="branch-preview"><span class="up">成功：${esc(option.branch.success.text ?? '')}</span><span class="down">失败：${esc(option.branch.failure.text ?? '')}</span></span>` : ''}
+          ${option.branch ? `<span class="branch-preview"><span class="up">成功：${esc(option.branch.success.text ?? '')}</span><span class="down">失败：${esc(option.branch.failure.text ?? '')}</span></span>` : option.book ? `<span class="branch-preview"><span class="up">成功：学会并保留书</span><span class="down">失败：疲劳 +6，书保留</span></span>` : ''}
         </button>`
       }).join('')}
     </div>

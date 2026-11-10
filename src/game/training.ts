@@ -22,6 +22,8 @@ import { FACILITY_STAGE_VERSION, MAX_FACILITY_LEVEL, MAX_FACILITY_STAGE, STAGES_
 import { addTrainedCard, closeFinishedTraining, deleteCard, equipCard } from './cards.ts'
 import { attrLimit, attrMax, attrRating, MAIN_ATTR_MAX, displayGain, isMainAttr, scaleAuthoredGains } from './rating.ts'
 import { inheritanceChances, mentorSkill, validateInheritance } from './inheritance.ts'
+import { bookEvents, bookLearnChance, eventForSession, grantBookSkill, bookTierLabel } from './legend-learning.ts'
+import { legendMultiplier, legendValue } from './legend-bonus.ts'
 import { partnerAssignment, trainingDate, trainingLowMood, trainingOptions, type TrainingActivityId } from './training-calendar.ts'
 
 export const ACTIONS_PER_ROUTE = 30
@@ -121,7 +123,7 @@ function sessionWeek(session: TrainingSession, action: number): number {
 /** 没有显式快照时的默认阶段：1 级满阶段，保留旧课程测试的满额加成。 */
 const DEFAULT_STAGE = STAGES_PER_LEVEL
 
-export function createTrainingSession(player: Player, seed: number, snapshot: TrainingSession['facilityLevels'] | number = { stadium: DEFAULT_STAGE, academy: DEFAULT_STAGE, medical: DEFAULT_STAGE, shop: DEFAULT_STAGE, sponsor: DEFAULT_STAGE, psychology: DEFAULT_STAGE, tactics: DEFAULT_STAGE }, stadiumLevel = 1): TrainingSession {
+export function createTrainingSession(player: Player, seed: number, snapshot: TrainingSession['facilityLevels'] | number = { stadium: DEFAULT_STAGE, academy: DEFAULT_STAGE, medical: DEFAULT_STAGE, shop: DEFAULT_STAGE, sponsor: DEFAULT_STAGE, psychology: DEFAULT_STAGE, tactics: DEFAULT_STAGE }, stadiumLevel = 1, books?: TrainingSession['books']): TrainingSession {
   // 旧的三参数写法传的是等级，换算成阶段后与新的存档格式一致。
   const levels = typeof snapshot === 'number'
     ? { stadium: stadiumLevel * STAGES_PER_LEVEL, academy: snapshot * STAGES_PER_LEVEL, medical: DEFAULT_STAGE, shop: DEFAULT_STAGE, sponsor: DEFAULT_STAGE, psychology: DEFAULT_STAGE, tactics: DEFAULT_STAGE }
@@ -145,6 +147,7 @@ export function createTrainingSession(player: Player, seed: number, snapshot: Tr
     scheduleSeed: seed,
     playerId: player.id,
     seed,
+    ...(books?.length ? { books: books.slice(0, 4) } : {}),
     candidate,
     facilityLevels: { ...levels },
     facilityStageVersion: FACILITY_STAGE_VERSION,
@@ -254,7 +257,12 @@ function trainingCeilings(session: TrainingSession): Player['ceilings'] {
   const gk = candidateIsGk(session)
   // 每个属性只练到球员自己的上限（由画像与星级决定），不再统一到 1500。
   // 旧存档候选若缺少 ceilings，回退到该属性的绝对上限。
-  return normalizeCeilings(session.candidate.attrs, session.candidate.ceilings, (key) => attrLimit(key, gk))
+  const ceilings = normalizeCeilings(session.candidate.attrs, session.candidate.ceilings, (key) => attrLimit(key, gk))
+  const breakBonus = legendValue(session.candidate, 'lg_ceiling_break', 200)
+  if (breakBonus > 0) {
+    for (const key of mainKeysForTraining(gk)) ceilings[key] = Math.min(attrLimit(key, gk), ceilings[key] + breakBonus)
+  }
+  return ceilings
 }
 
 // Authored gains are already in storage units. The facility bonus replaces the
@@ -317,8 +325,9 @@ export function trainingQuality(session: TrainingSession): { label: string; mult
   const failure = failureChance(stamina)
   const plain = plainChance(stamina)
   const canCrit = stamina > FAILURE_STAMINA
-  const perfect = canCrit ? PERFECT_CHANCE : 0
-  const great = canCrit ? GREAT_CHANCE : 0
+  const fastLearner = legendValue(session.candidate, 'lg_fast_learner', 0.05)
+  const perfect = canCrit ? PERFECT_CHANCE + fastLearner : 0
+  const great = canCrit ? GREAT_CHANCE + fastLearner : 0
   if (roll < failure) return { label: '失败', multiplier: QUALITY_MULTIPLIER.failure }
   if (roll >= 1 - perfect) return { label: '完美成功', multiplier: QUALITY_MULTIPLIER.perfect }
   if (roll >= 1 - perfect - great) return { label: '大成功', multiplier: QUALITY_MULTIPLIER.great }
@@ -335,14 +344,34 @@ function gainSpread(session: TrainingSession, key: AttrKey): number {
   return 1 + (roll * 2 - 1) * GAIN_SPREAD
 }
 
-function actionGains(session: TrainingSession, gains: Partial<Record<AttrKey, number>>, multiplier: number, teammates: number) {
+function mainKeysForTraining(gk: boolean): AttrKey[] {
+  return gk
+    ? ['reflexes', 'handling', 'rushing', 'oneOnOne', 'passing', 'composure']
+    : ['passing', 'shooting', 'dribbling', 'tackling', 'strength', 'speed', 'acceleration']
+}
+
+function trainingFatigueCost(session: TrainingSession, base: number): number {
+  return Math.max(0, Math.round(base * (1 - legendValue(session.candidate, 'lg_iron_constitution', 0.2))))
+}
+
+function legendGrowthMultiplier(session: TrainingSession, key: AttrKey, kind: string): number {
+  const candidate = session.candidate
+  let multiplier = 1
+  if (kind === 'drill') multiplier += legendValue(candidate, 'lg_drill_master', 0.12)
+  if (kind === 'match') multiplier += legendValue(candidate, 'lg_match_ready', 0.25)
+  if ((['acceleration', 'speed', 'agility', 'strength'] as AttrKey[]).includes(key)) multiplier += legendValue(candidate, 'lg_physical_gift', 0.2)
+  if ((['passing', 'shooting', 'dribbling', 'firstTouch'] as AttrKey[]).includes(key)) multiplier += legendValue(candidate, 'lg_technical_gift', 0.2)
+  return multiplier
+}
+
+function actionGains(session: TrainingSession, gains: Partial<Record<AttrKey, number>>, multiplier: number, teammates: number, kind = 'other') {
   // 失败：这次行动没有任何属性成长（队友、设施、心情加成也一并免谈）。
   if (!(multiplier > 0)) return applyTrainingGains(session, {})
   const gk = candidateIsGk(session)
   const scaled = scaleAuthoredGains(gains, gk)
   // 主属性的基础值先浮动 ±10%，再乘品质，最后加队友；隐藏属性不浮动。
   const withTeam = Object.fromEntries((Object.entries(scaled) as [AttrKey, number][]).map(([key, value]) =>
-    [key, value > 0 ? value * (isMainAttr(key, gk) ? gainSpread(session, key) : 1) * multiplier + partnerBonusPerMate(session) * teammates * attrMax(key, gk) / MAIN_ATTR_MAX : value]))
+    [key, value > 0 ? value * (isMainAttr(key, gk) ? gainSpread(session, key) : 1) * multiplier * legendGrowthMultiplier(session, key, kind) + partnerBonusPerMate(session) * teammates * attrMax(key, gk) / MAIN_ATTR_MAX : value]))
   return applyTrainingGains(session, moodGains(session, facilityGains(session, withTeam), session.action + 1))
 }
 
@@ -382,11 +411,11 @@ export function planTraining(session: TrainingSession, request: TrainingRequest,
       const plan = planLegacyTraining(session, legacy, mentor, teammateCount, hideQuality)
       return { ...plan, label: activity.label, text: activity.desc, ...(activity.noRecovery ? { fatigue: 0, note: undefined } : {}) }
     }
-    const cost = activity.cost!
+    const cost = trainingFatigueCost(session, activity.cost!)
     if (session.fatigue + cost > 100) return emptyPlan(activity.label, `训练体力不足，需要 ${cost} 点，请先休息。`, before)
     const quality = hideQuality ? { label: '成功', multiplier: QUALITY_MULTIPLIER.success } : trainingQuality(session)
     const gains = candidateIsGk(session) ? activity.goalkeeperGains ?? activity.gains! : activity.gains!
-    const result = actionGains(session, gains, quality.multiplier, teammateCount)
+    const result = actionGains(session, gains, quality.multiplier, teammateCount, activity.id === 'match' || activity.id === 'exchange' ? 'match' : 'other')
     return { kind: 'activity', label: activity.label, text: activity.desc, gains: result.actual, fatigue: cost, energyCost: 0, error: false, quality, caBefore: result.caBefore, caAfter: result.caAfter, scale: result.scale, cappedByCeiling: result.cappedByCeiling, cappedByPa: result.cappedByPa, note: result.cappedByCeiling ? '部分属性已达各自上限' : undefined }
   }
   if (request.kind === 'activity') return emptyPlan('培养', '旧课程不支持日历项目。', before)
@@ -400,7 +429,7 @@ function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingR
   const requestedCost = request.kind === 'drill' ? 12 : request.kind === 'combo' ? 16 : request.kind === 'match' ? 25 :
     request.kind === 'position' || request.kind === 'protection' || request.kind === 'inherit' ? 8 : 0
   // 新课程里的交流赛和队内比赛是必须参加的，不消耗训练体力；作为交换，周五下午的休整不恢复体力。
-  const cost = session.scheduleVersion === 1 && request.kind === 'match' ? 0 : requestedCost
+  const cost = session.scheduleVersion === 1 && request.kind === 'match' ? 0 : trainingFatigueCost(session, requestedCost)
   if (session.fatigue + cost > 100) return emptyPlan('训练体力不足', `训练体力不足，需要 ${cost} 点，请先休息。`, before)
   if (request.kind === 'drill') {
     const attr = request.attr
@@ -422,8 +451,8 @@ function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingR
     const gains: Partial<Record<AttrKey, number>> = { [attr]: mainGain }
     if (related) gains[related] = 1
     const quality = hideQuality ? { label: '成功', multiplier: QUALITY_MULTIPLIER.success } : trainingQuality(session)
-    const result = actionGains(session, gains, quality.multiplier, teammateCount)
-    const fatigue = 12
+    const result = actionGains(session, gains, quality.multiplier, teammateCount, 'drill')
+    const fatigue = trainingFatigueCost(session, 12)
     const noteParts: string[] = []
     if (result.cappedByCeiling) noteParts.push('部分属性已达各自上限')
     if (related) noteParts.push(`相关属性：${attrLabel(related)}`)
@@ -458,13 +487,13 @@ function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingR
       [third]: 0.5,
     }
     const quality = hideQuality ? { label: '成功', multiplier: QUALITY_MULTIPLIER.success } : trainingQuality(session)
-    const result = actionGains(session, gains, quality.multiplier, teammateCount)
+    const result = actionGains(session, gains, quality.multiplier, teammateCount, 'combo')
     return {
       kind: 'combo',
       label: attack ? '配合训练 · 进攻' : '配合训练 · 防守',
       text: attack ? '短传、接应、跑位与团队合作同步练习。' : '站位、抢断、预判与补位同步练习。',
       gains: result.actual,
-      fatigue: 16,
+      fatigue: trainingFatigueCost(session, 16),
       energyCost: 0,
       error: false,
       quality,
@@ -480,7 +509,7 @@ function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingR
     const key: AttrKey = isGk ? 'reflexes' : 'speed'
     const gains: Partial<Record<AttrKey, number>> = { passing: 2, [key]: 2, teamwork: 1 }
     const quality = hideQuality ? { label: '成功', multiplier: QUALITY_MULTIPLIER.success } : trainingQuality(session)
-    const result = actionGains(session, gains, quality.multiplier, teammateCount)
+    const result = actionGains(session, gains, quality.multiplier, teammateCount, 'match')
     return {
       kind: 'match', label: '队内比赛', text: '高强度队内比赛，综合练习传球与身体或扑救。',
       gains: result.actual, fatigue: cost, energyCost: 0, error: false, quality,
@@ -533,7 +562,7 @@ function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingR
   }
   if (request.kind === 'rest') {
     // 站在恢复上的陪练：每人多恢复一点训练体力。
-    const recovery = 30 + REST_PARTNER_RECOVERY * teammateCount
+    const recovery = (30 + REST_PARTNER_RECOVERY * teammateCount) * (1 + legendValue(session.candidate, 'lg_recovery_pro', 0.3))
     return {
       kind: 'rest',
       label: '休息',
@@ -589,7 +618,7 @@ function emptyPlan(label: string, text: string, ca: number): TrainingPlan {
 
 export function eligibleEvents(session: TrainingSession, action = session.action): EventDef[] {
   const isGk = candidateIsGk(session)
-  return EVENTS.filter((event) => {
+  return [...EVENTS, ...bookEvents(session)].filter((event) => {
     const trigger = event.trigger
     if (event.once !== false) {
       if (session.flags.includes(event.id)) return false
@@ -840,7 +869,7 @@ export type ResolveResult = {
 
 export function resolveTrainingEvent(session: TrainingSession, optionId: string): ResolveResult {
   if (!session.pendingEventId) return { ok: false, error: '当前没有待处理事件', completed: session.completed }
-  const event = eventById(session.pendingEventId)
+  const event = eventForSession(session, session.pendingEventId)
   if (!event) return { ok: false, error: '未知事件配置', completed: session.completed }
   const option = event.options.find((item) => item.id === optionId)
   if (!option) return { ok: false, error: '未知选项', completed: session.completed }
@@ -849,7 +878,18 @@ export function resolveTrainingEvent(session: TrainingSession, optionId: string)
   let success: boolean | undefined
   let probability: number | undefined
   let roll: number | undefined
-  if (option.branch) {
+  if (option.book) {
+    // 书用平方曲线，不能复用 branchProbability 的线性公式。
+    const chance = bookLearnChance?.(session.candidate, option.book) ?? 0
+    probability = chance
+    roll = rng.float()
+    success = roll < chance
+    effect = success
+      ? { text: `你照着书练成了${bookTierLabel(option.book.tier)}《${SKILLS[option.book.id].name}》。`, bookSkill: option.book }
+      : { text: `这本${bookTierLabel(option.book.tier)}《${SKILLS[option.book.id].name}》的动作没做顺，书还在包里。`, fatigue: 6 }
+    probability = Math.round(probability * 1000) / 1000
+    roll = Math.round(roll * 1000) / 1000
+  } else if (option.branch) {
     probability = branchProbability(session, option.branch.check, option.branch.p)
     roll = rng.float()
     success = roll < probability
@@ -927,6 +967,14 @@ function applyEventEffect(session: TrainingSession, effect: EventEffect): { gain
     } else {
       session.candidate.skills = [...session.candidate.skills, grantSkill]
       notes.push(`学会技能`)
+    }
+  }
+  if (effect.bookSkill) {
+    const granted = grantBookSkill(session, effect.bookSkill)
+    if (granted.ok) notes.push(granted.upgraded ? '技能升档成功' : '学会技能')
+    else {
+      gains.decisions = (gains.decisions ?? 0) + 1
+      notes.push(`${granted.reason ?? '无法学习'}，改为提升决策`)
     }
   }
   const eventGains = Object.fromEntries((Object.entries(gains) as [AttrKey, number][]).map(([key, value]) => [key, value * eventGrowthScale(session)]))
