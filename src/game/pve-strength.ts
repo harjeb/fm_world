@@ -10,7 +10,7 @@ export function startingCa(team: AITeam): number {
   return players.reduce((sum, player) => sum + caOf(player.attrs, player.positions.GK > 0), 0) / (players.length || 1)
 }
 
-/** 仅用于离线生成 PvE 内容：保留强弱次序，精确校准首发平均；绝不用于玩家/AI 培养。 */
+/** Calibrate generated PvE opponents while retaining their profile; never use for club training. */
 export function alignPveStrength(source: AITeam, target: number): AITeam {
   if (!(target > 0 && target <= 1500)) throw new Error('PvE 目标 CA 必须在 (0, 1500]')
   const team = structuredClone(source)

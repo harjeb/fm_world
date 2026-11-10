@@ -243,13 +243,13 @@ type TrophyRecord = {
 | 联盟杯 | 16 队 | 4 组 × 4；小组前 2 → 8 强单场 | 7 世界 + 你 + 8 随机 | 中期主力杯 |
 | 冠军杯 | 32 队 | 8 组 × 4；前 2 → 16 强单场；8 强/半决赛两回合；决赛单场 | 11 世界 + 你 + 20 随机 | 高难度，毕业杯 |
 
-- **随机队池**：全局常量 `CUP_SEED` + `CUP_VERSION`，按杯赛生成固定池：社区杯 8 队、联盟杯 12 队、冠军杯 24 队；冻结在 `src/game/data/cup-teams.generated.ts`。所有玩家共享同一批随机队；每个赛季按 `splitSeed(CUP_SEED, 'cup-field-<cupId>-<season>')` 抽取/轮换。
-- **世界队**：社区杯从本分区取，联盟杯从全世界的非冠军联赛取，冠军杯从冠军联赛/高 RANK 球队取；世界队强度跟随存档世界成长。
+- **随机球队**：每季按全局 `CUP_SEED`、杯赛和赛季编号重新生成全部随机队，包括队名、球员、阵型和战术；同一赛季可确定性重建。社区杯 / 联盟杯 / 冠军杯分别保留 4 / 8 / 20 个随机名额，首发 CA 范围为 600–750 / 780–920 / 950–1100。原 `cup-teams.generated.ts` 仅提供强度范围和旧内容兼容，不再作为现役固定名单。
+- **世界队**：每季开始时，社区杯从本分区取 11 队，联盟杯从全世界非冠军联赛取 7 队，冠军杯从冠军联赛取 11 队；不足时由新增随机队补足。采用当季世界的季初阵容，强度在下个赛季随世界球队更新，本季保持稳定。
 - **混合与抽签**：世界队 + 随机队合在一起后按赛季种子洗牌、分组；同一赛季同一杯赛的对阵固定，换季作废后重新抽。
 - **随机队强度**：社区杯约 600–750、联盟杯约 780–920、冠军杯约 950–1100（首发平均 CA）；随机队不随世界成长，保证杯赛始终有“外部强队”。
-- **杯赛定义是配置，不是存档**：增删杯赛不影响旧存档（新杯自动可报名，删掉的杯只是不再出现在报名列表，奖杯记录仍显示）。报名时为每支参赛队保存完整 `AITeam` 快照；之后世界队训练、转会或缓存刷新都不会改变杯赛对手。
+- **季初对手池**：`pve.cupSeason` 保存本季名单、去重后的世界队快照和紧凑的随机队生成定义；预览与报名读取同一份池子，不在报名时刷新阵容。联机服务器额外保留全服本季 `cupOpening`，中途注册和重启都沿用季初名册。旧存档首次升级时补建一次本季池子，已经开始的杯赛及其赛果不变。
 - **传奇杯**（8 队、全部传奇队抽签、特殊奖杯样式）作为后续扩展预留，本版不开放。
-- 换季作废的理由：世界球队名单换季后重建，签表里的队伍引用会失效；随机队池虽然固定，但小组/对阵是按赛季抽的，跨季没有意义。
+- 换季替换本季对手池并归档旧杯赛；历史记录保留签表和比分，移除完整阵容，避免逐季累积快照。
 - **Trophy ceilings**: trophies unlock a club bonus without changing personal `ceilings`; current and future members use personal ceilings plus the club bonus. Migration v3 separates embedded legacy rewards only when all main ceilings match the reproducible original player profile plus the claimed bonus. Unknown profiles or modified ceilings are preserved because old saves did not record the recipients or clipped amounts; an ambiguous embedded reward may therefore remain. Version 2 deductions are inferred from unchanged ceiling entries and the original backups, so later trophies are not refunded as old deductions. If every entry was subsequently changed, the backup and current values are retained as floors; the precise historical gain cannot be reconstructed. Migration is idempotent.
 - **已实装 v2**：`src/game/cup.ts` 生成混合名单/分组，`src/game/cup-run.ts` 负责报名、**按轮**结算 AI 小组赛（不提前泄露未来赛果）、小组积分、同分规则、16/32 队淘汰赛、8 强/半决赛两回合、引擎内点球、完整 `rounds` 签表、奖杯、换季归档。比赛使用报名快照，不随世界名册变化。挑战页已接入报名、继续比赛、积分榜/签表/历届记录和荣誉橱窗。
 
@@ -431,7 +431,7 @@ legendTeamId?: string // mode = 'legend' 时
 
 ### 5.4 PvE 内容快照与历史名单证据
 
-- 50 支传奇队、100 关、44 支杯赛随机队的**完整 Player 属性/位置/技能/首发/替补**冻结在 `src/game/data/pve-snapshots.generated.json`，内容 SHA-256 由 `tests/pve-content.test.ts` 复核；运行时通过 `pve-content.ts` 懒加载，首次进入传奇/杯赛/巅峰才下载，不拖慢普通页面。
+- 50 支传奇队、100 关和 44 支旧版杯赛模板的**完整 Player 属性/位置/技能/首发/替补**冻结在 `src/game/data/pve-snapshots.generated.json`，内容 SHA-256 由 `tests/pve-content.test.ts` 复核；运行时通过 `pve-content.ts` 懒加载，首次进入挑战页面才下载，不拖慢普通页面；当季杯赛随机队按保存的定义生成，不依赖这 44 支旧模板快照。
 - 重新生成：`npm run peak:generate` → `npm run pve:freeze`。快照变化必须同步更新测试/版本；不能只改生成器而不重新冻结。
 - 20 支世界杯国家队的 320 名球员已逐一匹配对应届 `XXXX_FIFA_World_Cup_squads` 名单，并记录号码/年龄证据（`world-cup-evidence.generated.json`）。
 - 50 支俱乐部的赛季页用于纠正明确年代/阵容错误；无法从赛季页核实的少数替补/历史档案仍标为未核实，不随机编造年龄/身高。

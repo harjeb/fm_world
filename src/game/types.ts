@@ -953,6 +953,8 @@ export type CupGroupState = {
 
 export type CupRun = {
   cupId: string
+  /** New runs reference the immutable season pool instead of duplicating full squads. */
+  seasonPool?: boolean
   seasonIndex: number
   status: CupRunStatus
   stage: 'group' | 'r16' | 'qf' | 'sf' | 'final' | 'done'
@@ -1002,6 +1004,8 @@ export type PveState = {
     breakthroughCards?: number
   }
   cups: Record<string, CupRun>
+  /** Season-opening opponents; only the current season is retained. */
+  cupSeason?: import('./cup.ts').CupSeasonState
   cupHistory?: CupRun[]
   /** 已获得的俱乐部奖杯上限加成，每种杯赛只计一次。 */
   cupCeilingClaims?: Partial<Record<string, true>>

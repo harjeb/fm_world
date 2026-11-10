@@ -1,6 +1,6 @@
 import type { AITeam, CupFixture, CupGroupState, CupRun, CupTie, GameState, MatchContext, MatchRecord, TrophyRecord } from './types.ts'
 import { CUP_SEED, cupDefById, type CupId, type CupRound } from './data/cup-config.ts'
-import { buildCupField, buildCupGroups } from './cup.ts'
+import { buildCupField, buildCupGroups, cupSeasonTeam, hasCupSeasonTeam } from './cup.ts'
 import { MatchEngine } from './match/engine.ts'
 import { teamInputFromAI } from './match/setup.ts'
 import { splitSeed } from './rng.ts'
@@ -12,10 +12,15 @@ import { applyCupCeilingReward } from './cup-rewards.ts'
 const ROUND_ORDER: CupRound[] = ['r16', 'qf', 'sf', 'final']
 
 export function cupTeam(game: GameState, run: CupRun, id: string): AITeam | undefined {
-  // 杯赛 AI 一律使用报名时快照，不让后续转会、培养或共享缓存改变对手。
+  // Existing runs retain their snapshots; new runs share the immutable opening pool.
   if (id === 'player') return undefined
   const snapshot = run.participants[id]?.snapshot
-  return snapshot ? structuredClone(snapshot) : undefined
+  if (snapshot) return structuredClone(snapshot)
+  return run.seasonPool && run.seasonIndex === game.pve?.cupSeason?.seasonIndex ? cupSeasonTeam(game, run.cupId as CupId, id) : undefined
+}
+
+export function cupTeamAvailable(game: GameState, run: CupRun, id: string): boolean {
+  return !!run.participants[id]?.snapshot || !!(run.seasonPool && run.seasonIndex === game.pve?.cupSeason?.seasonIndex && hasCupSeasonTeam(game, run.cupId as CupId, id))
 }
 
 function roundSeed(run: CupRun): number {
@@ -49,7 +54,7 @@ function settleGroupRound(game: GameState, run: CupRun, round: number): void {
   }
 }
 
-export function enterCup(game: GameState, cupId: CupId, worldTeams?: readonly AITeam[]): { ok: boolean; error?: string; run?: CupRun } {
+export function enterCup(game: GameState, cupId: CupId): { ok: boolean; error?: string; run?: CupRun } {
   if (game.season.finished) return { ok: false, error: '赛季已结束，下一赛季再报名' }
   if (game.activeMatch) return { ok: false, error: '已有进行中的比赛' }
   const def = cupDefById(cupId)
@@ -58,22 +63,13 @@ export function enterCup(game: GameState, cupId: CupId, worldTeams?: readonly AI
   if (old?.seasonIndex === game.season.index && old.status !== 'void') return { ok: false, error: `本季已经参加过${def.name}` }
   if (!game.pve) return { ok: false, error: '存档缺少 PvE 数据' }
   const field = buildCupField(cupId, game, game.season.index)
-  if (worldTeams) {
-    const shared = new Map(worldTeams.map((team) => [team.id, team]))
-    for (const entry of field) if (entry.kind === 'world') {
-      const snapshot = shared.get(entry.id)
-      if (!snapshot) return { ok: false, error: '杯赛世界队快照不完整，请重试' }
-      entry.team = structuredClone(snapshot)
-      entry.name = snapshot.name
-    }
-  }
   if (field.length !== def.size || new Set(field.map((team) => team.id)).size !== def.size) return { ok: false, error: '可用参赛球队不足，无法报名' }
   const groups = buildCupGroups(cupId, field, game.season.index)
   const run: CupRun = {
+    seasonPool: true,
     cupId, seasonIndex: game.season.index, status: 'active', stage: 'group', groupRound: 1, rounds: [],
     participants: Object.fromEntries(field.map((entry) => [entry.id, {
       name: entry.name, kind: entry.kind, ...(entry.defId ? { defId: entry.defId } : {}),
-      ...(entry.kind !== 'player' ? { snapshot: structuredClone(entry.team) } : {}),
     }])),
     groups: groups.map((group) => ({ index: group.index, teamIds: group.teams.map((entry) => entry.id), fixtures: group.fixtures, table: group.teams.map((entry) => emptyCupRow(entry.id)) })),
     playerGroupIndex: groups.findIndex((group) => group.teams.some((entry) => entry.id === 'player')),
