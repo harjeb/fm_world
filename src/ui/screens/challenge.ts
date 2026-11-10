@@ -22,7 +22,7 @@ const MODE_SUB = {
   friendly: '不计联赛积分，平局直接进入点球大战。挑战比赛不扣体能。',
   legend: '50 支历史俱乐部队；固定阵容与属性，可查看完整首发、替补和 7 项主属性。',
   cup: '两个 16 队杯和一个 32 队杯。世界球队 + 随机队，小组循环后淘汰赛；决赛单场。',
-  peak: '100 关，首发平均 CA 350→1300。前 80 关生成，最后 20 关世界杯国家队，所有玩家对手相同。',
+  peak: '100 关，首发平均 CA 350→1300。前 80 关生成/特别，最后 20 关世界杯国家队，所有玩家对手相同。',
 }
 
 function recordsPanel(records: MatchRecord[], title = '挑战记录'): string {
@@ -70,9 +70,11 @@ function renderPeak(): string {
   const stage = Math.max(1, Math.min(100, selected))
   const def = peakStageDef(stage), team = buildPeakTeam(stage)
   const canPlay = !done && stage === current
+  const kindLabel = def.kind === 'national' ? '世界杯国家队' : def.kind === 'special' ? '动漫全明星' : '生成队'
+  const starCap = def.kind === 'special' ? ` · 球星上限 ${Math.max(...team.players.map((player) => player.pa)).toFixed(0)}` : ''
   return `<div class="kpi-row">${tile('已通关', `${cleared} / ${PEAK_STAGE_COUNT}`)}${tile('当前关', done ? '全部完成' : String(current))}${tile('浏览关卡', String(stage))}${tile('首发平均 CA', String(Math.round(startingCa(team))))}</div>
     ${panel('进度 · 点击任意关卡预览', `<div class="peak-track" aria-label="巅峰之路关卡">${Array.from({ length: 100 }, (_, i) => `<button class="peak-cell ${i < cleared ? 'done' : ''} ${i + 1 === current && !done ? 'current' : ''} ${i >= 80 ? 'national' : ''}" data-peak-preview="${i + 1}" aria-label="第 ${i + 1} 关${i < cleared ? '，已通关' : i + 1 === current ? '，当前关' : '，未解锁'}" aria-pressed="${i + 1 === stage}">${i + 1}</button>`).join('')}</div><p class="hint pad">绿色已通关，高亮为当前关；81–100 关为世界杯国家队。只能挑战当前关，但可以预览全部关卡。</p>`, { flush: true })}
-    ${panel(done ? '100 关全部通关 · 对手预览' : canPlay ? '当前对手' : '关卡预览', `<div class="peak-current"><div class="peak-stage-no">第 ${stage} 关</div><div class="peak-stage-main"><b>${esc(team.name)}</b><span>${def.kind === 'national' ? '世界杯国家队' : '生成队'} · ${team.formationId} · ${esc(tacticText(team.tactics))}</span><span>核心：${esc(coreNames(team))}</span></div><div class="peak-stage-ca"><span>目标 CA ${def.targetCa}</span><b>${startingCa(team).toFixed(0)}</b></div>${pveTeamButton(`peak:${stage}`)}<button class="btn" data-action="start-peak-stage" data-stage="${stage}" ${!canPlay || game.activeMatch ? 'disabled' : ''}>${canPlay ? '挑战' : '仅预览'}</button></div>`, { flush: true })}
+    ${panel(done ? '100 关全部通关 · 对手预览' : canPlay ? '当前对手' : '关卡预览', `<div class="peak-current"><div class="peak-stage-no">第 ${stage} 关</div><div class="peak-stage-main"><b>${esc(team.name)}</b><span>${kindLabel} · ${team.formationId} · ${esc(tacticText(team.tactics))}${starCap}</span><span>核心：${esc(coreNames(team))}</span></div><div class="peak-stage-ca"><span>目标 CA ${def.targetCa}</span><b>${startingCa(team).toFixed(0)}</b></div>${pveTeamButton(`peak:${stage}`)}<button class="btn" data-action="start-peak-stage" data-stage="${stage}" ${!canPlay || game.activeMatch ? 'disabled' : ''}>${canPlay ? '挑战' : '仅预览'}</button></div>`, { flush: true })}
     ${recordsPanel(game.challengeHistory.filter((record) => record.mode === 'peak'), '最近闯关')}
     <p class="hint pad">对手固定，胜利推进下一关；失败可重试。调整阵容、战术不会受关卡预览影响。</p>`
 }

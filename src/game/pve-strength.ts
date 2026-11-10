@@ -52,3 +52,19 @@ export function alignPveStrength(source: AITeam, target: number): AITeam {
   }
   return team
 }
+
+/**
+ * 只给特别 Boss 使用：保留当前 attrs/首发 CA 不变，把 ceilings/PA 拉到球星上限。
+ * 比赛只读 attrs，所以不会改变关卡难度；潜力数据用于展示和未来的成长玩法。
+ */
+export function applyStarPotential(team: AITeam, potentialCa = 1500): AITeam {
+  const result = structuredClone(team)
+  const potential = alignPveStrength(structuredClone(team), potentialCa)
+  const byId = new Map(potential.players.map((player) => [player.id, player]))
+  for (const player of result.players) {
+    const target = byId.get(player.id)!
+    player.ceilings = { ...target.attrs }
+    player.pa = target.pa
+  }
+  return result
+}

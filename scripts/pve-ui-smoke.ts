@@ -82,6 +82,9 @@ try {
   await wait(`document.querySelectorAll('[data-action="start-legend-challenge"]').length > 0 && document.querySelectorAll('[data-action="start-legend-challenge"]').length < 50`)
   await screenshot('legend-desktop')
   await click('[data-challenge-mode="peak"]')
+  await click('[data-peak-preview="50"]')
+  await wait(`document.body.innerText.includes('足球小将') && document.body.innerText.includes('球星上限 1500')`)
+  await screenshot('peak-stage-50')
   await click('[data-peak-preview="100"]')
   await wait(`document.body.innerText.includes('1300') && document.querySelector('[data-action="start-peak-stage"]').disabled`)
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true })
@@ -102,7 +105,7 @@ try {
   await wait(`document.body.innerText.includes('小组赛') && document.body.innerText.includes('战报')`)
   await screenshot('cup-mobile-resume')
   if (errors.length) throw new Error(errors.join('\n'))
-  console.log('PvE 浏览器冒烟通过：默认 B 档、自由切换档位、桌面/390px、筛选、7 项主属性、100 关预览、报名比赛、刷新续赛；不访问线上账号/数据。')
+  console.log('PvE 浏览器冒烟通过：默认 B 档、自由切换档位、第 50 关足球小将、桌面/390px、筛选、7 项主属性、100 关预览、报名比赛、刷新续赛；不访问线上账号/数据。')
 } catch (error) {
   await screenshot('failure').catch(() => {})
   console.error(await evaluate('document.body.innerText.slice(-4000)').catch(() => 'page unavailable'))

@@ -6,7 +6,7 @@ export type PeakStageDef = {
   stage: number
   targetCa: number
   actualCa: number
-  kind: 'generated' | 'national'
+  kind: 'generated' | 'national' | 'special'
   team: LegendTeamDef
 }
 
@@ -8442,173 +8442,173 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 50,
     "targetCa": 780,
-    "actualCa": 780.0000000000007,
-    "kind": "generated",
+    "actualCa": 780,
+    "kind": "special",
     "team": {
-      "id": "peak-50",
-      "club": "黑潮联",
-      "clubEn": "黑潮联",
-      "season": "",
-      "coach": "生成教练",
-      "tier": "B",
-      "formationId": "3-4-3",
+      "id": "captain-tsubasa-all-stars",
+      "club": "足球小将",
+      "clubEn": "Captain Tsubasa All-Stars",
+      "season": "全明星",
+      "coach": "全明星联队",
+      "tier": "S+",
+      "formationId": "4-3-3",
       "tactics": {
-        "attack": "balanced",
+        "attack": "wing",
         "passing": "short",
         "tempo": "fast",
-        "line": "low",
+        "line": "high",
         "press": "high"
       },
-      "color": "#6a1b9a",
-      "accent": "#ffffff",
-      "note": "PvE 生成球队",
-      "targetCa": 780,
+      "color": "#1d4ed8",
+      "accent": "#facc15",
+      "note": "《足球小将》全明星：大空翼、日向小次郎、若林源三、岬太郎、三杉淳……当前能力压到第 50 关的 780 CA，但每名球员的潜力上限按球星级别保留。",
       "players": [
         [
-          "松田悠希",
-          "Yuki Matsuda",
+          "若林源三",
+          "Genzo Wakabayashi",
           "日本",
           "GK",
-          "gk_sweeper",
-          73.9315,
+          "gk_wall",
+          90,
           "R"
         ],
         [
-          "尼科洛·丰塔纳",
-          "Nicolo Fontana",
-          "意大利",
+          "早田诚",
+          "Makoto Soda",
+          "日本",
+          "W",
+          "fb_attacking",
+          82,
+          "L"
+        ],
+        [
+          "次藤洋",
+          "Hiroshi Jito",
+          "日本",
           "CB",
           "cb_stopper",
-          73.9315,
+          84,
           "R"
         ],
         [
-          "奎西·门萨",
-          "Kwesi Mensah",
-          "加纳",
+          "石崎了",
+          "Ryo Ishizaki",
+          "日本",
           "CB",
-          "cb_cover",
-          73.9315,
-          "L"
-        ],
-        [
-          "亚乌·门萨",
-          "Yaw Mensah",
-          "加纳",
-          "CB",
-          "cb_ballplaying",
-          71.9315,
+          "cb_stopper",
+          80,
           "R"
         ],
         [
-          "法昆多·帕雷德斯",
-          "Facundo Paredes",
-          "阿根廷",
-          "W",
-          "w_playmaker",
-          71.9315,
-          "L"
-        ],
-        [
-          "田若谷",
-          "Tian Ruogu",
-          "中国",
-          "CM",
-          "cm_playmaker",
-          71.9315,
-          "R"
-        ],
-        [
-          "许泽宇",
-          "Xu Zeyu",
-          "中国",
-          "CM",
-          "cm_engine",
-          71.9315,
-          "R"
-        ],
-        [
-          "琴克·厄兹蒂尔克",
-          "Cenk Ozturk",
-          "土耳其",
-          "W",
-          "w_engine",
-          70.9315,
-          "R"
-        ],
-        [
-          "芬恩·肖",
-          "Finn Shaw",
-          "英格兰",
-          "W",
-          "w_dribbler",
-          70.9315,
-          "L"
-        ],
-        [
-          "阿克塞尔·尼格伦",
-          "Axel Nygren",
-          "瑞典",
-          "ST",
-          "st_target",
-          70.9315,
-          "R"
-        ],
-        [
-          "何思远",
-          "He Siyuan",
-          "中国",
-          "W",
-          "w_finisher",
-          70.9315,
-          "R"
-        ],
-        [
-          "阿古斯丁·莱德斯马",
-          "Agustin Ledesma",
-          "阿根廷",
-          "GK",
-          "gk_sweeper",
-          67.9315,
-          "R"
-        ],
-        [
-          "马科斯·奥尔特加",
-          "Marcos Ortega",
-          "西班牙",
-          "CB",
-          "cb_cover",
-          67.9315,
-          "R"
-        ],
-        [
-          "塞杜·巴",
-          "Seydou Ba",
-          "塞内加尔",
+          "松山光",
+          "Hikaru Matsuyama",
+          "日本",
           "W",
           "fb_playmaker",
-          67.9315,
+          85,
           "R"
         ],
         [
-          "黄志勋",
-          "Hwang Jihoon",
-          "韩国",
+          "三杉淳",
+          "Jun Misugi",
+          "日本",
+          "CM",
+          "cm_mezzala",
+          88,
+          "R"
+        ],
+        [
+          "大空翼",
+          "Tsubasa Ozora",
+          "日本",
+          "CM",
+          "cm_playmaker",
+          94,
+          "R"
+        ],
+        [
+          "岬太郎",
+          "Taro Misaki",
+          "日本",
+          "CM",
+          "cm_creator",
+          90,
+          "R"
+        ],
+        [
+          "葵新伍",
+          "Shingo Aoi",
+          "日本",
+          "W",
+          "w_dribbler",
+          85,
+          "L"
+        ],
+        [
+          "日向小次郎",
+          "Kojiro Hyuga",
+          "日本",
+          "ST",
+          "st_finisher",
+          92,
+          "R"
+        ],
+        [
+          "新田瞬",
+          "Shun Nitta",
+          "日本",
+          "W",
+          "w_finisher",
+          84,
+          "R"
+        ],
+        [
+          "若岛津健",
+          "Ken Wakashimazu",
+          "日本",
+          "GK",
+          "gk_shotstopper",
+          86,
+          "R"
+        ],
+        [
+          "泽田武",
+          "Takeshi Sawada",
+          "日本",
           "CM",
           "cm_engine",
-          67.9315,
+          80,
           "R"
         ],
         [
-          "马尔科·比安基",
-          "Marco Bianchi",
-          "意大利",
+          "井泽守",
+          "Mamoru Izawa",
+          "日本",
+          "CM",
+          "cm_destroyer",
+          80,
+          "R"
+        ],
+        [
+          "来生哲兵",
+          "Teppei Kisugi",
+          "日本",
           "ST",
-          "st_runner",
-          67.9315,
+          "st_poacher",
+          82,
+          "R"
+        ],
+        [
+          "泷一",
+          "Hajime Taki",
+          "日本",
+          "W",
+          "w_crosser",
+          80,
           "R"
         ]
-      ]
+      ],
+      "targetCa": 780
     }
   },
   {

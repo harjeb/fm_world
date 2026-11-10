@@ -4,6 +4,7 @@ beforeAll(loadPveContent)
 import { PEAK_STAGES } from '../src/game/data/peak-stages.generated.ts'
 import { PEAK_STAGE_COUNT, buildPeakTeam, peakStageTargetCa } from '../src/game/peak.ts'
 import { caOf } from '../src/game/ca.ts'
+import { startingCa } from '../src/game/pve-strength.ts'
 
 describe('巅峰之路 100 关', () => {
   it('关卡连续、难度单调不降、100 关到 1300', () => {
@@ -18,9 +19,20 @@ describe('巅峰之路 100 关', () => {
     expect(peakStageTargetCa(100)).toBe(1300)
   })
 
-  it('1–80 关生成，81–100 关固定国家队', () => {
-    expect(PEAK_STAGES.slice(0, 80).every((stage) => stage.kind === 'generated')).toBe(true)
+  it('1–80 关生成/特别，81–100 关固定国家队', () => {
+    expect(PEAK_STAGES.slice(0, 80).every((stage) => stage.kind === 'generated' || stage.kind === 'special')).toBe(true)
+    expect(PEAK_STAGES[49].kind).toBe('special')
     expect(PEAK_STAGES.slice(80).every((stage) => stage.kind === 'national')).toBe(true)
+  })
+
+  it('第 50 关是足球小将全明星：CA 保持 780，球星上限 1500', () => {
+    const team = buildPeakTeam(50)
+    expect(team.name).toBe('足球小将 全明星')
+    expect(startingCa(team)).toBeCloseTo(780, 5)
+    expect(team.players).toHaveLength(16)
+    expect(team.players.find((player) => player.name === '大空翼')).toBeTruthy()
+    expect(team.players.every((player) => player.pa >= 1499.9)).toBe(true)
+    expect(team.players.every((player) => caOf(player.ceilings, player.positions.GK > 0) >= 1499.9)).toBe(true)
   })
 
   it('每关可构建 16 人合法阵容，实际 CA 接近目标', () => {
