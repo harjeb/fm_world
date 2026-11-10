@@ -41,6 +41,7 @@ import type { TrainingActivityId } from '../game/training-calendar.ts'
 import { autoAssignLineup, autoFillLineup, clearStarter, movePlayer, type LineupTarget } from '../game/squad.ts'
 import { seasonStats } from '../game/player-stats.ts'
 import { injuryUntil } from '../game/injury.ts'
+import { claimPeakReward } from '../game/peak-reward.ts'
 import { ensureCards, playerCards } from '../game/cards.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeStarTraits } from '../game/names.ts'
 import { catchUpSeason, lineupLockState, settleGameConditions, skipToPostseasonEnd } from '../game/season.ts'
@@ -1513,6 +1514,16 @@ document.addEventListener('click', async (event) => {
       const stage = Number(actionEl.dataset.stage)
       if (!Number.isFinite(stage)) break
       openFriendly(startPeakChallenge(game, stage))
+      break
+    }
+    case 'claim-peak-reward': {
+      const templateId = actionEl.dataset.player
+      if (!templateId) break
+      const result = claimPeakReward(game, templateId)
+      if (!result.ok) { showNotice(result.error); break }
+      showNotice(`${result.player.name} 已加入阵容。`)
+      ui.peakPreviewStage = 50
+      render()
       break
     }
     case 'cup-preview': {

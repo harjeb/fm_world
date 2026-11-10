@@ -30,8 +30,9 @@ export function pveRoster(team: AITeam): string {
   const roles = new Map(team.lineup.starters.map((starter) => [starter.playerId, lineup.slots.find((slot) => slot.id === starter.slotId)?.label ?? starter.slotId]))
   const ordered = [...team.lineup.starters.map((starter) => team.players.find((p) => p.id === starter.playerId)!), ...team.lineup.bench.map((id) => team.players.find((p) => p.id === id)!)]
   const table = (gk: boolean) => `<div class="table-scroll"><table class="dt"><thead><tr><th>首发/替补</th><th>球员</th><th class="num">CA</th>${(gk ? ['反应', '手控球', '出击', '一对一', '传球', '镇定', ''] : ['传球', '射门', '盘带', '抢断', '力量', '速度', '爆发']).map((text) => `<th class="num">${text}</th>`).join('')}</tr></thead><tbody>${ordered.filter((p) => (p.positions.GK > 0) === gk).map((p) => row(p, roles.get(p.id) ?? '替补')).join('')}</tbody></table></div>`
+  const minPa = Math.min(...team.players.map((player) => player.pa))
   const maxPa = Math.max(...team.players.map((player) => player.pa))
   const maxCa = Math.max(...team.players.map((player) => caOf(player.attrs, player.positions.GK > 0)))
-  const starPotential = maxPa > maxCa + 1 ? `球星潜力上限 PA ${maxPa.toFixed(0)}；` : ''
+  const starPotential = maxPa > maxCa + 1 ? `球星潜力上限 PA ${minPa.toFixed(0)}–${maxPa.toFixed(0)}；` : ''
   return panel(`${esc(team.name)} · 完整阵容`, `<p class="hint pad">${starPotential}主属性按 0–100 评分显示（存档为评分 × 15）；下表为固定的 11 名首发和 5 名替补。历史档案不明确的字段标为未核实，不随机补造。</p>${table(false)}${table(true)}`, { flush: true })
 }

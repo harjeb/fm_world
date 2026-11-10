@@ -3,6 +3,8 @@ import { caOf } from '../../game/ca.ts'
 import { LEGEND_TEAMS } from '../../game/data/legend-teams.ts'
 import { legendTeamById } from '../../game/legend.ts'
 import { PEAK_STAGE_COUNT, peakStageDef, buildPeakTeam } from '../../game/peak.ts'
+import { PEAK_REWARD_STAGE, peakRewardReady } from '../../game/peak-reward.ts'
+import { SQUAD_LIMIT } from '../../game/market.ts'
 import { legendRecordOf } from '../../game/pve.ts'
 import { cupTeam } from '../../game/cup-run.ts'
 import { startingCa } from '../../game/pve-strength.ts'
@@ -13,7 +15,7 @@ import { game, ui } from '../state.ts'
 import { conferenceLabel } from '../../game/data/world-clubs.ts'
 import { inPostseason } from '../../game/season.ts'
 import { onlineState } from '../../online.ts'
-import { DEFAULT_FORMATION } from '../../game/data/formations.ts'
+import { DEFAULT_FORMATION, FORMATIONS } from '../../game/data/formations.ts'
 import { renderCup } from '../cup-view.ts'
 import { coreNames, pveRoster, pveTeamButton } from '../pve-details.ts'
 
@@ -63,6 +65,25 @@ function renderLegend(): string {
     ${recordsPanel(game.challengeHistory.filter((record) => record.mode === 'legend'), '传奇战报')}`
 }
 
+function peakRewardPanel(): string {
+  const peak = game.pve?.peak
+  if (!peak) return ''
+  const claimed = peak.reward50
+  if (claimed) {
+    return panel('第 50 关全明星奖励', `<p class="hint pad">已加入：<b>${esc(claimed.name)}</b> · 当前 CA ${Math.round(claimed.ca)} · 球星上限 PA ${Math.round(claimed.pa)}</p>`, { flush: true })
+  }
+  if (!peakRewardReady(game)) return ''
+  const team = buildPeakTeam(PEAK_REWARD_STAGE)
+  const roles = new Map(team.lineup.starters.map((starter) => [starter.playerId, FORMATIONS[team.formationId].slots.find((slot) => slot.id === starter.slotId)?.label ?? '首发']))
+  const full = game.roster.length >= SQUAD_LIMIT
+  const rows = team.players.map((player) => {
+    const ca = caOf(player.attrs, player.positions.GK > 0)
+    return `<tr><td>${esc(roles.get(player.id) ?? '替补')}</td><td><b>${esc(player.name)}</b><small class="muted"> ${esc(player.enName)}</small></td><td class="num">${caHeat(ca)}</td><td class="num">${Math.round(player.pa)}</td><td><button class="btn small" data-action="claim-peak-reward" data-player="${esc(player.id)}" ${game.activeMatch || full ? 'disabled' : ''}>选择加入</button></td></tr>`
+  }).join('')
+  const warning = full ? `<p class="warn-text pad">阵容已满（${game.roster.length} / ${SQUAD_LIMIT}），请先裁掉一名球员再领取。</p>` : ''
+  return panel('第 50 关全明星奖励 · 选择 1 人加入', `<p class="hint pad">击败足球小将全明星后，可从下面 16 人中选 1 人加入；入队保留当前 CA，PA 为逐人球星上限。</p>${warning}<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th class="num">当前 CA</th><th class="num">上限 PA</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`, { flush: true })
+}
+
 function renderPeak(): string {
   const cleared = game.pve?.peak.cleared ?? 0, done = cleared >= 100
   const current = Math.min(100, cleared + 1)
@@ -71,9 +92,12 @@ function renderPeak(): string {
   const def = peakStageDef(stage), team = buildPeakTeam(stage)
   const canPlay = !done && stage === current
   const kindLabel = def.kind === 'national' ? '世界杯国家队' : def.kind === 'special' ? '动漫全明星' : '生成队'
-  const starCap = def.kind === 'special' ? ` · 球星上限 ${Math.max(...team.players.map((player) => player.pa)).toFixed(0)}` : ''
+  const starCap = def.kind === 'special'
+    ? ` · 球星上限 ${Math.min(...team.players.map((player) => player.pa)).toFixed(0)}–${Math.max(...team.players.map((player) => player.pa)).toFixed(0)}`
+    : ''
   return `<div class="kpi-row">${tile('已通关', `${cleared} / ${PEAK_STAGE_COUNT}`)}${tile('当前关', done ? '全部完成' : String(current))}${tile('浏览关卡', String(stage))}${tile('首发平均 CA', String(Math.round(startingCa(team))))}</div>
     ${panel('进度 · 点击任意关卡预览', `<div class="peak-track" aria-label="巅峰之路关卡">${Array.from({ length: 100 }, (_, i) => `<button class="peak-cell ${i < cleared ? 'done' : ''} ${i + 1 === current && !done ? 'current' : ''} ${i >= 80 ? 'national' : ''}" data-peak-preview="${i + 1}" aria-label="第 ${i + 1} 关${i < cleared ? '，已通关' : i + 1 === current ? '，当前关' : '，未解锁'}" aria-pressed="${i + 1 === stage}">${i + 1}</button>`).join('')}</div><p class="hint pad">绿色已通关，高亮为当前关；81–100 关为世界杯国家队。只能挑战当前关，但可以预览全部关卡。</p>`, { flush: true })}
+    ${peakRewardPanel()}
     ${panel(done ? '100 关全部通关 · 对手预览' : canPlay ? '当前对手' : '关卡预览', `<div class="peak-current"><div class="peak-stage-no">第 ${stage} 关</div><div class="peak-stage-main"><b>${esc(team.name)}</b><span>${kindLabel} · ${team.formationId} · ${esc(tacticText(team.tactics))}${starCap}</span><span>核心：${esc(coreNames(team))}</span></div><div class="peak-stage-ca"><span>目标 CA ${def.targetCa}</span><b>${startingCa(team).toFixed(0)}</b></div>${pveTeamButton(`peak:${stage}`)}<button class="btn" data-action="start-peak-stage" data-stage="${stage}" ${!canPlay || game.activeMatch ? 'disabled' : ''}>${canPlay ? '挑战' : '仅预览'}</button></div>`, { flush: true })}
     ${recordsPanel(game.challengeHistory.filter((record) => record.mode === 'peak'), '最近闯关')}
     <p class="hint pad">对手固定，胜利推进下一关；失败可重试。调整阵容、战术不会受关卡预览影响。</p>`
@@ -98,5 +122,5 @@ export function renderChallenge(): string {
   const body = !loaded ? '<p class="banner info" role="status">正在加载固定球队数据，请稍候…</p>' : mode === 'friendly' ? renderFriendly() : mode === 'legend' ? renderLegend() : mode === 'cup' ? renderCup() : renderPeak()
   return `${pageHead({ kicker: '挑战 · 纯 PvE', title: MODE_LABEL[mode], sub: MODE_SUB[mode] })}
     <div class="seg challenge-mode-tabs" aria-label="挑战模式">${(Object.keys(MODE_LABEL) as (keyof typeof MODE_LABEL)[]).map((key) => `<button data-challenge-mode="${key}" class="${key === mode ? 'active' : ''}">${MODE_LABEL[key]}</button>`).join('')}</div>
-    <p class="hint">挑战比赛不扣体能、不发金钱或技能卡；杯赛冠军只记录奖杯荣誉。内容 v${PVE_CONTENT_VERSION} · ${PVE_CONTENT_HASH.slice(0, 8)}</p>${body}${loaded ? selectedRoster() : ''}`
+    <p class="hint">挑战比赛不扣体能、不发金钱或技能卡；第 50 关首次通关可选 1 名全明星入队，杯赛冠军只记录奖杯荣誉。内容 v${PVE_CONTENT_VERSION} · ${PVE_CONTENT_HASH.slice(0, 8)}</p>${body}${loaded ? selectedRoster() : ''}`
 }

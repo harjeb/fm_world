@@ -17,7 +17,7 @@ export const CAPTAIN_TSUBASA_ALL_STARS: LegendTeamDef = {
   tactics: { attack: 'wing', passing: 'short', tempo: 'fast', line: 'high', press: 'high' },
   color: '#1d4ed8',
   accent: '#facc15',
-  note: '《足球小将》全明星：大空翼、日向小次郎、若林源三、岬太郎、三杉淳……当前能力压到第 50 关的 780 CA，但每名球员的潜力上限按球星级别保留。',
+  note: '《足球小将》全明星：大空翼、日向小次郎、若林源三、岬太郎、三杉淳……当前能力压到第 50 关的 780 CA，但每名球员的潜力上限按球星级别保留（1300–1500）。',
   players: [
     ['若林源三', 'Genzo Wakabayashi', '日本', 'GK', 'gk_wall', 90, 'R'],
     ['早田诚', 'Makoto Soda', '日本', 'W', 'fb_attacking', 82, 'L'],
@@ -43,5 +43,22 @@ export const PEAK_BOSS_TEAMS: Record<number, LegendTeamDef> = {
   50: CAPTAIN_TSUBASA_ALL_STARS,
 }
 
-/** 特别 Boss 的球星潜力上限（CA 制，玩家上限当前仍是 800，后续提升到 1500）。 */
-export const PEAK_BOSS_POTENTIAL_CA = 1500
+/** 每名角色的球星潜力上限：按角色区分，不是全员 1500。 */
+export const PEAK_BOSS_POTENTIAL: Record<string, number> = {
+  'Tsubasa Ozora': 1500,
+  'Kojiro Hyuga': 1480,
+  'Genzo Wakabayashi': 1470,
+  'Taro Misaki': 1450,
+  'Jun Misugi': 1440,
+  'Shingo Aoi': 1420,
+  'Hikaru Matsuyama': 1400,
+  'Shun Nitta': 1380,
+  'Ken Wakashimazu': 1370,
+  'Hiroshi Jito': 1350,
+  'Makoto Soda': 1340,
+  'Ryo Ishizaki': 1320,
+  'Teppei Kisugi': 1320,
+  'Takeshi Sawada': 1300,
+  'Mamoru Izawa': 1300,
+  'Hajime Taki': 1300,
+}

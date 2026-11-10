@@ -29,6 +29,11 @@ export function ensurePve(game: GameState): boolean {
     pve.peak.history = []
     changed = true
   }
+  const reward = pve.peak.reward50
+  if (reward && (!Number.isFinite(reward.claimedAt) || typeof reward.playerId !== 'string' || !reward.playerId || typeof reward.templateId !== 'string' || !reward.templateId || typeof reward.name !== 'string')) {
+    delete pve.peak.reward50
+    changed = true
+  }
   if (!pve.cups || typeof pve.cups !== 'object' || Array.isArray(pve.cups)) {
     pve.cups = {}
     changed = true

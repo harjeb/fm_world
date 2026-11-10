@@ -31,8 +31,11 @@ describe('巅峰之路 100 关', () => {
     expect(startingCa(team)).toBeCloseTo(780, 5)
     expect(team.players).toHaveLength(16)
     expect(team.players.find((player) => player.name === '大空翼')).toBeTruthy()
-    expect(team.players.every((player) => player.pa >= 1499.9)).toBe(true)
-    expect(team.players.every((player) => caOf(player.ceilings, player.positions.GK > 0) >= 1499.9)).toBe(true)
+    const tsubasa = team.players.find((player) => player.name === '大空翼')!
+    expect(tsubasa.pa).toBeCloseTo(1500, 5)
+    expect(team.players.every((player) => player.pa >= 1299.9)).toBe(true)
+    expect(team.players.every((player) => caOf(player.ceilings, player.positions.GK > 0) >= 1299.9)).toBe(true)
+    expect(new Set(team.players.map((player) => player.pa)).size).toBeGreaterThan(4)
   })
 
   it('每关可构建 16 人合法阵容，实际 CA 接近目标', () => {

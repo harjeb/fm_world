@@ -904,11 +904,21 @@ export type TrophyRecord = {
   matchId?: string
 }
 
+export type PvePeakReward = {
+  claimedAt: number
+  playerId: string
+  templateId: string
+  name: string
+  ca: number
+  pa: number
+}
+
 export type PveState = {
   legends: Record<string, PveLegendRecord>
   peak: {
     cleared: number
     history: PvePeakHistoryEntry[]
+    reward50?: PvePeakReward
   }
   cups: Record<string, CupRun>
   cupHistory?: CupRun[]

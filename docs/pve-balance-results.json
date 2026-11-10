@@ -1,5 +1,5 @@
 {
-  "contentHash": "4aaa3da755ca2f81216083bd54d5c7a04617ccfcc729c5a87ea0f99d878f2ebf",
+  "contentHash": "ffb657bbdaef03c3a1bf949eb9b6746b584cc4958500b09f65229aa542940ac0",
   "engine": "PesEngine / rulesVersion 4",
   "baseline": "玩家完整自动培养一轮；未来 CA 档位为同形状归一化假设，不是声称玩家当前可培养到该数值。",
   "actualTrainingCa": 409.8,

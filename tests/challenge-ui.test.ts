@@ -45,6 +45,17 @@ describe('挑战页面', () => {
     expect(html).toContain('你')
   })
 
+  it('通关第 50 关后显示全明星奖励选择', () => {
+    game.pve!.peak.cleared = 50
+    delete game.pve!.peak.reward50
+    ui.challengeMode = 'peak'
+    ui.peakPreviewStage = 50
+    const html = renderChallenge()
+    expect(html).toContain('第 50 关全明星奖励')
+    expect(html).toContain('data-action="claim-peak-reward"')
+    expect(html).toContain('当前 CA')
+  })
+
   it('传奇档位筛选和杯赛分组预览可渲染', () => {
     ui.challengeMode = 'legend'
     ui.legendTier = 'S+'

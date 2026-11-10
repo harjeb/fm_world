@@ -3,6 +3,7 @@ import crypto from 'node:crypto'
 import { LEGEND_TEAMS } from '../src/game/data/legend-teams.ts'
 import { PEAK_STAGES } from '../src/game/data/peak-stages.generated.ts'
 import { CUP_TEAM_POOLS } from '../src/game/data/cup-teams.generated.ts'
+import { PEAK_BOSS_POTENTIAL } from '../src/game/data/peak-boss-teams.ts'
 import { LEGEND_TIER_CA, buildHistoricTeam, legendTierTargets } from '../src/game/legend.ts'
 import { alignPveStrength, applyStarPotential, startingCa } from '../src/game/pve-strength.ts'
 import type { AITeam } from '../src/game/types.ts'
@@ -13,7 +14,7 @@ const legendTargets = legendTierTargets()
 for (const def of LEGEND_TEAMS) legends[def.id] = alignPveStrength(buildHistoricTeam(def), legendTargets.get(def.id)!)
 for (const stage of PEAK_STAGES) {
   const team = alignPveStrength(buildHistoricTeam(stage.team), stage.targetCa)
-  peak[String(stage.stage)] = stage.kind === 'special' ? applyStarPotential(team) : team
+  peak[String(stage.stage)] = stage.kind === 'special' ? applyStarPotential(team, PEAK_BOSS_POTENTIAL) : team
 }
 for (const pool of Object.values(CUP_TEAM_POOLS)) for (const def of pool) cups[def.id] = alignPveStrength(buildHistoricTeam(def), def.targetCa!)
 for (const team of [...Object.values(legends), ...Object.values(peak), ...Object.values(cups)]) {
@@ -25,7 +26,8 @@ for (let i = 1; i < 100; i++) if (startingCa(peak[String(i)]) > startingCa(peak[
 for (const stage of PEAK_STAGES.filter((item) => item.kind === 'special')) {
   const team = peak[String(stage.stage)]
   const minPa = Math.min(...team.players.map((player) => player.pa))
-  if (minPa < 1300) throw new Error(`特别关 ${stage.stage}: 球星上限过低 ${minPa.toFixed(0)}`)
+  const maxPa = Math.max(...team.players.map((player) => player.pa))
+  if (minPa < 1299.5 || maxPa > 1500.5) throw new Error(`特别关 ${stage.stage}: 球星上限越界 ${minPa.toFixed(0)}–${maxPa.toFixed(0)}`)
 }
 for (const def of LEGEND_TEAMS) {
   const ca = startingCa(legends[def.id]), [min, max] = LEGEND_TIER_CA[def.tier]
