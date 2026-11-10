@@ -4,8 +4,10 @@ import { kickoffAtForRound, roundsKickedOff } from '../src/game/calendar.ts'
 import { recordMatchDiscipline } from '../src/game/discipline.ts'
 import { splitSeed } from '../src/game/rng.ts'
 import { LINEUP_LOCK_MS } from '../src/game/season.ts'
+import { LEAGUE_REALTIME_MS } from '../src/game/match/time.ts'
 import { RECENT_MATCHES } from '../src/game/transfer-rules.ts'
 import { settleCondition } from '../src/game/condition.ts'
+import { aiMatchLineup } from '../src/game/match/setup.ts'
 import { MatchQueue } from './match-queue.ts'
 import { emptyMatchBook, matchJobId, type LockedTeam, type MatchBook, type MatchJob, type MatchJobResult } from './match-job.ts'
 
@@ -24,7 +26,10 @@ export class MatchScheduler {
     private readonly persist: () => void,
   ) { shared.matchBook ??= emptyMatchBook() }
 
-  /** 这里只入队、同步已公开赛果；无论从 HTTP 还是定时器调用都不执行仿真。 */
+  /**
+   * 这里只入队、同步已公开赛果；无论从 HTTP 还是定时器调用都不执行仿真。
+   * 开球后比赛要“直播” 10 分钟（LEAGUE_REALTIME_MS），比分、积分榜、战报都等到这之后才一起公布。
+   */
   refresh(now: number): boolean {
     const { world } = this.shared
     let changed = false
@@ -59,6 +64,9 @@ export class MatchScheduler {
       // 锁定到开球还有一段时间：快照里的体能按每小时的恢复结算到开球那一刻。
       for (const locked of [job.home, job.away]) {
         for (const player of locked.team.players) settleCondition(player, kickoffAt, job.gameDayMs, this.shared.matchBook!.conditionAt[player.id])
+        // 没有教练的电脑球队：锁定这一刻就按开球时的体能轮换（低于 80 的先休息、停赛的不排），
+        // 阵容连同快照一起冻结，战报里记的也是真正上场的名单。有教练的球队用教练自己排的阵容。
+        if (locked.ai) locked.team.lineup = aiMatchLineup(locked.team, new Set(locked.suspended), true)
       }
       this.queue.enqueue(job)
     }
@@ -67,7 +75,7 @@ export class MatchScheduler {
   private publishDue(now: number): boolean {
     const { world } = this.shared
     let published = false
-    const rounds = [...new Set(world.divisions.flatMap((division) => division.fixtures.filter((fixture) => !fixture.played && kickoffAtForRound(world.seasonStartedAt, fixture.round) <= now).map((fixture) => fixture.round)))].sort((a, b) => a - b)
+    const rounds = [...new Set(world.divisions.flatMap((division) => division.fixtures.filter((fixture) => !fixture.played && kickoffAtForRound(world.seasonStartedAt, fixture.round) + LEAGUE_REALTIME_MS <= now).map((fixture) => fixture.round)))].sort((a, b) => a - b)
     for (const round of rounds) {
       const pending = world.divisions.flatMap((division) => division.fixtures.filter((fixture) => fixture.round === round && !fixture.played).map((fixture) => ({ division, fixture, id: matchJobId(world.seasonIndex, division.divisionId!, fixture) })))
       // 同轮全部准备好后一次发布，绝不提前泄露某一场结果，也不让后续轮次越过未完成的轮次。

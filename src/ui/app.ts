@@ -41,7 +41,7 @@ import { ensureCards, playerCards } from '../game/cards.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeStarTraits } from '../game/names.ts'
 import { catchUpSeason, lineupLockState, settleGameConditions, skipToPostseasonEnd } from '../game/season.ts'
 import { fetchFriendlyTeam, isOnlineMode } from '../online.ts'
-import { advanceLeagueRealtime, leagueDisplayClock } from '../game/realtime.ts'
+import { advanceLeagueRealtime, leagueDisplayClock, setLeagueClock } from '../game/realtime.ts'
 import { displayClock } from '../game/match/time.ts'
 import { emptyAutoSubs } from '../game/match/management.ts'
 import { payWageArrears, upgradeFacility, type FacilityId } from '../game/economy.ts'
@@ -72,7 +72,8 @@ import { parseLineupTarget, renderLineup, selectedSlotTarget } from './screens/l
 import { renderMatch } from './screens/match.ts'
 import { renderAccountOverlay, renderDetailOverlay, renderNegotiationOverlay, renderNewGameOverlay } from './screens/overlays.ts'
 import { renderClubOverlay } from './club-view.ts'
-import { renderReview } from './screens/review.ts'
+import { renderCommentary, renderReview } from './screens/review.ts'
+import { cycleReplay2DSpeed, drawReplay2D, ensureReplay2D, previewReplay2DSeek, replay2d, resetReplay2D, restartReplay2D, seekReplay2D, setReplay2DHooks, toggleReplay2D } from './replay-2d.ts'
 import { renderSeason } from './screens/season.ts'
 import { renderMarketTicker, renderSidebar, renderTopbar } from './screens/shell.ts'
 import { buildTrainingRequest, renderAutoStrategyOverlay, renderTraining } from './screens/training.ts'
@@ -253,8 +254,15 @@ function render(): void {
   } else {
     stopTimer()
   }
-  if (ui.screen === 'review') scheduleReplay()
-  else stopReplay()
+  if (ui.screen === 'review') {
+    scheduleReplay()
+    // 联机联赛的战报可以 2D 重看：取回开球状态，把当前这一帧画上去。
+    ensureReplay2D([...game.matchHistory, ...game.challengeHistory].find((item) => item.id === ui.reviewId))
+    drawReplay2D()
+  } else {
+    stopReplay()
+    if (replay2d.id) resetReplay2D()
+  }
   mountTurnstile()
 }
 
@@ -303,7 +311,12 @@ function mountTurnstile(): void {
 
 function openFinishedLeague(previous: NonNullable<GameState['activeMatch']>): void {
   const record = game.matchHistory.find((item) => item.round === previous.context.round)
-  if (ui.screen !== 'match' || !record) return
+  if (ui.screen !== 'match') return
+  // 直播已经结束但战报还没到（极端情况下公布晚了）：别停在空的比赛页，回首页等公布。
+  if (!record) {
+    if (previous.preplayed) { ui.screen = 'home'; ui.matchEngine = null; ui.coachPanel = false }
+    return
+  }
   resetReplay(record.id)
   replay.index = (record.commentary ?? record.keyEvents).length
   ui.reviewId = record.id
@@ -1570,6 +1583,15 @@ document.addEventListener('click', async (event) => {
         render()
       }
       break
+    case 'replay2d-toggle':
+      toggleReplay2D()
+      break
+    case 'replay2d-restart':
+      restartReplay2D()
+      break
+    case 'replay2d-speed':
+      cycleReplay2DSpeed()
+      break
     case 'replay-toggle':
       if (replay.playing) stopReplay()
       else {
@@ -1604,6 +1626,10 @@ document.addEventListener('click', async (event) => {
 
 document.addEventListener('change', (event) => {
   const target = event.target as HTMLSelectElement | HTMLInputElement
+  if (target instanceof HTMLInputElement && target.matches('[data-rp-seek]')) {
+    seekReplay2D(Number(target.value) / 1000)
+    return
+  }
   if (target.id === 'account-club') {
     ui.registrationClubId = target.value
     render()
@@ -1736,6 +1762,10 @@ document.addEventListener('change', (event) => {
 
 document.addEventListener('input', (event) => {
   const target = event.target as HTMLInputElement
+  if (target.matches?.('[data-rp-seek]')) {
+    previewReplay2DSeek(Number(target.value) / 1000)
+    return
+  }
   if (target.id === 'academy-search') {
     ui.academySearch = target.value
     render()
@@ -1843,6 +1873,11 @@ function autoAdvanceSeason(): void {
 function tickRealtimeLeague(): void {
   const active = game.activeMatch
   if (!active?.context.isLeague) return
+  // 服务器预先算好的回放：浏览器自己按时钟追，比分、数据条和文字直播每秒跟着画面刷新一次。
+  if (active.preplayed) {
+    if (ui.screen === 'match') render()
+    return
+  }
   if (!isOnlineMode() && advanceLeagueRealtime(game)) {
     if (game.activeMatch && ui.screen === 'match') ui.matchEngine = restoreActiveEngine(game)
     else if (!game.activeMatch) openFinishedLeague(active)
@@ -1862,6 +1897,12 @@ window.addEventListener('beforeunload', () => {
   saveGame(game)
 })
 
+// 联赛回放按服务器时钟走（本机时钟快慢不影响开球和终场）。
+setLeagueClock(serverNow)
+setReplay2DHooks({
+  refresh: () => render(),
+  feed: (entries, durationSeconds) => entries.map((entry) => renderCommentary(entry, durationSeconds)).join(''),
+})
 setPesViewHooks({
   refresh: () => render(),
   finished: () => completeMatch(),

@@ -1,6 +1,8 @@
 import crypto from 'node:crypto'
 import type { AITeam, AutoSubPlan, Fixture, MatchRecord, Suspension } from '../src/game/types.ts'
 import { MatchEngine } from '../src/game/match/engine.ts'
+import { PesEngine, type GameEngine } from '../src/game/pes/engine.ts'
+import type { MatchState } from '../src/game/match/types.ts'
 import { createMatchRecord, fixtureScorers, playersAtPerformance, teamInputFromAI } from '../src/game/match/setup.ts'
 import { prepareMatchInjuries } from '../src/game/injury.ts'
 import { facilityLevel } from '../src/game/economy.ts'
@@ -41,6 +43,11 @@ export type MatchJob = {
 }
 export type MatchJobResult = {
   id: string
+  /**
+   * 有教练参与的比赛用画面同款的 PES 引擎算，这里存开球那一刻的初始引擎状态：
+   * 浏览器拿它按现实时钟回放整场（同一份种子和输入，回放和最终比分一致）。纯电脑对电脑的比赛没有。
+   */
+  initialState?: MatchState
   record: MatchRecord
   fixture: Pick<Fixture, 'score' | 'matchId' | 'scorers' | 'assisters' | 'autoSimulated'>
   injuries: Record<string, number>
@@ -63,11 +70,15 @@ export function computeMatchJob(job: MatchJob): MatchJobResult {
     if (locked.autoSubs) team.autoSubs = structuredClone(locked.autoSubs)
     return team
   }
-  const engine = new MatchEngine({
-    seed: job.seed, home: input(job.home), away: input(job.away), knockout: false,
-    durationSeconds: LOGIC_MATCH_SECONDS, offside: true, recordPlayback: false, rulesVersion: 2,
-  })
+  // 至少一方有教练：开球后要把整场当直播放给教练看，必须用和画面同一个的 PES 引擎。
+  // 两支电脑球队互踢没人看，沿用便宜的整步引擎，只要赛果。
+  const live = !job.home.ai || !job.away.ai
+  const home = input(job.home), away = input(job.away)
+  const engine: GameEngine = live
+    ? new PesEngine({ seed: job.seed, home, away, knockout: false, durationSeconds: LOGIC_MATCH_SECONDS, offside: true })
+    : new MatchEngine({ seed: job.seed, home, away, knockout: false, durationSeconds: LOGIC_MATCH_SECONDS, offside: true, recordPlayback: false, rulesVersion: 2 })
   prepareMatchInjuries(engine.state, { ...job.home.injuries, ...job.away.injuries }, job.kickoffAt)
+  const initialState = live ? engine.serialize() : undefined
   const state = engine.simulate()
   const injuries: Record<string, number> = {}
   for (const entry of state.log) {
@@ -96,7 +107,7 @@ export function computeMatchJob(job: MatchJob): MatchJobResult {
     appearances[id] = Math.round(stat.minutes)
   }
   const cards = state.log.flatMap((entry) => entry.card && entry.playerId ? [{ card: entry.card, playerId: entry.playerId }] : [])
-  return { id: job.id, record, fixture: { score: { ...record.score }, matchId: job.id, ...fixtureScorers(state), autoSimulated: true }, injuries, conditionLoss, appearances, cards }
+  return { id: job.id, ...(initialState ? { initialState } : {}), record, fixture: { score: { ...record.score }, matchId: job.id, ...fixtureScorers(state), autoSimulated: true }, injuries, conditionLoss, appearances, cards }
 }
 
 /** 同一个全服战报映射给双方教练，各自看到自己的球队 ID、阵容和胜负。 */
@@ -107,6 +118,7 @@ export function recordForClub(job: MatchJob, result: MatchJobResult, clubId: str
   record.awayId = home ? job.away.team.id : 'player'
   record.opponentId = home ? job.away.team.id : job.home.team.id
   record.lineup = structuredClone(home ? job.home.team.lineup : job.away.team.lineup)
+  if (result.initialState) record.hasReplay = true
   const scored = home ? record.score.home : record.score.away
   const conceded = home ? record.score.away : record.score.home
   record.result = scored > conceded ? 'win' : scored < conceded ? 'loss' : 'draw'

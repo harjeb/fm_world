@@ -36,15 +36,24 @@ export function teamInputFromLineup(roster: Player[], lineup: Lineup, identity: 
 }
 
 /**
- * 电脑球队的比赛阵容。rotate：体能低于 80 的先休息（联赛用；有教练的球队按教练自己排的阵容，不传）。
- * 轮换只影响这一场，存档里的阵容不变。
+ * 电脑球队这一场的首发和替补。rotate：体能低于 80 的先休息（联赛用；有教练的球队按教练自己排的阵容，不传）。
+ * 轮换只影响这一场，存档里的阵容不变。停赛的人先剔除；剔除后阵容不完整时也按轮换重排
+ * （不能退回“只看实力”的自动填充，否则体能低的人会被排进首发）。
  */
-export function teamInputFromAI(ai: AITeam, suspended?: Set<string>, options: { rotate?: boolean } = {}): MatchTeamInput {
+export function aiMatchLineup(ai: AITeam, suspended?: Set<string>, rotate = false): Lineup {
   const players = suspended?.size ? ai.players.filter((player) => !suspended.has(player.id)) : ai.players
   const tactics = ai.lineup?.tactics ?? ai.tactics
-  const lineup = options.rotate && aiNeedsRotation(players, ai.lineup)
-    ? aiRotatedLineup(players, ai.lineup?.formationId ?? ai.formationId, tactics, ai.lineup)
-    : players.length === ai.players.length ? ai.lineup : autoFillLineup(players, ai.formationId, ai.tactics)
+  const intact = players.length === ai.players.length || validateLineup(players, ai.lineup).valid
+  if (rotate && (!intact || aiNeedsRotation(players, ai.lineup))) {
+    return aiRotatedLineup(players, ai.lineup?.formationId ?? ai.formationId, tactics, ai.lineup)
+  }
+  return intact ? ai.lineup : autoFillLineup(players, ai.formationId, ai.tactics)
+}
+
+/** 电脑球队的比赛阵容输入（见 aiMatchLineup）。 */
+export function teamInputFromAI(ai: AITeam, suspended?: Set<string>, options: { rotate?: boolean } = {}): MatchTeamInput {
+  const players = suspended?.size ? ai.players.filter((player) => !suspended.has(player.id)) : ai.players
+  const lineup = aiMatchLineup(ai, suspended, options.rotate)
   return { ...teamInputFromLineup(players, lineup, { id: ai.id, name: ai.name, color: ai.color, accent: ai.accent }), autoSubs: { timed: [], staminaBelow: null, onInjury: true } }
 }
 

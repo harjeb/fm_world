@@ -1,6 +1,8 @@
 /** 比赛显示为 90 分钟；引擎内部时钟与现实联赛推进各自独立。 */
 export const MATCH_DISPLAY_SECONDS = 5400
 export const LEAGUE_REALTIME_SECONDS = 600
+/** 联赛开球后多久公布比分：比赛按现实时间直播这么久，比分、积分榜和战报到点才一起出来。 */
+export const LEAGUE_REALTIME_MS = LEAGUE_REALTIME_SECONDS * 1000
 export const MATCH_RULES_VERSION = 3
 /** 权威仿真的基础步长：0.1 秒。 */
 export const MATCH_BASE_TICK_SECONDS = 0.1

@@ -689,6 +689,16 @@ h3:first-child { margin-top: 0; }
 .replay-panel .panel-body { padding-bottom: 0; }
 .replay-panel .event-log { margin: 0 -12px; }
 .replay-panel .commentary-log { max-height: 420px; }
+/* 复盘页 2D 重看 */
+.replay2d-panel { margin-bottom: 12px; }
+.replay2d-panel #replay-pitch { width: 100%; height: auto; display: block; }
+.replay2d-panel .rp-digits { display: grid; justify-items: center; gap: 4px; }
+.replay2d-panel .rp-digits small { color: var(--muted); font: 500 12px/1 var(--font-num); }
+.replay2d-panel .rp-controls { padding-top: 10px; }
+.rp-track { position: relative; flex: 1 1 220px; min-width: 180px; height: 28px; display: flex; align-items: center; }
+.rp-track input[type=range] { width: 100%; margin: 0; accent-color: var(--accent); }
+.rp-goal { position: absolute; top: 3px; width: 3px; height: 8px; margin-left: -1.5px; border-radius: 2px; background: var(--warn); pointer-events: none; }
+.replay2d-panel .rp-feed { margin: 10px -12px 0; max-height: 220px; overflow: auto; }
 .review-details { margin-bottom: 12px; }
 .review-details > summary {
   display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; cursor: pointer; list-style: none;

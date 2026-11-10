@@ -9,6 +9,8 @@ import { nextMatchCountdown, playerFixture } from '../src/game/season.ts'
 import type { GameState, WorldState } from '../src/game/types.ts'
 import type { JobEntry } from '../server/match-queue.ts'
 import type { MatchJob, MatchJobResult } from '../server/match-job.ts'
+import { PesEngine } from '../src/game/pes/engine.ts'
+import { LOGIC_MATCH_SECONDS } from '../src/game/match/time.ts'
 
 const servers: AppServer[] = [], dirs: string[] = []
 afterEach(() => {
@@ -111,7 +113,33 @@ describe('锁定快照、逐场计算、全服到点公布', () => {
     await app.runMatchQueue()
     expect(entries(dir).every((entry) => entry.attempts === 1)).toBe(true)
     expect(playerFixture((await load(base, first.token)).game)!.played).toBe(false)
+    // 开球：比赛进入 10 分钟直播，比分、积分榜、战报仍然不公开；教练拿到的是开球时的初始引擎状态。
     clock = at(12)
+    await app.runMatchQueue()
+    expect(worldAt(dir).divisions.flatMap((item) => item.fixtures).some((item) => item.played || item.score)).toBe(false)
+    expect(entries(dir).every((entry) => entry.status === 'ready')).toBe(true)
+    const watching = await load(base, first.token), watchingOpponent = await load(base, second.token)
+    expect(playerFixture(watching.game)!.played).toBe(false)
+    expect(watching.game.matchHistory).toHaveLength(0)
+    const live = watching.game.activeMatch!
+    expect(live).toMatchObject({ preplayed: true, startedAt: at(12), coachPausesLeft: 0, context: { isLeague: true, round: 1, durationSeconds: LOGIC_MATCH_SECONDS } })
+    expect(watchingOpponent.game.activeMatch!.context.homeAway).not.toBe(live.context.homeAway)
+    // 存档里带着服务器时钟：客户端先对准它再回放，本机时钟不准也不会把回放放到错的时刻。
+    expect((await (await fetch(`${base}/api/game`, { headers: auth(first.token) })).json() as { serverTime: number }).serverTime).toBe(clock)
+    // 直播回放就是算好的这场：从开球状态一路推进，比分和之后公布的完全一致。
+    const replay = PesEngine.restore(live.engineState as never)
+    expect(replay.state.score).toEqual({ home: 0, away: 0 })
+    replay.advanceTo(LOGIC_MATCH_SECONDS + 30)
+    expect(replay.state.finished).toBe(true)
+    expect(replay.state.score).toEqual(expected)
+    // 直播副本不会存回账号：旧页面把它原样交回来也只是被丢掉。
+    expect((await save(base, first.token, watching)).status).toBe(200)
+    expect((await load(base, first.token)).game.activeMatch?.preplayed).toBe(true)
+    clock = at(12, 10) - 1
+    await app.runMatchQueue()
+    expect(worldAt(dir).divisions.flatMap((item) => item.fixtures).some((item) => item.played || item.score)).toBe(false)
+    expect(entries(dir).every((entry) => entry.status === 'ready')).toBe(true)
+    clock = at(12, 10)
     await app.runMatchQueue()
     const published = worldAt(dir)
     expect(published.divisions.every((item) => item.fixtures.filter((item) => item.round === 1).every((item) => item.played))).toBe(true)
@@ -129,6 +157,24 @@ describe('锁定快照、逐场计算、全服到点公布', () => {
     expect(two.game.matchHistory).toHaveLength(1)
     expect(one.game.matchHistory[0].id).toBe(two.game.matchHistory[0].id)
     expect(one.game.matchHistory[0].createdAt).toBe(at(12))
+    // 公布后两位教练都能 2D 重看：服务器留着开球状态，从头回放得到公布的比分；对手视角相反。
+    const matchId = one.game.matchHistory[0].id
+    expect(one.game.matchHistory[0].hasReplay).toBe(true)
+    expect(two.game.matchHistory[0].hasReplay).toBe(true)
+    const replayOf = async (token: string, id: string) => fetch(`${base}/api/match/replay?id=${id}`, { headers: auth(token) })
+    const mine = await replayOf(first.token, matchId)
+    expect(mine.status).toBe(200)
+    const replayData = await mine.json() as { engineState: never; homeAway: string; durationSeconds: number }
+    expect(replayData.durationSeconds).toBe(LOGIC_MATCH_SECONDS)
+    expect((await (await replayOf(second.token, matchId)).json() as { homeAway: string }).homeAway).not.toBe(replayData.homeAway)
+    const rewatch = PesEngine.restore(replayData.engineState)
+    expect(rewatch.state.score).toEqual({ home: 0, away: 0 })
+    rewatch.advanceTo(LOGIC_MATCH_SECONDS + 30)
+    expect(rewatch.state.score).toEqual(expected)
+    // 没有登录、格式不对、不是自己的比赛，都拿不到。
+    expect((await fetch(`${base}/api/match/replay?id=${matchId}`)).status).toBe(401)
+    expect((await replayOf(first.token, 'q-nope')).status).toBe(404)
+    expect((await replayOf(first.token, `q-${'0'.repeat(64)}`)).status).toBe(404)
     expect(one.game.training).toEqual(training)
     expect(one.game.economy!.academy).toBe(current.game.economy!.academy)
     expect(one.game.economy!.balance).toBeGreaterThan(current.game.economy!.balance)
@@ -161,6 +207,7 @@ describe('锁定快照、逐场计算、全服到点公布', () => {
     expect(playerFixture(late.game)!.played).toBe(true)
     expect(late.game.season.table.find((row) => row.teamId === 'player')!.played).toBe(1)
     expect(late.game.matchHistory).toHaveLength(0)
+    expect((await replayOf(late.token, matchId)).status).toBe(404)
     expect(nextMatchCountdown(late.game, clock)).toBe('1 小时 0 分')
     expect(worldAt(dir).divisions).toEqual(old.divisions)
   }, 120_000)
@@ -180,6 +227,9 @@ describe('锁定快照、逐场计算、全服到点公布', () => {
     expect(app.accountCount()).toBe(0)
     expect(worldAt(dir).divisions.flatMap((item) => item.fixtures).some((item) => item.played)).toBe(false)
     clock = at(12)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(worldAt(dir).divisions.flatMap((item) => item.fixtures).some((item) => item.played)).toBe(false)
+    clock = at(12, 10)
     await wait(() => entries(dir).every((entry) => entry.status === 'published'))
     expect(worldAt(dir).divisions.every((item) => item.table.every((row) => row.played === 1))).toBe(true)
   }, 120_000)

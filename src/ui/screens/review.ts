@@ -9,6 +9,7 @@ import { skillEffectText } from '../../game/data/skill-effects.ts'
 import { clockText, esc, skillName } from '../format.ts'
 import { tipAttrs } from '../tooltip.ts'
 import { game, replay, resetReplay, ui } from '../state.ts'
+import { renderReplay2D } from '../replay-2d.ts'
 
 export function eventTypeLabel(type: string): string {
   const labels: Record<string, string> = { goal: '进球', shot: '射门', save: '扑救', block: '封堵', foul: '犯规', pass: '传球', dribble: '盘带', tackle: '抢断', contest: '争夺', setpiece: '定位球', penalty: '点球', kickoff: '开球', half: '半场', full: '终场', sub: '换人', injury: '受伤', tactic: '战术', miss: '偏出', info: '信息' }
@@ -105,6 +106,7 @@ function renderRecord(record: MatchRecord): string {
       kicker: `<button class="link" data-action="back-review">${icon('left', 12)} 返回记录</button><span class="kicker-sep">${record.isLeague ? `联赛第 ${record.round} 轮` : '友谊赛'} · 种子 ${record.seed}</span>`,
       title: `${esc(record.homeName)} vs ${esc(record.awayName)}`,
     })}
+    ${renderReplay2D(record)}
     ${renderReplay(record)}
     <details class="review-details"><summary>${icon('review', 15)}展开完整赛后复盘（含最终结果）</summary>
       <div class="report" style="${recordKits(record)}">

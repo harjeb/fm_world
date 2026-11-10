@@ -82,9 +82,17 @@ export function createInitialGame(seed?: number, clubName = '青石'): GameState
 }
 
 /** 只写本地缓存（联机存档来自服务器时用，避免把服务器状态再推回去）。 */
+/**
+ * 联赛直播回放（activeMatch.preplayed）只活在服务器下发的存档副本里：
+ * 不落本地缓存，否则离线重开会把已经结束的比赛当成“进行中”。
+ */
+export function withoutReplay(game: GameState): GameState {
+  return game.activeMatch?.preplayed ? { ...game, activeMatch: undefined } : game
+}
+
 export function cacheGameLocally(game: GameState): void {
   try {
-    if (typeof localStorage !== 'undefined') localStorage.setItem(SAVE_KEY, JSON.stringify(game))
+    if (typeof localStorage !== 'undefined') localStorage.setItem(SAVE_KEY, JSON.stringify(withoutReplay(game)))
   } catch {
     // 本地缓存失败不影响服务器同步。
   }
@@ -95,7 +103,7 @@ export function saveGame(game: GameState): boolean {
   let local = false
   try {
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(SAVE_KEY, JSON.stringify(game))
+      localStorage.setItem(SAVE_KEY, JSON.stringify(withoutReplay(game)))
       local = true
     }
   } catch {

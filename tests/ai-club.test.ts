@@ -22,6 +22,8 @@ import { facilityUpgradeCost, facilityLevel, projectedRoundIncome } from '../src
 import { AVERAGE_ROUND_GAME_DAYS } from '../src/game/calendar.ts'
 import { cachedOwnerlessTeams, createWorldGame } from '../src/game/world.ts'
 import { simulateAITrainingRound } from '../src/game/ai-training.ts'
+import { initialDisplayCA } from '../src/game/rating.ts'
+import { refreshAILineup } from '../src/game/squad.ts'
 
 const game = () => createWorldGame(2024)
 
@@ -262,6 +264,90 @@ describe('电脑球队的经营节奏', () => {
     const ratings = Object.values(ai.cards).map((card) => card.rating)
     expect(ratings.length).toBeGreaterThan(0)
     expect(ai.trained).toBeGreaterThan(0)
+  })
+})
+
+describe('电脑球队按原始 CA 培养并换下主力', () => {
+  const ownerKey = (player: Player) => `${player.id}|${player.enName}`
+  /** 不到一个游戏日的一轮：二级球队刚好练 1 个人。 */
+  const oneSession = (ai: AIClubState, team: Parameters<typeof advanceAIClub>[2], seed: number) =>
+    advanceAIClub(ai, { id: team!.id, tier: 'division2' }, team, 0.5, seed)
+
+  it('新买的高水平球星原始 CA 最高又没练过，第一个轮到他', () => {
+    const team = structuredClone(game().aiTeams[0])
+    const ai = state(100_000, 'division2')
+    const slot = team.players.findIndex((player, index) => index > 4 && player.positions.GK === 0)
+    const star = scale(team.players[slot], 2)
+    star.baseAttrs = { ...star.attrs }
+    team.players[slot] = star
+    expect(team.players.every((player) => player === star || initialDisplayCA(player) < initialDisplayCA(star))).toBe(true)
+
+    expect(oneSession(ai, team, 31).trained).toBe(1)
+    expect(ai.trainedOwners).toEqual([ownerKey(star)])
+  })
+
+  it('按原始 CA 从高到低每次练一个，全队练过一遍后清空重新开一圈', () => {
+    const team = structuredClone(game().aiTeams[0])
+    const ai = state(100_000, 'division2')
+    const order = [...team.players].sort((a, b) => initialDisplayCA(b) - initialDisplayCA(a)).map(ownerKey)
+    for (let index = 0; index < team.players.length; index++) {
+      oneSession(ai, team, 100 + index)
+      expect(ai.trainedOwners, `第 ${index + 1} 次`).toEqual(order.slice(0, index + 1))
+    }
+    oneSession(ai, team, 500)
+    expect(ai.trainedOwners).toEqual([order[0]])
+  })
+
+  it('离队球员不再占着“已练”记录，新来的先练', () => {
+    const team = structuredClone(game().aiTeams[0])
+    const ai = state(100_000, 'division2')
+    ai.trainedOwners = [...team.players.map(ownerKey), 'gone|Ghost Player']
+    const rookie = scale(team.players[7], 1.2)
+    rookie.id = 'rookie-1'
+    rookie.enName = 'Rookie One'
+    rookie.baseAttrs = { ...rookie.attrs }
+    team.players.push(rookie)
+    expect(oneSession(ai, team, 7).trained).toBe(1)
+    // 只有新来的这一个是新练的，离队的记录被剔除；练的就是他（卡在他自己的槽位上）。
+    expect(ai.trainedOwners).toContain(ownerKey(rookie))
+    expect(ai.trainedOwners).not.toContain('gone|Ghost Player')
+    expect(ai.trainedOwners).toHaveLength(team.players.length)
+    expect(ai.cards[String(team.players.length - 1)]?.owner).toBe(ownerKey(rookie))
+  })
+
+  it('替补练出来比主力强，就把主力换下来进首发', () => {
+    let proven = false
+    for (const candidate of game().aiTeams) {
+      const team = structuredClone(candidate)
+      const ai = state(100_000, 'division2')
+      const starters = new Set(team.lineup.starters.map((starter) => starter.playerId))
+      for (const bench of team.players.filter((player) => !starters.has(player.id) && player.positions.GK === 0)) {
+        const starter = team.players.find((player) => starters.has(player.id) && primaryPosition(player) === primaryPosition(bench))
+        if (!starter) continue
+        // 这名替补练之前比主力略弱（差 20 点），一次培养至少涨 50，练完就该超过主力。
+        let factor = 1
+        const target = playerCa(starter) - 20
+        const weakened = structuredClone(bench)
+        while (playerCa(weakened) > target && factor > 0.2) {
+          factor -= 0.02
+          weakened.attrs = scale(bench, factor).attrs
+        }
+        weakened.baseAttrs = { ...weakened.attrs }
+        team.players[team.players.indexOf(bench)] = weakened
+        ai.trainedOwners = team.players.filter((player) => player !== weakened).map(ownerKey)
+        refreshAILineup(team)
+        if (team.lineup.starters.some((item) => item.playerId === weakened.id)) continue
+        const before = playerCa(weakened)
+        oneSession(ai, team, 13)
+        const after = team.players.find((player) => player.id === weakened.id)!
+        expect(playerCa(after)).toBeGreaterThan(before + 40)
+        expect(team.lineup.starters.some((item) => item.playerId === weakened.id)).toBe(true)
+        proven = true
+        break
+      }
+      if (proven) break
+    }
+    expect(proven).toBe(true)
   })
 })
 

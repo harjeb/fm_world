@@ -687,6 +687,8 @@ export type MatchRecord = {
   lineup: Lineup
   opponentId: string
   autoSimulated?: boolean
+  /** 联机联赛：服务器留着开球时的引擎初始状态，可以在复盘页 2D 重看整场（`GET /api/match/replay`）。 */
+  hasReplay?: boolean
 }
 
 export type MatchInstruction = {
@@ -884,6 +886,11 @@ export type AIClubState = {
   upgradeProgress?: number
   /** 这个赛季已经买进几个人（竞拍、签自由球员、挖人），每赛季最多 5 人。 */
   transfers?: { season: number; bought: number }
+  /**
+   * 这一圈培养里已经练过的球员（`id|英文名`）。电脑球队按“原始 CA 从高到低、还没练过的”挑人，
+   * 全队都练过一遍后清空重新开一圈；球员离队后自然从名单里剔除。
+   */
+  trainedOwners?: string[]
 }
 
 export type MatchContext = {
@@ -905,6 +912,12 @@ export type ActiveMatchSave = {
   startedAt: number
   elapsedSeconds?: number
   coachPausesLeft: number
+  /**
+   * 联机联赛的回放：比赛已经在开球前 30 分钟锁定阵容并由服务器算好，
+   * 这里的 engineState 是开球那一刻的初始状态，浏览器按现实时钟把它回放出来（约 10 分钟），不能干预。
+   * 只存在于服务器下发的存档副本里，不会保存回服务器，也不落本地缓存。
+   */
+  preplayed?: boolean
 }
 
 export type ReviewRecommendation = {
