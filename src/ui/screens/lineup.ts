@@ -803,7 +803,7 @@ export function renderLineup(): string {
     ${pageHead({
       title: `战术 ${dirty ? '<span class="tag gold head-tag">未保存</span>' : ''}`,
       sub: contextLine(),
-      actions: `<select id="lineup-auto-mode" class="auto-mode" aria-label="自动填充方式" ${onlineLock ? 'disabled' : ''}><option value="best" ${ui.lineupAutoMode === 'best' ? 'selected' : ''}>最强阵容（CA·熟练度）</option><option value="half" ${ui.lineupAutoMode === 'half' ? 'selected' : ''}>部分轮换</option><option value="full" ${ui.lineupAutoMode === 'full' ? 'selected' : ''}>全部轮换</option></select><button class="btn" data-action="lineup-auto" ${onlineLock ? 'disabled' : ''}>自动填充</button><button class="btn primary" data-action="lineup-save" ${onlineLock ? 'disabled' : ''}>${icon('check', 14)}保存阵容</button>`,
+      actions: `<select id="lineup-auto-mode" class="auto-mode" aria-label="自动填充方式" ${onlineLock ? 'disabled' : ''}><option value="best" ${ui.lineupAutoMode === 'best' ? 'selected' : ''}>最强阵容（CA·熟练度）</option><option value="half" ${ui.lineupAutoMode === 'half' ? 'selected' : ''}>部分轮换（体能优先）</option><option value="full" ${ui.lineupAutoMode === 'full' ? 'selected' : ''}>全部轮换（体能优先）</option></select><button class="btn" data-action="lineup-auto" ${onlineLock ? 'disabled' : ''}>自动填充</button><button class="btn primary" data-action="lineup-save" ${onlineLock ? 'disabled' : ''}>${icon('check', 14)}保存阵容</button>`,
     })}
     ${lockBanner}
     <div class="tactics">

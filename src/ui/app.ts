@@ -771,12 +771,12 @@ function askingFloor(player: Player, auction: ReturnType<typeof marketState.auct
   return minimumBid(player, auction)
 }
 
-/** 战术页自动填充：按 CA、位置熟练度和体能分配；部分轮换/全部轮换还会参考体力和本赛季出场时间。 */
+/** 战术页自动填充：轮换先排除伤停、再看体能和能力；部分轮换基于当前草稿，而不是重新洗掉首发。 */
 function autoFillLineupDraft(): Lineup {
   const base = ui.lineupDraft ?? game.lineup
   const minutes = new Map(game.roster.map((player) => [player.id, seasonStats(game, player.id).minutes]))
   const now = Date.now()
-  const lineup = autoAssignLineup(game.roster, base.formationId, base.tactics, undefined, ui.lineupAutoMode, {
+  const lineup = autoAssignLineup(game.roster, base.formationId, base.tactics, base, ui.lineupAutoMode, {
     condition: (player) => player.condition ?? 100,
     minutes: (player) => minutes.get(player.id) ?? 0,
     suspended: (player) => !!game.suspensions?.[player.id],
@@ -1394,7 +1394,7 @@ document.addEventListener('click', async (event) => {
         break
       }
       ui.lineupDraft = autoFillLineupDraft()
-      ui.notice = `${{ best: '已按 CA 和熟练度排出最强阵容', half: '已部分轮换：体力差的约一半主力换成体力好的替补', full: '已全部轮换：换上本赛季上场最少的一批人' }[ui.lineupAutoMode]}，记得保存。`
+      ui.notice = `${{ best: '已按 CA 和熟练度排出最强阵容（排除伤停）', half: '已部分轮换：保留健康首发，优先替换疲劳球员，体能相同时再看能力', full: '已全部轮换：健康、体能优先，体能相同时再看 CA 和位置适配' }[ui.lineupAutoMode]}，记得保存。`
       render()
       break
     case 'lineup-save':
