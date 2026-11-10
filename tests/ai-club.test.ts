@@ -21,6 +21,7 @@ import { AI_BID_PREFIX, AUCTION_DURATION_MS, placeAIBid, settleAuctions, type Fr
 import { facilityUpgradeCost, facilityLevel, projectedRoundIncome } from '../src/game/economy.ts'
 import { AVERAGE_ROUND_GAME_DAYS } from '../src/game/calendar.ts'
 import { cachedOwnerlessTeams, createWorldGame } from '../src/game/world.ts'
+import { simulateAITrainingRound } from '../src/game/ai-training.ts'
 
 const game = () => createWorldGame(2024)
 
@@ -131,7 +132,7 @@ describe('电脑球队的经营节奏', () => {
       team.players.forEach((player, slot) => {
         const delta = playerCa(player) - before[slot]
         expect(delta, `${tier} slot ${slot}`).toBeGreaterThanOrEqual(-0.5)
-        // 每个被练到的人一次约 +250～300 CA（和玩家一整轮同量级）；
+        // 每个被练到的人一次约 +80～230 CA（和玩家自动一轮同量级）；
         // 6 轮下来会顶到 PA，取整可能超出不到 5 点。
         if (Number.isFinite(player.pa)) expect(playerCa(player), `${tier} slot ${slot}`).toBeLessThanOrEqual(player.pa! + 5)
         // 装上的卡就是这个槽位自己的卡。
@@ -166,6 +167,18 @@ describe('电脑球队的经营节奏', () => {
     ai.cards['3'] = { rating: playerCa(strong), attrs: { ...strong.attrs }, owner }
     expect(equipAICards(ai, team.players)).toBe(true)
     expect(playerCa(player)).toBeGreaterThan(playerCa(strong) - 1)
+  })
+
+  it('AI 一次培养真实跑完 30 个时段，和玩家自动一轮同量级', () => {
+    const base = game()
+    const player = structuredClone(base.roster[0])
+    const ai = createAIClub({ id: 'probe', tier: 'division2' }, 7)
+    for (const id of ['stadium', 'academy', 'medical', 'shop', 'sponsor', 'psychology', 'tactics'] as const) ai.economy[id] = 1
+    const before = playerCa(player)
+    const trained = simulateAITrainingRound(player, 123, ai.economy)
+    expect(playerCa(trained)).toBeGreaterThan(before + 50)
+    expect(trained.attrs).not.toEqual(player.attrs)
+    expect(trained.version).toBeGreaterThan(player.version)
   })
 
   it('一次培养的力度和玩家同量级，不再是零点几', () => {

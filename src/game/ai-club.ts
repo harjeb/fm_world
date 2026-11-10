@@ -1,14 +1,15 @@
-import { caOf, costAttrs } from './ca.ts'
-import { MAX_FANS, STAGES_PER_LEVEL, facilityLevel, facilityStageChance, facilityUpgradeCost, projectedRoundIncome } from './economy.ts'
+import { caOf } from './ca.ts'
+import { MAX_FANS, STAGES_PER_LEVEL, facilityLevel, facilityUpgradeCost, projectedRoundIncome } from './economy.ts'
 import { AVERAGE_ROUND_GAME_DAYS } from './calendar.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 import { playerMarketValue } from './pricing.ts'
 import { isOnMarketToday } from './market-window.ts'
-import { attrMax, attrRating } from './scale.ts'
+import { attrMax } from './scale.ts'
 import { ALL_ATTRIBUTES, type AICard, type AIClubState, type AITeam, type AttrKey, type Attributes, type FacilityId, type GameState, type Player, type TierId, type WorldClub, type WorldState } from './types.ts'
 import { FULL_SQUAD, refreshAILineup } from './squad.ts'
 import { cachedOwnerlessTeams } from './world.ts'
 import { aiBuysLeft, noteAIBuy } from './transfer-rules.ts'
+import { simulateAITrainingRound } from './ai-training.ts'
 
 /**
  * 电脑球队的经营。
@@ -52,11 +53,9 @@ const TIER_PROFILE: Record<TierId, TierProfile> = {
 export const aiTierProfile = (tier: TierId): TierProfile => TIER_PROFILE[tier]
 
 /**
- * 一次训练 = 玩家的一整轮培养（30 个时段，只练这一个人），所有级别完全一样，不是一次行动。
- * 玩家自动培养一轮实测约 +250～270 CA（初始设施）；这里按同样的量级给基础值，再乘设施系数。
- * 每天练几个人由 perDay 决定；成长只受球员自己的 PA 上限约束，没有额外的目标或放缓。
+ * 一次训练 = 玩家的一整轮培养（30 个时段），直接调用玩家同一套训练规则。
+ * 每天练几个人由 perDay 决定；成长只受球员自己的 PA 上限约束，没有额外加成。
  */
-const AI_CA_PER_PROGRAM = 560
 /** 电脑球队阵容上限：比玩家的 25 人低，抢人时会留出位置。 */
 /** 电脑球队名单上限：25 人名单再留 4 个签人的空位。 */
 export const AI_SQUAD_LIMIT = 29
@@ -221,47 +220,6 @@ export function mergeSignings(state: AIClubState, players: Player[]): Player[] {
   return squad
 }
 
-const growableAttrs = (gk: boolean): readonly AttrKey[] => costAttrs(gk)
-
-function growCard(state: AIClubState, card: AICard, gk: boolean, rng: ReturnType<typeof derivedRng>, pa?: number): number {
-  const before = caOf(card.attrs, gk)
-  const facilityScale = 0.6 + facilityLevel(state.economy.stadium) / 5 + facilityLevel(state.economy.academy) / 10
-  const rolled = AI_CA_PER_PROGRAM * facilityScale * (0.8 + rng.float() * 0.4)
-  // 和玩家一样：能练多少练多少，只被球员自己的 PA 上限截断。
-  const gain = pa === undefined ? rolled : Math.min(rolled, Math.max(0, pa - before))
-  if (!(gain > 0)) return before
-  const keys = growableAttrs(gk)
-  // 把“提升 X 点能力评分”换算成属性比例：评分近似和属性评分的平方成正比。
-  const factor = Math.sqrt((before + gain) / Math.max(1, before))
-  const chances = {
-    stadium: facilityStageChance(state.economy.stadium),
-    academy: facilityStageChance(state.economy.academy),
-    medical: facilityStageChance(state.economy.medical),
-    psychology: facilityStageChance(state.economy.psychology),
-    tactics: facilityStageChance(state.economy.tactics),
-  }
-  const rolls = {
-    stadium: rng.float(),
-    academy: rng.float(),
-    medical: rng.float(),
-    psychology: rng.float(),
-    tactics: rng.float(),
-  }
-  // 球场管全属性，其它设施管各自那一类；抽到没触发就这次白练，和玩家一样。
-  const boost = 0.6 + 0.4 * ((rolls.stadium < chances.stadium ? 1 : 0) + (rolls.academy < chances.academy ? 1 : 0) + (rolls.medical < chances.medical ? 1 : 0) + (rolls.psychology < chances.psychology ? 1 : 0) + (rolls.tactics < chances.tactics ? 1 : 0)) / 5
-  for (const key of keys) card.attrs[key] = Math.round(card.attrs[key] * (1 + (factor - 1) * boost))
-  clampAttrs(card.attrs, gk)
-  let after = caOf(card.attrs, gk)
-  // 属性取整可能让 CA 稍微越过 PA：按平方比例压回来，和玩家的硬上限一致。
-  for (let guard = 0; guard < 3 && pa !== undefined && after > pa && after > 0; guard++) {
-    const scale = Math.sqrt(pa / after)
-    for (const key of keys) card.attrs[key] = Math.round(card.attrs[key] * scale)
-    clampAttrs(card.attrs, gk)
-    after = caOf(card.attrs, gk)
-  }
-  return after
-}
-
 /** 挑一个最该练的槽位：评分最低的那几个里随机一个，青训好的队会顺带照顾年轻人。 */
 function pickSlot(state: AIClubState, players: Player[] | undefined, rng: ReturnType<typeof derivedRng>): number {
   const ratings: { slot: number; rating: number }[] = []
@@ -315,15 +273,15 @@ export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | '
     // 没有当季名单（其他分区）就不练：账本里的卡等下赛季随名单重建，免得把 GK 属性练到场上球员身上。
     if (!base) break
     const card = cardOf(state, slot, base)
-    const gk = base.positions.GK > 0
-    const before = card.rating
-    const after = growCard(state, card, gk, rng, base.pa)
-    if (after <= before + 0.4) continue
-    state.cards[String(slot)] = { rating: after, attrs: { ...card.attrs }, owner: card.owner }
+    // 真实培养：从原始属性开始跑完 30 个时段和事件，产出这一轮的候选属性。
+    const trainedPlayer = simulateAITrainingRound(base, splitSeed(seed, `program-${state.trained}-${slot}`), state.economy)
+    state.trained += 1
     trained += 1
+    const rating = playerCa(trainedPlayer)
+    if (rating <= card.rating + 0.4) continue
+    state.cards[String(slot)] = { rating, attrs: { ...trainedPlayer.attrs }, owner: card.owner }
     // 按名单下标装这个槽位自己的卡（不能拿一个人当 0 号槽位去套）。
     if (applyToTeam && players) equipSlot(state, players, slot)
-    state.trained += 1
   }
 
   // 设施升级按级别限速：二级慢（约两轮升一次）、一级积极、顶级最快；名额按轮累计，钱不够就作废。
