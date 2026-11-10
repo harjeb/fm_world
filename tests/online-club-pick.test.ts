@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
+import { readStoredAccounts, writeStoredAccounts } from './account-storage-helpers.ts'
 import { applyAgentAction } from '../server/agent.ts'
 import { createWorldGame } from '../src/game/world.ts'
 import { seasonStartForRound } from '../src/game/calendar.ts'
@@ -101,12 +102,11 @@ describe('注册时选队，注册后不能换队', () => {
     const afterSave = await (await fetch(`${base}/api/game`, { headers })).json() as { game: GameState }
     expect(afterSave.game.settings).not.toHaveProperty('autoSettle')
     servers.pop()!.close()
-    const dbPath = path.join(dataDir, 'accounts.json')
-    const stored = JSON.parse(fs.readFileSync(dbPath, 'utf8'))
-    stored.accounts[0].game.settings.autoSettle = { season: 1, fromRound: 2, after: Date.UTC(2026, 10, 9, 8, 45) }
-    fs.writeFileSync(dbPath, JSON.stringify(stored))
+    const stored = readStoredAccounts(dataDir)
+    Object.assign(stored.accounts[0].game.settings!, { autoSettle: { season: 1, fromRound: 2, after: Date.UTC(2026, 10, 9, 8, 45) } })
+    writeStoredAccounts(dataDir, stored)
     ;({ base } = await start(dataDir))
-    expect(JSON.parse(fs.readFileSync(dbPath, 'utf8')).accounts[0].game.settings).not.toHaveProperty('autoSettle')
+    expect(readStoredAccounts(dataDir).accounts[0].game.settings).not.toHaveProperty('autoSettle')
     const swap = await fetch(`${base}/api/world/choose-club`, { method: 'POST', headers, body: JSON.stringify({ clubId: other.id }) })
     expect(swap.status).toBe(400)
     expect((await world(base, registered.token)).ownClubId).toBe(before.ownClubId)

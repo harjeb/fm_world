@@ -19,7 +19,7 @@ if (registration === 'invite' && !inviteCode) {
   console.error('FM_REGISTRATION=invite 但缺少 FM_INVITE_CODE，已改为 closed（只允许登录）。')
 }
 
-const { server } = createAppServer({
+const app = createAppServer({
   dataDir: process.env.FM_DATA_DIR ?? 'data',
   staticDir: process.env.FM_STATIC_DIR ?? 'dist',
   tickMs: Number(process.env.FM_TICK_MS ?? 30_000),
@@ -29,6 +29,26 @@ const { server } = createAppServer({
   turnstileSiteKey: process.env.FM_TURNSTILE_SITEKEY?.trim(),
   registerLimitPerHour: Number(process.env.FM_REGISTER_LIMIT_PER_HOUR ?? 5),
 })
+
+const { server } = app
+let stopping = false
+async function shutdown(): Promise<void> {
+  if (stopping) return
+  stopping = true
+  // 给正在上传存档的请求留出排空时间，避免无限等待慢连接。
+  const deadline = setTimeout(() => server.closeAllConnections(), 30_000)
+  deadline.unref()
+  try {
+    await app.shutdown()
+  } catch (error) {
+    console.error('停服保存失败', error)
+    process.exitCode = 1
+  } finally {
+    clearTimeout(deadline)
+  }
+}
+process.on('SIGINT', shutdown)
+process.on('SIGTERM', shutdown)
 
 server.listen(port, '0.0.0.0', () => {
   console.log(`FM online server: http://localhost:${port}`)

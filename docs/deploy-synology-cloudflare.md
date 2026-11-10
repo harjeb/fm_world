@@ -109,9 +109,11 @@ Cloudflare Access 是按人头计费的企业零信任（免费 50 席，付费�
 
 ## 7. 备份
 
-存档就三个 JSON：`data/accounts.json`、`data/world.json`、`data/sessions.json`。
+账号、游戏存档、密码哈希与登录会话存放在 `data/accounts.sqlite`；共享世界在 `data/world.json`，比赛任务和回放在 `data/match-jobs/`。升级后首次启动会事务迁移旧 `accounts.json` / `sessions.json`，原文件保留作迁移前备份，之后不再更新或重新导入。
 
-Hyper Backup 直接备份 `/volume1/docker/fm-world/data`。或加一条计划任务：
+**先正常停止应用容器，等待退出前 flush 完成，再备份整个 `data/` 目录。** SQLite 使用 WAL，运行中不要只复制 `.sqlite` 文件，也不要删除 `-wal` / `-shm` 文件。若要不停服备份，需使用 SQLite 在线备份工具，并单独协调共享世界与任务文件的一致性。
+
+停服后可用 Hyper Backup 备份 `/volume1/docker/fm-world/data`，或执行：
 
 ```bash
 cd /volume1/docker/fm-world && mkdir -p backup && \

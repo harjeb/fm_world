@@ -264,7 +264,7 @@ function acceptSession(data: AuthResponse): void {
 function connectEvents(): void {
   if (!token || typeof EventSource === 'undefined') return
   eventSource?.close()
-  eventSource = new EventSource(`/api/events?token=${encodeURIComponent(token)}`)
+  eventSource = new EventSource(`/api/events?token=${encodeURIComponent(token)}&client=${encodeURIComponent(clientId)}`)
   eventSource.onopen = () => {
     onlineState.connected = true
     notify()
