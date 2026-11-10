@@ -18,6 +18,8 @@ import type { MatchPlayerState, MatchSide, MatchState, MatchTeamInput, MatchTeam
 import { MotionRatings } from './ability.ts'
 import { formationRows } from './formation.ts'
 import { PesSettlement, type PesSettlementJSON } from './settle.ts'
+import { DEFAULT_PARAMS } from './tactics.ts'
+import type { TacticalInstructionsV2, TacticsParams } from './tactics.ts'
 import { PesMatch, type PesTeamInit } from './sim.ts'
 import { GAME_RULES, makeGamePitch, type PesEvent, type PesMatchSnapshot, type PesRules, type PesTactics, type PitchSpec } from './spec.ts'
 
@@ -54,8 +56,25 @@ class MotionSettlement extends PesSettlement {
   }
 }
 
-/** 我们的 5 个战术枚举 → pes2d 滑杆（计划 5.1）。 */
-export function tacticsOf(tactics: Tactics): PesTactics {
+/**
+ * 我们的 5 个战术枚举 → pes2d 滑杆（计划 5.1）。
+ *
+ * 给了首版九项 `instructions` 时走新分支：旧滑杆固定在中性基底（width / direct / press = 0.5），
+ * 方向、宽度、逼抢线、频率、攻防转换由新指令独立驱动，避免同一战术叠加两遍（文档 4.1）。
+ * 旧配置（没有 instructions）继续走原来的映射，v4 行为不变。
+ */
+export function tacticsOf(tactics: Tactics, instructions?: TacticalInstructionsV2): PesTactics {
+  if (instructions) {
+    return {
+      width: 0.5,
+      direct: 0.5,
+      press: 0.5,
+      aggression: 0.5,
+      tempo: DEFAULT_PARAMS.tempoValue[instructions.possession.tempo],
+      line: DEFAULT_PARAMS.lineValue[instructions.defense.line],
+      instructions,
+    }
+  }
   const press = { low: 0.25, mid: 0.5, high: 0.8 }[tactics.press]
   return {
     width: { middle: 0.3, balanced: 0.5, wing: 0.75 }[tactics.attack],
@@ -88,6 +107,10 @@ export interface PesGameOptions {
   rules?: Partial<PesRules>
   /** 场地；默认 11 人制的游戏场地（makeGamePitch） */
   spec?: PitchSpec
+  /** 战术实验埋点（只观察，不改行为） */
+  metrics?: boolean
+  /** 覆盖首版九项的实验参数 */
+  tacticsParams?: Partial<TacticsParams>
 }
 
 function pesTeam(input: MatchTeamInput, team: MatchTeamState, ratings: MotionRatings): PesTeamInit {
@@ -98,7 +121,7 @@ function pesTeam(input: MatchTeamInput, team: MatchTeamState, ratings: MotionRat
   }
   const rows = formationRows(input.formationId, custom)
   return {
-    tactics: tacticsOf(input.tactics),
+    tactics: tacticsOf(input.tactics, input.instructions),
     players: rows.map((row) => {
       const player = team.players.find((item) => item.slotId === row.slotId)
       if (!player) throw new Error(`阵容缺少位置 ${row.slotId}`)
@@ -112,6 +135,7 @@ function pesTeam(input: MatchTeamInput, team: MatchTeamState, ratings: MotionRat
         num: player.number,
         stamina: player.stamina / Math.max(1, player.maxStamina),
         ref: player.id,
+        familiarity: input.familiarity ?? 1,
       }
     }),
   }
@@ -150,6 +174,8 @@ export class PesGame {
       recordHz: source.recordHz,
       rules: { ...GAME_RULES, offside: source.offside ?? false, ...source.rules },
       contact: this.settlement,
+      metrics: source.metrics,
+      tacticsParams: source.tacticsParams,
     })
     // Kickoff placement may differ from the lineup's nominal coordinates.
     refreshMotionAbilities(this.match, this.settlement)

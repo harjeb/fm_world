@@ -55,6 +55,11 @@ export interface PesTactics {
   /** 0 短传 ~ 1 直塞 */
   direct: number
   aggression: number
+  /**
+   * 首版九项指令（docs/fm-tactical-styles-and-instructions.md 3.3）。
+   * 给了它才走新分支：旧滑杆固定在中性基底，方向 / 宽度 / 逼抢线 / 频率 / 转换各自由指令驱动。
+   */
+  instructions?: import('./tactics.ts').TacticalInstructionsV2
 }
 
 export const DEFAULT_TACTICS: PesTactics = { width: 0.5, line: 0.5, press: 0.5, tempo: 0.5, direct: 0.5, aggression: 0.5 }
@@ -192,6 +197,10 @@ export interface PesPlayer {
   /** 个人跑动米数 */
   distance: number
   touches: number
+  /** 战术熟练度 0–1（缺省 1 = 完全熟练）。只影响新指令的执行强度与失误，不改球员能力。 */
+  familiarity?: number
+  /** 本次决策的指令执行系数（−1…+1）：正 = 按指令执行，负 = 执行反了。每帧重算，不参与存档语义。 */
+  bias?: number
 }
 
 export interface PesTeam {
@@ -207,6 +216,13 @@ export interface PesTeam {
   /** 本帧负责上抢的球员 pid / 第二保护 pid，没有为 -1。每帧重新分配。 */
   presser: number
   cover: number
+  /** 新指令的第二上抢者（高强度压迫才有），没有为 -1。 */
+  presser2?: number
+  /** 最近一次确认得球 / 失球的比赛时刻（新指令的攻防转换窗口）。 */
+  gainAt?: number
+  lossAt?: number
+  /** 本帧防线指令的执行系数（−1…+1，已含熟练度与「执行反了」），无新指令时 undefined。 */
+  lineBias?: number
   /** marks[slot] = 该队员本帧盯防的对方 pid，没有为 -1。每帧重新分配。 */
   marks: number[]
 }

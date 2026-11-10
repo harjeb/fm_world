@@ -39,7 +39,8 @@
     "typecheck": "tsc --noEmit",
     "build:site": "vite build",
     "build:safe": "bash scripts/build-safe.sh",
-    "pes:stamina": "tsx scripts/pes-stamina.ts"
+    "pes:stamina": "tsx scripts/pes-stamina.ts",
+    "tactics:experiment": "tsx scripts/tactics-experiment.ts"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

@@ -20,6 +20,16 @@
  */
 import { derivedRng, PCG32 } from '../rng.ts'
 import type { ContactModel, PassKind, PassVerdict, ShotRequest, ShotVerdict } from './contact.ts'
+import { MatchMetrics } from './metrics.ts'
+import {
+  DEFAULT_PARAMS,
+  execution,
+  INSTRUCTION_DIFFICULTY,
+  slipChance,
+  triOf,
+  type TacticalInstructionsV2,
+  type TacticsParams,
+} from './tactics.ts'
 import {
   DEFAULT_TACTICS,
   emptyStats,
@@ -93,6 +103,8 @@ export interface PesPlayerInit {
   stamina?: number
   /** 调用方自己的球员 id，引擎原样带着不使用 */
   ref?: string
+  /** 战术熟练度 0–1；缺省 1（只在新指令下生效）。 */
+  familiarity?: number
 }
 
 export interface PesTeamInit {
@@ -120,6 +132,10 @@ export interface PesMatchInit {
   rules?: Partial<PesRules>
   /** 接触点结算模型；不给 = pes2d 原版的几何结算 */
   contact?: ContactModel
+  /** 打开战术实验埋点（默认关闭；只观察，不改行为、不消耗随机数） */
+  metrics?: boolean
+  /** 覆盖新指令的实验参数 */
+  tacticsParams?: Partial<TacticsParams>
 }
 
 export interface PesRestoreOptions {
@@ -159,6 +175,13 @@ export class PesMatch {
   restart: PesRestart | null = null
   setPiece: PesSetPiece | null = null
   events: PesEvent[] = []
+  /** 战术实验埋点（默认 null）。 */
+  metrics: MatchMetrics | null = null
+  /** 新指令参数（只在有球队给 `instructions` 时生效）。 */
+  tacticsParams: TacticsParams = DEFAULT_PARAMS
+  /** 上一帧确认控球的队伍（新指令的攻防转换窗口）。 */
+  private lastPoss: TeamIndex | null = null
+  private metricsClosed = false
   /** 录像帧（输出，不进存档） */
   frames: PesFrame[] = []
   recordHz = 0
@@ -188,6 +211,7 @@ export class PesMatch {
     }
     this.spec = source.spec ?? makePitch7()
     this.rules = { ...NATIVE_RULES, ...source.rules }
+    this.tacticsParams = { ...DEFAULT_PARAMS, ...source.tacticsParams }
     this.rng = source.rng ?? derivedRng(source.seed ?? 12345, 'pes-match')
     this.recordHz = source.recordHz ?? 0
     const home = this.buildTeam(source.home, 0, 'home', 1, 0)
@@ -202,6 +226,7 @@ export class PesMatch {
     this.setupKickoff(home)
     this.contact = source.contact ?? null
     this.contact?.attach(this)
+    if (source.metrics) this.metrics = new MatchMetrics(this)
   }
 
   private buildTeam(init: PesTeamInit, ti: TeamIndex, side: 'home' | 'away', dir: 1 | -1, base: number): PesTeam {
@@ -249,6 +274,7 @@ export class PesMatch {
         runTarget: null,
         distance: 0,
         touches: 0,
+        familiarity: row.familiarity,
       })
     })
     return team
@@ -291,6 +317,7 @@ export class PesMatch {
         p.tackleCd = Math.max(0, p.tackleCd - dt)
         p.shotCd = Math.max(0, p.shotCd - dt)
         if (p.decideT <= 0 && p.stun <= 0) {
+          this.metrics?.decide(p, this.time)
           this.decide(p)
           p.decideT = this.reactionTime(p)
         }
@@ -301,11 +328,16 @@ export class PesMatch {
     for (const t of this.teams) for (const p of t.players) this.move(p, dt)
     this.tryTackles()
     this.resolvePossession()
+    this.updateTransitions()
     this.checkRules()
     this.collect(dt)
 
     if (this.half === 1 && this.time >= P.HALF) this.onHalfEnd()
     else if (this.half === 2 && this.time >= P.HALF * 2) this.onHalfEnd()
+    if ((this.phase as PesPhase) === 'end' && this.metrics && !this.metricsClosed) {
+      this.metrics.finish(this)
+      this.metricsClosed = true
+    }
   }
 
   advance(seconds: number): void {
@@ -734,6 +766,45 @@ export class PesMatch {
     this.event(type, ti, taker ? [taker.pid] : [])
   }
 
+  /* ---------- 新指令：攻防转换窗口 ---------- */
+  private updateTransitions(): void {
+    const v2 = this.teams[0].tactics.instructions ?? this.teams[1].tactics.instructions
+    if (!v2 && !this.metrics) return
+    const poss = this.possessionTeam()
+    const ti = poss ? this.tiOf(poss) : null
+    if (this.metrics) this.metrics.step(this, ti, this.spec.DT)
+    if (!v2) return
+    if (ti === null || ti === this.lastPoss) return
+    if (this.lastPoss !== null) this.teams[this.lastPoss].lossAt = this.time
+    poss!.gainAt = this.time
+    this.lastPoss = ti
+  }
+
+  /** 转换窗口是模拟秒，按整场时长缩放（文档 4.1）。 */
+  private inWindow(since: number | undefined): boolean {
+    if (since === undefined) return false
+    return this.time - since <= this.tacticsParams.transitionWindow * (this.spec.HALF * 2) / 900
+  }
+
+  /** 球队熟练度：新指令的执行强度按全队均值缩放（个体熟练度用于「执行反了」的抽签）。 */
+  private teamFamiliarity(t: PesTeam): number {
+    const outfield = t.players.filter((p) => p.slot !== 0)
+    if (!outfield.length) return 1
+    return outfield.reduce((sum, p) => sum + (p.familiarity ?? 1), 0) / outfield.length
+  }
+
+  /**
+   * 每次决策的指令执行符号：+1 = 按指令，−1 = 执行反了。
+   * 熟练度低 / 指令难度高时更容易反着执行；这是新指令唯一额外抽取随机数的地方。
+   */
+  private tacticBias(p: PesPlayer, key: keyof typeof INSTRUCTION_DIFFICULTY): number {
+    if (!this.teams[p.ti].tactics.instructions) return 0
+    const fam = p.familiarity ?? 1
+    if (fam >= 1) return 1
+    const slip = Math.min(1, this.tacticsParams.familiaritySlip * (1 - fam) * INSTRUCTION_DIFFICULTY[key])
+    return this.rng.float() < slip ? -1 : 1
+  }
+
   /* ---------- 决策 ---------- */
   private possessionTeam(): PesTeam | null {
     const b = this.ball
@@ -825,6 +896,7 @@ export class PesMatch {
     const opps = this.other(t).players
     let best: PesPlayer | null = null
     let bs = 0.28
+    if (t.tactics.instructions) p.bias = this.tacticBias(p, 'passing')
     for (const mate of t.players) {
       if (mate === p) continue
       const s = this.passValue(p, mate, 0.15, opps)
@@ -846,6 +918,8 @@ export class PesMatch {
     const opps = this.other(t).players
     const press = this.pressure(p)
     const dGoal = dist(p.pos, this.oppGoalOf(t))
+    // 新指令的执行符号：一次决策抽一次，之后所有候选共用，避免每个候选各抽一枚。
+    if (t.tactics.instructions) p.bias = this.tacticBias(p, 'passing')
 
     // 刚接到球：先带一下（除非被逼得很紧）
     if (this.time < p.holdUntil && press < 0.5 && dGoal > 26 * K) {
@@ -1171,6 +1245,27 @@ export class PesMatch {
       }
     }
     s += (this.rng.float() - 0.5) * 0.09
+    // 新指令的首版九项：传球 / 方向 / 转换三项合计裁到 ±clip，只修改候选选择，不改传球成功率。
+    const v2 = t.tactics.instructions
+    if (v2) {
+      const params = this.tacticsParams
+      const K2 = this.spec.K
+      const passing = triOf(v2.possession.passing)
+      const focus = triOf(v2.possession.focus)
+      const z = clamp(Math.abs(mate.pos.y) / (this.spec.HW - 2.5), 0, 1)
+      let preference = params.wPass * passing * (clamp(d / (40 * K2), 0, 1) - 0.5)
+        + params.wFocus * focus * (z - 0.5)
+      const gain = v2.transition.onGain
+      if (gain !== 'balanced' && this.inWindow(t.gainAt)) {
+        const q = triOf(gain)
+        let transition = params.wTransition * q * clamp(fwd / (20 * K2), -1, 1)
+        // 危险回传保护：纵向回传 > 2K 且线路净空不足 1.5K 的候选不能因为转换指令而加分。
+        if (transition > 0 && fwd < -2 * K2 && lane < 1.5 * K2) transition = 0
+        preference += transition
+      }
+      const eff = execution(this.teamFamiliarity(t), params)
+      s += clamp(preference, -params.clipPreference, params.clipPreference) * eff * (p.bias ?? 1)
+    }
     return s
   }
 
@@ -1220,9 +1315,15 @@ export class PesMatch {
 
       // 前腰也可前插；最多两人同时冲刺，其他人留作接应层。
       const runners = t.players.filter((q) => q.runTarget && this.time < q.runUntil).length
+      const v2 = t.tactics.instructions
+      // 熟练度同样削弱「得球后前插」的执行强度：fam 低时回到中性概率。
+      const runProb = v2
+        ? lerp(0.12, this.tacticsParams.runnerProb[this.inWindow(t.gainAt) ? v2.transition.onGain : 'balanced'],
+          execution(this.teamFamiliarity(t), this.tacticsParams))
+        : 0.12
       if (p.line >= 0.6 && this.time > p.runUntil && runners < 2 && b.x * t.dir > -12 * K) {
         const sbl = this.spaceBehindLine(p, oppTeam)
-        if (sbl > 4 && this.rng.float() < 0.12) {
+        if (sbl > 4 && this.rng.float() < runProb) {
           const lineLx = Math.max(0, b.x * t.dir, this.secondLastLx(t, oppTeam))
           const runLx = Math.min(lineLx - 1.5, P.HL - 6 * K)
           const chanY = clamp(this.homeWorld(p).y + (this.rng.float() - 0.5) * 6, -P.HW + 4, P.HW - 4)
@@ -1245,9 +1346,10 @@ export class PesMatch {
           // 前腰在球前/肋部接应，中场在球后，后腰保留保护距离。
           const supportLx = K * (p.line >= 0.6 ? 4 + 3 * t.tactics.direct
             : p.line > 0.35 ? -(7 + 4 * (1 - t.tactics.direct)) : -15)
+          const focus = t.tactics.instructions ? triOf(t.tactics.instructions.possession.focus) : 0
           const sup = {
             x: b.x + t.dir * supportLx,
-            y: clamp(b.y + t.dir * side * 9 * K * (0.6 + 0.8 * t.tactics.width), -P.HW + 4, P.HW - 4),
+            y: clamp(b.y + t.dir * side * 9 * K * (0.6 + 0.8 * t.tactics.width) * (1 + 0.35 * focus), -P.HW + 4, P.HW - 4),
           }
           tgt = { x: lerp(tgt.x, sup.x, 0.42), y: lerp(tgt.y, sup.y, 0.42) }
         }
@@ -1265,7 +1367,7 @@ export class PesMatch {
 
     // ---- 防守 ----
     p.runTarget = null
-    if (t.presser === p.pid) {
+    if (t.presser === p.pid || t.presser2 === p.pid) {
       const ip = owner ? { x: owner.pos.x + owner.vel.x * 0.55, y: owner.pos.y + owner.vel.y * 0.55 }
         : this.predictBall(0.5)
       const g = this.goalOf(t)
@@ -1346,7 +1448,23 @@ export class PesMatch {
     let lx = lx0 + bxt * kx
     let ly = ly0 * (0.72 + 0.6 * tac.width) + byt * ky * (1 - 0.30 * tac.width)
 
+    // 新指令的持球宽度：只缩放相对球队中心的横向偏移，不把整体随球移动当成宽度；每个目标只缩放一次。
+    const v2 = tac.instructions
+    if (v2 && inPoss) {
+      const center = this.possessionCenterY(t)
+      const sign = triOf(v2.possession.width)
+      ly = center + (ly - center) * (1 + this.tacticsParams.wWidth * sign)
+    }
+
     lx += K * (inPoss ? (3 + 8 * tac.line) : -(2 + 6 * (1 - tac.press)))
+
+    // 新指令的防线纵深：低防线整条后撤、高防线整体前压（后卫最明显，中场次之）。
+    // 首轮只映射旧 line 时实测 DL 只差 2 米，和文档 −3～−10 米的目标差一个量级。
+    if (v2 && !inPoss) {
+      // 防线纵深同样吃熟练度：lineBias 由 updateShape 每帧算一次（含「执行反了」）。
+      const depth = K * (tac.line - 0.5) * 2 * this.tacticsParams.lineDepth * (t.lineBias ?? 1)
+      lx += depth * (p.line <= 0.35 ? 1 : p.line <= 0.55 ? 0.6 : 0.15)
+    }
 
     if (!inPoss) {
       // 防线：最高不能超过这条线；同时不能站在球的前面（球门一侧才是防守位置）
@@ -1369,8 +1487,27 @@ export class PesMatch {
     return { x: lx * dir, y: ly * dir }
   }
 
-  /* ---- 防线/越位线 ---- */
-  private secondLastLx(team: PesTeam, oppTeam: PesTeam): number {
+  /**
+   * 持球宽度缩放的中心：中性宽度下所有外场球员目标的横向均值。
+   * 用目标而不是实际位置，避免把球员惯性 / 随球漂移误当成宽度。
+   */
+  private possessionCenterY(t: PesTeam): number {
+    const P = this.spec
+    const tac = t.tactics
+    const byt = this.ball.y * t.dir
+    let sum = 0
+    let n = 0
+    for (const p of t.players) {
+      if (p.slot === 0) continue
+      const ly0 = (p.hn.y - 0.5) * P.W
+      const ky = 0.42 + 0.34 * p.line
+      sum += ly0 * (0.72 + 0.6 * tac.width) + byt * ky * (1 - 0.30 * tac.width)
+      n++
+    }
+    return n ? sum / n : 0
+  }
+
+  /* ---- 防线/越位线 ---- */  private secondLastLx(team: PesTeam, oppTeam: PesTeam): number {
     // 倒数第二名对手，包含门将；门将出击 / 被罚下时也按实际位置排序。
     const xs = oppTeam.players.map((o) => o.pos.x * team.dir).sort((a, b) => b - a)
     return xs[1] ?? -this.spec.HL
@@ -1425,6 +1562,7 @@ export class PesMatch {
     const K = this.spec.K
     const t = this.teams[p.ti]
     const d = dist(p.pos, mate.pos)
+    this.metrics?.pass(this, p, mate.pos, d)
     const lead = clamp(d / 16, 0.15, 1.7)
     const errAng = (1 - p.ab.passing) * 0.075 * (d / 22) + press * 0.04
     let ang = (this.rng.float() - 0.5) * 2 * errAng
@@ -2287,6 +2425,10 @@ export class PesMatch {
     }
     this.phase = 'end'
     this.event('end', -1)
+    if (this.metrics && !this.metricsClosed) {
+      this.metrics.finish(this)
+      this.metricsClosed = true
+    }
   }
 
   /* ---------- 统计 / 录像 ---------- */
@@ -2321,8 +2463,13 @@ export class PesMatch {
       const ip = b.owner >= 0 ? { x: b.x + b.vx * 0.2, y: b.y + b.vy * 0.2 } : this.predictBall(0.4)
       const eta = (p: PesPlayer): number => dist(p.pos, ip) / Math.max(2.5, this.maxSpeed(p) * 0.6)
       const sorted = outfield.slice().sort((a, c) => eta(a) - eta(c))
-      t.presser = sorted[0].pid
-      t.cover = sorted[1] ? sorted[1].pid : -1
+      const v2 = t.tactics.instructions
+      if (v2) {
+        this.assignPressers(t, v2, outfield, ip)
+      } else {
+        t.presser = sorted[0].pid
+        t.cover = sorted[1] ? sorted[1].pid : -1
+      }
 
       const oppTeam = this.other(t)
       const opps = oppTeam.players.filter((o) => o.role !== 'GK')
@@ -2348,6 +2495,51 @@ export class PesMatch {
         }
       }
     }
+  }
+
+  /**
+   * 新指令的上抢调度（文档 4.1「上抢调度的首版可执行起点」）：
+   * 逼抢线控制允许区域、频率控制搜索半径与人数；回撤窗口取消常规上抢，反抢窗口加半径并忽略逼抢线。
+   * 只分配任务，不直接提高抢断成功率；实际接触仍走 tryTackles / 结算。
+   */
+  private assignPressers(t: PesTeam, v2: TacticalInstructionsV2, outfield: PesPlayer[], ip: Vec2): void {
+    const P = this.spec
+    const params = this.tacticsParams
+    const b = this.ball
+    const ti = this.tiOf(t)
+    const fam = this.teamFamiliarity(t)
+    const eff = execution(fam, params)
+    const u = (b.x * t.dir + P.HL) / P.L
+    const counterpress = v2.transition.onLoss === 'counterpress' && this.inWindow(t.lossAt)
+    const regroup = v2.transition.onLoss === 'regroup' && this.inWindow(t.lossAt)
+    // 熟练度不足时防线类指令也会「执行反了」：低/高互换成对方档位（中档不变），再按执行强度缩到中性附近。
+    // 满熟练度不抽随机数，保证 fam = 1 的行为与校准实验逐位一致。
+    const slip = fam >= 1 ? 0 : slipChance(fam, INSTRUCTION_DIFFICULTY.engagement, params)
+    const invert = fam >= 1 || this.rng.float() >= slip ? 1 : -1
+    const level = <T extends 'low' | 'mid' | 'high'>(value: T): T => (invert > 0 || value === 'mid' ? value : value === 'low' ? 'high' as T : 'low' as T)
+    const engagement = lerp(params.engagement.mid, params.engagement[level(v2.defense.engagement)], eff)
+    const radius = lerp(params.pressRadius.mid, params.pressRadius[level(v2.defense.intensity)], eff)
+    const count = Math.max(1, Math.round(lerp(1, params.pressCount[level(v2.defense.intensity)], eff)))
+    // 防线纵深用同一个执行系数：满熟练度时正好等于指令值，低熟练度时退回中性 / 反向。
+    t.lineBias = t.tactics.line === 0.5 ? 0 : eff * invert
+    const maxPress = Math.min(count, Math.max(0, outfield.length - params.keepBack))
+    const search = counterpress ? Math.min(radius + params.counterpressBonus, params.counterpressMax) : radius
+    const allowed = !regroup && (counterpress || u <= engagement)
+    const near = outfield
+      .filter((p) => dist(p.pos, ip) <= search)
+      .sort((a, c) => dist(a.pos, ip) - dist(c.pos, ip) || a.pid - c.pid)
+    const picked = allowed ? near.slice(0, maxPress) : []
+    // 紧急上抢：禁区内完全没人上前不现实；任何档位允许一名 3 米内的合格球员，计入人数上限。
+    if (allowed && !picked.length) {
+      const emergency = outfield
+        .filter((p) => dist(p.pos, ip) <= params.emergencyRadius)
+        .sort((a, c) => dist(a.pos, ip) - dist(c.pos, ip) || a.pid - c.pid)[0]
+      if (emergency) picked.push(emergency)
+    }
+    t.presser = picked[0] ? picked[0].pid : -1
+    t.presser2 = picked[1] ? picked[1].pid : -1
+    t.cover = near.find((p) => !picked.includes(p))?.pid ?? -1
+    this.metrics?.press(ti, picked.length, u, this.inWindow(t.lossAt))
   }
 }
 

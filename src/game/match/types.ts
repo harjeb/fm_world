@@ -268,6 +268,10 @@ export type MatchTeamInput = {
   accent: string
   formationId: FormationId
   tactics: Tactics
+  /** 首版九项战术指令（docs/fm-tactical-styles-and-instructions.md 3.3）：给了才走新引擎分支。 */
+  instructions?: import('../pes/tactics.ts').TacticalInstructionsV2
+  /** 全队战术熟练度 0–1（缺省 1）。只在新指令下生效。 */
+  familiarity?: number
   autoSubs?: AutoSubPlan
   chemistry?: Record<string, number>
   starters: { player: Player; role: RoleId; slotId: string }[]
