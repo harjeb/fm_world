@@ -76,6 +76,8 @@ try {
   await send('Page.navigate', { url: `http://127.0.0.1:${port}` })
   await click('[data-action="boot-offline"]')
   await click('[data-nav="challenge"]')
+  assert.ok(!(await evaluate('document.body.innerText')).includes('挑战比赛不扣体能'))
+  assert.ok(!(await evaluate('document.body.innerText')).includes('杯赛冠军只记录奖杯荣誉'))
   await click('[data-challenge-mode="legend"]')
   await wait(`document.querySelector('[data-legend-tier="B"].active') && document.querySelectorAll('[data-action="start-legend-challenge"]').length > 0`)
   await click('[data-legend-tier="ALL"]')
@@ -87,7 +89,22 @@ try {
   await click('[data-challenge-mode="peak"]')
   await click('[data-peak-preview="50"]')
   await wait(`document.body.innerText.includes('足球小将') && document.body.innerText.includes('第 50 关全明星奖励')`)
+  await click('[data-pve-team="peak:50"]')
+  await wait(`document.querySelector('#pve-team-detail')?.innerText.includes('完整阵容')`)
+  const rosterValues = await evaluate(`(async () => {
+    const [{ buildPeakTeam }, { mainAttrsFor }] = await Promise.all([import('/src/game/peak.ts'), import('/src/game/scale.ts')]);
+    const team = buildPeakTeam(50);
+    return [false, true].map(gk => {
+      const player = team.players.find(p => (p.positions.GK > 0) === gk);
+      const row = [...document.querySelectorAll('#pve-team-detail tbody tr')].find(row => row.cells[1].querySelector('b').textContent === player.name);
+      return { actual: [...row.cells].slice(3, 3 + mainAttrsFor(gk).length).map(cell => Number(cell.textContent)),
+        expected: mainAttrsFor(gk).map(key => Math.round(player.attrs[key])) };
+    });
+  })()`)
+  for (const row of rosterValues) assert.deepEqual(row.actual, row.expected, 'Roster main attributes must use the player-facing 1500-point scale')
+  assert.ok(!(await evaluate(`document.querySelector('#pve-team-detail').innerText`)).includes('0–100'))
   await screenshot('peak-stage-50')
+  await click('#pve-team-detail [data-pve-team=""]')
   await evaluate(`import('/src/game/state.ts').then(m => {
     window.__peakSaves = [];
     m.setRemoteSaver(value => window.__peakSaves.push(structuredClone(value)));
@@ -132,6 +149,7 @@ try {
   const overflow = await evaluate('document.documentElement.scrollWidth > innerWidth + 2')
   if (overflow) throw new Error('手机页面横向溢出')
   await click('[data-challenge-mode="cup"]')
+  assert.doesNotMatch(await evaluate('document.body.innerText'), /\d+\s*支世界队/)
   await click('[data-action="enter-cup"][data-cup="community"]')
   await wait(`document.body.innerText.includes('小组赛') && !!document.querySelector('[data-action="start-cup-match"]')`)
   await click('[data-action="start-cup-match"][data-cup="community"]')
@@ -183,6 +201,7 @@ try {
     const world = await import('/src/game/world.ts');
     const cups = await import('/src/game/cup-run.ts');
     const probe = world.createWorldGame(3377);
+    window.__layoutGame = probe;
     for (const cup of ['community', 'league', 'champions']) {
       const result = cups.enterCup(probe, cup);
       if (!result.ok) throw new Error(result.error);
@@ -196,8 +215,75 @@ try {
   })()`)
   console.log('World save with all cups:', storage)
   assert.ok(storage.ok, 'Season pools and all three cup runs must fit local storage')
+  await evaluate(`(async () => {
+    const state = await import('/src/ui/state.ts');
+    const online = await import('/src/online.ts');
+    const game = window.__layoutGame;
+    game.season.round = 12;
+    game.season.startedAt += 86400000;
+    game.world.seasonStartedAt += 86400000;
+    game.clubName = '皇家海岸国际竞技足球俱乐部';
+    for (const team of game.aiTeams) {
+      team.name = '皇家海岸国际竞技足球俱乐部';
+      const club = game.world.clubs.find(club => club.id === team.id);
+      if (club) club.name = team.name;
+    }
+    for (const [index, fixture] of game.season.fixtures.slice(0, 8).entries()) {
+      fixture.played = true;
+      fixture.score = { home: index + 1, away: 0 };
+      const team = fixture.homeId === 'player' ? game : game.aiTeams.find(team => team.id === fixture.homeId);
+      const players = team.roster ?? team.players;
+      fixture.scorers = [{ playerId: players[1].id, name: '亚历山德罗·马克西米利安·费尔南德斯', goals: index + 1, teamId: fixture.homeId }];
+      fixture.assisters = [{ playerId: players[2].id, name: 'Alexander Maximilian Fernandez', assists: index + 2, teamId: fixture.homeId }];
+    }
+    state.setGame(game);
+    state.ui.notice = '';
+    online.onlineState.status = 'online';
+    online.onlineState.user = { id: 'layout-coach', username: 'layout-verification-coach' };
+    online.onlineState.connected = true;
+    online.marketState.auctions = [{ playerId: 'layout-player', playerName: 'Layout player', startedAt: Date.now(), endsAt: Date.now() + 723000,
+      bids: [{ accountId: 'layout-coach', club: game.clubName, amount: 150000, at: Date.now() }] }];
+  })()`)
+  await click('[data-nav="season"]')
+  for (const width of [1440, 1024, 768, 390, 360, 320]) {
+    await send('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: width <= 760 })
+    await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+    const layout = await evaluate(`(() => {
+      const rect = el => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; };
+      const overlap = (a, b) => a.left < b.right - 1 && a.right > b.left + 1 && a.top < b.bottom - 1 && a.bottom > b.top + 1;
+      const round = rect(document.querySelector('.top-stat:first-child'));
+      const clocks = [...document.querySelectorAll('.topbar .continue-wait, .topbar .auction-chip')].map(rect);
+      const rows = [...document.querySelectorAll('.season-bottom .leader-rows .row-line')];
+      return { topbarOverlap: clocks.some(clock => overlap(round, clock)),
+        overflow: document.documentElement.scrollWidth > innerWidth + 1,
+        rows: rows.length,
+        rowOverflow: rows.some(row => row.scrollWidth > row.clientWidth + 1),
+        scoreOverlap: rows.some(row => [...row.children].slice(0, 3).some(cell => overlap(rect(cell), rect(row.lastElementChild)))),
+        panels: [...document.querySelectorAll('.season-bottom > .panel')].map(rect) };
+    })()`)
+    await screenshot(`season-${width}`)
+    assert.equal(layout.topbarOverlap, false, `Round/countdown overlap at ${width}px`)
+    assert.equal(layout.overflow, false, `Horizontal page overflow at ${width}px`)
+    assert.equal(layout.rows, 16)
+    assert.equal(layout.rowOverflow, false, `Leaderboard row overflows at ${width}px`)
+    assert.equal(layout.scoreOverlap, false, `Leaderboard names overlap scores at ${width}px`)
+    assert.equal(layout.panels.length, 2)
+    if (width >= 1024) assert.ok(Math.abs(layout.panels[0].top - layout.panels[1].top) < 2, 'Desktop leaderboards must sit side by side')
+    if (width <= 760) assert.ok(layout.panels[1].top >= layout.panels[0].bottom, 'Mobile leaderboards must stack')
+    if (width === 1440 || width === 390) {
+      await evaluate(`document.querySelector('.season-bottom').scrollIntoView(); window.scrollBy(0, -document.querySelector('.topbar').getBoundingClientRect().height - 12)`)
+      const tickerOverlap = await evaluate(`(() => {
+        const header = document.querySelector('.topbar').getBoundingClientRect();
+        const ticker = document.querySelector('.market-ticker').getBoundingClientRect();
+        return ticker.top < header.bottom - 1 && ticker.bottom > header.top + 1;
+      })()`)
+      assert.equal(tickerOverlap, false, `Transfer ticker overlaps the header while scrolling at ${width}px`)
+      await screenshot(`season-leaders-${width}`)
+      await evaluate('window.scrollTo(0, 0)')
+    }
+  }
   if (errors.length) throw new Error(errors.join('\n'))
-  console.log('PvE headless smoke passed: legend filters, peak rewards and immediate saves, training books, desktop/mobile layouts, cup enrollment/reload, new-season opponents and archived history.')
+  console.log('UI headless smoke passed: challenge copy and attributes, rewards/saves, cup rollover, 320–1440px topbar spacing and populated leaderboards.')
 } catch (error) {
   await screenshot('failure').catch(() => {})
   console.error(await evaluate('document.body.innerText.slice(-4000)').catch(() => 'page unavailable'))

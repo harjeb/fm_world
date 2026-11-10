@@ -34,7 +34,7 @@ describe('技能和特性的效果说明', () => {
     expect(skillTierNote('box_hunter')).toContain('×1.4')
   })
 
-  it('每个特性都有说明；主属性按面板数字说，隐藏属性按满分 100 说', () => {
+  it('describes every trait using attribute names and effect values', () => {
     for (const id of Object.keys(TRAITS) as TraitId[]) {
       const text = traitEffectText(id)
       expect(text, id).toMatch(/\d/)
@@ -44,9 +44,9 @@ describe('技能和特性的效果说明', () => {
     expect(traitEffectText('wall')).toBe('扑救反应 +90。')
     expect(traitEffectText('anchor')).toBe('抢断 +75。')
     expect(traitEffectText('engine')).toBe('跑动时的体力消耗 -8%。')
-    expect(traitEffectText('metronome')).toBe('传球或进入前场时：视野 +6（隐藏属性，满分 100）。')
-    expect(traitEffectText('pace')).toBe('加速 +3（隐藏属性，满分 100）。')
-    expect(traitEffectText('target')).toBe('争顶时：力量 +105，头球 +7（隐藏属性，满分 100）。')
+    expect(traitEffectText('metronome')).toBe('传球或进入前场时：视野 +6。')
+    expect(traitEffectText('pace')).toBe('加速 +3。')
+    expect(traitEffectText('target')).toBe('争顶时：力量 +105，头球 +7。')
   })
 
   it('特性说明里的数字和比赛里的实际加成一致', () => {

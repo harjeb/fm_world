@@ -449,7 +449,7 @@ function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingR
       return emptyPlan('专项训练', '外场球员不能训练门将专属属性。', before)
     }
     if (!isMainAttr(attr, isGk)) {
-      return emptyPlan('专项训练', `${attrLabel(attr)} 是隐藏属性，不能直接专项训练；只能通过事件、配合或测验成长。`, before)
+      return emptyPlan('专项训练', `${attrLabel(attr)} 暂不支持专项训练，可通过事件、配合或测验成长。`, before)
     }
     const rng = actionRng(session, nextAction, `drill-${attr}`)
     const professionalism = session.candidate.personality.professionalism

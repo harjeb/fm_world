@@ -50,9 +50,9 @@ export function skillTierNote(id: SkillId): string {
   return id === 'iron_lung' ? '等级效果：银 5% / 金 10% / 彩虹 15%' : '等级效果：银 ×1 / 金 ×1.2 / 彩虹 ×1.4'
 }
 
-/** 主属性按面板的 0–1500 显示；隐藏属性没有面板数字，按比赛里的 0–100 说。 */
+/** Describe the attribute effect and value without exposing engine-scale labels. */
 const main = (value: number) => `+${num(value * MAIN_ATTR_SCALE)}`
-const hidden = (value: number) => `+${num(value)}（隐藏属性，满分 100）`
+const hidden = (value: number) => `+${num(value)}`
 
 const TRAIT_EFFECTS: Record<TraitEffect, (value: number) => string> = {
   vision: (v) => `传球或进入前场时：视野 ${hidden(v)}。`,

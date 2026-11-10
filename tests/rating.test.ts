@@ -55,7 +55,7 @@ describe('属性显示尺度', () => {
     delete session.scheduleVersion
     const hidden = planTraining(session, { kind: 'drill', attr: 'firstTouch' })
     expect(hidden.gains).toEqual({})
-    expect(hidden.note).toContain('隐藏属性')
+    expect(hidden.note).toContain('暂不支持专项训练')
     const main = planTraining(session, { kind: 'drill', attr: 'passing' })
     expect(main.gains.passing ?? 0).toBeGreaterThan(0)
   })
