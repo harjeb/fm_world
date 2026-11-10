@@ -389,6 +389,8 @@ export type TrainingSession = {
   /** 陪练队友：开局选定的其他 6 名队友，只给本次培养的主角加成长，不消耗精力也不涨属性。 */
   partnerIds?: string[]
   scheduleSeed?: number
+  /** Role snapshot used to keep match-training rewards stable throughout the course. */
+  matchRole?: RoleId
   lowMoodWeeks?: number[]
   exchangeMatches?: TrainingExchange[]
   playerId: string
@@ -519,6 +521,9 @@ export type PlayerMatchStats = {
   name: string
   side: 'home' | 'away'
   minutes: number
+  /** Display minutes (0-90), used to measure actual overlap between teammates. */
+  onMinute?: number
+  offMinute?: number
   passes: number
   passesCompleted: number
   shots: number
@@ -810,6 +815,17 @@ export type EconomyState = {
   lastIncomeRound: number
 }
 
+export type PairChemistry = {
+  players: [string, string]
+  minutes: number
+  training: number
+  lastAt: number
+  trainingAt?: number
+  trainingToday?: number
+}
+
+export type Chemistry = Record<string, PairChemistry>
+
 export type GameState = {
   version: number
   createdAt: number
@@ -827,6 +843,8 @@ export type GameState = {
   autoSubs?: AutoSubPlan
   training: Record<string, TrainingSession>
   injuries?: Record<string, number>
+  /** Sparse relationships between player instances, independent of equipped cards. */
+  chemistry?: Chemistry
   /** 最近 20 场的出场分钟（按球员 id，玩家和本联赛 AI 球队的都记），俱乐部判断放不放人用。 */
   appearances?: Record<string, number[]>
   /** AI 俱乐部发来的报价（收件箱）。 */

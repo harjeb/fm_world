@@ -54,8 +54,8 @@ const GK_ACTIVITIES: TrainingActivity[] = [
   ...(['goalkeeping', 'video', 'tactics'] as TrainingActivityId[]).map((id) => ACTIVITIES.find((item) => item.id === id)!),
 ]
 
-const EXCHANGE: TrainingActivity = { id: 'exchange', label: '交流赛', desc: '使用当前保存的阵容和已装备的属性与 AI 球队比赛，培养中的成果不参与。失败使本课程下周一至周三属性成长减半。不消耗训练体力。', stamina: '不耗体力', group: true }
-const MATCH: TrainingActivity = { id: 'match', label: '队内比赛', desc: '高强度队内比赛，综合练习。不消耗训练体力。', stamina: '不耗体力', group: true }
+const EXCHANGE: TrainingActivity = { id: 'exchange', label: '交流赛', desc: '使用当前保存的阵容和已装备的属性与 AI 球队比赛，培养中的成果不参与。按位置与职责轮换两项主属性成长；失败使本课程下周一至周三属性成长减半。不消耗训练体力。', stamina: '不耗体力', group: true }
+const MATCH: TrainingActivity = { id: 'match', label: '队内比赛', desc: '按位置与职责轮换两项主属性，并练习团队合作。不消耗训练体力。', stamina: '不耗体力', group: true }
 const REST: TrainingActivity = { id: 'rest', label: '恢复', desc: '恢复 30 点训练体力。', stamina: '+30', group: false }
 const MATCH_DAY_REST: TrainingActivity = { id: 'rest', label: '休整', desc: '队内比赛后的休整，不恢复训练体力。', stamina: '体力不变', group: false, noRecovery: true }
 const DAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'] as const

@@ -8,6 +8,7 @@ import { LEAGUE_REALTIME_MS } from '../src/game/match/time.ts'
 import { RECENT_MATCHES } from '../src/game/transfer-rules.ts'
 import { settleCondition } from '../src/game/condition.ts'
 import { aiMatchLineup } from '../src/game/match/setup.ts'
+import { chemistrySnapshot, pruneChemistry, recordMatchChemistry } from '../src/game/chemistry.ts'
 import { MatchQueue } from './match-queue.ts'
 import { emptyMatchBook, matchJobId, type LockedTeam, type MatchBook, type MatchJob, type MatchJobResult } from './match-job.ts'
 
@@ -40,6 +41,8 @@ export class MatchScheduler {
     if (changed) this.persist()
     const published = this.publishDue(now)
     this.prepare(now)
+    const caughtUp = world.divisions.every(d => d.fixtures.every(f => f.played || kickoffAtForRound(world.seasonStartedAt, f.round) + LEAGUE_REALTIME_MS > now))
+    if (caughtUp && pruneChemistry(this.shared.matchBook!.chemistry, now, world.divisions[0]?.gameDayMs)) { this.persist(); changed = true }
     return changed || published
   }
 
@@ -67,6 +70,7 @@ export class MatchScheduler {
         // 没有教练的电脑球队：锁定这一刻就按开球时的体能轮换（低于 80 的先休息、停赛的不排），
         // 阵容连同快照一起冻结，战报里记的也是真正上场的名单。有教练的球队用教练自己排的阵容。
         if (locked.ai) locked.team.lineup = aiMatchLineup(locked.team, new Set(locked.suspended), true)
+        locked.chemistry = chemistrySnapshot(this.shared.matchBook!.chemistry, [...locked.team.lineup.starters.map(p => p.playerId), ...locked.team.lineup.bench], kickoffAt, job.gameDayMs)
       }
       this.queue.enqueue(job)
     }
@@ -101,6 +105,7 @@ export class MatchScheduler {
 
   private applyEffects(job: MatchJob, result: MatchJobResult): void {
     const book = this.shared.matchBook!
+    recordMatchChemistry(book, result.record.playerStats, job.kickoffAt, job.gameDayMs)
     const ids = new Set(Object.keys(result.appearances))
     for (const id of ids) {
       const ban = book.suspensions[id]

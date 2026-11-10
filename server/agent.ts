@@ -586,7 +586,7 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       const request = parseTrainingRequest(body.request)
       if (!request) return { ok: false, error: '无效的训练请求；请检查 kind、参数及 teammateIds' }
       const playerId = text(body.playerId)
-      const result = trainingAction(game, playerId, request)
+      const result = trainingAction(game, playerId, request, now)
       const session = game.training[playerId]
       // Group results may contain unfiltered events or hidden gains; expose only the primary result.
       const visible = { ok: result.ok, error: result.error, completed: result.completed, event: result.event && session ? eventView(session, result.event) : null, exchange: result.exchange }

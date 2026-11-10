@@ -38,6 +38,7 @@ import { startChallengeWithOpponent } from '../src/game/actions.ts'
 import { MatchQueue, type MatchQueueOptions } from './match-queue.ts'
 import { MatchScheduler } from './match-scheduler.ts'
 import { emptyMatchBook, matchJobId, recordForClub, type LockedTeam, type MatchBook, type MatchJob } from './match-job.ts'
+import { chemistryForPlayers, mergeChemistryTraining } from '../src/game/chemistry.ts'
 
 type Account = {
   id: string
@@ -474,7 +475,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
     const book = sharedWorld.matchBook!
     const ids = new Set([...game.roster, ...game.aiTeams.flatMap((team) => team.players)].map((player) => player.id))
-    const before = JSON.stringify([game.injuries, game.suspensions, game.yellowCounts, game.appearances])
+    const before = JSON.stringify([game.injuries, game.suspensions, game.yellowCounts, game.appearances, game.chemistry])
+    game.chemistry = chemistryForPlayers(book.chemistry, new Set(game.roster.map(p => p.id)), now(), game.season.gameDayMs)
     for (const [id, until] of Object.entries(book.injuries)) (game.injuries ??= {})[id] = Math.max(game.injuries?.[id] ?? 0, until)
     for (const id of ids) {
       if (book.suspensions[id]) (game.suspensions ??= {})[id] = structuredClone(book.suspensions[id])
@@ -482,7 +484,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (book.yellowCounts[id] !== undefined) (game.yellowCounts ??= {})[id] = book.yellowCounts[id]
       if (book.appearances[id]) (game.appearances ??= {})[id] = [...book.appearances[id]]
     }
-    return changed || before !== JSON.stringify([game.injuries, game.suspensions, game.yellowCounts, game.appearances])
+    return changed || before !== JSON.stringify([game.injuries, game.suspensions, game.yellowCounts, game.appearances, game.chemistry])
   }
 
   /** 其他分区的赛程与积分同样以全服快照为准，不保留各账号各自抽象模拟的比分。 */
@@ -561,6 +563,12 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (!clubId || !sharedWorld.teams?.[clubId] || account.game.world?.clubs.find((item) => item.id === 'player')?.squadKey !== clubId) return
     const team = sharedWorld.teams[clubId]
     let changed = false
+    const book = sharedWorld.matchBook!
+    const beforeChemistry = JSON.stringify(book.chemistry)
+    const ownPlayers = new Set(account.game.roster.map(p => p.id))
+    mergeChemistryTraining(book, account.game.chemistry, ownPlayers, now(), account.game.season.gameDayMs)
+    account.game.chemistry = chemistryForPlayers(book.chemistry, ownPlayers, now(), account.game.season.gameDayMs)
+    if (beforeChemistry !== JSON.stringify(book.chemistry)) changed = true
     if (JSON.stringify(team.players) !== JSON.stringify(account.game.roster) || JSON.stringify(team.lineup) !== JSON.stringify(account.game.lineup) || team.name !== account.game.clubName) {
       sharedWorld.teams[clubId] = { ...team, name: account.game.clubName, players: structuredClone(account.game.roster), lineup: structuredClone(account.game.lineup) }
       changed = true

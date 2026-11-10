@@ -88,7 +88,7 @@ export type ShotModel = {
 }
 
 /** 内核对评分的依赖：有效属性和特性触发条件。MatchRatings 满足它。 */
-export type KernelRatings = Pick<MatchRatings, 'eff' | 'traitConditionMet'>
+export type KernelRatings = Pick<MatchRatings, 'eff' | 'traitConditionMet'> & Partial<Pick<MatchRatings, 'pairChemistry'>>
 
 /** 内核对调用方的依赖：技能触发统计（只在 markSkills 为真时调用）和旧存档规则开关。 */
 export interface KernelHooks {
@@ -159,6 +159,8 @@ export class SettlementKernel {
       if (markSkills) this.hooks.markSkill(main, 'sweeper', true, true)
     }
     let c = -Math.max(0, dist - 12) * 0.35
+    const cooperation = this.ratings.pairChemistry?.(carrier, receiver) ?? 0
+    c += 4 * clamp(cooperation, 0, 100) / 100 * (type === 'long' ? 0.5 : type === 'cross' ? 0.8 : 1)
     const nearestToReceiver = this.nearestOpponent(opp, receiver)
     c += nearestToReceiver ? Math.min(5, distance(nearestToReceiver, receiver) * 0.25) : 3
     c -= pressure * 0.8
@@ -712,9 +714,9 @@ export class SettlementKernel {
       const dist = distance(player, point)
       const isGk = player.position === 'GK'
       if (dist <= (isGk ? 11 : 13)) {
-        const weight = isGk
+        const weight = (isGk
           ? 0.4 * this.ratings.eff(player, 'rushing', { aerial: true }) + 0.3 * this.ratings.eff(player, 'handling') + 0.2 * this.ratings.eff(player, 'anticipation') + 10
-          : 0.4 * this.ratings.eff(player, 'heading', { aerial: true }) + 0.3 * this.ratings.eff(player, 'strength', { aerial: true }) + 0.2 * this.ratings.eff(player, 'defPos') + 0.1 * this.ratings.eff(player, 'anticipation')
+          : 0.4 * this.ratings.eff(player, 'heading', { aerial: true }) + 0.3 * this.ratings.eff(player, 'strength', { aerial: true }) + 0.2 * this.ratings.eff(player, 'defPos') + 0.1 * this.ratings.eff(player, 'anticipation')) + Math.max(0, player.height - 175) * 0.2
         contestants.push({ player, weight: weight * (0.85 + jitter() * 0.3), side: defending.side })
         if (!isGk && player.skills.includes('aerial')) this.hooks.markSkill(player, 'aerial', true, true)
       }

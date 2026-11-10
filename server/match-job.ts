@@ -1,5 +1,5 @@
 import crypto from 'node:crypto'
-import type { AITeam, AutoSubPlan, Fixture, MatchRecord, Suspension } from '../src/game/types.ts'
+import type { AITeam, AutoSubPlan, Chemistry, Fixture, MatchRecord, Suspension } from '../src/game/types.ts'
 import { MatchEngine } from '../src/game/match/engine.ts'
 import { PesEngine, type GameEngine } from '../src/game/pes/engine.ts'
 import type { MatchState } from '../src/game/match/types.ts'
@@ -15,11 +15,13 @@ export type MatchBook = {
   yellowCounts: Record<string, number>
   appearances: Record<string, number[]>
   conditionAt: Record<string, number>
+  chemistry?: Chemistry
 }
-export const emptyMatchBook = (): MatchBook => ({ injuries: {}, suspensions: {}, yellowCounts: {}, appearances: {}, conditionAt: {} })
+export const emptyMatchBook = (): MatchBook => ({ injuries: {}, suspensions: {}, yellowCounts: {}, appearances: {}, conditionAt: {}, chemistry: {} })
 
 export type LockedTeam = {
   team: AITeam
+  chemistry?: Record<string, number>
   autoSubs?: AutoSubPlan
   injuries: Record<string, number>
   suspended: string[]
@@ -67,6 +69,7 @@ export function computeMatchJob(job: MatchJob): MatchJobResult {
     const factor = locked.performance ?? 1
     const squad = factor < 1 ? { ...locked.team, players: playersAtPerformance(locked.team.players, factor) } : locked.team
     const team = teamInputFromAI(squad, new Set(locked.suspended), { rotate: !!locked.ai })
+    if (locked.chemistry) team.chemistry = { ...locked.chemistry }
     if (locked.autoSubs) team.autoSubs = structuredClone(locked.autoSubs)
     return team
   }

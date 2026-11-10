@@ -8,6 +8,7 @@ An 11-a-side football management game you play in the browser: take over a club,
 
 - **Real-time 2D matches**: a physics engine simulates the movement of all 22 players and the ball in real time, and every touch (pass, shot, tackle and so on) is resolved from the players' attributes. You can pause, change the speed and use coach timeouts to adjust tactics, with live text commentary and a post-match review.
 - **Tactics**: several 11-a-side formations, a role for every position, free positioning on the tactics board and saved tactic presets.
+- **Teammate chemistry**: overlapping match minutes and cooperative training build pair familiarity, giving a small passing benefit. View partners on the tactics board and player profiles. Switching cards preserves chemistry; relationships expire after six months (180 game days) without cooperation.
 - **Player development**: a 30-session training calendar with friendlies, internal matches and training events; finishing a programme gives the player a new player card.
 - **Transfers and finances**: buy players from computer-run clubs (starters, rotation players and bench warmers are priced differently), negotiate with the player himself and answer bids from other clubs. Upgrade facilities and pay wages every round; while wages are unpaid, your players perform at half strength.
 - **Stamina and rotation**: each league match uses about 70% of a player's stamina, which then recovers hour by hour, so a busy schedule calls for rotation.

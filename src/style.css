@@ -1022,6 +1022,13 @@ circle.pm-5 { fill: var(--h6); }
 .tac-table .t-name .tag { margin-left: 4px; }
 .tac-table .t-card { min-width: 58px; }
 .tac-table .meter-cell { min-width: 62px; }
+.chemistry-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.chemistry-lines line { vector-effect: non-scaling-stroke; }
+.chemistry-stroke { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.chemistry-hit { stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: help; }
+.chemistry-link:hover .chemistry-stroke, .chemistry-link:focus-visible .chemistry-stroke { opacity: 1; stroke-width: 2.5; }
+.chemistry-link:focus-visible { outline: none; }
+
 /* 熟练度和体能是选人时最常看的两列，给足宽度，条和数字都看得清。 */
 .tac-table .t-prof { min-width: 62px; }
 .tac-table .t-cond { min-width: 34px; }

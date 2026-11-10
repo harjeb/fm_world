@@ -75,11 +75,11 @@ export const EVENTS: EventDef[] = [
       {
         id: 'special',
         label: '挑战个人强项',
-        hint: '射门、传球、抢断的均值决定成功率；高风险，高回报',
+        hint: '射术、盘带、抢断的均值决定成功率；高风险，高回报',
         branch: {
           chanceText: '强项挑战成功率',
-          check: { attrs: ['shooting', 'passing', 'tackling'], base: 0.42, scale: 0.008 },
-          success: { text: '你在强项测试里交出了漂亮数据，教练难得地鼓了掌。', attrs: { shooting: 2, passing: 2, tackling: 2 }, fatigue: 7 },
+          check: { attrs: ['shooting', 'dribbling', 'tackling'], base: 0.42, scale: 0.008 },
+          success: { text: '你在强项测试里交出了漂亮数据，教练难得地鼓了掌。', attrs: { shooting: 2, dribbling: 2, tackling: 2 }, fatigue: 7 },
           failure: { text: '强项没有发挥出来。教练没有批评，只让你把失败动作再走一遍。', attrs: { decisions: 1, composure: 1 }, fatigue: 7 },
         },
       },
@@ -103,11 +103,11 @@ export const EVENTS: EventDef[] = [
       {
         id: 'full',
         label: '参加完整测验',
-        hint: '传球、决策、镇定的均值决定成功率',
+        hint: '爆发、决策、镇定的均值决定成功率',
         branch: {
           chanceText: '完整测验通过率',
-          check: { attrs: ['passing', 'decisions', 'composure'], base: 0.5, scale: 0.008 },
-          success: { text: '你在压力下仍能完成配合，教练把你写进了最后阶段的重点名单。', attrs: { passing: 2, decisions: 2, composure: 1 }, fatigue: 6 },
+          check: { attrs: ['acceleration', 'decisions', 'composure'], base: 0.5, scale: 0.008 },
+          success: { text: '你在压力下仍能判断启动时机，教练把你写进了最后阶段的重点名单。', attrs: { acceleration: 2, decisions: 2, composure: 1 }, fatigue: 6 },
           failure: { text: '测验节奏比想象中快。你记下了几次慢半拍的回合。', attrs: { decisions: 1, composure: 1 }, fatigue: 6 },
         },
       },
@@ -539,8 +539,8 @@ export const EVENTS: EventDef[] = [
       {
         id: 'light',
         label: '坚持轻量有球训练',
-        hint: '疲劳 -10，传球 +1，决策 +1',
-        effect: { text: '你还是想碰球。轻量的传接球让状态保持住了，但恢复不算彻底。', attrs: { passing: 1, decisions: 1 }, fatigue: -10 },
+        hint: '疲劳 -10，盘带 +1，第一脚触球 +1',
+        effect: { text: '你用轻量控球和接球练习保持球感，但恢复不算彻底。', attrs: { dribbling: 1, firstTouch: 1 }, fatigue: -10 },
       },
     ],
   },
@@ -557,20 +557,115 @@ export const EVENTS: EventDef[] = [
       {
         id: 'free',
         label: '任意球',
-        hint: '传球 +2，视野 +1，疲劳 +6',
-        effect: { text: '你反复调整助跑角度，直到球能绕过人墙又落在门框范围内。', attrs: { passing: 2, vision: 1 }, fatigue: 6 },
+        hint: '射术 +2，视野 +1，疲劳 +6',
+        effect: { text: '你反复调整助跑角度，直到球能绕过人墙又落在门框范围内。', attrs: { shooting: 2, vision: 1 }, fatigue: 6 },
       },
       {
         id: 'corner',
         label: '角球与争顶',
-        hint: '头球 +1，力量 +1，传球 +1，疲劳 +7',
-        effect: { text: '你既练了开角球，也练了在人群里抢第一点。', attrs: { heading: 1, strength: 1, passing: 1 }, fatigue: 7 },
+        hint: '头球 +1，力量 +1，预判 +1，疲劳 +7',
+        effect: { text: '你反复判断角球落点，在人群里争抢第一点。', attrs: { heading: 1, strength: 1, anticipation: 1 }, fatigue: 7 },
       },
       {
         id: 'penalty',
         label: '点球',
         hint: '镇定 +2，射术 +1，疲劳 +4',
         effect: { text: '你在门将的干扰下连续主罚。越到最后，越只关注自己的动作。', attrs: { composure: 2, shooting: 1 }, fatigue: 4 },
+      },
+    ],
+  },
+  {
+    id: 'train_dribbling',
+    title: '变向突破课',
+    category: 'training',
+    weight: 11,
+    once: false,
+    cooldown: 5,
+    trigger: { minAction: 2, playerCategory: 'field' },
+    text: '助教把标志盘摆成窄门，要求你带球穿过后立刻面对防守者。今天练的是把球留在自己能控制的距离内。',
+    options: [
+      {
+        id: 'control',
+        label: '练连续变向',
+        hint: '盘带 +2，灵活 +1，疲劳 +5',
+        effect: { text: '你逐渐能在变向时保持步幅，不再为了追球打乱节奏。', attrs: { dribbling: 2, agility: 1 }, fatigue: 5 },
+      },
+      {
+        id: 'pressure',
+        label: '挑战贴身防守',
+        hint: '盘带与爆发决定成功率；成功盘带 +3、爆发 +1，失败盘带 +1、镇定 +1',
+        branch: {
+          chanceText: '贴身突破成功率',
+          check: { attrs: ['dribbling', 'acceleration'], base: 0.48, scale: 0.009 },
+          success: { text: '你用一次变向接启动甩开了对手，下一脚触球仍在掌控中。', attrs: { dribbling: 3, acceleration: 1 }, fatigue: 7 },
+          failure: { text: '球被碰走了，但你学会在压力下先保护下一脚触球。', attrs: { dribbling: 1, composure: 1 }, fatigue: 7 },
+        },
+      },
+      {
+        id: 'carry',
+        label: '练带球推进',
+        hint: '盘带 +1，速度 +1，第一脚触球 +1，疲劳 +6',
+        effect: { text: '你把短触球与长距离带球连接起来，推进时不用每一步都低头找球。', attrs: { dribbling: 1, speed: 1, firstTouch: 1 }, fatigue: 6 },
+      },
+    ],
+  },
+  {
+    id: 'train_sprint',
+    title: '冲刺与启动',
+    category: 'training',
+    weight: 11,
+    once: false,
+    cooldown: 5,
+    trigger: { minAction: 2, playerCategory: 'field' },
+    text: '体能教练把计时器放在边线。你可以练持续冲刺，也可以专门练前几步的启动。',
+    options: [
+      {
+        id: 'speed',
+        label: '练持续冲刺',
+        hint: '速度 +2，爆发 +1，疲劳 +7',
+        effect: { text: '你学会在起速后保持动作，冲到后半程仍能维持速度。', attrs: { speed: 2, acceleration: 1 }, fatigue: 7 },
+      },
+      {
+        id: 'start',
+        label: '练短距离启动',
+        hint: '爆发 +2，速度 +1，疲劳 +6',
+        effect: { text: '反复练习的前几步开始变得有力，第一时间就能抢出半个身位。', attrs: { acceleration: 2, speed: 1 }, fatigue: 6 },
+      },
+      {
+        id: 'recover',
+        label: '按计划恢复',
+        hint: '耐力 +1，疲劳 -12',
+        effect: { text: '你降低训练强度，完成呼吸与恢复练习，为下一次冲刺留出余量。', attrs: { endurance: 1 }, fatigue: -12 },
+      },
+    ],
+  },
+  {
+    id: 'train_duel',
+    title: '身体对抗课',
+    category: 'training',
+    weight: 11,
+    once: false,
+    cooldown: 5,
+    trigger: { minAction: 2, playerCategory: 'field' },
+    text: '教练把你和队友安排在狭小区域里争球。护住球、抢下球和落后一步后的回追，都需要不同的动作。',
+    options: [
+      {
+        id: 'tackle',
+        label: '练贴身抢断',
+        hint: '抢断 +2，力量 +1，疲劳 +6',
+        effect: { text: '你先用身体保持接触，再选择下脚时机，争抢变得更稳。', attrs: { tackling: 2, strength: 1 }, fatigue: 6 },
+      },
+      {
+        id: 'shield',
+        label: '练护球与转身',
+        hint: '力量 +2，速度 +1，疲劳 +6',
+        effect: { text: '你扛住身后的压力后转身起跑，让护球动作自然衔接下一次推进。', attrs: { strength: 2, speed: 1 }, fatigue: 6 },
+      },
+      {
+        id: 'recover',
+        label: '练回追再抢断',
+        hint: '爆发 +1，抢断 +1，预判 +1，疲劳 +5',
+        effect: { text: '落后一步时你不再盲目伸脚，而是先加速跟住，再等待对手露球。', attrs: { acceleration: 1, tackling: 1, anticipation: 1 }, fatigue: 5 },
       },
     ],
   },
@@ -613,13 +708,13 @@ export const EVENTS: EventDef[] = [
     once: false,
     cooldown: 5,
     trigger: { minAction: 4 },
-    text: '训练结束后，球场灯还亮着。你听见球门方向传来射门声，队友已经走了，教练也没有要求你留下。',
+    text: '训练结束后，球场灯还亮着。标志盘和训练球还没收走，教练也没有要求你留下。',
     options: [
       {
         id: 'stay',
         label: '留下来加练',
-        hint: '射术 +1，传球 +1，进取心 +3，疲劳 +15',
-        effect: { text: '你在空球场里多练了半小时。回宿舍时腿很沉，但心里很满足。', attrs: { shooting: 1, passing: 1 }, personality: { ambition: 3 }, fatigue: 15 },
+        hint: '盘带 +1，爆发 +1，进取心 +3，疲劳 +15',
+        effect: { text: '你多做了半小时带球变向和启动练习。回宿舍时腿很沉，但心里很满足。', attrs: { dribbling: 1, acceleration: 1 }, personality: { ambition: 3 }, fatigue: 15 },
       },
       {
         id: 'rest',
@@ -713,9 +808,9 @@ export const EVENTS: EventDef[] = [
     options: [
       {
         id: 'wing',
-        label: '与边路队友练习',
-        hint: '传球 +1，第一脚触球 +1，团队合作 +1',
-        effect: { text: '你们把撞墙配合重复到闭着眼也知道彼此的位置。', attrs: { passing: 1, firstTouch: 1, teamwork: 1 }, fatigue: 4 },
+        label: '与边路队友练传切突破',
+        hint: '盘带 +1，速度 +1，团队合作 +1',
+        effect: { text: '你接回队友的球立刻加速，逐渐学会靠连续传切摆脱防守。', attrs: { dribbling: 1, speed: 1, teamwork: 1 }, fatigue: 4 },
       },
       {
         id: 'striker',
@@ -737,9 +832,9 @@ export const EVENTS: EventDef[] = [
     options: [
       {
         id: 'deep',
-        label: '下底传中',
-        hint: '传球 +1，无球跑位 +1，团队合作 +1',
-        effect: { text: '你把球送到前锋最喜欢的高度，而不是自己最舒服的位置。', attrs: { passing: 1, offBall: 1, teamwork: 1 }, fatigue: 4 },
+        label: '练下底冲刺接应',
+        hint: '速度 +1，爆发 +1，团队合作 +1',
+        effect: { text: '你反复练习接球后启动与下底，队友逐渐记住了你的冲刺节奏。', attrs: { speed: 1, acceleration: 1, teamwork: 1 }, fatigue: 4 },
       },
       {
         id: 'cutback',
@@ -768,8 +863,8 @@ export const EVENTS: EventDef[] = [
       {
         id: 'transition',
         label: '与后腰练攻守转换',
-        hint: '传球 +1，决策 +1，耐力 +1',
-        effect: { text: '抢下球后的第一脚传球，比抢断本身更能决定反击质量。', attrs: { passing: 1, decisions: 1, endurance: 1 }, fatigue: 5 },
+        hint: '爆发 +1，抢断 +1，耐力 +1',
+        effect: { text: '丢球后立即回追，重新追到对手身侧再下脚，转换中的防守不再慢半拍。', attrs: { acceleration: 1, tackling: 1, endurance: 1 }, fatigue: 5 },
       },
     ],
   },
@@ -822,9 +917,9 @@ export const EVENTS: EventDef[] = [
     options: [
       {
         id: 'tech',
-        label: '展示技术',
-        hint: '传球 +1，第一脚触球 +1，射术 +1，疲劳 +3',
-        effect: { text: '你在小场对抗里做了几次漂亮的处理。球探在本子上写了什么，你看不见。', attrs: { passing: 1, firstTouch: 1, shooting: 1 }, fatigue: 3 },
+        label: '展示带球与终结',
+        hint: '盘带 +1，第一脚触球 +1，射术 +1，疲劳 +3',
+        effect: { text: '你在小场对抗中连续完成接球、摆脱和射门。球探在本子上写了什么，你看不见。', attrs: { dribbling: 1, firstTouch: 1, shooting: 1 }, fatigue: 3 },
       },
       {
         id: 'iq',

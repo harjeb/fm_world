@@ -1,4 +1,6 @@
-import type { GameState, Lineup, MatchContext, MatchRecord, MatchTeamStats, Player } from '../types.ts'
+import type { Chemistry, GameState, Lineup, MatchContext, MatchRecord, MatchTeamStats, Player } from '../types.ts'
+import { chemistrySnapshot } from '../chemistry.ts'
+import { GAME_DAY_MS } from '../calendar.ts'
 import type { AITeam } from '../types.ts'
 import type { MatchTeamInput } from './types.ts'
 import { FORMATIONS } from '../data/formations.ts'
@@ -10,6 +12,12 @@ import { LOGIC_MATCH_SECONDS } from './time.ts'
 import { matchPerformanceOf } from '../economy.ts'
 
 export type TeamIdentity = { id: string; name: string; color: string; accent: string }
+
+export function withChemistry(input: MatchTeamInput, store: Chemistry | undefined, now: number, gameDayMs = GAME_DAY_MS): MatchTeamInput {
+  const scores = chemistrySnapshot(store, [...input.starters.map(p => p.player.id), ...input.bench.map(p => p.id)], now, gameDayMs)
+  if (Object.keys(scores).length) input.chemistry = scores
+  return input
+}
 
 export function teamInputFromLineup(roster: Player[], lineup: Lineup, identity: TeamIdentity): MatchTeamInput {
   const check = validateLineup(roster, lineup)
@@ -58,11 +66,11 @@ export function teamInputFromAI(ai: AITeam, suspended?: Set<string>, options: { 
 }
 
 /** 两支电脑球队的比赛（联赛、升级附加赛）：体能低于 80 的先休息（rotate 默认开）。 */
-export function simulateAIvsAIState(home: AITeam, away: AITeam, seed: number, durationSeconds = LOGIC_MATCH_SECONDS, injuries?: GameState['injuries'], now = Date.now(), suspended?: Set<string>, rotate = true) {
+export function simulateAIvsAIState(home: AITeam, away: AITeam, seed: number, durationSeconds = LOGIC_MATCH_SECONDS, injuries?: GameState['injuries'], now = Date.now(), suspended?: Set<string>, rotate = true, chemistry?: Chemistry, gameDayMs = GAME_DAY_MS) {
   const engine = new MatchEngine({
     seed,
-    home: teamInputFromAI(home, suspended, { rotate }),
-    away: teamInputFromAI(away, suspended, { rotate }),
+    home: withChemistry(teamInputFromAI(home, suspended, { rotate }), chemistry, now, gameDayMs),
+    away: withChemistry(teamInputFromAI(away, suspended, { rotate }), chemistry, now, gameDayMs),
     knockout: false,
     durationSeconds,
     offside: false,
@@ -198,6 +206,8 @@ export function buildMatchEngineForGame(game: GameState, context: MatchContext, 
   if (game.autoSubs) playerInput.autoSubs = structuredClone(game.autoSubs)
   // 对手是电脑球队：体能低于 80 的先休息。
   const aiInput = teamInputFromAI(ai, suspended, { rotate: true })
+  withChemistry(playerInput, game.chemistry, now, game.season.gameDayMs)
+  withChemistry(aiInput, game.chemistry, now, game.season.gameDayMs)
   if (rulesVersion === undefined) {
     const pes = new PesEngine({
       seed: context.seed,

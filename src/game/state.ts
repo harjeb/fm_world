@@ -15,6 +15,7 @@ import { economyOf } from './economy.ts'
 import { addLegacySignature } from './data/players.ts'
 import { ensureCards } from './cards.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION, upgradeBurstAttr, upgradeNames, upgradeStarTraits } from './names.ts'
+import { pruneChemistry } from './chemistry.ts'
 
 // 游戏改名后仍沿用旧键，改了已有存档就读不到了。
 export const SAVE_KEY = 'fm-seven-a-side-save-v3'
@@ -99,6 +100,7 @@ export function cacheGameLocally(game: GameState): void {
 }
 
 export function saveGame(game: GameState): boolean {
+  pruneChemistry(game.chemistry, Date.now(), game.season.gameDayMs)
   game.ui = { ...(game.ui ?? { screen: 'home' }) }
   let local = false
   try {
@@ -167,7 +169,8 @@ export function loadGame(): GameState | null {
     const traitsUpgraded = upgradeStarTraits(parsed)
     const attrsUpgraded = upgradeBurstAttr(parsed)
     parsed.ui = parsed.ui ?? { screen: 'home' }
-    if (rescheduled || elevenUpgraded || repaired || aiLineupsRefreshed || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded) saveGame(parsed)
+    const chemistryPruned = pruneChemistry(parsed.chemistry, Date.now(), parsed.season.gameDayMs)
+    if (chemistryPruned || rescheduled || elevenUpgraded || repaired || aiLineupsRefreshed || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded) saveGame(parsed)
     return parsed
   } catch {
     return null

@@ -72,6 +72,7 @@ export function buildMatchTeam(input: MatchTeamInput, side: MatchSide): MatchTea
     const slot = formation.slots.find((item) => item.id === starter.slotId)
     const position = slot?.position ?? 'CM'
     const mp = toMatchPlayer(starter.player, side, starter.role, starter.slotId, position)
+    mp.stats.onMinute = 0
     mp.stats.staminaLeft = Math.round((mp.stamina / Math.max(1, mp.maxStamina)) * 100)
     // 玩家自己摆的位置优先（见 squad.rememberLineupPositions）；没摆过就用阵型默认坐标。
     const spot = customSpotFor(starter.player) ?? slot
@@ -106,6 +107,7 @@ export function buildMatchTeam(input: MatchTeamInput, side: MatchSide): MatchTea
     bench,
     autoSubs: input.autoSubs ? structuredClone(input.autoSubs) : undefined,
     subsUsed: 0,
+    ...(input.chemistry && Object.keys(input.chemistry).length ? { chemistry: { ...input.chemistry } } : {}),
   }
 }
 

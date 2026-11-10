@@ -601,7 +601,7 @@ function executeTraining(): void {
   if (!ui.trainingPlayerId) return
   const playerId = ui.trainingPlayerId
   const actionNumber = (game.training[playerId]?.action ?? 0) + 1
-  const result = trainingAction(game, playerId, buildTrainingRequest())
+  const result = trainingAction(game, playerId, buildTrainingRequest(), serverNow())
   if (!result.ok) showNotice(result.error ?? '行动失败')
   else {
     // 品质只在执行后揭晓。
@@ -1183,6 +1183,12 @@ document.addEventListener('click', async (event) => {
       ui.newGameRequired = false
       Object.assign(ui, { screen: 'home', trainingPlayerId: null, trainingTeammateIds: [], detailPlayerId: null, reviewId: null, lineupDraft: null, lineupSlot: null, autoSubsDraft: null, notice: '新游戏已创建。', matchEngine: null, matchPlaying: false, completing: false, coachPanel: false, seasonRound: null, worldDivision: null, worldClubId: null, worldPlayerId: null, newGameOpen: false, newGameClubId: null })
       render()
+      break
+    case 'chemistry-detail':
+      if (playerId) {
+        ui.detailPlayerId = playerId
+        render()
+      }
       break
     case 'detail':
       if (playerId && ui.lineupSlot && ui.screen === 'lineup') {
