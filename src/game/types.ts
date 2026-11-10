@@ -1002,6 +1002,8 @@ export type GameState = {
   training: Record<string, TrainingSession>
   /** 已获得的传奇技能书；只增不减，学习不消耗。 */
   legendBooks?: LegendBook[]
+  /** 每支传奇队“已有彩书后再次获胜”的球迷补偿是否已发；每队只发一次。 */
+  legendRepeatFans?: Record<string, true>
   injuries?: Record<string, number>
   /** 最近 20 场的出场分钟（按球员 id，玩家和本联赛 AI 球队的都记），俱乐部判断放不放人用。 */
   appearances?: Record<string, number[]>

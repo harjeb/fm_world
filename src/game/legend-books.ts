@@ -16,6 +16,10 @@ export function ensureLegendBooks(game: GameState): boolean {
     game.legendBooks = []
     changed = true
   }
+  if (!game.legendRepeatFans || typeof game.legendRepeatFans !== 'object' || Array.isArray(game.legendRepeatFans)) {
+    game.legendRepeatFans = {}
+    changed = true
+  }
   const seen = new Set<string>()
   const valid = game.legendBooks.filter((book) => {
     if (!book || !Object.hasOwn(LEGEND_SKILLS, book.id) || (book.tier !== 'gold' && book.tier !== 'rainbow')) return false
@@ -64,10 +68,15 @@ export function awardLegendReward(game: GameState, legendId: string, result: 'wi
   const reward: LegendReward = {}
   if (result === 'win') {
     if (hasLegendBook(game, skillId, 'rainbow')) {
-      const economy = economyOf(game)
-      const before = economy.fans
-      economy.fans = Math.min(MAX_FANS, before + 800)
-      reward.duplicateFans = economy.fans - before
+      // 彩书后的球迷补偿每个传奇队只发一次，避免反复刷同一队。
+      if (!game.legendRepeatFans?.[legendId]) {
+        const economy = economyOf(game)
+        const before = economy.fans
+        economy.fans = Math.min(MAX_FANS, before + 800)
+        reward.duplicateFans = economy.fans - before
+        game.legendRepeatFans ??= {}
+        game.legendRepeatFans[legendId] = true
+      }
     } else if (addLegendBook(game, skillId, 'rainbow')) {
       reward.book = { id: skillId, tier: 'rainbow' }
     }

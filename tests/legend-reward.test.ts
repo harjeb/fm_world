@@ -19,6 +19,10 @@ describe('传奇挑战技能书奖励', () => {
     const fans = game.economy!.fans
     const duplicate = awardLegendReward(game, TEAM, 'win', false)
     expect(duplicate.book).toBeUndefined()
+    expect(duplicate.duplicateFans).toBe(800)
+    expect(game.economy!.fans).toBe(fans + 800)
+    const duplicateAgain = awardLegendReward(game, TEAM, 'win', false)
+    expect(duplicateAgain.duplicateFans).toBeUndefined()
     expect(game.economy!.fans).toBe(fans + 800)
     expect(awardLegendReward(game, TEAM, 'draw', false).book).toBeUndefined()
   })
