@@ -55,7 +55,7 @@ export type UIState = {
   seasonRound: number | null
   /** 挑战页当前模式。 */
   challengeMode: ChallengeMode
-  /** 传奇挑战档位筛选。 */
+  /** 传奇挑战档位筛选；默认先看 B 档，所有档位均可自由切换。 */
   legendTier: 'ALL' | 'S+' | 'S' | 'A' | 'B'
   legendSearch: string
   legendEra: string
@@ -159,7 +159,7 @@ export const ui: UIState = {
   cardDeleteId: null,
   seasonRound: null,
   challengeMode: 'friendly',
-  legendTier: 'ALL',
+  legendTier: 'B',
   legendSearch: '',
   legendEra: 'ALL',
   legendCountry: 'ALL',

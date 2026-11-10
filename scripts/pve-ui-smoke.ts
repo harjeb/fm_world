@@ -74,6 +74,8 @@ try {
   await click('[data-action="boot-offline"]')
   await click('[data-nav="challenge"]')
   await click('[data-challenge-mode="legend"]')
+  await wait(`document.querySelector('[data-legend-tier="B"].active') && document.querySelectorAll('[data-action="start-legend-challenge"]').length > 0`)
+  await click('[data-legend-tier="ALL"]')
   await click('[data-pve-team]')
   await wait(`document.body.innerText.includes('完整阵容') && document.body.innerText.includes('爆发')`)
   await evaluate(`const search = document.querySelector('#legend-search'); search.value = '米兰'; search.dispatchEvent(new Event('input', { bubbles: true }));`)
@@ -100,7 +102,7 @@ try {
   await wait(`document.body.innerText.includes('小组赛') && document.body.innerText.includes('战报')`)
   await screenshot('cup-mobile-resume')
   if (errors.length) throw new Error(errors.join('\n'))
-  console.log('PvE 浏览器冒烟通过：桌面/390px、筛选、7 项主属性、100 关预览、报名比赛、刷新续赛；不访问线上账号/数据。')
+  console.log('PvE 浏览器冒烟通过：默认 B 档、自由切换档位、桌面/390px、筛选、7 项主属性、100 关预览、报名比赛、刷新续赛；不访问线上账号/数据。')
 } catch (error) {
   await screenshot('failure').catch(() => {})
   console.error(await evaluate('document.body.innerText.slice(-4000)').catch(() => 'page unavailable'))

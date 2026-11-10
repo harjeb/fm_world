@@ -6,6 +6,24 @@ import { game, ui } from '../src/ui/state.ts'
 import { enterCup } from '../src/game/cup-run.ts'
 
 describe('挑战页面', () => {
+  it('传奇挑战默认筛选 B 档，所有档位都可以直接开战', () => {
+    expect(ui.legendTier).toBe('B')
+    ui.challengeMode = 'legend'
+    ui.legendTier = 'B'
+    ui.legendSearch = ''
+    ui.legendCountry = 'ALL'
+    ui.legendEra = 'ALL'
+    const legend = renderChallenge()
+    expect(legend).toContain('data-legend-tier="B" class="active"')
+    expect(legend).toContain('data-team="aston-villa-1981-82"')
+    expect(legend).not.toContain('data-team="juventus-1997-98"')
+    // 没有前置解锁：不需要先赢 B，直接切到 S+ 就能开战。
+    ui.legendTier = 'S+'
+    const sPlus = renderChallenge()
+    expect(sPlus).toContain('data-legend-tier="S+" class="active"')
+    expect(sPlus).toContain('data-team="barcelona-2010-11"')
+    expect(sPlus).not.toContain('data-team="aston-villa-1981-82"')
+  })
   it('四种模式都能渲染', () => {
     for (const mode of ['friendly', 'legend', 'cup', 'peak'] as const) {
       ui.challengeMode = mode
