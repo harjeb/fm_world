@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { agentView, playerView } from '../server/agent.ts'
 import { createInitialGame } from '../src/game/state.ts'
 import { caOf } from '../src/game/ca.ts'
 import { mainAttrsFor } from '../src/game/scale.ts'
@@ -35,6 +36,19 @@ describe('AI transfer base-player pricing', () => {
     expect(preview.asking).toBe(expected.asking)
     expect(preview.value).toBe(expected.value)
     expect(negotiationDemands(game, player)).toEqual(negotiationDemands(game, base))
+    expect(player).toEqual(before)
+  })
+
+  it('exposes the original player in Agent transfer listings without changing equipped match attributes', () => {
+    const { game, player, base } = equippedSeller()
+    const before = structuredClone(player)
+    const listed = agentView(game).market.clubOffers.find((entry) => entry.player.id === player.id)!.player
+    expect(listed.ca).toBe(caOf(base.attrs, false))
+    expect(listed.ca).toBe(listed.initialCA)
+    expect(listed.equippedCardId).toBeNull()
+    for (const key of mainAttrsFor(false)) expect(listed.attrs[key]).toBe(base.attrs[key])
+    expect(listed.skills).toEqual(base.skills)
+    expect(playerView(player, game, 0).ca).toBeGreaterThan(listed.ca)
     expect(player).toEqual(before)
   })
 

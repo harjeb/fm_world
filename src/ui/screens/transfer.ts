@@ -8,8 +8,9 @@ import { traitEffectText } from '../../game/data/skill-effects.ts'
 import { traitNameOf } from '../../game/data/star-traits.ts'
 import { SQUAD_LIMIT, aiTransferOffers, bestMarketValue, freeAgentAsking, saleChance, suggestedPrice, transferWindowOpen } from '../../game/market.ts'
 import { isOnMarketToday } from '../../game/market-window.ts'
+import { initialDisplayCA } from '../../game/rating.ts'
 import { caHeat, clubName, countryLabel, emptyState, icon, pageHead, panel, posBadge, primaryPosition, tag, traitLabel } from '../components.ts'
-import { countdownText, esc, playerCA } from '../format.ts'
+import { countdownText, esc } from '../format.ts'
 import { isOnlineMode, marketState, onlineState, publicWorld, serverNow } from '../../online.ts'
 import { game, ui, type TransferTab } from '../state.ts'
 
@@ -40,10 +41,10 @@ function marketTab(): string {
         <td class="num"><button class="btn small" data-action="club-cancel" data-player="${esc(player.id)}">取消挂牌</button></td>
       </tr>`).join('')}</tbody></table></div>`
     : '<p class="muted pad">暂无挂牌。</p>'
-  const sell = `<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th class="num">CA</th><th class="num">估值</th><th class="num">建议价</th><th>要价</th></tr></thead><tbody>${game.roster.map((player) => `<tr data-key="${esc(player.id)}">
+  const sell = `<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th class="num">原始 CA</th><th class="num">估值</th><th class="num">建议价</th><th>要价</th></tr></thead><tbody>${game.roster.map((player) => `<tr data-key="${esc(player.id)}">
       <td>${posBadge(primaryPosition(player))}</td>
       ${nameCell(player)}
-      <td class="num strong">${caHeat(playerCA(player))}</td>
+      <td class="num strong">${caHeat(initialDisplayCA(player))}</td>
       <td class="num dim">${bestMarketValue(game, player).toLocaleString()}</td>
       <td class="num">${suggestedPrice(game, player).toLocaleString()}</td>
       <td class="price-cell"><input type="number" class="compact" min="1" max="9007199254740991" step="1" value="${suggestedPrice(game, player)}" aria-label="${esc(player.name)} 的要价" data-club-price="${esc(player.id)}"><button class="btn small" data-action="club-list" data-player="${esc(player.id)}">挂牌</button></td>
@@ -82,7 +83,7 @@ function auctionTab(): string {
       <td>${posBadge(primaryPosition(player))}</td>
       <td class="name-cell"><button class="name-btn" data-action="detail" data-player="${esc(player.id)}">${esc(player.name)}</button><small>${esc(player.enName)}</small></td>
       <td class="num">${player.age ?? 24}</td>
-      <td class="num strong">${caHeat(playerCA(player))}</td>
+      <td class="num strong">${caHeat(initialDisplayCA(player))}</td>
       <td>${traitLabel(player.traitId, true)}</td>
       <td class="num strong">${lead.amount.toLocaleString()}</td>
       <td>${mine ? tag('你领先', 'good') : esc(lead.club)}</td>
@@ -103,7 +104,7 @@ function auctionTab(): string {
       ${nameCell(player)}
       <td class="dim">${esc(countryLabel(player))}</td>
       <td class="num">${player.age ?? 24}</td>
-      <td class="num strong">${caHeat(playerCA(player))}</td>
+      <td class="num strong">${caHeat(initialDisplayCA(player))}</td>
       <td>${traitLabel(player.traitId, true)}</td>
       <td class="num">${opening.toLocaleString()}</td>
       <td class="num"><button class="btn small" data-action="auction-bid" data-player="${esc(player.id)}" data-amount="${opening}" ${canTrade && available >= opening && game.roster.length < 25 ? '' : 'disabled'}>出价</button></td>
@@ -112,14 +113,14 @@ function auctionTab(): string {
   const logRows = marketState.log.slice(0, 8).map((item) => `<li>${item.club ? `<b>${esc(item.club)}</b> 以 ${item.amount.toLocaleString()} 签下 ${esc(item.playerName)}` : `${esc(item.playerName)} 流拍，回到市场`}</li>`).join('')
   return `
     <p class="hint">${icon('clock', 13)} 第一口出价开始 ${AUCTION_DURATION_MS / 3_600_000} 小时倒计时，全服可见；最后 ${AUCTION_EXTEND_MS / 60_000} 分钟内有人跟价，倒计时重新回到 ${AUCTION_EXTEND_MS / 60_000} 分钟。跟价每次至少加 5%，并交出价 2%（至少 1,000）的手续费，手续费不退还。</p>
-    ${running.length ? panel(`竞拍中 <small>${running.length}</small>`, `<div class="table-scroll"><table class="dt auction-table"><thead><tr><th>位置</th><th>球员</th><th class="num">龄</th><th class="num">CA</th><th>特性</th><th class="num">当前价</th><th>领先</th><th class="num">倒计时</th><th class="num">出价</th></tr></thead><tbody>${auctionRows}</tbody></table></div>`, { flush: true }) : ''}
+    ${running.length ? panel(`竞拍中 <small>${running.length}</small>`, `<div class="table-scroll"><table class="dt auction-table"><thead><tr><th>位置</th><th>球员</th><th class="num">龄</th><th class="num">原始 CA</th><th>特性</th><th class="num">当前价</th><th>领先</th><th class="num">倒计时</th><th class="num">出价</th></tr></thead><tbody>${auctionRows}</tbody></table></div>`, { flush: true }) : ''}
     ${panel(`自由球员 <small>${agents.length}</small>`, `
       <div class="toolbar in-panel">
         <div class="input-icon">${icon('search', 14)}<input id="club-search" placeholder="搜索姓名 / 国家 / 英文名 / 特性" value="${esc(ui.clubSearch)}"></div>
         <button class="btn small" data-action="club-search">搜索</button>
         <span class="muted small">阵容 ${game.roster.length} / ${SQUAD_LIMIT} · 余额 ${economy.balance.toLocaleString()}</span>
       </div>
-      ${rows ? `<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th>国籍</th><th class="num">龄</th><th class="num">CA</th><th>特性</th><th class="num">起拍价</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : `<p class="muted pad">${marketState.pool.length ? '没有符合条件的球员。' : '正在加载自由市场…'}</p>`}
+      ${rows ? `<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th>国籍</th><th class="num">龄</th><th class="num">原始 CA</th><th>特性</th><th class="num">起拍价</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : `<p class="muted pad">${marketState.pool.length ? '没有符合条件的球员。' : '正在加载自由市场…'}</p>`}
       <div class="pager"><button class="btn small" data-action="club-prev" ${ui.clubPage === 0 ? 'disabled' : ''}>${icon('left', 13)}上一页</button><span class="muted small">${ui.clubPage + 1} / ${pages}</span><button class="btn small" data-action="club-next" data-pages="${pages}" ${ui.clubPage >= pages - 1 ? 'disabled' : ''}>下一页${icon('right', 13)}</button></div>
     `, { flush: true })}
     ${logRows ? panel('最近成交', `<ul class="auction-log">${logRows}</ul>`) : ''}
@@ -146,7 +147,7 @@ function freeTab(): string {
       ${nameCell(player)}
       <td class="dim">${esc(countryLabel(player))}</td>
       <td class="num">${player.age ?? 24}</td>
-      <td class="num strong">${caHeat(playerCA(player))}</td>
+      <td class="num strong">${caHeat(initialDisplayCA(player))}</td>
       <td>${traitLabel(player.traitId, true)}</td>
       <td class="num">${price.toLocaleString()}</td>
       <td class="num">${available
@@ -162,7 +163,7 @@ function freeTab(): string {
     </div>
     <p class="hint">签人要谈判：他会问你的赛季目标和给他的位置，报价越高成功率越高。不是所有球员随时都能碰到。</p>
     ${game.roster.length > SQUAD_LIMIT ? `<p class="warn-text">阵容 ${game.roster.length} / ${SQUAD_LIMIT}，已超编：必须裁掉 ${game.roster.length - SQUAD_LIMIT} 人才能进入比赛。</p>` : ''}
-    ${rows ? `<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th>国籍</th><th class="num">龄</th><th class="num">CA</th><th>特性</th><th class="num">底价</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('没有匹配的自由球员。')}
+    ${rows ? `<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th>国籍</th><th class="num">龄</th><th class="num">原始 CA</th><th>特性</th><th class="num">底价</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('没有匹配的自由球员。')}
     <div class="pager"><button class="btn small" data-action="club-prev" ${ui.clubPage === 0 ? 'disabled' : ''}>${icon('left', 13)}上一页</button><span class="muted small">${ui.clubPage + 1} / ${pages}</span><button class="btn small" data-action="club-next" ${ui.clubPage >= pages - 1 ? 'disabled' : ''}>下一页${icon('right', 13)}</button></div>
   `, { flush: true })
 }
@@ -175,7 +176,7 @@ function aiTab(): string {
   const teams = [...new Map(all.map((item) => [item.team.id, item.team.name])).entries()]
   const rows = all
     .filter((item) => (ui.aiBuyTeam === 'ALL' || item.team.id === ui.aiBuyTeam) && (ui.aiBuyPos === 'ALL' || primaryPosition(item.player) === ui.aiBuyPos))
-    .sort((a, b) => playerCA(b.player) - playerCA(a.player))
+    .sort((a, b) => initialDisplayCA(b.player) - initialDisplayCA(a.player))
   const pageSize = 20
   const pages = Math.max(1, Math.ceil(rows.length / pageSize))
   ui.aiBuyPage = Math.min(ui.aiBuyPage, pages - 1)
@@ -184,7 +185,7 @@ function aiTab(): string {
       <td>${posBadge(primaryPosition(player))}</td>
       ${nameCell(player)}
       <td class="num">${player.age ?? 24}</td>
-      <td class="num strong">${caHeat(playerCA(player))}</td>
+      <td class="num strong">${caHeat(initialDisplayCA(player))}</td>
       <td>${tag(SQUAD_STATUS_LABELS[terms.status], STATUS_TONE[terms.status])}</td>
       <td class="num" title="${terms.recorded >= 5 ? `最近 ${terms.recorded} 场的出场时间` : '记录不足 5 场，按阵容角色估算'}">${pctText(terms.minutesShare)}${terms.recorded >= 5 ? '' : '<small class="muted">*</small>'}</td>
       <td class="num dim">${terms.value.toLocaleString()}</td>
@@ -200,7 +201,7 @@ function aiTab(): string {
         <select id="ai-buy-pos" class="compact">${posOptions}</select>
         <span class="muted small">近 20 场 = 出场时间占比（* 为按阵容角色估算） · 余额 ${economyOf(game).balance.toLocaleString()}</span>
       </div>
-      ${body ? `<div class="table-scroll"><table class="dt"><thead><tr><th>球队</th><th>位置</th><th>球员</th><th class="num">龄</th><th class="num">CA</th><th>地位</th><th class="num">近 20 场</th><th class="num">身价</th><th class="num">俱乐部要价</th><th></th></tr></thead><tbody>${body}</tbody></table></div>` : emptyState('没有符合条件的球员。')}
+      ${body ? `<div class="table-scroll"><table class="dt"><thead><tr><th>球队</th><th>位置</th><th>球员</th><th class="num">龄</th><th class="num">原始 CA</th><th>地位</th><th class="num">近 20 场</th><th class="num">身价</th><th class="num">俱乐部要价</th><th></th></tr></thead><tbody>${body}</tbody></table></div>` : emptyState('没有符合条件的球员。')}
       <div class="pager"><button class="btn small" data-action="ai-buy-prev" ${ui.aiBuyPage === 0 ? 'disabled' : ''}>${icon('left', 13)}上一页</button><span class="muted small">${ui.aiBuyPage + 1} / ${pages}</span><button class="btn small" data-action="ai-buy-next" data-pages="${pages}" ${ui.aiBuyPage >= pages - 1 ? 'disabled' : ''}>下一页${icon('right', 13)}</button></div>
     `, { flush: true })}`
 }
@@ -219,7 +220,7 @@ function offersTab(): string {
     return `<tr data-key="${esc(offer.id)}">
       <td>${clubName(offer.clubId, 14)}</td>
       <td>${player ? posBadge(primaryPosition(player)) : ''}</td>
-      <td class="name-cell"><button class="name-btn" data-action="detail" data-player="${esc(offer.playerId)}">${esc(offer.playerName)}</button>${player ? `<small>${player.age ?? 24} 岁 · CA ${playerCA(player).toFixed(0)}</small>` : ''}</td>
+      <td class="name-cell"><button class="name-btn" data-action="detail" data-player="${esc(offer.playerId)}">${esc(offer.playerName)}</button>${player ? `<small>${player.age ?? 24} 岁 · 原始 CA ${initialDisplayCA(player).toFixed(0)}</small>` : ''}</td>
       <td class="num strong">${offer.amount.toLocaleString()}</td>
       <td class="num dim">${offer.value.toLocaleString()}</td>
       <td class="num ${premium >= 0 ? 'up' : 'down'}">${premium >= 0 ? '+' : ''}${Math.round(premium * 100)}%</td>
@@ -245,7 +246,7 @@ export function renderTransfer(): string {
   const body = tab === 'free' ? freeTab() : tab === 'ai' ? aiTab() : tab === 'offers' ? offersTab() : marketTab()
   const pendingCount = (game.transferOffers ?? []).filter((offer) => offer.status === 'pending').length
   return `
-    ${pageHead({ kicker: '经营', title: '转会市场' })}
+    ${pageHead({ kicker: '经营', title: '转会市场', sub: '交易展示原始 CA，培养出的球员卡不随转会转移。' })}
     <div class="tabs" role="tablist">
       ${TABS.map((item) => `<button class="tab ${tab === item.id ? 'active' : ''}" role="tab" aria-selected="${tab === item.id}" data-transfer-tab="${item.id}">${item.id === 'free' && isOnlineMode() ? '全服竞拍' : item.label}${item.id === 'offers' && pendingCount ? ` <span class="badge">${pendingCount}</span>` : ''}</button>`).join('')}
     </div>

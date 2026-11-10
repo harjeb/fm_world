@@ -34,9 +34,9 @@ export function playerDisplayCA(player: Player): number {
   return caOf(player.attrs, player.positions.GK > 0)
 }
 
-/** 初始 CA 用原型初始属性计算，不随训练变化。 */
+/** 原始 CA 使用原始属性和原始位置计算，不受装备卡、培养或转会影响；兼容缺少原始字段的旧数据。 */
 export function initialDisplayCA(player: Player): number {
-  return caOf(player.baseAttrs, player.positions.GK > 0)
+  return caOf(player.baseAttrs ?? player.attrs, (player.basePositions ?? player.positions).GK > 0)
 }
 
 export { mainAttrsFor as visibleMainAttrs }

@@ -1,7 +1,7 @@
 import type { Player } from '../../game/types.ts'
 import { ATTR_GROUPS } from '../../game/data/attributes.ts'
 import { bestMarketValue } from '../../game/market.ts'
-import { equippedCard, playerCards } from '../../game/cards.ts'
+import { equippedCard, playerCards, untrainedPlayer } from '../../game/cards.ts'
 import { attrRating, initialDisplayCA, mainAttrsFor } from '../../game/rating.ts'
 import { MAIN_FIELD_ATTRS, MAIN_GK_ATTRS } from '../../game/scale.ts'
 import type { ClubPreview } from '../../game/world.ts'
@@ -59,9 +59,12 @@ function statsBlock(player: Player): string {
 
 export function renderDetailOverlay(): string {
   if (!ui.detailPlayerId) return ''
-  const player = findAnyPlayer(ui.detailPlayerId)
-  if (!player) return ''
-  const owned = game.roster.some((item) => item.id === player.id)
+  const source = findAnyPlayer(ui.detailPlayerId)
+  if (!source) return ''
+  const owned = game.roster.some((item) => item.id === source.id)
+  // 在转会市场预览别人球队的球员时，展示实际能买到的原始球员，而不是不随转会转移的卡。
+  const transferPreview = !owned && ui.screen === 'transfer'
+  const player = transferPreview ? untrainedPlayer(source) : source
   const gk = player.positions.GK > 0
   const session = owned ? game.training[player.id] : undefined
   const candidate = owned ? game.candidates[player.id] : undefined
@@ -108,7 +111,7 @@ export function renderDetailOverlay(): string {
               <p class="muted">球员详情 · ${[countryLabel(player), player.era === 'random' ? '' : player.era, gk ? '门将' : '外场'].filter(Boolean).map(esc).join(' · ')}</p>
             </div>
           </div>
-          <div class="big-ca"><span>CA</span><b>${caHeat(playerCA(player), 1)}</b><small>原始 CA ${initialDisplayCA(player).toFixed(1)}</small></div>
+          <div class="big-ca"><span>${transferPreview ? '原始 CA' : 'CA'}</span><b>${caHeat(playerCA(player), 1)}</b><small>${transferPreview ? '转会不包含球员卡' : `原始 CA ${initialDisplayCA(player).toFixed(1)}`}</small></div>
         </header>
         ${injury ? `<div class="banner bad">${icon('cross', 16)}<span>${injury}；带伤比赛能力下降 30%，不影响精力或培养。</span></div>` : ''}
         <div class="profile-grid">
@@ -291,8 +294,9 @@ export function renderNewGameOverlay(): string {
 export function renderNegotiationOverlay(): string {
   const draft = ui.negotiation
   if (!draft) return ''
-  const player = findAnyPlayer(draft.playerId)
-  if (!player) return ''
+  const sourcePlayer = findAnyPlayer(draft.playerId)
+  if (!sourcePlayer) return ''
+  const player = untrainedPlayer(sourcePlayer)
   const demands = negotiationDemands(game, player)
   const tier = game.season.tier ?? 'division2'
   const terms = negotiationTerms({
@@ -336,7 +340,8 @@ export function renderNegotiationOverlay(): string {
       <div class="modal nego-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="球员谈判">
         <button class="modal-close" data-action="nego-cancel" aria-label="关闭">${icon('close', 16)}</button>
         <div class="kicker">球员谈判 · ${esc(source)}</div>
-        <h1>${esc(player.name)} <small>${posBadge(primaryPosition(player))} CA ${playerCA(player).toFixed(0)}</small></h1>
+        <h1>${esc(player.name)} <small>${posBadge(primaryPosition(player))} 原始 CA ${initialDisplayCA(player).toFixed(0)}</small></h1>
+        <p class="hint">球员按原始属性转会，培养出的球员卡不随人转移。</p>
         <p class="hint">${demandsLine}</p>
         ${hardLines}
         <div class="nego-answers">
