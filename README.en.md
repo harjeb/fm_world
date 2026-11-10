@@ -15,6 +15,30 @@ An 11-a-side football management game you play in the browser: take over a club,
 - **Shared online world**: all players compete in the same three-tier league system with promotion and relegation, matches kick off every day at 12:00 and 20:00 Beijing time, and free agents are auctioned server-wide. You can also play offline on your own.
 - **AI coaching**: let an AI assistant manage your club through the Agent API or MCP; see [docs/agent-api.md](docs/agent-api.md) (in Chinese).
 
+## Screenshots
+
+**Real-time 2D match**: all 22 players and the ball move in real time according to their attributes, with live text commentary on the right and possession, shots and xG below.
+
+![Real-time 2D match](docs/screenshots/match-2d.png)
+
+**Tactical tracking view**: overlays your team's shape on the pitch so you can read the overall positioning.
+
+![Tactical tracking view](docs/screenshots/match-tracking.png)
+
+**Tactics board**: pick a formation, give every position a role and set in-possession and out-of-possession tactics; the dashed lines on the board connect the main chemistry partners.
+
+![Tactics board](docs/screenshots/tactics.png)
+
+**Player development**: a 30-session training calendar with friendlies, internal matches and training events; the radar chart on the right shows attribute changes.
+
+![Player development](docs/screenshots/training.png)
+
+**Transfer market**: buy from computer-run clubs, with each player's share of the last 20 matches, valuation and the club's asking price; first-choice players are marked "not for sale".
+
+![Transfer market](docs/screenshots/transfer.png)
+
+> Screenshots are from offline single-player mode at 1440×900; the interface is in Chinese. Player and club names are prototype gameplay-test data; see the disclaimer below.
+
 ## Quick start
 
 ```bash
