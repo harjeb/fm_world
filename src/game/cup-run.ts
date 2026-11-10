@@ -1,4 +1,4 @@
-import type { AITeam, CupFixture, CupGroupState, CupRun, CupTie, GameState, MatchContext, MatchRecord } from './types.ts'
+import type { AITeam, CupFixture, CupGroupState, CupRun, CupTie, GameState, MatchContext, MatchRecord, TrophyRecord } from './types.ts'
 import { CUP_SEED, cupDefById, type CupId, type CupRound } from './data/cup-config.ts'
 import { buildCupField, buildCupGroups } from './cup.ts'
 import { MatchEngine } from './match/engine.ts'
@@ -7,6 +7,7 @@ import { splitSeed } from './rng.ts'
 import { emptyCupRow, sortCupTable, updateCupTable } from './cup-table.ts'
 import { archivePastCups } from './pve-season.ts'
 import { LOGIC_MATCH_SECONDS } from './match/time.ts'
+import { applyCupCeilingReward } from './cup-rewards.ts'
 
 const ROUND_ORDER: CupRound[] = ['r16', 'qf', 'sf', 'final']
 
@@ -180,13 +181,16 @@ function finishCup(game: GameState, run: CupRun, champion: boolean): void {
   const opponentId = leg.homeId === 'player' ? leg.awayId : leg.homeId
   if (game.pve!.trophies.some((entry) => entry.cupId === run.cupId && entry.seasonIndex === run.seasonIndex)) return
   const playerHome = leg.homeId === 'player'
-  game.pve!.trophies.push({
+  const trophy: TrophyRecord = {
     cupId: run.cupId, cupName: cupDefById(run.cupId as CupId).name, seasonIndex: run.seasonIndex,
     wonAt: Date.now(), finalOpponent: run.participants[opponentId].name,
     finalScore: playerHome ? { ...leg.score! } : { home: leg.score!.away, away: leg.score!.home },
     ...(leg.shootout ? { finalShootout: playerHome ? { ...leg.shootout } : { home: leg.shootout.away, away: leg.shootout.home } } : {}),
     matchId: leg.matchId,
-  })
+  }
+  game.pve!.trophies.push(trophy)
+  const ceilingBonus = applyCupCeilingReward(game, run.cupId as CupId)
+  if (ceilingBonus > 0) trophy.ceilingBonus = ceilingBonus
 }
 
 export function recordCupResult(game: GameState, record: MatchRecord, context: MatchContext): void {

@@ -20,7 +20,7 @@ import { derivedRng } from './rng.ts'
 import { PLAYER_COUNT } from './data/players.ts'
 import { FACILITY_STAGE_VERSION, MAX_FACILITY_LEVEL, MAX_FACILITY_STAGE, STAGES_PER_LEVEL, facilityLevel, facilityStageChance, type FacilityId } from './economy.ts'
 import { addTrainedCard, closeFinishedTraining, deleteCard, equipCard } from './cards.ts'
-import { attrLimit, attrMax, attrRating, MAIN_ATTR_MAX, displayGain, isMainAttr, scaleAuthoredGains } from './rating.ts'
+import { attrLimit, attrHardLimit, attrMax, attrRating, CA_MAX, MAIN_ATTR_MAX, displayGain, isMainAttr, scaleAuthoredGains } from './rating.ts'
 import { inheritanceChances, mentorSkill, validateInheritance } from './inheritance.ts'
 import { bookEvents, bookLearnChance, eventForSession, grantBookSkill, bookTierLabel } from './legend-learning.ts'
 import { legendMultiplier, legendValue } from './legend-bonus.ts'
@@ -174,7 +174,7 @@ export function createTrainingSession(player: Player, seed: number, snapshot: Tr
         week: 1,
         kind: 'system',
         title: '开始新一轮培养',
-        text: '从原始属性开始培养。本轮 15 天，每天上午和下午各练一次；每周一上午交流赛，周五上午队内比赛、下午恢复。结束后产出一张新卡进入库存，和之前的卡互不影响。主属性最高为 1500。',
+        text: '从原始属性开始培养。本轮 15 天，每天上午和下午各练一次；每周一上午交流赛，周五上午队内比赛、下午恢复。结束后产出一张新卡进入库存，和之前的卡互不影响。基础上限 1500，奖励/技能可把上限推到 2000。',
       },
     ],
     completed: false,
@@ -257,10 +257,10 @@ function trainingCeilings(session: TrainingSession): Player['ceilings'] {
   const gk = candidateIsGk(session)
   // 每个属性只练到球员自己的上限（由画像与星级决定），不再统一到 1500。
   // 旧存档候选若缺少 ceilings，回退到该属性的绝对上限。
-  const ceilings = normalizeCeilings(session.candidate.attrs, session.candidate.ceilings, (key) => attrLimit(key, gk))
+  const ceilings = normalizeCeilings(session.candidate.attrs, session.candidate.ceilings, (key) => attrHardLimit(key, gk))
   const breakBonus = legendValue(session.candidate, 'lg_ceiling_break', 200)
   if (breakBonus > 0) {
-    for (const key of mainKeysForTraining(gk)) ceilings[key] = Math.min(attrLimit(key, gk), ceilings[key] + breakBonus)
+    for (const key of mainKeysForTraining(gk)) ceilings[key] = Math.min(attrHardLimit(key, gk), ceilings[key] + breakBonus)
   }
   return ceilings
 }
@@ -274,7 +274,7 @@ function facilityGains(session: TrainingSession, gains: Partial<Record<AttrKey, 
 }
 
 function applyTrainingGains(session: TrainingSession, gains: Partial<Record<AttrKey, number>>) {
-  return applyGains(session.candidate.attrs, trainingCeilings(session), 1500, gains, candidateIsGk(session))
+  return applyGains(session.candidate.attrs, trainingCeilings(session), CA_MAX, gains, candidateIsGk(session))
 }
 
 function moodGains(session: TrainingSession, gains: Partial<Record<AttrKey, number>>, action: number) {

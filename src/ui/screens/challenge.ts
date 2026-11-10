@@ -1,5 +1,7 @@
 import type { AITeam, MatchRecord } from '../../game/types.ts'
 import { caOf } from '../../game/ca.ts'
+import { mainAttrsFor } from '../../game/rating.ts'
+import { attrLabel } from '../../game/data/attributes.ts'
 import { LEGEND_TEAMS } from '../../game/data/legend-teams.ts'
 import { legendTeamById } from '../../game/legend.ts'
 import { PEAK_STAGE_COUNT, peakStageDef, buildPeakTeam } from '../../game/peak.ts'
@@ -93,6 +95,21 @@ function peakRewardPanel(): string {
   return panel('第 50 关全明星奖励 · 选择 1 人加入', `<p class="hint pad">击败足球小将全明星后，可从下面 16 人中选 1 人加入；入队保留当前 CA。</p>${warning}<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th class="num">当前 CA</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`, { flush: true })
 }
 
+function peakBreakthroughPanel(): string {
+  const pve = game.pve?.peak
+  const cards = pve?.breakthroughCards ?? 0
+  if (cards <= 0) return ''
+  const player = game.roster.find((item) => item.id === ui.peakCardPlayerId) ?? game.roster[0]
+  if (!player) return ''
+  ui.peakCardPlayerId = player.id
+  const attrs = mainAttrsFor(player.positions.GK > 0)
+  if (!ui.peakCardAttr || !attrs.includes(ui.peakCardAttr)) ui.peakCardAttr = attrs[0]
+  return panel(`属性突破卡 <small>${cards}</small>`, `<p class="hint pad">每张卡让一名球员的一项主属性上限 +100；只加上限，不直接加当前属性。</p>
+    <div class="form-row"><label for="peak-card-player">球员</label><select id="peak-card-player" data-peak-card-player>${game.roster.map((item) => `<option value="${esc(item.id)}" ${item.id === player.id ? 'selected' : ''}>${esc(item.name)}</option>`).join('')}</select></div>
+    <div class="form-row"><label for="peak-card-attr">属性</label><select id="peak-card-attr" data-peak-card-attr>${attrs.map((key) => `<option value="${key}" ${key === ui.peakCardAttr ? 'selected' : ''}>${esc(attrLabel(key))}</option>`).join('')}</select></div>
+    <button class="btn primary" data-action="use-peak-card" ${game.activeMatch ? 'disabled' : ''}>使用 1 张</button>`, { flush: true })
+}
+
 function renderPeak(): string {
   const cleared = game.pve?.peak.cleared ?? 0, done = cleared >= 100
   const current = Math.min(100, cleared + 1)
@@ -104,6 +121,7 @@ function renderPeak(): string {
   return `<div class="kpi-row">${tile('已通关', `${cleared} / ${PEAK_STAGE_COUNT}`)}${tile('当前关', done ? '全部完成' : String(current))}${tile('浏览关卡', String(stage))}${tile('首发平均 CA', String(Math.round(startingCa(team))))}</div>
     ${panel('进度 · 点击任意关卡预览', `<div class="peak-track" aria-label="巅峰之路关卡">${Array.from({ length: 100 }, (_, i) => `<button class="peak-cell ${i < cleared ? 'done' : ''} ${i + 1 === current && !done ? 'current' : ''} ${i >= 80 ? 'national' : ''}" data-peak-preview="${i + 1}" aria-label="第 ${i + 1} 关${i < cleared ? '，已通关' : i + 1 === current ? '，当前关' : '，未解锁'}" aria-pressed="${i + 1 === stage}">${i + 1}</button>`).join('')}</div><p class="hint pad">绿色已通关，高亮为当前关；81–100 关为世界杯国家队。只能挑战当前关，但可以预览全部关卡。</p>`, { flush: true })}
     ${peakRewardPanel()}
+    ${peakBreakthroughPanel()}
     ${panel(done ? '100 关全部通关 · 对手预览' : canPlay ? '当前对手' : '关卡预览', `<div class="peak-current"><div class="peak-stage-no">第 ${stage} 关</div><div class="peak-stage-main"><b>${esc(team.name)}</b><span>${kindLabel} · ${team.formationId} · ${esc(tacticText(team.tactics))}</span><span>核心：${esc(coreNames(team))}</span></div><div class="peak-stage-ca"><span>目标 CA ${def.targetCa}</span><b>${startingCa(team).toFixed(0)}</b></div>${pveTeamButton(`peak:${stage}`)}<button class="btn" data-action="start-peak-stage" data-stage="${stage}" ${!canPlay || game.activeMatch ? 'disabled' : ''}>${canPlay ? '挑战' : '仅预览'}</button></div>`, { flush: true })}
     ${recordsPanel(game.challengeHistory.filter((record) => record.mode === 'peak'), '最近闯关')}
     <p class="hint pad">对手固定，胜利推进下一关；失败可重试。调整阵容、战术不会受关卡预览影响。</p>`

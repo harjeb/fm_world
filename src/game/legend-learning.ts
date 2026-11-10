@@ -1,10 +1,22 @@
-import type { AttrKey, EventDef, LegendBook, LegendBookTier, LegendSkillId, Player, TrainingSession } from './types.ts'
+import type { AttrKey, EventDef, LegendBook, LegendBookTier, PeakSkillId, Player, SkillBookId, TrainingSession } from './types.ts'
 import { SKILLS, canLearnSkill } from './data/skills.ts'
 import { LEGEND_SKILLS, MAX_BOOKS } from './data/legend-skills.ts'
+import { PEAK_SKILLS } from './data/peak-skills.ts'
+import { attrHardLimit } from './scale.ts'
 import { attrLabel } from './data/attributes.ts'
 import { eventById } from './data/events.ts'
 
 const RANK: Record<string, number> = { silver: 0, gold: 1, rainbow: 2 }
+
+type BookDef = { name: string; scope: 'any' | 'field' | 'gk'; requires: { attr: AttrKey; gold: number; rainbow: number }[] }
+
+function bookDef(id: SkillBookId): BookDef | undefined {
+  return (LEGEND_SKILLS as unknown as Record<string, BookDef>)[id] ?? (PEAK_SKILLS as unknown as Record<string, BookDef>)[id]
+}
+
+function peakDef(id: SkillBookId) {
+  return (PEAK_SKILLS as unknown as Record<string, import('./data/peak-skills.ts').PeakSkillDef>)[id]
+}
 
 export function bookKey(book: Pick<LegendBook, 'id' | 'tier'>): string {
   return `${book.id}:${book.tier}`
@@ -14,16 +26,18 @@ export function bookTierLabel(tier: LegendBookTier): string {
   return tier === 'rainbow' ? '彩书' : '金书'
 }
 
-export function bookScopeMatches(player: Pick<Player, 'positions'>, book: { id: LegendSkillId }): boolean {
-  const def = LEGEND_SKILLS[book.id]
+export function bookScopeMatches(player: Pick<Player, 'positions'>, book: { id: SkillBookId }): boolean {
+  const def = bookDef(book.id)
+  if (!def) return false
   const gk = player.positions.GK > 0
   return def.scope === 'any' || (def.scope === 'field' && !gk) || (def.scope === 'gk' && gk)
 }
 
 /** 当前球员学这本书的成功率；纯计算，不掷骰。 */
-export function bookLearnChance(player: Pick<Player, 'attrs' | 'positions'>, book: { id: LegendSkillId; tier: LegendBookTier }): number {
+export function bookLearnChance(player: Pick<Player, 'attrs' | 'positions'>, book: { id: SkillBookId; tier: LegendBookTier }): number {
   if (!bookScopeMatches(player, book)) return 0
-  const def = LEGEND_SKILLS[book.id]
+  const def = bookDef(book.id)
+  if (!def) return 0
   const values = def.requires.map((requirement) => {
     const threshold = book.tier === 'rainbow' ? requirement.rainbow : requirement.gold
     if (!(threshold > 0)) return 1
@@ -34,8 +48,9 @@ export function bookLearnChance(player: Pick<Player, 'attrs' | 'positions'>, boo
   return Math.max(0.02, Math.min(1, Math.pow(values.reduce((product, value) => product * value, 1), 1 / values.length)))
 }
 
-export function bookRequirementText(book: { id: LegendSkillId; tier: LegendBookTier }): string {
-  const def = LEGEND_SKILLS[book.id]
+export function bookRequirementText(book: { id: SkillBookId; tier: LegendBookTier }): string {
+  const def = bookDef(book.id)
+  if (!def) return ''
   return def.requires
     .map((requirement) => `${attrLabel(requirement.attr)} ${book.tier === 'rainbow' ? requirement.rainbow : requirement.gold}`)
     .join(' + ')
@@ -56,6 +71,17 @@ export function grantBookSkill(session: TrainingSession, book: LegendBook): { ok
   const had = session.candidate.skills.includes(book.id)
   if (!had) session.candidate.skills = [...session.candidate.skills, book.id]
   session.candidate.skillTiers = { ...session.candidate.skillTiers, [book.id]: book.tier }
+  const peak = peakDef(book.id)
+  if (peak && !had) {
+    const gk = session.candidate.positions.GK > 0
+    for (const attr of peak.pair) {
+      const hard = attrHardLimit(attr, gk)
+      const ceiling = Math.min(hard, (session.candidate.ceilings[attr] ?? hard) + peak.ceiling)
+      const current = Math.min(ceiling, (session.candidate.attrs[attr] ?? 0) + peak.current)
+      session.candidate.ceilings = { ...session.candidate.ceilings, [attr]: ceiling }
+      session.candidate.attrs = { ...session.candidate.attrs, [attr]: current }
+    }
+  }
   return { ok: true, upgraded: had }
 }
 
@@ -64,7 +90,7 @@ export function bookEvents(session: TrainingSession): EventDef[] {
   const books = (session.books ?? []).slice(0, MAX_BOOKS)
   const total = session.actionsTotal ?? 18
   return books.flatMap((book, index) => {
-    const def = LEGEND_SKILLS[book.id]
+    const def = bookDef(book.id)
     if (!def || !canUseBookOnPlayer(session.candidate, book).ok) return []
     const current = session.candidate.skills.includes(book.id) ? (session.candidate.skillTiers?.[book.id] ?? 'silver') : null
     if (current && RANK[current] >= RANK[book.tier]) return []
@@ -114,6 +140,6 @@ export function usableBooksFor(player: Pick<Player, 'positions' | 'skills' | 'sk
   })
 }
 
-export function bookName(id: LegendSkillId): string {
+export function bookName(id: SkillBookId): string {
   return SKILLS[id]?.name ?? id
 }

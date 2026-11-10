@@ -1,5 +1,7 @@
-import type { GameState, LegendBook, LegendBookTier, LegendSkillId, SkillTier } from './types.ts'
+import type { GameState, LegendBook, LegendBookTier, SkillBookId, SkillTier } from './types.ts'
 import { LEGEND_SKILLS, LEGEND_SKILL_DROPS } from './data/legend-skills.ts'
+import { PEAK_SKILLS } from './data/peak-skills.ts'
+import { SKILLS } from './data/skills.ts'
 import { LEGEND_TEAMS } from './data/legend-teams.ts'
 import { economyOf, MAX_FANS } from './economy.ts'
 
@@ -22,7 +24,7 @@ export function ensureLegendBooks(game: GameState): boolean {
   }
   const seen = new Set<string>()
   const valid = game.legendBooks.filter((book) => {
-    if (!book || !Object.hasOwn(LEGEND_SKILLS, book.id) || (book.tier !== 'gold' && book.tier !== 'rainbow')) return false
+    if (!book || (!Object.hasOwn(LEGEND_SKILLS, book.id) && !Object.hasOwn(PEAK_SKILLS, book.id)) || (book.tier !== 'gold' && book.tier !== 'rainbow')) return false
     const key = `${book.id}:${book.tier}`
     if (seen.has(key)) return false
     seen.add(key)
@@ -35,11 +37,11 @@ export function ensureLegendBooks(game: GameState): boolean {
   return changed
 }
 
-export function hasLegendBook(game: GameState, id: LegendSkillId, tier?: LegendBookTier): boolean {
+export function hasLegendBook(game: GameState, id: SkillBookId, tier?: LegendBookTier): boolean {
   return !!game.legendBooks?.some((book) => book.id === id && (tier === undefined || book.tier === tier))
 }
 
-export function addLegendBook(game: GameState, id: LegendSkillId, tier: LegendBookTier): boolean {
+export function addLegendBook(game: GameState, id: SkillBookId, tier: LegendBookTier): boolean {
   ensureLegendBooks(game)
   if (hasLegendBook(game, id, tier)) return false
   game.legendBooks!.push({ id, tier })
@@ -98,5 +100,5 @@ export function awardLegendReward(game: GameState, legendId: string, result: 'wi
 }
 
 export function legendBookLabel(book: LegendBook): string {
-  return LEGEND_SKILLS[book.id].name
+  return SKILLS[book.id]?.name ?? book.id
 }

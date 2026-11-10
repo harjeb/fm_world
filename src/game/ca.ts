@@ -1,6 +1,6 @@
 import type { AttrKey, Attributes, Player } from './types.ts'
 import { FIELD_ATTRIBUTES, GK_ATTRIBUTES } from './types.ts'
-import { attrMax, attrRating } from './scale.ts'
+import { attrMax, attrRating, MAX_ATTR_RATING } from './scale.ts'
 
 export const CA_SCALE = 1500
 export const POSITION_FLOOR = 0.6
@@ -133,7 +133,7 @@ export function effectiveAttr(
   const k = key === 'endurance' ? 0 : isPhysical(key) ? 0.75 : 0.5
   const fatigue = 1 - k * (1 - Math.max(0, Math.min(1, staminaRatio)))
   const m = positionMultiplier(proficiency)
-  return Math.max(1, Math.min(100, attrs[key] * fatigue * m))
+  return Math.max(1, Math.min(MAX_ATTR_RATING, attrs[key] * fatigue * m))
 }
 
 export function isPhysical(key: AttrKey): boolean {

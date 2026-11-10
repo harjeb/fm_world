@@ -123,12 +123,19 @@ export type SkillId =
   | 'lg_wing_engine'
   | 'lg_gk_economy'
   | 'lg_stamina_regen'
+  | 'lg_peak_striker'
+  | 'lg_peak_engine'
+  | 'lg_peak_wall'
+  | 'lg_peak_wing'
+  | 'lg_peak_keeper'
 
-export type LegendSkillId = Extract<SkillId, `lg_${string}`>
+export type PeakSkillId = 'lg_peak_striker' | 'lg_peak_engine' | 'lg_peak_wall' | 'lg_peak_wing' | 'lg_peak_keeper'
+export type LegendSkillId = Exclude<Extract<SkillId, `lg_${string}`>, PeakSkillId>
 
 export type SkillTier = 'silver' | 'gold' | 'rainbow'
 export type LegendBookTier = 'gold' | 'rainbow'
-export type LegendBook = { id: LegendSkillId; tier: LegendBookTier }
+export type SkillBookId = LegendSkillId | PeakSkillId
+export type LegendBook = { id: SkillBookId; tier: LegendBookTier }
 
 export type TraitEffect =
   | 'vision'
@@ -488,7 +495,7 @@ export type EventEffect = {
   route?: { id: RouteId; points: number }
   routeOwn?: number
   skill?: SkillId
-  bookSkill?: { id: LegendSkillId; tier: LegendBookTier }
+  bookSkill?: { id: SkillBookId; tier: LegendBookTier }
   routeSkill?: boolean
   position?: { pos: Position; amount: number }
   personality?: Partial<Personality>
@@ -516,7 +523,7 @@ export type EventOption = {
   effect?: EventEffect
   branch?: EventBranch
   /** 传奇技能书：动态概率由 bookLearnChance() 计算，不走 branch 的线性公式。 */
-  book?: { id: LegendSkillId; tier: LegendBookTier }
+  book?: { id: SkillBookId; tier: LegendBookTier }
 }
 
 export type EventTrigger = {
@@ -960,6 +967,8 @@ export type TrophyRecord = {
   finalOpponent: string
   finalScore: { home: number; away: number }
   finalShootout?: { home: number; away: number }
+  /** 首次夺冠时发放的俱乐部主属性上限奖励。 */
+  ceilingBonus?: number
   matchId?: string
 }
 
@@ -978,9 +987,15 @@ export type PveState = {
     cleared: number
     history: PvePeakHistoryEntry[]
     reward50?: PvePeakReward
+    /** 已领取的里程碑关卡（只发一次）。 */
+    claimedMilestones?: number[]
+    /** 单属性上限 +100 的突破卡库存。 */
+    breakthroughCards?: number
   }
   cups: Record<string, CupRun>
   cupHistory?: CupRun[]
+  /** 每个杯赛首次夺冠的俱乐部上限奖励是否已发。 */
+  cupCeilingClaims?: Partial<Record<string, true>>
   trophies: TrophyRecord[]
 }
 
@@ -1115,6 +1130,6 @@ export type TrainingAutoConfig = {
   mode: 'priority' | 'targets' | 'max'
   /** 属性优先级，靠前的先练。 */
   priority: AttrKey[]
-  /** 最低目标（存档值 0–1500）；没达到就优先安排对应训练。 */
+  /** 最低目标（存档值 0–2000）；没达到就优先安排对应训练。 */
   targets: Partial<Record<AttrKey, number>>
 }

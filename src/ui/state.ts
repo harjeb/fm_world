@@ -62,6 +62,8 @@ export type UIState = {
   legendCountry: string
   pveTeamId: string | null
   peakPreviewStage: number | null
+  peakCardPlayerId: string | null
+  peakCardAttr: AttrKey | null
   cupHistorySeason: number | null
   /** 杯赛页正在预览分组的杯赛。 */
   cupPreviewId: string | null
@@ -167,6 +169,8 @@ export const ui: UIState = {
   legendCountry: 'ALL',
   pveTeamId: null,
   peakPreviewStage: null,
+  peakCardPlayerId: null,
+  peakCardAttr: null,
   cupHistorySeason: null,
   cupPreviewId: null,
   challengeDivision: null,

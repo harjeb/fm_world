@@ -1,7 +1,7 @@
 import { STAR_TRAITS } from '../data/star-traits.generated.ts'
 import type { TraitCondition } from '../data/star-traits.ts'
 import type { AttrKey, BaseTraitId } from '../types.ts'
-import { MAIN_ATTR_SCALE } from '../scale.ts'
+import { MAIN_ATTR_SCALE, MAX_ATTR_RATING } from '../scale.ts'
 import { TRAITS } from '../data/skills.ts'
 import { effectiveAttr } from '../ca.ts'
 import { derivedRng } from '../rng.ts'
@@ -82,7 +82,7 @@ export class MatchRatings {
           break
       }
     }
-    return clamp(value * (player.injured ? 0.7 : 1), 1, 100)
+    return clamp(value * (player.injured ? 0.7 : 1), 1, MAX_ATTR_RATING)
   }
 
   traitConditionMet(player: MatchPlayerState, when: TraitCondition, ctx: MatchEventContext = {}): boolean {

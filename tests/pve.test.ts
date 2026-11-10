@@ -12,8 +12,9 @@ describe('PvE 挑战', () => {
     expect(ensurePve(game)).toBe(true)
     expect(game.pve).toEqual({
       legends: {},
-      peak: { cleared: 0, history: [] },
+      peak: { cleared: 0, history: [], claimedMilestones: [], breakthroughCards: 0 },
       cups: {},
+      cupCeilingClaims: {},
       trophies: [],
     })
   })

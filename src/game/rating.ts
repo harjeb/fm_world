@@ -2,7 +2,7 @@ import type { AttrKey, Player } from './types.ts'
 import { caOf } from './ca.ts'
 import { mainAttrsFor } from './scale.ts'
 
-export { MAIN_FIELD_ATTRS, MAIN_GK_ATTRS, MAIN_ATTR_SCALE, HIDDEN_ATTR_SCALE, MAIN_ATTR_MAX, HIDDEN_ATTR_MAX, CA_MAX, mainAttrsFor, isMainAttr, attrLimit, attrMax, attrRating, attrStorage, authoredGain, scaleAuthoredGains } from './scale.ts'
+export { MAIN_FIELD_ATTRS, MAIN_GK_ATTRS, MAIN_ATTR_SCALE, HIDDEN_ATTR_SCALE, MAIN_ATTR_MAX, MAIN_ATTR_HARD_MAX, HIDDEN_ATTR_MAX, CA_MAX, MAX_ATTR_RATING, attrHardLimit, mainAttrsFor, isMainAttr, attrLimit, attrMax, attrRating, attrStorage, authoredGain, scaleAuthoredGains } from './scale.ts'
 export type { MainAttr } from './scale.ts'
 
 /** Display attributes and gains in their stored units, not the match rating scale. */

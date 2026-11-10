@@ -2,6 +2,7 @@ import type { BaseTraitId, SkillId, SkillTier, TraitEffect, TraitId } from '../t
 import { MAIN_ATTR_SCALE } from '../scale.ts'
 import { TRAITS } from './skills.ts'
 import { LEGEND_SKILLS } from './legend-skills.ts'
+import { PEAK_SKILLS } from './peak-skills.ts'
 import { starTraitOf, starTraitText } from './star-traits.ts'
 
 /**
@@ -36,9 +37,11 @@ const SKILL_EFFECTS: Partial<Record<SkillId, (m: number) => string>> = {
 export function skillEffectText(id: SkillId, tier: SkillTier = 'silver'): string {
   const fn = SKILL_EFFECTS[id]
   if (fn) return fn(TIER_MULTIPLIER[tier])
-  const legend = LEGEND_SKILLS[id as keyof typeof LEGEND_SKILLS]
-  if (!legend) return ''
-  const text = legend.effect.replace(/(\d+\.\d{2,})/g, (_match, value: string) => String(Math.round(Number(value) * 10) / 10))
+  const legend = LEGEND_SKILLS[id as keyof typeof LEGEND_SKILLS] as { effect?: string } | undefined
+  const peak = PEAK_SKILLS[id as keyof typeof PEAK_SKILLS] as { effect?: string } | undefined
+  const effect = legend?.effect ?? peak?.effect
+  if (!effect) return ''
+  const text = effect.replace(/(\d+\.\d{2,})/g, (_match, value: string) => String(Math.round(Number(value) * 10) / 10))
   return `${text}（金 ×1 / 彩 ×1.4）`
 }
 

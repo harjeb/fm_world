@@ -41,7 +41,10 @@ import type { TrainingActivityId } from '../game/training-calendar.ts'
 import { autoAssignLineup, autoFillLineup, clearStarter, movePlayer, type LineupTarget } from '../game/squad.ts'
 import { seasonStats } from '../game/player-stats.ts'
 import { injuryUntil } from '../game/injury.ts'
+import { mainAttrsFor } from '../game/rating.ts'
+import { attrLabel } from '../game/data/attributes.ts'
 import { claimPeakReward } from '../game/peak-reward.ts'
+import { applyPeakBreakthrough } from '../game/peak-milestones.ts'
 import { ensureCards, playerCards } from '../game/cards.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeStarTraits } from '../game/names.ts'
 import { catchUpSeason, lineupLockState, settleGameConditions, skipToPostseasonEnd } from '../game/season.ts'
@@ -1215,7 +1218,7 @@ document.addEventListener('click', async (event) => {
       saveGame(game)
       setTeamPickPending(false)
       ui.newGameRequired = false
-      Object.assign(ui, { screen: 'home', trainingPlayerId: null, trainingBookIds: [], trainingTeammateIds: [], detailPlayerId: null, reviewId: null, lineupDraft: null, lineupSlot: null, autoSubsDraft: null, notice: '新游戏已创建。', matchEngine: null, matchPlaying: false, completing: false, coachPanel: false, seasonRound: null, worldDivision: null, worldClubId: null, worldPlayerId: null, newGameOpen: false, newGameClubId: null })
+      Object.assign(ui, { screen: 'home', trainingPlayerId: null, trainingBookIds: [], trainingTeammateIds: [], peakCardPlayerId: null, peakCardAttr: null, detailPlayerId: null, reviewId: null, lineupDraft: null, lineupSlot: null, autoSubsDraft: null, notice: '新游戏已创建。', matchEngine: null, matchPlaying: false, completing: false, coachPanel: false, seasonRound: null, worldDivision: null, worldClubId: null, worldPlayerId: null, newGameOpen: false, newGameClubId: null })
       render()
       break
     case 'detail':
@@ -1517,6 +1520,14 @@ document.addEventListener('click', async (event) => {
       openFriendly(startPeakChallenge(game, stage))
       break
     }
+    case 'use-peak-card': {
+      if (!ui.peakCardPlayerId || !ui.peakCardAttr) break
+      const result = applyPeakBreakthrough(game, ui.peakCardPlayerId, ui.peakCardAttr)
+      if (!result.ok) { showNotice(result.error); break }
+      showNotice(`${result.playerName} 的${attrLabel(result.attr)}上限 +${result.amount}。`)
+      render()
+      break
+    }
     case 'claim-peak-reward': {
       const templateId = actionEl.dataset.player
       if (!templateId) break
@@ -1718,6 +1729,21 @@ document.addEventListener('click', async (event) => {
 
 document.addEventListener('change', (event) => {
   const target = event.target as HTMLSelectElement | HTMLInputElement
+  if (target.dataset.peakCardPlayer !== undefined) {
+    ui.peakCardPlayerId = target.value || null
+    const player = game.roster.find((item) => item.id === ui.peakCardPlayerId)
+    if (player) {
+      const allowed = mainAttrsFor(player.positions.GK > 0)
+      if (!ui.peakCardAttr || !allowed.includes(ui.peakCardAttr)) ui.peakCardAttr = allowed[0]
+    }
+    render()
+    return
+  }
+  if (target.dataset.peakCardAttr !== undefined) {
+    ui.peakCardAttr = target.value as AttrKey
+    render()
+    return
+  }
   if (target.dataset.trainingBook) {
     const key = target.dataset.trainingBook
     const checked = (target as HTMLInputElement).checked

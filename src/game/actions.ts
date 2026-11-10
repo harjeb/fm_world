@@ -32,7 +32,7 @@ import { keyAttrsOf } from './data/key-attrs.ts'
 import { normalizeCeilings } from './data/attr-profile.ts'
 import { isGoalkeeper } from './ca.ts'
 import { canUseBookOnPlayer } from './legend-learning.ts'
-import { MAIN_ATTR_MAX, attrLimit, mainAttrsFor } from './rating.ts'
+import { MAIN_ATTR_MAX, MAIN_ATTR_HARD_MAX, attrHardLimit, attrLimit, mainAttrsFor } from './rating.ts'
 import { settleEnergy } from './energy.ts'
 
 export function startTraining(game: GameState, playerId: string, seed?: number, bookKeys?: string[]): { ok: boolean; error?: string } {
@@ -363,7 +363,7 @@ export function autoTrainingConfig(game: GameState, playerId?: string): Training
   const targets: Partial<Record<AttrKey, number>> = {}
   for (const [key, value] of Object.entries(existing?.targets ?? {}) as [AttrKey, number | undefined][]) {
     if (!ALL_ATTRIBUTES.includes(key) || typeof value !== 'number' || !Number.isFinite(value)) continue
-    targets[key] = Math.round(Math.max(0, Math.min(MAIN_ATTR_MAX, value)))
+    targets[key] = Math.round(Math.max(0, Math.min(MAIN_ATTR_HARD_MAX, value)))
   }
   return { enabled: existing?.enabled !== false, autopilot: own?.autopilot === true, mode: existing?.mode === 'targets' || existing?.mode === 'max' ? existing.mode : 'priority', priority, targets }
 }
@@ -391,7 +391,7 @@ export function autoTrainingRunnable(game: GameState, playerId: string): boolean
 /** 本次培养里该球员各属性还能练到多少（球员个人上限）。 */
 function autoTrainableCeilings(session: TrainingSession): Attributes {
   const gk = isGoalkeeper(session.candidate)
-  return normalizeCeilings(session.candidate.attrs, session.candidate.ceilings, (key) => attrLimit(key, gk))
+  return normalizeCeilings(session.candidate.attrs, session.candidate.ceilings, (key) => attrHardLimit(key, gk))
 }
 
 type AutoWeight = { key: AttrKey; weight: number }

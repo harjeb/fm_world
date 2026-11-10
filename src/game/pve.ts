@@ -1,7 +1,10 @@
 import type { GameState, MatchContext, MatchRecord, PveLegendRecord, PveState } from './types.ts'
 import { recordCupResult } from './cup-run.ts'
 import { archivePastCups } from './pve-season.ts'
-import { awardLegendReward, ensureLegendBooks } from './legend-books.ts'
+import { addLegendBook, awardLegendReward, ensureLegendBooks } from './legend-books.ts'
+import { PEAK_SKILL_STAGES, peakSkillForStage } from './data/peak-skills.ts'
+import { ensureCupCeilingClaims } from './cup-rewards.ts'
+import { awardPeakMilestone, ensurePeakMilestones } from './peak-milestones.ts'
 
 const EMPTY_LEGEND: PveLegendRecord = { played: 0, won: 0, drawn: 0, lost: 0, goals: 0, conceded: 0 }
 
@@ -57,7 +60,14 @@ export function ensurePve(game: GameState): boolean {
     pve.peak.cleared = 0
     changed = true
   }
-  return ensureLegendBooks(game) || archivePastCups(game) || changed
+  for (const [stage, id] of Object.entries(PEAK_SKILL_STAGES)) {
+    if (pve.peak.cleared >= Number(stage)) addLegendBook(game, id, 'rainbow')
+  }
+  const booksChanged = ensureLegendBooks(game)
+  const cupsChanged = ensureCupCeilingClaims(game)
+  const peakChanged = ensurePeakMilestones(game)
+  const archiveChanged = archivePastCups(game)
+  return booksChanged || cupsChanged || peakChanged || archiveChanged || changed
 }
 
 export function legendRecordOf(game: GameState, legendId: string): PveLegendRecord {
@@ -104,6 +114,11 @@ export function applyPveResult(game: GameState, record: MatchRecord, context: Ma
       score: { ...record.score },
     })
     if (pve.peak.history.length > 50) pve.peak.history.length = 50
-    if (record.result === 'win') pve.peak.cleared = Math.max(pve.peak.cleared, context.stage)
+    if (record.result === 'win') {
+      pve.peak.cleared = Math.max(pve.peak.cleared, context.stage)
+      const peakBook = peakSkillForStage(context.stage)
+      if (peakBook) addLegendBook(game, peakBook.id, 'rainbow')
+      awardPeakMilestone(game, context.stage)
+    }
   }
 }

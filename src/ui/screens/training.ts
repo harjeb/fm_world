@@ -138,7 +138,7 @@ export function renderAutoStrategyOverlay(): string {
     </div>`
   }).join('')
   const targetRows = mains.map((key) => `<div class="form-row"><label class="attr-name" style="--attr-color:${attrColor(key)}" for="training-auto-target-${key}">${attrLabel(key)}</label>
-      <input id="training-auto-target-${key}" data-auto-target="${key}" type="number" min="0" max="1500" step="50" value="${config.targets[key] ?? 0}" style="max-width:140px">
+      <input id="training-auto-target-${key}" data-auto-target="${key}" type="number" min="0" max="2000" step="50" value="${config.targets[key] ?? 0}" style="max-width:140px">
     </div>`).join('')
   return `
     <div class="overlay" data-action="auto-strategy-close">
@@ -156,7 +156,7 @@ export function renderAutoStrategyOverlay(): string {
             <button class="btn ghost small" data-action="training-auto-reset">恢复默认优先级</button>
           </div>
           <div>
-            <div class="field-title">最低目标（0–1500）</div>
+            <div class="field-title">最低目标（0–2000）</div>
             ${targetRows}
             <button class="btn" data-action="training-auto-save">保存目标值</button>
           </div>
