@@ -51,13 +51,17 @@ describe('联机联赛到点自动结算', () => {
     clock = Date.UTC(2026, 10, 9, 11, 30)
     await drainServerQueue(app, dataDir, clock)
     expect(playerFixture((await load()).game)!.played).toBe(false)
+    // 开球：比赛直播 10 分钟，比分此刻仍不公布。
     clock = Date.UTC(2026, 10, 9, 12)
+    await drainServerQueue(app, dataDir, clock)
+    expect(playerFixture((await load()).game)!.played).toBe(false)
+    clock = Date.UTC(2026, 10, 9, 12, 10)
     await drainServerQueue(app, dataDir, clock)
     const atKickoff = await load()
     expect(playerFixture(atKickoff.game)!.played).toBe(true)
     expect(atKickoff.game.matchHistory).toHaveLength(1)
     expect(registered.game.world!.seasonStartedAt).toBe(Date.UTC(2026, 10, 9, 12))
-    clock = kickoffAtForRound(registered.game.world!.seasonStartedAt, 2)
+    clock = kickoffAtForRound(registered.game.world!.seasonStartedAt, 2) + 10 * 60_000
     await drainServerQueue(app, dataDir, clock)
     const second = await load()
     expect(second.game.season.round).toBe(2)

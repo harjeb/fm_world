@@ -62,7 +62,15 @@ export function applyPeakBreakthrough(game: GameState, playerId: string, attr: i
   const hard = attrHardLimit(attr, gk)
   const before = Number.isFinite(player.ceilings[attr]) && player.ceilings[attr] > 0 ? player.ceilings[attr] : hard
   if (before >= hard) return { ok: false, error: '该属性已经达到 2000 硬上限' }
+  const amount = Math.min(100, hard - before)
   player.ceilings = { ...player.ceilings, [attr]: Math.min(hard, before + 100) }
+  const session = game.training[playerId]
+  if (session && !session.completed) {
+    const candidate = session.candidate
+    const raw = candidate.ceilings?.[attr]
+    const current = Number.isFinite(raw) && raw > 0 ? raw : hard
+    candidate.ceilings = { ...candidate.ceilings, [attr]: Math.min(hard, current + amount) }
+  }
   peak.breakthroughCards = (peak.breakthroughCards ?? 1) - 1
-  return { ok: true, playerName: player.name, attr, amount: Math.min(100, hard - before) }
+  return { ok: true, playerName: player.name, attr, amount }
 }

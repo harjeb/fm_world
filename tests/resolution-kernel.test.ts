@@ -9,6 +9,7 @@ import {
   type KernelHooks,
 } from '../src/game/match/resolution.ts'
 import { derivedRng } from '../src/game/rng.ts'
+import { chemistryKey } from '../src/game/chemistry.ts'
 import { inputFor, makeTeams } from './helpers.ts'
 import type { MatchPlayerState } from '../src/game/match/types.ts'
 
@@ -50,6 +51,26 @@ function keeper(team: { players: MatchPlayerState[] }): MatchPlayerState {
 }
 
 describe('结算内核：脱离引擎独立工作', () => {
+  it('chemistry improves only the matching pair passing, with a smaller long-ball benefit', () => {
+    const { kernel, home, away } = setup()
+    const [passer, receiver, other] = outfield(home, 3)
+    passer.x = 40; passer.y = 30
+    receiver.x = 62; receiver.y = 30
+    other.x = 62; other.y = 30
+    const model = (target = receiver, type: 'short' | 'long' = 'short') => kernel.passModel(passer, target, type, away, passer, target, false)
+    const baseline = model()
+    const unrelated = model(other)
+    const long = model(receiver, 'long')
+    const shot = kernel.shotModel(passer, home, away, { point: passer, header: false, penalty: false, freeKick: false })
+    home.chemistry = { [chemistryKey(passer.sourceId, receiver.sourceId)]: 100 }
+    expect(model().p).toBeGreaterThan(baseline.p)
+    expect(model().a).toBe(baseline.a)
+    expect(model().c - baseline.c).toBeCloseTo(4)
+    expect(model(receiver, 'long').c - long.c).toBeCloseTo(2)
+    expect(model(other)).toEqual(unrelated)
+    expect(kernel.shotModel(passer, home, away, { point: passer, header: false, penalty: false, freeKick: false })).toEqual(shot)
+  })
+
   it('传球、过人、射门模型的输出和引擎里的同名方法完全一致', () => {
     const { engine, kernel, home, away } = setup()
     const [passer, receiver] = outfield(home)
@@ -207,6 +228,28 @@ describe('结算内核：脱离引擎独立工作', () => {
     expect(loose.length).toBeGreaterThanOrEqual(attackers.length + defenders.length - 1)
     const ids = new Set(loose.map((item) => item.player.id))
     expect(ids.size).toBe(loose.length)
+  })
+
+  it('applies the same height bonus to attacking players, defenders, and goalkeepers', () => {
+    const { kernel, home, away } = setup()
+    const point = { x: 90, y: 32 }
+    const attacker = outfield(home, 1)[0]
+    const defender = outfield(away, 1)[0]
+    const goalkeeper = keeper(away)
+    for (const player of [...home.players, ...away.players]) { player.x = 3; player.y = 3 }
+    for (const player of [attacker, defender, goalkeeper]) { player.x = point.x; player.y = point.y }
+
+    const weightAt = (player: MatchPlayerState, height: number) => {
+      player.height = height
+      return kernel.aerialContestants(home, away, point, 'home', () => 0.5)
+        .find((contestant) => contestant.player.id === player.id)!.weight
+    }
+
+    for (const player of [attacker, defender, goalkeeper]) {
+      const baseline = weightAt(player, 175)
+      expect(weightAt(player, 165)).toBeCloseTo(baseline, 10)
+      expect(weightAt(player, 185) - baseline).toBeCloseTo(2, 10)
+    }
   })
 
   it('抽签：区间边界、浮点落到末尾、权重为 0 的人不会赢', () => {

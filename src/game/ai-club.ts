@@ -220,18 +220,42 @@ export function mergeSignings(state: AIClubState, players: Player[]): Player[] {
   return squad
 }
 
-/** 挑一个最该练的槽位：评分最低的那几个里随机一个，青训好的队会顺带照顾年轻人。 */
-function pickSlot(state: AIClubState, players: Player[] | undefined, rng: ReturnType<typeof derivedRng>): number {
-  const ratings: { slot: number; rating: number }[] = []
-  const length = players?.length ?? Math.max(0, ...Object.keys(state.cards).map((key) => Number(key) + 1))
-  for (let slot = 0; slot < length; slot++) {
-    const player = players?.[slot]
-    const card = state.cards[String(slot)]
-    ratings.push({ slot, rating: player ? Math.min(playerCa(player), card?.rating ?? Infinity) : card?.rating ?? 0 })
+/** 球员没培养过的样子的 CA（原始属性），不随已装备的培养卡变化。 */
+function originalCa(player: Player): number {
+  return caOf(player.baseAttrs ?? player.attrs, (player.basePositions ?? player.positions).GK > 0)
+}
+
+/**
+ * 挑下一个要练的槽位：球队现在的人里，原始 CA 最高、且这一圈还没练过的那个。
+ * 刚签进来的球星原始 CA 高又没练过，自然排在最前面；全队都练过一遍就清空，从头再来一圈。
+ * 挑中的人当场记为“已练”，哪怕这次没练出更好的卡也不会原地重复。
+ */
+function pickSlot(state: AIClubState, players: Player[] | undefined): number {
+  if (!players?.length) return -1
+  const owners = new Set(players.map(ownerOf))
+  // 已经离队的人不再占着记录。
+  const trained = new Set((state.trainedOwners ?? []).filter((owner) => owners.has(owner)))
+  const pick = (): number => {
+    let best = -1
+    let bestCa = -Infinity
+    players.forEach((player, slot) => {
+      if (trained.has(ownerOf(player))) return
+      const ca = originalCa(player)
+      if (ca > bestCa) {
+        best = slot
+        bestCa = ca
+      }
+    })
+    return best
   }
-  if (!ratings.length) return -1
-  ratings.sort((a, b) => a.rating - b.rating)
-  return ratings[Math.min(ratings.length - 1, rng.int(3))].slot
+  let slot = pick()
+  if (slot < 0) {
+    trained.clear()
+    slot = pick()
+  }
+  if (slot >= 0) trained.add(ownerOf(players[slot]))
+  state.trainedOwners = [...trained]
+  return slot
 }
 
 /** 每支球队每天练几次。二级约 1 次，一级 2–3 次，顶级 3–5 次。 */
@@ -257,7 +281,8 @@ export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | '
   state.economy.balance = Math.min(AI_BALANCE_CAP, state.economy.balance + projectedRoundIncome(state.economy) * rounds)
   state.economy.fans = Math.min(MAX_FANS, Math.round(state.economy.fans * (1 + 0.006 * rounds)))
   const players = team?.players
-  if (players && players.length && applyToTeam) equipAICards(state, players)
+  // 练出来的卡装到球员身上后，首发要跟着重排：评分更高的人才会把原来的主力换下来。
+  let equipped = !!players?.length && applyToTeam && equipAICards(state, players)
 
   const days = rounds * AVERAGE_ROUND_GAME_DAYS
   const rng = derivedRng(seed, 'ai-train', state.trained, rounds)
@@ -267,7 +292,7 @@ export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | '
   sessions = Math.min(sessions, days * profile.perDay[1])
   let trained = 0
   for (let step = 0; step < sessions; step++) {
-    const slot = pickSlot(state, players, rng)
+    const slot = pickSlot(state, players)
     if (slot < 0) break
     const base = players?.[slot]
     // 没有当季名单（其他分区）就不练：账本里的卡等下赛季随名单重建，免得把 GK 属性练到场上球员身上。
@@ -281,8 +306,9 @@ export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | '
     if (rating <= card.rating + 0.4) continue
     state.cards[String(slot)] = { rating, attrs: { ...trainedPlayer.attrs }, owner: card.owner }
     // 按名单下标装这个槽位自己的卡（不能拿一个人当 0 号槽位去套）。
-    if (applyToTeam && players) equipSlot(state, players, slot)
+    if (applyToTeam && players && equipSlot(state, players, slot)) equipped = true
   }
+  if (equipped && team) refreshAILineup(team)
 
   // 设施升级按级别限速：二级慢（约两轮升一次）、一级积极、顶级最快；名额按轮累计，钱不够就作废。
   // 升级前的留底比买人时更低：顶级球队优先升设施，宁可少留点钱。

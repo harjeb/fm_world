@@ -30,6 +30,10 @@ import { RATING_STOPS, boardMarkings, boardSpot, boardSpotFromPercent, caHeat, c
 import { esc, pct, playerCA, positionLabel, shortName } from '../format.ts'
 import { morph } from '../morph.ts'
 import { game, ui } from '../state.ts'
+import { chemistryKey } from '../../game/chemistry.ts'
+import { selectChemistryLinks } from '../chemistry-links.ts'
+import { tipAttrs } from '../tooltip.ts'
+import { serverNow } from '../../online.ts'
 
 const BENCH_SLOTS = BENCH_SIZE
 const benchSlotId = (index: number) => `bench-${index}`
@@ -758,6 +762,23 @@ function customSpotCount(lineup: Lineup): number {
   return Object.keys(lineup.customPositions ?? {}).length
 }
 
+function chemistryLines(draft: Lineup, formation: FormationDef): string {
+  const players = draft.starters.flatMap(starter => {
+    const slot = formation.slots.find(s => s.id === starter.slotId)
+    return slot && playerOf(starter.playerId) ? [{ id: starter.playerId, ...slotPosition(draft, slot) }] : []
+  })
+  const links = selectChemistryLinks(game.chemistry, players, serverNow(), game.season.gameDayMs)
+  if (!links.length) return ''
+  return `<svg class="chemistry-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="主要队友默契">${links.map(({ a, b, value, minutes }) => {
+    const start = boardSpot(a.x, a.y)
+    const end = boardSpot(b.x, b.y)
+    const points = `x1="${start.left}" y1="${start.top}" x2="${end.left}" y2="${end.top}"`
+    const title = `${playerOf(a.id)!.name} ↔ ${playerOf(b.id)!.name}`
+    const body = `默契 ${value.toFixed(1)} / 100；共同上场 ${Math.round(minutes)} 分钟。传球配合评分最多 +${(4 * value / 100).toFixed(1)}，长传减半、传中按八成计算。每人仅显示一名主要搭档，其他队友默契仍生效。超过 180 个游戏日未合作会移除。`
+    return `<g class="chemistry-link" data-key="${esc(chemistryKey(a.id, b.id))}" data-a="${esc(a.id)}" data-b="${esc(b.id)}" role="img" ${tipAttrs(title, body)}><line class="chemistry-stroke" ${points} opacity="${0.35 + value / 180}" /><line class="chemistry-hit" ${points} /></g>`
+  }).join('')}</svg>`
+}
+
 export function renderLineup(): string {
   const draft = ui.lineupDraft ?? structuredClone(game.lineup)
   // 自动填充/换阵型会把预设和位置弄丢：从存档里接回来（位置仅限同阵型）。
@@ -791,8 +812,9 @@ export function renderLineup(): string {
         <div class="tac-body">
           <aside class="tac-plan">${planColumn(draft, formation)}</aside>
           <div class="tac-pitch">
-            <div class="board">${boardMarkings()}${formation.slots.map((slot) => slotCard(slot, draft, formation, selectedId, look.color)).join('')}</div>
+            <div class="board">${boardMarkings()}${chemistryLines(draft, formation)}${formation.slots.map((slot) => slotCard(slot, draft, formation, selectedId, look.color)).join('')}</div>
             <p class="hint flat">圆内是有效评分；橙圈表示熟练度低、受伤或停赛。任何人都能踢任何位置，熟练度越低属性折损越多，最多折损 40%。</p>
+            <p class="hint flat">虚线表示主要默契搭档，每人最多显示一条；悬停、聚焦或点按连线查看详情。</p>
             <div class="pos-bar">
               <span class="hint flat">拖圆点自由摆位，松手即保存；圆点获得焦点后方向键微调（Shift 更细），Home 回默认。点圆点仍是选人换人，把球员表里的把手拖到位置也能换位。</span>
               ${customSpotCount(draft) ? `<button class="btn small ghost" data-pos-reset>还原默认位置（${customSpotCount(draft)}）</button>` : ''}

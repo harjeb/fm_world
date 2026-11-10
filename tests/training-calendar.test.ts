@@ -9,6 +9,7 @@ import { MatchEngine } from '../src/game/match/engine.ts'
 import { teamInputFromAI, teamInputFromLineup } from '../src/game/match/setup.ts'
 import { isMainAttr } from '../src/game/scale.ts'
 import { lineupRating } from '../src/game/club-rating.ts'
+import { chemistryKey } from '../src/game/chemistry.ts'
 
 function setup(count = 1) {
   const game = createInitialGame(410)
@@ -147,8 +148,10 @@ describe('calendar training', () => {
     expect(game.training[ids[1]].exchangeMatches).toEqual([result.exchange])
     expect(game.roster).toEqual(before.roster)
     expect(game.injuries).toEqual(before.injuries)
+    expect(game.chemistry?.[chemistryKey(ids[0], ids[1])]?.training).toBe(0.5)
     const after = structuredClone(game)
     after.training = before.training
+    after.chemistry = before.chemistry
     expect(after).toEqual(before)
     if (result.exchange?.result === 'loss') expect(s.lowMoodWeeks).toContain(2)
   })

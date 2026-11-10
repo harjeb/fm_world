@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import net from 'node:net'
+import assert from 'node:assert/strict'
 import { createInitialGame, SAVE_KEY } from '../src/game/state.ts'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -11,8 +12,8 @@ const listener = net.createServer()
 await new Promise<void>((resolve) => listener.listen(0, '127.0.0.1', resolve))
 const port = (listener.address() as net.AddressInfo).port
 await new Promise<void>((resolve) => listener.close(() => resolve()))
-const vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { stdio: 'ignore' })
-const chrome = spawn('chromium', ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--remote-debugging-port=0', `--user-data-dir=${temp}`, '--window-size=1280,900', 'about:blank'], { stdio: 'ignore' })
+const vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { stdio: 'ignore', windowsHide: true })
+const chrome = spawn(process.env.CHROMIUM_PATH ?? 'chromium', ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--remote-debugging-port=0', `--user-data-dir=${temp}`, '--window-size=1280,900', 'about:blank'], { stdio: 'ignore', windowsHide: true })
 let ws: WebSocket | undefined, id = 0
 const pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }>()
 const errors: string[] = []
@@ -37,7 +38,7 @@ async function click(selector: string) {
 }
 async function screenshot(name: string) {
   const result = await send('Page.captureScreenshot', { format: 'png' })
-  const output = `/tmp/pve-${name}.png`
+  const output = path.join(process.env.PVE_SMOKE_OUTPUT_DIR ?? os.tmpdir(), `pve-${name}.png`)
   fs.writeFileSync(output, Buffer.from(result.data, 'base64'))
   console.log(`Screenshot: ${output}`)
 }
@@ -87,6 +88,43 @@ try {
   await click('[data-peak-preview="50"]')
   await wait(`document.body.innerText.includes('足球小将') && document.body.innerText.includes('第 50 关全明星奖励')`)
   await screenshot('peak-stage-50')
+  await evaluate(`import('/src/game/state.ts').then(m => {
+    window.__peakSaves = [];
+    m.setRemoteSaver(value => window.__peakSaves.push(structuredClone(value)));
+  })`)
+  const cardsBefore = await evaluate(`import('/src/ui/state.ts').then(m => m.game.pve.peak.breakthroughCards)`)
+  await click('[data-action="use-peak-card"]')
+  const cardSave = await evaluate(`import('/src/ui/state.ts').then(m => {
+    const stored = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}));
+    const sent = window.__peakSaves.at(-1);
+    const id = m.ui.peakCardPlayerId, attr = m.ui.peakCardAttr;
+    return { saves: window.__peakSaves.length, cards: m.game.pve.peak.breakthroughCards,
+      storedCards: stored.pve.peak.breakthroughCards, sentCards: sent?.pve.peak.breakthroughCards,
+      ceiling: m.game.roster.find(p => p.id === id).ceilings[attr],
+      storedCeiling: stored.roster.find(p => p.id === id).ceilings[attr],
+      sentCeiling: sent?.roster.find(p => p.id === id).ceilings[attr] };
+  })`)
+  assert.ok(cardSave.saves > 0, 'Breakthrough must save immediately')
+  assert.equal(cardSave.cards, cardsBefore - 1)
+  assert.equal(cardSave.storedCards, cardSave.cards)
+  assert.equal(cardSave.sentCards, cardSave.cards)
+  assert.equal(cardSave.storedCeiling, cardSave.ceiling)
+  assert.equal(cardSave.sentCeiling, cardSave.ceiling)
+  await click('[data-action="claim-peak-reward"]')
+  const rewardSave = await evaluate(`import('/src/ui/state.ts').then(m => {
+    const stored = JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)}));
+    const sent = window.__peakSaves.at(-1);
+    const id = m.game.pve.peak.reward50?.playerId;
+    return { saves: window.__peakSaves.length, id, storedId: stored.pve.peak.reward50?.playerId,
+      sentId: sent?.pve.peak.reward50?.playerId, inRoster: stored.roster.some(p => p.id === id),
+      sentRoster: sent?.roster.some(p => p.id === id) };
+  })`)
+  assert.ok(rewardSave.saves > cardSave.saves, 'Reward claim must save immediately')
+  assert.ok(rewardSave.id)
+  assert.equal(rewardSave.storedId, rewardSave.id)
+  assert.equal(rewardSave.sentId, rewardSave.id)
+  assert.ok(rewardSave.inRoster && rewardSave.sentRoster)
+  await evaluate(`import('/src/game/state.ts').then(m => m.setRemoteSaver(null))`)
   await click('[data-peak-preview="100"]')
   await wait(`document.body.innerText.includes('1300') && document.querySelector('[data-action="start-peak-stage"]').disabled`)
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true })
@@ -101,6 +139,9 @@ try {
   await wait(`JSON.parse(localStorage.getItem(${JSON.stringify(SAVE_KEY)})).challengeHistory.some(r => r.mode === 'cup')`)
   await send('Page.reload')
   await click('[data-action="boot-offline"]')
+  const reloaded = await evaluate(`import('/src/ui/state.ts').then(m => ({ cards: m.game.pve.peak.breakthroughCards, rewardId: m.game.pve.peak.reward50?.playerId }))`)
+  assert.equal(reloaded.cards, cardSave.cards)
+  assert.equal(reloaded.rewardId, rewardSave.id)
   await click('[data-nav="challenge"]')
   await click('[data-challenge-mode="cup"]')
   await click('[data-action="cup-preview"][data-cup="community"]')
@@ -121,5 +162,7 @@ try {
 } finally {
   ws?.close(); chrome.kill('SIGTERM'); vite.kill('SIGTERM')
   await sleep(700)
-  fs.rmSync(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+  const resolvedTemp = path.resolve(temp)
+  if (path.dirname(resolvedTemp) !== path.resolve(os.tmpdir()) || !path.basename(resolvedTemp).startsWith('pve-ui-smoke-')) throw new Error('Unexpected browser profile path')
+  fs.rmSync(resolvedTemp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
 }

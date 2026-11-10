@@ -1,4 +1,6 @@
-import type { GameState, Lineup, MatchContext, MatchRecord, MatchTeamStats, Player } from '../types.ts'
+import type { Chemistry, GameState, Lineup, MatchContext, MatchRecord, MatchTeamStats, Player } from '../types.ts'
+import { chemistrySnapshot } from '../chemistry.ts'
+import { GAME_DAY_MS } from '../calendar.ts'
 import type { AITeam } from '../types.ts'
 import type { MatchTeamInput } from './types.ts'
 import { FORMATIONS } from '../data/formations.ts'
@@ -10,6 +12,12 @@ import { LOGIC_MATCH_SECONDS } from './time.ts'
 import { matchPerformanceOf } from '../economy.ts'
 
 export type TeamIdentity = { id: string; name: string; color: string; accent: string }
+
+export function withChemistry(input: MatchTeamInput, store: Chemistry | undefined, now: number, gameDayMs = GAME_DAY_MS): MatchTeamInput {
+  const scores = chemistrySnapshot(store, [...input.starters.map(p => p.player.id), ...input.bench.map(p => p.id)], now, gameDayMs)
+  if (Object.keys(scores).length) input.chemistry = scores
+  return input
+}
 
 export function teamInputFromLineup(roster: Player[], lineup: Lineup, identity: TeamIdentity): MatchTeamInput {
   const check = validateLineup(roster, lineup)
@@ -36,24 +44,33 @@ export function teamInputFromLineup(roster: Player[], lineup: Lineup, identity: 
 }
 
 /**
- * 电脑球队的比赛阵容。rotate：体能低于 80 的先休息（联赛用；有教练的球队按教练自己排的阵容，不传）。
- * 轮换只影响这一场，存档里的阵容不变。
+ * 电脑球队这一场的首发和替补。rotate：体能低于 80 的先休息（联赛用；有教练的球队按教练自己排的阵容，不传）。
+ * 轮换只影响这一场，存档里的阵容不变。停赛的人先剔除；剔除后阵容不完整时也按轮换重排
+ * （不能退回“只看实力”的自动填充，否则体能低的人会被排进首发）。
  */
-export function teamInputFromAI(ai: AITeam, suspended?: Set<string>, options: { rotate?: boolean } = {}): MatchTeamInput {
+export function aiMatchLineup(ai: AITeam, suspended?: Set<string>, rotate = false): Lineup {
   const players = suspended?.size ? ai.players.filter((player) => !suspended.has(player.id)) : ai.players
   const tactics = ai.lineup?.tactics ?? ai.tactics
-  const lineup = options.rotate && aiNeedsRotation(players, ai.lineup)
-    ? aiRotatedLineup(players, ai.lineup?.formationId ?? ai.formationId, tactics, ai.lineup)
-    : players.length === ai.players.length ? ai.lineup : autoFillLineup(players, ai.formationId, ai.tactics)
+  const intact = players.length === ai.players.length || validateLineup(players, ai.lineup).valid
+  if (rotate && (!intact || aiNeedsRotation(players, ai.lineup))) {
+    return aiRotatedLineup(players, ai.lineup?.formationId ?? ai.formationId, tactics, ai.lineup)
+  }
+  return intact ? ai.lineup : autoFillLineup(players, ai.formationId, ai.tactics)
+}
+
+/** 电脑球队的比赛阵容输入（见 aiMatchLineup）。 */
+export function teamInputFromAI(ai: AITeam, suspended?: Set<string>, options: { rotate?: boolean } = {}): MatchTeamInput {
+  const players = suspended?.size ? ai.players.filter((player) => !suspended.has(player.id)) : ai.players
+  const lineup = aiMatchLineup(ai, suspended, options.rotate)
   return { ...teamInputFromLineup(players, lineup, { id: ai.id, name: ai.name, color: ai.color, accent: ai.accent }), autoSubs: { timed: [], staminaBelow: null, onInjury: true } }
 }
 
 /** 两支电脑球队的比赛（联赛、升级附加赛）：体能低于 80 的先休息（rotate 默认开）。 */
-export function simulateAIvsAIState(home: AITeam, away: AITeam, seed: number, durationSeconds = LOGIC_MATCH_SECONDS, injuries?: GameState['injuries'], now = Date.now(), suspended?: Set<string>, rotate = true) {
+export function simulateAIvsAIState(home: AITeam, away: AITeam, seed: number, durationSeconds = LOGIC_MATCH_SECONDS, injuries?: GameState['injuries'], now = Date.now(), suspended?: Set<string>, rotate = true, chemistry?: Chemistry, gameDayMs = GAME_DAY_MS) {
   const engine = new MatchEngine({
     seed,
-    home: teamInputFromAI(home, suspended, { rotate }),
-    away: teamInputFromAI(away, suspended, { rotate }),
+    home: withChemistry(teamInputFromAI(home, suspended, { rotate }), chemistry, now, gameDayMs),
+    away: withChemistry(teamInputFromAI(away, suspended, { rotate }), chemistry, now, gameDayMs),
     knockout: false,
     durationSeconds,
     offside: false,
@@ -194,6 +211,8 @@ export function buildMatchEngineForGame(game: GameState, context: MatchContext, 
   if (game.autoSubs) playerInput.autoSubs = structuredClone(game.autoSubs)
   // 对手是电脑球队：体能低于 80 的先休息。
   const aiInput = teamInputFromAI(ai, suspended, { rotate: true })
+  withChemistry(playerInput, game.chemistry, now, game.season.gameDayMs)
+  withChemistry(aiInput, game.chemistry, now, game.season.gameDayMs)
   if (rulesVersion === undefined) {
     const pes = new PesEngine({
       seed: context.seed,

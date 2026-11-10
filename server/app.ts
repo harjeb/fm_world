@@ -19,7 +19,8 @@ import { splitSeed } from '../src/game/rng.ts'
 import { awardRoundIncome, awardSeasonPrize, economyOf, matchPerformanceOf, payWageBill } from '../src/game/economy.ts'
 import { advanceLeagueRealtime } from '../src/game/realtime.ts'
 import { validateAutoSubPlan } from '../src/game/match/management.ts'
-import type { GameState, PlayerCard } from '../src/game/types.ts'
+import type { ActiveMatchSave, GameState, PlayerCard } from '../src/game/types.ts'
+import { LEAGUE_REALTIME_MS, LOGIC_MATCH_SECONDS } from '../src/game/match/time.ts'
 import { absorbFreeAgents, aiClubIdOf, auctionRaiseFee, leadingBid, minimumBid, placeAIBid, placeBid, settleAuctions, type AIBidder, type Auction, type AuctionResult, type BidResult, type FreeMarket } from '../src/game/auction.ts'
 import { isOnMarketToday } from '../src/game/market-window.ts'
 import { lineupRating } from '../src/game/club-rating.ts'
@@ -37,7 +38,8 @@ import { elevenFormationFor, isLegacyFormation } from '../src/game/data/formatio
 import { startChallengeWithOpponent } from '../src/game/actions.ts'
 import { MatchQueue, type MatchQueueOptions } from './match-queue.ts'
 import { MatchScheduler } from './match-scheduler.ts'
-import { emptyMatchBook, matchJobId, recordForClub, type LockedTeam, type MatchBook } from './match-job.ts'
+import { emptyMatchBook, matchJobId, recordForClub, type LockedTeam, type MatchBook, type MatchJob } from './match-job.ts'
+import { chemistryForPlayers, mergeChemistryTraining } from '../src/game/chemistry.ts'
 
 type Account = {
   id: string
@@ -446,7 +448,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const id = fixture.matchId
       if (!id?.startsWith('q-') || applied.has(id) || !matchQueue.ready(id)) continue
       const { input, result } = matchQueue.read(id)
-      if (input.kickoffAt > now()) continue
+      // 开球后还要“直播” 10 分钟，比赛公布（比分、战报、收入）之前不能提前结算。
+      if (input.kickoffAt + LEAGUE_REALTIME_MS > now()) continue
       const coached = input.kickoffAt > account.createdAt
       coachedMatch ||= coached
       if (coached && !game.matchHistory.some((record) => record.id === id)) game.matchHistory.unshift(recordForClub(input, result, clubId))
@@ -473,7 +476,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
     const book = sharedWorld.matchBook!
     const ids = new Set([...game.roster, ...game.aiTeams.flatMap((team) => team.players)].map((player) => player.id))
-    const before = JSON.stringify([game.injuries, game.suspensions, game.yellowCounts, game.appearances])
+    const before = JSON.stringify([game.injuries, game.suspensions, game.yellowCounts, game.appearances, game.chemistry])
+    game.chemistry = chemistryForPlayers(book.chemistry, new Set(game.roster.map(p => p.id)), now(), game.season.gameDayMs)
     for (const [id, until] of Object.entries(book.injuries)) (game.injuries ??= {})[id] = Math.max(game.injuries?.[id] ?? 0, until)
     for (const id of ids) {
       if (book.suspensions[id]) (game.suspensions ??= {})[id] = structuredClone(book.suspensions[id])
@@ -481,7 +485,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (book.yellowCounts[id] !== undefined) (game.yellowCounts ??= {})[id] = book.yellowCounts[id]
       if (book.appearances[id]) (game.appearances ??= {})[id] = [...book.appearances[id]]
     }
-    return changed || before !== JSON.stringify([game.injuries, game.suspensions, game.yellowCounts, game.appearances])
+    return changed || before !== JSON.stringify([game.injuries, game.suspensions, game.yellowCounts, game.appearances, game.chemistry])
   }
 
   /** 其他分区的赛程与积分同样以全服快照为准，不保留各账号各自抽象模拟的比分。 */
@@ -560,6 +564,12 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (!clubId || !sharedWorld.teams?.[clubId] || account.game.world?.clubs.find((item) => item.id === 'player')?.squadKey !== clubId) return
     const team = sharedWorld.teams[clubId]
     let changed = false
+    const book = sharedWorld.matchBook!
+    const beforeChemistry = JSON.stringify(book.chemistry)
+    const ownPlayers = new Set(account.game.roster.map(p => p.id))
+    mergeChemistryTraining(book, account.game.chemistry, ownPlayers, now(), account.game.season.gameDayMs)
+    account.game.chemistry = chemistryForPlayers(book.chemistry, ownPlayers, now(), account.game.season.gameDayMs)
+    if (beforeChemistry !== JSON.stringify(book.chemistry)) changed = true
     if (JSON.stringify(team.players) !== JSON.stringify(account.game.roster) || JSON.stringify(team.lineup) !== JSON.stringify(account.game.lineup) || team.name !== account.game.clubName) {
       sharedWorld.teams[clubId] = { ...team, name: account.game.clubName, players: structuredClone(account.game.roster), lineup: structuredClone(account.game.lineup) }
       changed = true
@@ -905,6 +915,68 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     return { status: result.ok ? 200 : 400, payload: { ...result } }
   }
 
+  /** 直播播完后到比分公布之间最多留多久（公布本来就在播完那一刻，这只是防止出现空档）。 */
+  const LIVE_GRACE_MS = 5 * 60_000
+  /** 直播窗口里反复下发同一场的初始引擎状态：读盘一次就够，只留最近几场。 */
+  const liveStates = new Map<string, { input: MatchJob; state: unknown }>()
+  function liveStateOf(id: string): { input: MatchJob; state: unknown } {
+    const cached = liveStates.get(id)
+    if (cached) return cached
+    const { input, result } = matchQueue.read(id)
+    // 没有初始状态的（纯电脑对电脑、测试里的假结果）也记下来，免得每秒反复读盘。
+    const entry = { input, state: result.initialState }
+    liveStates.set(id, entry)
+    while (liveStates.size > 8) liveStates.delete(liveStates.keys().next().value!)
+    return entry
+  }
+
+  /**
+   * 开球后到公布前（10 分钟，LEAGUE_REALTIME_MS），这位教练能“看直播”的那场比赛。
+   * 比赛早在开球前 30 分钟锁定阵容、由后台子进程算好，这里只下发开球那一刻的初始引擎状态：
+   * 浏览器按现实时钟把整场回放出来（和算好的结果同一份种子，比分一致），比分/积分榜要等 10 分钟后才公布。
+   */
+  /** 现在是否在某一轮开球后的直播窗口里（最近一次开球起 10 分钟 + 余量）；绝大多数时间不在，就不必逐账号找直播。 */
+  function inLiveWindow(t: number): boolean {
+    const round = Math.min(38, roundsKickedOff(sharedWorld.world.seasonStartedAt, t))
+    return round >= 1 && t - kickoffAtForRound(sharedWorld.world.seasonStartedAt, round) < LEAGUE_REALTIME_MS + LIVE_GRACE_MS
+  }
+
+  function liveMatchFor(account: Account): ActiveMatchSave | undefined {
+    if (!inLiveWindow(now())) return undefined
+    const clubId = ownedClubId(account)
+    const game = account.game
+    if (!clubId || game.world?.clubs.find((club) => club.id === 'player')?.squadKey !== clubId) return undefined
+    const t = now()
+    for (const fixture of game.season.fixtures) {
+      if (!fixture.isPlayer || fixture.played) continue
+      const kickoffAt = kickoffAtForRound(sharedWorld.world.seasonStartedAt, fixture.round)
+      // 开球起放到公布为止：10 分钟播完后到公布之间留一点余量，不出现空档；
+      // 停服后补公布的老比赛不再放直播（也不用为它们逐场读盘）。
+      if (t < kickoffAt || t >= kickoffAt + LEAGUE_REALTIME_MS + LIVE_GRACE_MS) continue
+      // 开球之后才接管的球队没有参与这场比赛的锁定，不放直播。
+      if (kickoffAt <= account.createdAt) continue
+      const id = matchJobId(game.season.index, game.season.divisionId!, {
+        round: fixture.round, homeId: fixture.homeId === 'player' ? clubId : fixture.homeId, awayId: fixture.awayId === 'player' ? clubId : fixture.awayId,
+      })
+      if (!matchQueue.ready(id)) continue
+      const live = liveStateOf(id)
+      if (!live.state) continue
+      const home = live.input.home.team.id === clubId
+      const mine = home ? live.input.home : live.input.away
+      const theirs = home ? live.input.away : live.input.home
+      return {
+        context: { isLeague: true, round: live.input.round, opponentId: theirs.team.id, opponentName: theirs.team.name, seed: live.input.seed, homeAway: home ? 'home' : 'away', durationSeconds: LOGIC_MATCH_SECONDS, offside: true },
+        engineState: live.state,
+        instructions: [],
+        lineup: structuredClone(mine.team.lineup),
+        startedAt: live.input.kickoffAt,
+        coachPausesLeft: 0,
+        preplayed: true,
+      }
+    }
+    return undefined
+  }
+
   /** 对手的实时体能只存在服务器；账号存档的公开副本不能带回这些字段。 */
   function publicGame(account: Account): GameState {
     const game = structuredClone(account.game)
@@ -912,9 +984,30 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       delete (player as Partial<Player>).condition
       delete (player as Partial<Player>).energy
     }
+    // 直播回放只放在下发的副本里，不写回账号存档。
+    if (!game.activeMatch) {
+      const live = liveMatchFor(account)
+      if (live) game.activeMatch = live
+    }
     return game
   }
-  const statePayload = (account: Account, source?: string) => ({ type: 'state', revision: account.revision, game: publicGame(account), ...(source ? { source } : {}) })
+
+  /** 开球那一刻把直播推给在线的教练（存档本身没有变化，不会触发普通的状态推送）。 */
+  const liveAnnounced = new Set<string>()
+  function announceLiveMatches(): void {
+    const t = now()
+    for (const key of liveAnnounced) if (Number(key.split('@')[1]) + 60 * 60_000 <= t) liveAnnounced.delete(key)
+    for (const account of db.accounts) {
+      const live = liveMatchFor(account)
+      if (!live) continue
+      const key = `${account.id}@${live.startedAt}`
+      if (liveAnnounced.has(key)) continue
+      liveAnnounced.add(key)
+      broadcast(account)
+    }
+  }
+  // serverTime：客户端在应用存档（含直播回放）之前先对准服务器时钟，本机时钟不准也不会把回放放到错的时刻。
+  const statePayload = (account: Account, source?: string) => ({ type: 'state', revision: account.revision, serverTime: now(), game: publicGame(account), ...(source ? { source } : {}) })
 
   function sendState(res: ServerResponse, account: Account, source?: string): void {
     res.write(`data: ${JSON.stringify(statePayload(account, source))}\n\n`)
@@ -1393,7 +1486,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       persistDb()
       persistSessions()
       advanceAccount(account)
-      json(res, 201, { token, user: publicAccount(account), revision: account.revision, game: publicGame(account) })
+      json(res, 201, { token, user: publicAccount(account), revision: account.revision, serverTime: now(), game: publicGame(account) })
       return
     }
 
@@ -1406,7 +1499,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const token = createSession(account.id)
       persistSessions()
       advanceAccount(account)
-      json(res, 200, { token, user: publicAccount(account), revision: account.revision, game: publicGame(account) })
+      json(res, 200, { token, user: publicAccount(account), revision: account.revision, serverTime: now(), game: publicGame(account) })
       return
     }
 
@@ -1464,7 +1557,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
           json(res, outcome.ok ? 200 : 400, { ...outcome, revision: agentAccount.revision, game: agentState() })
           return
         }
-        if (body.action === 'start_league' || body.action === 'simulate_round') return json(res, 400, { error: '联赛由服务器提前排队计算、到点统一公布，不能手动开赛或模拟' })
+        if (body.action === 'start_league' || body.action === 'simulate_round') return json(res, 400, { error: '联赛由服务器提前排队计算、开球 10 分钟后统一公布，不能手动开赛或模拟' })
         if (body.action === 'buy_free_agent') return json(res, 400, { error: '联机时自由球员要竞拍，请用 bid_free_agent 出价' })
         if (body.action === 'bid_free_agent') {
           const bid = bidFor(agentAccount, body.playerId, body.amount)
@@ -1601,16 +1694,29 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return
     }
 
+    // 赛后 2D 重看：只给参赛的教练，且比赛已经公布（战报在他的历史里）。返回开球时的引擎初始状态，
+    // 浏览器从头回放，和公布的比分一致。
+    if (url.pathname === '/api/match/replay' && req.method === 'GET') {
+      const id = url.searchParams.get('id') ?? ''
+      const clubId = ownedClubId(account)
+      const record = /^q-[a-f0-9]{64}$/.test(id) ? account.game.matchHistory.find((item) => item.id === id) : undefined
+      if (!clubId || !record?.hasReplay || !matchQueue.ready(id)) return json(res, 404, { error: '没有这场比赛的 2D 回放' })
+      const { input, state } = liveStateOf(id)
+      if (!state) return json(res, 404, { error: '没有这场比赛的 2D 回放' })
+      json(res, 200, { id, engineState: state, homeAway: input.home.team.id === clubId ? 'home' : 'away', durationSeconds: LOGIC_MATCH_SECONDS })
+      return
+    }
+
     if (url.pathname === '/api/game' && req.method === 'GET') {
       advanceAccount(account)
-      json(res, 200, { game: publicGame(account), revision: account.revision })
+      json(res, 200, { game: publicGame(account), revision: account.revision, serverTime: now() })
       return
     }
 
     if (url.pathname === '/api/match/action' && req.method === 'POST') {
       const body = await readJsonBody(req)
       if (!['start_league', 'set_match_tactics', 'substitute'].includes(String(body.action))) return json(res, 400, { error: '不支持的比赛操作' })
-      if (body.action === 'start_league') return json(res, 400, { error: '联赛由服务器提前排队计算、到点统一公布，不需要手动开赛' })
+      if (body.action === 'start_league') return json(res, 400, { error: '联赛由服务器提前排队计算、开球 10 分钟后统一公布，不需要手动开赛' })
       advanceAccount(account)
       if (body.action !== 'start_league' && !account.game.activeMatch?.context.isLeague) return json(res, 400, { error: '当前没有进行中的联赛' })
       const outcome = applyAgentAction(account.game, body, now())
@@ -1667,7 +1773,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (account.game.activeMatch?.context.isLeague) {
         body.game.activeMatch = account.game.activeMatch
       } else if (body.game.activeMatch?.context.isLeague) {
-        return json(res, 400, { error: '联赛必须由服务器开始' })
+        // 直播回放是服务器下发的副本，旧页面原样存回来时直接丢掉；其他联赛进度一律拒绝。
+        if (!body.game.activeMatch.preplayed) return json(res, 400, { error: '联赛必须由服务器开始' })
+        delete body.game.activeMatch
       }
       // 联赛赛程、比分和战报只由服务器产生；旧页面保存不能回滚已赛结果、伪造未来比分或重踢。
       body.game.season = account.game.season
@@ -1801,6 +1909,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const published = matchScheduler.refresh(now())
     // 空闲或仅在提前计算时，不必每秒复制所有账号的整份存档。
     if (changed || published) for (const account of db.accounts) advanceAccount(account)
+    announceLiveMatches()
     autoRollSharedSeason()
     autoPlayoff()
   }

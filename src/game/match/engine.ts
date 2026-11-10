@@ -2624,7 +2624,11 @@ export class MatchEngine {
     const displayMinutes = this.durationSeconds > 0 ? (seconds / this.durationSeconds) * 90 : 0
     for (const team of this.state.teams) {
       for (const player of team.players) {
-        if (player.onPitch) player.stats.minutes += displayMinutes
+        if (player.onPitch) {
+          player.stats.onMinute ??= Math.max(0, this.state.clock - seconds) / this.durationSeconds * 90
+          player.stats.minutes += displayMinutes
+          player.stats.offMinute = Math.min(this.state.half === 1 ? 45 : 90, this.state.clock / this.durationSeconds * 90)
+        }
       }
     }
   }
@@ -2784,7 +2788,7 @@ export class MatchEngine {
       onPitch: true,
       cameOff: false,
       subbedOn: true,
-      stats: { ...inPlayer.stats, staminaLeft: Math.round(inPlayer.stamina / Math.max(1, inPlayer.maxStamina) * 100) },
+      stats: { ...inPlayer.stats, onMinute: this.state.clock / this.durationSeconds * 90, staminaLeft: Math.round(inPlayer.stamina / Math.max(1, inPlayer.maxStamina) * 100) },
     }
     const outgoing: MatchPlayerState = { ...out, onPitch: false, cameOff: true, stats: { ...out.stats, staminaLeft: Math.round((out.stamina / out.maxStamina) * 100) } }
     team.players[outIndex] = incoming

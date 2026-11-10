@@ -22,9 +22,10 @@ import type { CupId } from './data/cup-config.ts'
 import { emptyAutoSubs, validateAutoSubPlan } from './match/management.ts'
 import { recordMatchInjuries } from './injury.ts'
 import { economyOf } from './economy.ts'
-import { trainingDate, trainingOptions, type TrainingActivity } from './training-calendar.ts'
+import { partnerAssignment, trainingDate, trainingOptions, type TrainingActivity } from './training-calendar.ts'
+import { recordTrainingChemistry } from './chemistry.ts'
 import { derivedRng, splitSeed } from './rng.ts'
-import { teamInputFromAI, teamInputFromLineup } from './match/setup.ts'
+import { teamInputFromAI, teamInputFromLineup, withChemistry } from './match/setup.ts'
 import { leagueMatchClockAt } from './realtime.ts'
 import { eventById } from './data/events.ts'
 import { attrLabel } from './data/attributes.ts'
@@ -60,6 +61,7 @@ export function startTraining(game: GameState, playerId: string, seed?: number, 
   const session = createTrainingSession(untrainedPlayer(player), seed ?? newTrainingSeed(game, playerId), { stadium: economy.stadium, academy: economy.academy, medical: economy.medical, shop: economy.shop, sponsor: economy.sponsor, psychology: economy.psychology, tactics: economy.tactics }, 1, books)
   session.scheduleSeed = splitSeed(game.seed, 'training-calendar')
   session.cupCeilingBonus = cupCeilingBonus(game)
+  session.matchRole = game.lineup.starters.find(starter => starter.playerId === playerId)?.role
   // 候选卡只是一份属性快照：精力时钟和不满属于球员本人，不跟着进卡。
   delete session.candidate.energyAt
   delete session.candidate.unhappy
@@ -258,6 +260,7 @@ function simulateTrainingExchange(game: GameState, session: TrainingSession): Tr
   const opponent = picked.team
   const home = teamInputFromLineup(roster, lineup, { id: 'player', name: game.clubName, color: '#34d399', accent: '#052e1b' })
   if (game.autoSubs) home.autoSubs = structuredClone(game.autoSubs)
+  withChemistry(home, game.chemistry, Date.now(), game.season.gameDayMs)
   const engine = new Engine({ seed: splitSeed(scheduleSeed, `training-exchange-${week}`), home, away: teamInputFromAI(opponent), knockout: false })
   const score = engine.simulate().score
   return { week, opponentId: opponent.id, opponentName: opponent.name, ownRating: Math.round(ownRating), opponentRating: Math.round(picked.rating), homeScore: score.home, awayScore: score.away, result: score.home > score.away ? 'win' : score.home < score.away ? 'loss' : 'draw' }
@@ -268,13 +271,22 @@ export function previewTraining(game: GameState, playerId: string, request: Trai
   return error ? { error } : { plan }
 }
 
-export function trainingAction(game: GameState, playerId: string, request: TrainingRequest): PerformResult {
+export function trainingAction(game: GameState, playerId: string, request: TrainingRequest, now = Date.now()): PerformResult {
   const current = game.training[playerId]
   // 陪练队友只按人数给主角加成长，不参与行动、不消耗精力、不涨属性。
   const support = current ? partnersAt(current, request) : 0
   // 显式 teammateIds（Agent/旧流程）仍然生效；没传时由系统陪练的人数提供加成。
   const prepared = prepareTraining(game, playerId, request)
   if (prepared.error || !prepared.ids) return { ok: false, error: prepared.error, completed: prepared.completed ?? false }
+  const cooperative = request.kind === 'match' || request.kind === 'combo' || request.kind === 'drill' ||
+    request.kind === 'activity' && ['passing', 'tactics', 'defending', 'corners', 'match', 'exchange', 'gk_crosses', 'gk_distribution', 'gk_positioning'].includes(request.activityId)
+  const trainingPairs: [string, string][] = []
+  if (cooperative) {
+    for (let i = 0; i < prepared.ids.length; i++) for (let j = i + 1; j < prepared.ids.length; j++) trainingPairs.push([prepared.ids[i], prepared.ids[j]])
+    const partners = current.scheduleVersion === 1 && request.kind === 'activity'
+      ? partnerAssignment(current)[request.activityId] ?? [] : current.partnerIds ?? []
+    for (const id of partners) if (game.roster.some(p => p.id === id)) trainingPairs.push([playerId, id])
+  }
   const mentor = trainingMentor(game, request)
   let exchange: TrainingExchange | undefined
   if (request.kind === 'activity' && request.activityId === 'exchange') {
@@ -304,6 +316,7 @@ export function trainingAction(game: GameState, playerId: string, request: Train
     Object.assign(game.training[prepared.ids[i]], staged[i])
     syncCandidate(game, prepared.ids[i])
   }
+  recordTrainingChemistry(game, trainingPairs, now, game.season.gameDayMs)
   saveGame(game)
   return exchange ? { ...primaryResult!, exchange } : primaryResult!
 }

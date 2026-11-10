@@ -136,6 +136,8 @@ export function resetPesView(): void {
  */
 export function pesViewEngine(engine: GameEngine): GameEngine {
   if (!isPesEngine(engine) || !pv.owned || !pv.sim || pv.key !== keyOf(engine)) return engine
+  // 服务器预先算好的直播回放：权威存档永远停在开球那一刻，画面引擎本来就不会比现实时钟快，直接读它。
+  if (game.activeMatch?.preplayed) return pv.sim
   return pv.sim.game.match.events.length <= engine.game.match.events.length ? pv.sim : engine
 }
 
@@ -218,13 +220,32 @@ function advanceLeague(sim: PesEngine, dt: number): void {
   const m = g.match
   const target = leagueMatchClock(active)
   const lag = target - m.time
+  // 预先算好的回放：中途打开页面、切回标签页时落后很多，一口气算到现在这一刻（整场约 1 秒），
+  // 不再用 5 倍速在画面上快进；已经发生的进球、红黄牌也不再弹横幅。
+  if (active.preplayed && lag > RESYNC_LAG) {
+    sim.advanceTo(target)
+    pv.acc = 0
+    pv.logSeen = sim.state.log.length
+    return
+  }
   // 落后太多且权威存档确实走在前面：直接复制。权威存档也落后（断线、没更新）时复制没有意义，照常加速追
   const auth = ui.matchEngine
   if (lag > RESYNC_LAG && isPesEngine(auth) && auth.game.match.time > m.time + RESYNC_LAG / 2) {
     pv.sim = copyOf(auth)
     return
   }
-  const base = sim.state.durationSeconds / LEAGUE_REALTIME_SECONDS
+  chase(sim, dt, target)
+}
+
+/**
+ * 把画面引擎追到比赛时刻 target，绝不超过它；speed 是回放倍速（联赛直播固定 1）。
+ * 死球期间比赛时钟不走，球员却要走到位，所以落后时适当加快，追上之后回到正常速度。
+ */
+function chase(sim: PesEngine, dt: number, target: number, speed = 1): void {
+  const g = sim.game
+  const m = g.match
+  const lag = target - m.time
+  const base = (sim.state.durationSeconds / LEAGUE_REALTIME_SECONDS) * speed
   const boost = Math.min(5, (m.phase === 'play' ? 1 : 2) * (1 + 0.25 * Math.max(0, Math.min(8, lag))))
   pv.acc += (dt * base * boost) / m.spec.DT
   let steps = Math.floor(pv.acc)
@@ -622,4 +643,32 @@ export function pesMotionSnapshot(): { id: string; x: number; y: number; speed: 
 /** 已经画了多少帧。 */
 export function pesFrameCount(): number {
   return pv.frames
+}
+
+/* ------------------------------ 赛后 2D 重看 ------------------------------ */
+
+/**
+ * 复盘页的 2D 重看用自己的一份引擎，画面状态（球迹、进球横幅）借用同一套；
+ * 复盘页和比赛页不会同时出现，进出时都会重置。
+ */
+export function chaseReplayClock(sim: PesEngine, dt: number, target: number, speed: number): void {
+  chase(sim, dt, target, speed)
+}
+
+export function paintReplay(canvas: HTMLCanvasElement, sim: PesEngine, kits: { home: string; away: string }, now: number): void {
+  pv.kits = kits
+  noteEvents(sim, now)
+  paint(canvas, sim, now)
+}
+
+/** 换了引擎或跳转之后：已经发生的进球不再弹横幅，球迹清空。 */
+export function resetReplayPaint(sim: PesEngine | null): void {
+  clearView()
+  pv.key = ''
+  pv.logSeen = sim?.state.log.length ?? 0
+}
+
+/** 当前横幅还在显示吗（循环要等它消失才停）。 */
+export function replayBannerActive(now: number): boolean {
+  return !!pv.banner && now < pv.banner.until
 }

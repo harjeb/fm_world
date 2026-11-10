@@ -15,6 +15,7 @@ import { CA_STOPS, attrHeadCell, attributeRadar, attrHeat, caHeat, cardName, car
 import { attrLabel, esc, playerCA, trainingLogText } from '../format.ts'
 import { game, ui } from '../state.ts'
 import { careerStats, fixtureTotals, isOwnPlayer, seasonStats } from '../../game/player-stats.ts'
+import { chemistryPartners } from '../chemistry.ts'
 
 function cardRows(player: Player): string {
   const cards = playerCards(game, player.id)
@@ -122,6 +123,7 @@ export function renderDetailOverlay(): string {
             <h3>特性与技能</h3>
             <div class="tag-row">${traitLabel(player.traitId, true)}</div>
             ${skillGroups(player)}
+            ${owned ? `<h3>队友默契</h3>${chemistryPartners(player)}<p class="hint">配合越多，默契越高；换卡保留。超过 180 个游戏日未合作会移除。</p>` : ''}
           </section>
           <section class="profile-col">
             ${owned ? `<h3>球员卡</h3>${cardRows(player)}` : ''}

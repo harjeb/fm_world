@@ -5,12 +5,18 @@ import { finishActiveMatch, LEAGUE_REALTIME_SECONDS } from './season.ts'
 import { displayClock, logicClock, MATCH_DISPLAY_SECONDS } from './match/time.ts'
 import { recordMatchInjuries } from './injury.ts'
 
+/** 联赛进度用的“现在”：浏览器里换成服务器时钟，本机时钟不准也不会提前或拖后回放。 */
+let leagueNow: () => number = () => Date.now()
+export function setLeagueClock(clock: () => number): void {
+  leagueNow = clock
+}
+
 /** 现实联赛进度（0..约 600 秒），不是引擎逻辑时钟。 */
-export function leagueElapsed(active: ActiveMatchSave, now = Date.now()): number {
+export function leagueElapsed(active: ActiveMatchSave, now = leagueNow()): number {
   return Math.max(active.elapsedSeconds ?? 0, Math.min(LEAGUE_REALTIME_SECONDS, Math.max(0, (now - active.startedAt) / 1000)))
 }
 
-export function leagueMatchClock(active: ActiveMatchSave, now = Date.now()): number {
+export function leagueMatchClock(active: ActiveMatchSave, now = leagueNow()): number {
   return leagueMatchClockAt(active, leagueElapsed(active, now))
 }
 
@@ -18,7 +24,7 @@ export function leagueMatchClockAt(active: ActiveMatchSave, elapsedSeconds: numb
   return logicClock((elapsedSeconds / LEAGUE_REALTIME_SECONDS) * MATCH_DISPLAY_SECONDS, active.context.durationSeconds)
 }
 
-export function leagueDisplayClock(active: ActiveMatchSave, now = Date.now()): number {
+export function leagueDisplayClock(active: ActiveMatchSave, now = leagueNow()): number {
   return displayClock(leagueMatchClock(active, now), active.context.durationSeconds)
 }
 

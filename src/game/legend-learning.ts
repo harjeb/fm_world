@@ -43,7 +43,7 @@ export function bookLearnChance(player: Pick<Player, 'attrs' | 'positions'>, boo
     const threshold = book.tier === 'rainbow' ? requirement.rainbow : requirement.gold
     if (!(threshold > 0)) return 1
     const ratio = (player.attrs[requirement.attr] ?? 0) / threshold
-    return Math.max(0.02, Math.min(1, ((ratio - 0.65) / 0.35) ** 2))
+    return Math.max(0.02, Math.min(1, Math.max(0, (ratio - 0.65) / 0.35) ** 2))
   })
   if (values.length === 0) return 1
   return Math.max(0.02, Math.min(1, Math.pow(values.reduce((product, value) => product * value, 1), 1 / values.length)))

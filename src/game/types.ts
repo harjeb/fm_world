@@ -450,6 +450,8 @@ export type TrainingSession = {
   /** 陪练队友：开局选定的其他 6 名队友，只给本次培养的主角加成长，不消耗精力也不涨属性。 */
   partnerIds?: string[]
   scheduleSeed?: number
+  /** Role snapshot used to keep match-training rewards stable throughout the course. */
+  matchRole?: RoleId
   lowMoodWeeks?: number[]
   exchangeMatches?: TrainingExchange[]
   playerId: string
@@ -587,6 +589,9 @@ export type PlayerMatchStats = {
   name: string
   side: 'home' | 'away'
   minutes: number
+  /** Display minutes (0-90), used to measure actual overlap between teammates. */
+  onMinute?: number
+  offMinute?: number
   passes: number
   passesCompleted: number
   shots: number
@@ -764,6 +769,8 @@ export type MatchRecord = {
   lineup: Lineup
   opponentId: string
   autoSimulated?: boolean
+  /** 联机联赛：服务器留着开球时的引擎初始状态，可以在复盘页 2D 重看整场（`GET /api/match/replay`）。 */
+  hasReplay?: boolean
 }
 
 export type MatchInstruction = {
@@ -998,12 +1005,22 @@ export type PveState = {
   cupHistory?: CupRun[]
   /** 已获得的俱乐部奖杯上限加成，每种杯赛只计一次。 */
   cupCeilingClaims?: Partial<Record<string, true>>
-  /** 奖杯上限模型：2 = 俱乐部实时加成。 */
+  /** Ceiling migration version; 3 preserves ambiguous legacy ceilings and repairs v2 deductions. */
   cupCeilingVersion?: number
   /** 旧版已直接修改的上限原始值备份；旧档有转会或截断时可追溯。 */
   legacyCupCeilings?: Record<string, Attributes>
   trophies: TrophyRecord[]
 }
+export type PairChemistry = {
+  players: [string, string]
+  minutes: number
+  training: number
+  lastAt: number
+  trainingAt?: number
+  trainingToday?: number
+}
+
+export type Chemistry = Record<string, PairChemistry>
 
 export type GameState = {
   version: number
@@ -1026,6 +1043,8 @@ export type GameState = {
   /** 每支传奇队“已有彩书后再次获胜”的球迷补偿是否已发；每队只发一次。 */
   legendRepeatFans?: Record<string, true>
   injuries?: Record<string, number>
+  /** Sparse relationships between player instances, independent of equipped cards. */
+  chemistry?: Chemistry
   /** 最近 20 场的出场分钟（按球员 id，玩家和本联赛 AI 球队的都记），俱乐部判断放不放人用。 */
   appearances?: Record<string, number[]>
   /** AI 俱乐部发来的报价（收件箱）。 */
@@ -1087,6 +1106,11 @@ export type AIClubState = {
   upgradeProgress?: number
   /** 这个赛季已经买进几个人（竞拍、签自由球员、挖人），每赛季最多 5 人。 */
   transfers?: { season: number; bought: number }
+  /**
+   * 这一圈培养里已经练过的球员（`id|英文名`）。电脑球队按“原始 CA 从高到低、还没练过的”挑人，
+   * 全队都练过一遍后清空重新开一圈；球员离队后自然从名单里剔除。
+   */
+  trainedOwners?: string[]
 }
 
 export type MatchContext = {
@@ -1119,6 +1143,12 @@ export type ActiveMatchSave = {
   startedAt: number
   elapsedSeconds?: number
   coachPausesLeft: number
+  /**
+   * 联机联赛的回放：比赛已经在开球前 30 分钟锁定阵容并由服务器算好，
+   * 这里的 engineState 是开球那一刻的初始状态，浏览器按现实时钟把它回放出来（约 10 分钟），不能干预。
+   * 只存在于服务器下发的存档副本里，不会保存回服务器，也不落本地缓存。
+   */
+  preplayed?: boolean
 }
 
 export type ReviewRecommendation = {

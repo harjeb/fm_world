@@ -4,6 +4,7 @@ import type { AttrKey, BaseTraitId } from '../types.ts'
 import { MAIN_ATTR_SCALE, MAX_ATTR_RATING } from '../scale.ts'
 import { TRAITS } from '../data/skills.ts'
 import { effectiveAttr } from '../ca.ts'
+import { chemistryKey } from '../chemistry.ts'
 import { derivedRng } from '../rng.ts'
 import { legendMultiplier } from '../legend-bonus.ts'
 import { opponentSide } from './team.ts'
@@ -25,6 +26,12 @@ export class MatchRatings {
     private readonly stateOf: () => RatingsState,
     private readonly durationOf: () => number,
   ) {}
+
+  pairChemistry(a: MatchPlayerState, b: MatchPlayerState): number {
+    if (a.side !== b.side || a.sourceId === b.sourceId) return 0
+    const team = this.stateOf().teams[a.side === 'home' ? 0 : 1]
+    return team.chemistry?.[chemistryKey(a.sourceId, b.sourceId)] ?? 0
+  }
 
   eff(player: MatchPlayerState, key: Parameters<typeof effectiveAttr>[3], ctx: MatchEventContext = {}): number {
     const ratio = player.stamina / Math.max(1, player.maxStamina)

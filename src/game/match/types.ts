@@ -76,6 +76,7 @@ export type MatchTeamState = {
   bench: MatchPlayerState[]
   autoSubs?: AutoSubPlan
   subsUsed: number
+  chemistry?: Record<string, number>
 }
 
 export type PitchPoint = { x: number; y: number }
@@ -266,6 +267,7 @@ export type MatchTeamInput = {
   formationId: FormationId
   tactics: Tactics
   autoSubs?: AutoSubPlan
+  chemistry?: Record<string, number>
   starters: { player: Player; role: RoleId; slotId: string }[]
   bench: Player[]
 }

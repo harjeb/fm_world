@@ -4,6 +4,7 @@ import type { AppServer } from '../server/app.ts'
 import type { MatchJob, MatchJobResult } from '../server/match-job.ts'
 import type { MatchTeamStats, WorldState } from '../src/game/types.ts'
 import { kickoffAtForRound } from '../src/game/calendar.ts'
+import { LEAGUE_REALTIME_MS } from '../src/game/match/time.ts'
 import type { JobEntry } from '../server/match-queue.ts'
 
 /** 赛季/账号集成测试使用廉价的确定性执行器；真实引擎和子进程由 shared-kickoff.test 覆盖。 */
@@ -30,7 +31,7 @@ export async function drainServerQueue(app: AppServer, dir: string, now: number)
     const index = path.join(dir, 'match-jobs/index.json')
     const entries = fs.existsSync(index) ? JSON.parse(fs.readFileSync(index, 'utf8')) as JobEntry[] : []
     const { world } = JSON.parse(fs.readFileSync(path.join(dir, 'world.json'), 'utf8')) as { world: WorldState }
-    const due = world.divisions.some((division) => division.fixtures.some((fixture) => !fixture.played && kickoffAtForRound(world.seasonStartedAt, fixture.round) <= now))
+    const due = world.divisions.some((division) => division.fixtures.some((fixture) => !fixture.played && kickoffAtForRound(world.seasonStartedAt, fixture.round) + LEAGUE_REALTIME_MS <= now))
     if (!due && !entries.some((entry) => entry.status === 'queued' || entry.status === 'running')) return
   }
   throw new Error('测试后台队列未清空')

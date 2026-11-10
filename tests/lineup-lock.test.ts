@@ -69,8 +69,8 @@ describe('开赛前 30 分钟锁阵容', () => {
     // 每天北京时间 12:00、20:00 各一轮。
     const kickoff = (round: number) => kickoffAtForRound(worldStart, round)
 
-    // 到第 2 轮开球时间：第 1、2 轮自动结算，当前第 2 轮已踢，锁的是第 3 轮。
-    clock = kickoff(2) + 1000
+    // 第 2 轮开球 10 分钟后：第 1、2 轮的比分公布，当前第 2 轮已踢，锁的是第 3 轮。
+    clock = kickoff(2) + 10 * minute + 1000
     await drainServerQueue(app, dataDir, clock)
     const loaded = await (await fetch(`${base}/api/game`, { headers: auth })).json() as { game: GameState; revision: number }
     expect(loaded.game.season.round).toBe(2)
@@ -98,8 +98,14 @@ describe('开赛前 30 分钟锁阵容', () => {
     expect(agent.ok).toBe(false)
     expect(agent.error).toContain('锁定')
 
-    // 第 3 轮开球并自动结算后解锁
+    // 第 3 轮开球：比赛进入 10 分钟直播（比分未公布），本轮输入已经持久化，阵容立即解锁、准备下一轮
     clock = kickoff(3) + 1000
+    await drainServerQueue(app, dataDir, clock)
+    const live = await (await fetch(`${base}/api/game`, { headers: auth })).json() as { game: GameState; revision: number }
+    expect(playerFixture(live.game, 3)!.played).toBe(false)
+    expect(lineupLockState(live.game, clock).locked).toBe(false)
+    // 开球 10 分钟后公布比分
+    clock = kickoff(3) + 10 * minute + 1000
     await drainServerQueue(app, dataDir, clock)
     const after = await (await fetch(`${base}/api/game`, { headers: auth })).json() as { game: GameState; revision: number }
     expect(playerFixture(after.game, 3)!.played).toBe(true)

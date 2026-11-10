@@ -13,6 +13,29 @@ function player(seed = 1) {
 }
 
 describe('传奇技能书学习', () => {
+  it('keeps low requirements at the floor and increases monotonically', () => {
+    const p = player()
+    for (const ratio of [0, 1 / 13, 0.3, 0.64, 0.65]) {
+      p.attrs.teamwork = 13 * ratio
+      expect(bookLearnChance(p, drillBook)).toBe(0.02)
+    }
+    let previous = 0
+    for (let step = 0; step <= 120; step++) {
+      p.attrs.teamwork = 13 * step / 100
+      const chance = bookLearnChance(p, drillBook)
+      expect(chance).toBeGreaterThanOrEqual(previous)
+      previous = chance
+    }
+    expect(previous).toBe(1)
+  })
+
+  it('combines a low and a satisfied requirement by geometric mean', () => {
+    const p = player()
+    p.attrs.passing = 1
+    p.attrs.vision = 14
+    expect(bookLearnChance(p, { id: 'lg_pass_vision', tier: 'rainbow' })).toBeCloseTo(Math.sqrt(0.02), 8)
+  })
+
   it('学习概率在达标线为 100%，低于 0.65T 为 2% 地板，并支持混合要求', () => {
     const p = player()
     p.attrs.teamwork = 13

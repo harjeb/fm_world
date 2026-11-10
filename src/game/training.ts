@@ -25,6 +25,8 @@ import { bookEvents, bookLearnChance, eventForSession, grantBookSkill, bookTierL
 import { effectiveTrainingCeilings } from './cup-rewards.ts'
 import { legendMultiplier, legendValue } from './legend-bonus.ts'
 import { partnerAssignment, trainingDate, trainingLowMood, trainingOptions, type TrainingActivityId } from './training-calendar.ts'
+import { ROLES } from './data/roles.ts'
+import { mainAttrsFor } from './scale.ts'
 
 export const ACTIONS_PER_ROUTE = 30
 export const ACTIONS_PER_WEEK = 3
@@ -409,6 +411,28 @@ export function planTraining(session: TrainingSession, request: TrainingRequest,
   return planLegacyTraining(session, request, mentor, teammateCount, hideQuality)
 }
 
+const MATCH_POSITION_FOCUS: Record<Position, readonly AttrKey[]> = {
+  GK: ['reflexes', 'handling', 'oneOnOne', 'composure', 'rushing', 'passing'],
+  CB: ['tackling', 'strength', 'speed', 'acceleration'],
+  W: ['dribbling', 'acceleration', 'speed', 'passing'],
+  CM: ['passing', 'tackling', 'dribbling', 'acceleration'],
+  ST: ['shooting', 'acceleration', 'speed', 'strength'],
+}
+
+function calendarMatchFocus(session: TrainingSession): [AttrKey, AttrKey] {
+  const gk = candidateIsGk(session)
+  const savedRole = session.matchRole && ROLES[session.matchRole]
+  const role = savedRole && (savedRole.position === 'GK') === gk ? savedRole : undefined
+  const positions: Position[] = ['CB', 'W', 'CM', 'ST']
+  const position = gk ? 'GK' : role?.position ?? positions.sort((a, b) => session.candidate.positions[b] - session.candidate.positions[a])[0]
+  const main = mainAttrsFor(gk)
+  const roleFocus = main.filter(key => (role?.weights[key] ?? 0) > 0).sort((a, b) => (role?.weights[b] ?? 0) - (role?.weights[a] ?? 0))
+  const pool = [...new Set([...roleFocus, ...MATCH_POSITION_FOCUS[position]])].slice(0, gk ? 6 : 4)
+  const date = trainingDate(session.action + 1)
+  const matchIndex = (date.week - 1) * 2 + (date.day === 5 ? 1 : 0)
+  return [pool[matchIndex * 2 % pool.length], pool[(matchIndex * 2 + 1) % pool.length]]
+}
+
 function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingRequest, { kind: 'activity' }>, mentor?: Player, teammateCount = 0, hideQuality = false): TrainingPlan {
   const nextAction = session.action + 1
   const isGk = candidateIsGk(session)
@@ -494,11 +518,12 @@ function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingR
   }
   if (request.kind === 'match') {
     const key: AttrKey = isGk ? 'reflexes' : 'speed'
-    const gains: Partial<Record<AttrKey, number>> = { passing: 2, [key]: 2, teamwork: 1 }
+    const focus = session.scheduleVersion === 1 ? calendarMatchFocus(session) : ['passing', key] as const
+    const gains: Partial<Record<AttrKey, number>> = { [focus[0]]: 2, [focus[1]]: 2, teamwork: 1 }
     const quality = hideQuality ? { label: '成功', multiplier: QUALITY_MULTIPLIER.success } : trainingQuality(session)
     const result = actionGains(session, gains, quality.multiplier, teammateCount, 'match')
     return {
-      kind: 'match', label: '队内比赛', text: '高强度队内比赛，综合练习传球与身体或扑救。',
+      kind: 'match', label: '队内比赛', text: `按位置与职责练习${attrLabel(focus[0])}、${attrLabel(focus[1])}与团队合作。`,
       gains: result.actual, fatigue: cost, energyCost: 0, error: false, quality,
       caBefore: result.caBefore, caAfter: result.caAfter, scale: result.scale,
       cappedByCeiling: result.cappedByCeiling, cappedByPa: result.cappedByPa,

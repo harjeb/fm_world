@@ -15,7 +15,7 @@ describe('PvE 挑战', () => {
       peak: { cleared: 0, history: [], claimedMilestones: [], breakthroughCards: 0 },
       cups: {},
       cupCeilingClaims: {},
-      cupCeilingVersion: 2,
+      cupCeilingVersion: 3,
       trophies: [],
     })
   })

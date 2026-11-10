@@ -109,7 +109,7 @@ export async function loadPublicConfig(): Promise<PublicConfig> {
 }
 
 type AuthResponse = { token: string; user: OnlineUser; revision: number; game: GameState }
-type StateResponse = { type: 'state'; revision: number; game: GameState; source?: string }
+type StateResponse = { type: 'state'; revision: number; serverTime?: number; game: GameState; source?: string }
 
 const clientId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 let token = typeof localStorage === 'undefined' ? null : localStorage.getItem(TOKEN_KEY)
@@ -148,11 +148,22 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}`, 'X-FM-Client': clientId } : {}
 }
 
+/** 对准服务器时钟。联赛直播回放按它算“比赛踢到第几分钟”，所以必须在应用存档之前就同步好。 */
+function syncServerClock(serverTime: unknown): void {
+  if (typeof serverTime === 'number' && Number.isFinite(serverTime)) marketState.serverOffset = serverTime - Date.now()
+}
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, headers: { ...(init?.headers ?? {}), ...authHeaders() } })
   const data = await response.json().catch(() => ({}))
+  syncServerClock((data as { serverTime?: unknown } | null)?.serverTime)
   if (!response.ok) throw new Error((data as { error?: string }).error ?? `请求失败 (${response.status})`)
   return data as T
+}
+
+/** 赛后 2D 重看：开球时的引擎初始状态（只给参赛的教练，比赛公布之后才有）。 */
+export async function fetchMatchReplay(matchId: string): Promise<{ engineState: unknown; homeAway: 'home' | 'away'; durationSeconds: number }> {
+  return requestJson(`/api/match/replay?id=${encodeURIComponent(matchId)}`)
 }
 
 export async function registerOnline(
@@ -271,6 +282,7 @@ function connectEvents(): void {
       }
       const data = parsed as StateResponse
       if (data.type !== 'state' || !data.game) return
+      syncServerClock(data.serverTime)
       if (data.revision < onlineState.revision) return
       onlineState.revision = data.revision
       onlineState.lastSync = Date.now()
@@ -347,7 +359,8 @@ async function flushSave(): Promise<void> {
     const result = await requestJson<{ ok: boolean; revision: number; updatedAt: number }>('/api/game', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ game, baseRevision }),
+      // 联赛直播回放是服务器下发的副本，不存回服务器（几十 KB 的初始引擎状态）。
+      body: JSON.stringify({ game: game.activeMatch?.preplayed ? { ...game, activeMatch: undefined } : game, baseRevision }),
     })
     if (pendingGame && pendingRevision === baseRevision) pendingRevision = result.revision
     onlineState.revision = Math.max(onlineState.revision, result.revision)

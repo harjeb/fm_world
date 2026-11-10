@@ -677,6 +677,8 @@ export class PesSettlement implements ContactModel {
       const from = this.extra.joined[q.pid] ?? 0
       const to = Math.min(this.extra.left[q.pid] ?? m.time, D)
       player.stats.minutes = D > 0 ? Math.max(0, ((to - from) / D) * 90) : 0
+      player.stats.onMinute = D > 0 ? from / D * 90 : 0
+      player.stats.offMinute = D > 0 ? to / D * 90 : 0
     }
     for (const ti of [0, 1] as TeamIndex[]) {
       const stats = g.stats[sideOf(ti)]

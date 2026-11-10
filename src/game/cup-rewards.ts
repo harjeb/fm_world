@@ -1,5 +1,6 @@
 import type { CupId } from './data/cup-config.ts'
 import type { Attributes, GameState, Player, TrainingSession } from './types.ts'
+import { createPlayerFromSeed, seedById } from './data/players.ts'
 import { normalizeCeilings } from './data/attr-profile.ts'
 import { legendValue } from './legend-bonus.ts'
 import { attrHardLimit, mainAttrsFor } from './scale.ts'
@@ -12,7 +13,7 @@ export const CUP_CEILING_BONUS: Record<CupId, number> = {
 }
 
 const CUP_IDS: CupId[] = ['community', 'league', 'champions']
-const CLUB_CEILING_VERSION = 2
+const CLUB_CEILING_VERSION = 3
 
 /** 当前俱乐部所有已解锁奖杯的上限加成，不依赖球员何时入队。 */
 export function cupCeilingBonus(game: Pick<GameState, 'pve'>): number {
@@ -66,55 +67,70 @@ export function applyCupCeilingReward(game: GameState, cupId: CupId): number {
   return CUP_CEILING_BONUS[cupId]
 }
 
-/**
- * 旧实现直接把奖杯数值写入夺冠时的名单，且没有记录当时的名单或被 2000 截断的部分。
- * 迁移时对现有名单按旧领取记录扣回，以保持原有效上限不变，再由俱乐部实时加成提供；
- * 同时保留扣回前的完整上限，供旧档有人员变动或截断时人工核对。
- */
-function migrateLegacyCeilings(game: GameState, legacyClaims: Partial<Record<string, true>>): boolean {
-  if (!game.pve) return false
-  const legacyIds = CUP_IDS.filter((id) => legacyClaims[id] === true)
-  const legacyBonus = legacyIds.reduce((sum, id) => sum + CUP_CEILING_BONUS[id], 0)
-  if (!legacyBonus) return false
-  const backups: NonNullable<NonNullable<GameState['pve']>['legacyCupCeilings']> = {}
-  for (const player of game.roster) {
-    if (!player.ceilings) continue
-    const original = { ...player.ceilings }
-    if (removeLegacyBonus(player, legacyBonus)) backups[player.id] = original
-  }
-  // 旧培养从个人上限取快照：只扣除开始培养以前已发放的奖杯，避免把后来夺冠的奖杯扣两次。
-  for (const session of Object.values(game.training ?? {})) {
-    if (!session?.candidate?.ceilings) continue
-    const before = legacyIds.reduce((sum, id) => {
-      const first = game.pve!.trophies.filter((trophy) => trophy.cupId === id && Number.isFinite(trophy.wonAt))
-        .reduce<number | undefined>((value, trophy) => value === undefined ? trophy.wonAt : Math.min(value, trophy.wonAt), undefined)
-      return first === undefined || session.startedAt >= first ? sum + CUP_CEILING_BONUS[id] : sum
-    }, 0)
-    if (before) {
-      const original = { ...session.candidate.ceilings }
-      if (removeLegacyBonus(session.candidate, before)) backups[`training:${session.playerId}`] = original
-      const pending = game.candidates?.[session.playerId]
-      if (pending?.ceilings) {
-        const pendingOriginal = { ...pending.ceilings }
-        if (removeLegacyBonus(pending, before)) backups[`candidate:${session.playerId}`] = pendingOriginal
-      }
-    }
-  }
-  game.pve.legacyCupCeilings = backups
+/** Only separate an embedded reward when the full original ceiling vector is recoverable. */
+function separateLegacyBonus(player: Player, amount: number): boolean {
+  if (!(amount > 0) || !player.ceilings) return false
+  const seed = seedById(player.seedId)
+  if (!seed || (player.generation ?? 0) !== 0) return false
+  const original = createPlayerFromSeed(seed)
+  if (Object.keys(original.baseAttrs).some(key => original.baseAttrs[key as keyof Attributes] !== player.baseAttrs?.[key as keyof Attributes])) return false
+  const gk = player.positions.GK > 0
+  if (gk !== (original.positions.GK > 0)) return false
+  const keys = mainAttrsFor(gk)
+  // A single changed attribute is not evidence of a trophy: breakthrough cards also raise ceilings.
+  if (keys.some(key => !Number.isFinite(player.ceilings[key]) || Math.abs(player.ceilings[key] - Math.min(attrHardLimit(key, gk), original.ceilings[key] + amount)) > 0.01)) return false
+  player.ceilings = { ...player.ceilings }
+  for (const key of keys) player.ceilings[key] = original.ceilings[key]
   return true
 }
 
-function removeLegacyBonus(player: Player, amount: number): boolean {
+function bonusBeforeSession(game: GameState, ids: CupId[], startedAt: number): number {
+  return ids.reduce((sum, id) => {
+    const dates = game.pve!.trophies.filter(trophy => trophy.cupId === id && Number.isFinite(trophy.wonAt)).map(trophy => trophy.wonAt)
+    const first = dates.length ? Math.min(...dates) : undefined
+    return first === undefined || startedAt >= first ? sum + CUP_CEILING_BONUS[id] : sum
+  }, 0)
+}
+
+/** Recover v2 deductions from unchanged ceiling entries, rather than later trophy totals. */
+function restoreVersionTwo(player: Player, backup: Attributes | undefined, possibleBonuses: number[]): number {
+  if (!backup || !player.ceilings) return 0
   const gk = player.positions.GK > 0
-  if (!(amount > 0) || !player.ceilings) return false
-  // 低于旧奖杯总额的上限不可能包含过旧的直接加成，避免误伤后来加入的新球员。
-  if (!mainAttrsFor(gk).some((key) => player.ceilings[key] > amount + 0.5)) return false
+  const keys = mainAttrsFor(gk)
+  const difference = Math.max(0, ...keys.map(key => Number.isFinite(backup[key]) && Number.isFinite(player.ceilings[key]) ? backup[key] - player.ceilings[key] : 0))
+  const amount = possibleBonuses.find(value => value > 0 && Math.abs(value - difference) < 0.01) ?? 0
   player.ceilings = { ...player.ceilings }
-  for (const key of mainAttrsFor(gk)) {
-    const raw = player.ceilings[key]
-    if (Number.isFinite(raw) && raw > amount + 0.5) player.ceilings[key] = Math.round((raw - amount) * 10) / 10
+  for (const key of keys) {
+    if (!Number.isFinite(backup[key])) continue
+    const deducted = amount > 0 && backup[key] > amount + 0.5 ? Math.round((backup[key] - amount) * 10) / 10 : backup[key]
+    const current = Number.isFinite(player.ceilings[key]) ? player.ceilings[key] : backup[key]
+    // If all entries were subsequently modified, keep both recorded and current ceilings as floors.
+    player.ceilings[key] = Math.min(attrHardLimit(key, gk), Math.max(backup[key], current + backup[key] - deducted))
   }
-  return true
+  return amount
+}
+
+/** Unknown roster history is preserved; never deduct a guessed reward from personal ceilings. */
+function migrateLegacyCeilings(game: GameState, legacyClaims: Partial<Record<string, true>>): void {
+  const pve = game.pve!
+  const ids = CUP_IDS.filter(id => legacyClaims[id] === true)
+  const amount = ids.reduce((sum, id) => sum + CUP_CEILING_BONUS[id], 0)
+  if (!amount) return
+  const possibleBonuses = ids.reduce((values, id) => [...values, ...values.map(value => value + CUP_CEILING_BONUS[id])], [0])
+  const backups = pve.legacyCupCeilings ??= {}
+  const migrate = (player: Player, key: string, bonus: number) => {
+    if (pve.cupCeilingVersion === 2) bonus = restoreVersionTwo(player, backups[key], possibleBonuses.filter(value => value <= bonus))
+    const original = { ...player.ceilings }
+    if (separateLegacyBonus(player, bonus)) backups[key] ??= original
+  }
+  for (const player of game.roster) migrate(player, player.id, amount)
+  for (const session of Object.values(game.training ?? {})) {
+    if (!session?.candidate?.ceilings) continue
+    const bonus = bonusBeforeSession(game, ids, session.startedAt)
+    migrate(session.candidate, `training:${session.playerId}`, bonus)
+    const pending = game.candidates?.[session.playerId]
+    if (pending?.ceilings) migrate(pending, `candidate:${session.playerId}`, bonus)
+  }
 }
 
 /** 旧存档的奖杯自动解锁对应俱乐部加成，并保证迁移和同步可重复执行。 */
@@ -127,7 +143,7 @@ export function ensureCupCeilingClaims(game: GameState): boolean {
     changed = true
   }
   if (pve.cupCeilingVersion !== CLUB_CEILING_VERSION) {
-    if (migrateLegacyCeilings(game, pve.cupCeilingClaims)) changed = true
+    migrateLegacyCeilings(game, pve.cupCeilingClaims)
     pve.cupCeilingVersion = CLUB_CEILING_VERSION
     changed = true
   }

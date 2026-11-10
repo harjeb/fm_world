@@ -2,8 +2,52 @@ import { describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
 import { awardPeakMilestone, applyPeakBreakthrough, ensurePeakMilestones } from '../src/game/peak-milestones.ts'
 import { mainAttrsFor } from '../src/game/rating.ts'
+import { startTraining } from '../src/game/actions.ts'
+import { effectiveTrainingCeilings } from '../src/game/cup-rewards.ts'
 
 describe('巅峰里程碑奖励', () => {
+  it('updates the active training ceiling without changing attributes or other players', () => {
+    const game = createInitialGame(94)
+    const player = game.roster.find(item => item.positions.GK === 0)!
+    expect(startTraining(game, player.id, 7).ok).toBe(true)
+    const session = game.training[player.id]
+    const before = session.candidate.ceilings.passing
+    const attrs = structuredClone(session.candidate.attrs)
+    const other = structuredClone(game.roster.find(item => item.id !== player.id)!)
+    game.pve!.peak.breakthroughCards = 2
+    expect(applyPeakBreakthrough(game, player.id, 'passing').ok).toBe(true)
+    expect(effectiveTrainingCeilings(session).passing).toBe(before + 100)
+    expect(session.candidate.attrs).toEqual(attrs)
+    expect(game.roster.find(item => item.id === other.id)).toEqual(other)
+    expect(applyPeakBreakthrough(game, player.id, 'passing').ok).toBe(true)
+    expect(session.candidate.ceilings.passing).toBe(before + 200)
+  })
+
+  it('uses the actual capped increase and preserves separate candidate bonuses', () => {
+    const game = createInitialGame(95)
+    const player = game.roster.find(item => item.positions.GK === 0)!
+    player.ceilings.passing = 1950
+    expect(startTraining(game, player.id, 7).ok).toBe(true)
+    const session = game.training[player.id]
+    session.candidate.ceilings.passing = 1900
+    game.pve!.peak.breakthroughCards = 1
+    expect(applyPeakBreakthrough(game, player.id, 'passing')).toMatchObject({ ok: true, amount: 50 })
+    expect(session.candidate.ceilings.passing).toBe(1950)
+    expect(player.ceilings.passing).toBe(2000)
+  })
+
+  it('leaves completed training snapshots unchanged', () => {
+    const game = createInitialGame(96)
+    const player = game.roster.find(item => item.positions.GK === 0)!
+    expect(startTraining(game, player.id, 7).ok).toBe(true)
+    const session = game.training[player.id]
+    session.completed = true
+    const before = structuredClone(session.candidate)
+    game.pve!.peak.breakthroughCards = 1
+    expect(applyPeakBreakthrough(game, player.id, 'passing').ok).toBe(true)
+    expect(session.candidate).toEqual(before)
+  })
+
   it('金币/球迷交替发放，5 张突破卡分布正确', () => {
     const game = createInitialGame(91)
     const money = game.economy!.balance

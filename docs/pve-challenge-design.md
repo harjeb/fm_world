@@ -250,7 +250,7 @@ type TrophyRecord = {
 - **杯赛定义是配置，不是存档**：增删杯赛不影响旧存档（新杯自动可报名，删掉的杯只是不再出现在报名列表，奖杯记录仍显示）。报名时为每支参赛队保存完整 `AITeam` 快照；之后世界队训练、转会或缓存刷新都不会改变杯赛对手。
 - **传奇杯**（8 队、全部传奇队抽签、特殊奖杯样式）作为后续扩展预留，本版不开放。
 - 换季作废的理由：世界球队名单换季后重建，签表里的队伍引用会失效；随机队池虽然固定，但小组/对阵是按赛季抽的，跨季没有意义。
-- **奖杯上限实现**：奖杯只解锁“俱乐部上限加成”，不写进球员个人 `ceilings`；现有和之后加入的球员在培养时都使用 `个人上限 + 俱乐部奖杯加成`，离队不带走。旧版直接写入个人上限的存档会按旧领取记录迁移扣除，避免双加。
+- **Trophy ceilings**: trophies unlock a club bonus without changing personal `ceilings`; current and future members use personal ceilings plus the club bonus. Migration v3 separates embedded legacy rewards only when all main ceilings match the reproducible original player profile plus the claimed bonus. Unknown profiles or modified ceilings are preserved because old saves did not record the recipients or clipped amounts; an ambiguous embedded reward may therefore remain. Version 2 deductions are inferred from unchanged ceiling entries and the original backups, so later trophies are not refunded as old deductions. If every entry was subsequently changed, the backup and current values are retained as floors; the precise historical gain cannot be reconstructed. Migration is idempotent.
 - **已实装 v2**：`src/game/cup.ts` 生成混合名单/分组，`src/game/cup-run.ts` 负责报名、**按轮**结算 AI 小组赛（不提前泄露未来赛果）、小组积分、同分规则、16/32 队淘汰赛、8 强/半决赛两回合、引擎内点球、完整 `rounds` 签表、奖杯、换季归档。比赛使用报名快照，不随世界名册变化。挑战页已接入报名、继续比赛、积分榜/签表/历届记录和荣誉橱窗。
 
 ### 3.5 展示

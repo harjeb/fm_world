@@ -9,6 +9,7 @@ import { skillEffectText } from '../../game/data/skill-effects.ts'
 import { clockText, esc, matchModeLabel, pveModeLabel, skillName } from '../format.ts'
 import { tipAttrs } from '../tooltip.ts'
 import { game, replay, resetReplay, ui } from '../state.ts'
+import { renderReplay2D } from '../replay-2d.ts'
 
 export function eventTypeLabel(type: string): string {
   const labels: Record<string, string> = { goal: '进球', shot: '射门', save: '扑救', block: '封堵', foul: '犯规', pass: '传球', dribble: '盘带', tackle: '抢断', contest: '争夺', setpiece: '定位球', penalty: '点球', kickoff: '开球', half: '半场', full: '终场', sub: '换人', injury: '受伤', tactic: '战术', miss: '偏出', info: '信息' }
@@ -106,6 +107,7 @@ function renderRecord(record: MatchRecord): string {
       title: `${esc(record.homeName)} vs ${esc(record.awayName)}`,
     })}
     ${record.aggregateScore ? `<p class="banner info">两回合总比分：${esc(record.homeName)} ${record.aggregateScore.home}:${record.aggregateScore.away} ${esc(record.awayName)}${record.shootout ? ` · 点球 ${record.shootout.home}:${record.shootout.away}` : ''}（不计客场进球）</p>` : ''}
+    ${renderReplay2D(record)}
     ${renderReplay(record)}
     <details class="review-details"><summary>${icon('review', 15)}展开完整赛后复盘（含最终结果）</summary>
       <div class="report" style="${recordKits(record)}">

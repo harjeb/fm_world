@@ -16,6 +16,7 @@ import { addLegacySignature } from './data/players.ts'
 import { ensureCards } from './cards.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION, upgradeBurstAttr, upgradeNames, upgradeStarTraits } from './names.ts'
 import { ensurePve } from './pve.ts'
+import { pruneChemistry } from './chemistry.ts'
 
 // 游戏改名后仍沿用旧键，改了已有存档就读不到了。
 export const SAVE_KEY = 'fm-seven-a-side-save-v3'
@@ -84,20 +85,29 @@ export function createInitialGame(seed?: number, clubName = '青石'): GameState
 }
 
 /** 只写本地缓存（联机存档来自服务器时用，避免把服务器状态再推回去）。 */
+/**
+ * 联赛直播回放（activeMatch.preplayed）只活在服务器下发的存档副本里：
+ * 不落本地缓存，否则离线重开会把已经结束的比赛当成“进行中”。
+ */
+export function withoutReplay(game: GameState): GameState {
+  return game.activeMatch?.preplayed ? { ...game, activeMatch: undefined } : game
+}
+
 export function cacheGameLocally(game: GameState): void {
   try {
-    if (typeof localStorage !== 'undefined') localStorage.setItem(SAVE_KEY, JSON.stringify(game))
+    if (typeof localStorage !== 'undefined') localStorage.setItem(SAVE_KEY, JSON.stringify(withoutReplay(game)))
   } catch {
     // 本地缓存失败不影响服务器同步。
   }
 }
 
 export function saveGame(game: GameState): boolean {
+  pruneChemistry(game.chemistry, Date.now(), game.season.gameDayMs)
   game.ui = { ...(game.ui ?? { screen: 'home' }) }
   let local = false
   try {
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(SAVE_KEY, JSON.stringify(game))
+      localStorage.setItem(SAVE_KEY, JSON.stringify(withoutReplay(game)))
       local = true
     }
   } catch {
@@ -162,7 +172,8 @@ export function loadGame(): GameState | null {
     const attrsUpgraded = upgradeBurstAttr(parsed)
     const pveAdded = ensurePve(parsed)
     parsed.ui = parsed.ui ?? { screen: 'home' }
-    if (rescheduled || elevenUpgraded || repaired || aiLineupsRefreshed || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || pveAdded) saveGame(parsed)
+    const chemistryPruned = pruneChemistry(parsed.chemistry, Date.now(), parsed.season.gameDayMs)
+    if (chemistryPruned || rescheduled || elevenUpgraded || repaired || aiLineupsRefreshed || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || pveAdded) saveGame(parsed)
     return parsed
   } catch {
     return null

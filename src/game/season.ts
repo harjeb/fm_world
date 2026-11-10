@@ -19,6 +19,7 @@ import { LOGIC_MATCH_SECONDS } from './match/time.ts'
 import { advanceWorldSeason, ensurePromotionPlayoff, simulateOtherDivisions, syncPlayerDivision, payWorldWages } from './world.ts'
 import { runAIClubs } from './ai-club.ts'
 import { recordMatchDiscipline, serveSuspensions, suspendedPlayerIds } from './discipline.ts'
+import { pruneChemistry, recordMatchChemistry } from './chemistry.ts'
 
 export const PLAYER_TEAM_ID = 'player'
 export const ROUNDS = 38
@@ -320,6 +321,12 @@ function skipCalendar(game: GameState, delta: number, now: number): { ok: boolea
   // 体能同理：先结算到现在，再把结算时间往回拨，跳过的这段按休息恢复。
   settleGameConditions(game, now)
   shiftCalendar(game, delta)
+  for (const pair of Object.values(game.chemistry ?? {})) {
+    pair.lastAt -= delta
+    if (pair.trainingAt !== undefined) pair.trainingAt -= delta
+    pair.trainingToday = 0
+  }
+  pruneChemistry(game.chemistry, now, game.season.gameDayMs)
   shiftEnergyClock(game, delta)
   shiftConditionClock([...game.roster, ...game.aiTeams.flatMap((team) => team.players)], delta)
   // 报价的回复期限也按游戏日算：时间往前跳，期限跟着往前挪。
@@ -405,6 +412,7 @@ export function simulateFixture(game: GameState, fixture: Fixture, auto = false,
   recordMatchInjuries(game, state, now, auto)
   if (game.world) recordMatchDiscipline(game, state)
   const record = createMatchRecord(game, state, context)
+  recordMatchChemistry(game, record.playerStats, now, game.season.gameDayMs)
   if (auto) record.autoSimulated = true
   fixture.played = true
   fixture.score = { ...record.score }
@@ -425,7 +433,7 @@ export function simulateAIFixturesInRound(game: GameState, round = game.season.r
     const away = game.aiTeams.find((team) => team.id === fixture.awayId)
     if (!home || !away) continue
     const seed = splitSeed(game.season.seed, `ai-${round}-${fixture.homeId}-${fixture.awayId}`)
-    const state = simulateAIvsAIState(home, away, seed, LEAGUE_MATCH_SECONDS, game.injuries, now, suspendedPlayerIds(game))
+    const state = simulateAIvsAIState(home, away, seed, LEAGUE_MATCH_SECONDS, game.injuries, now, suspendedPlayerIds(game), true, game.chemistry, game.season.gameDayMs)
     recordMatchInjuries(game, state, now, historical)
     recordMatchDiscipline(game, state)
     fixture.score = { home: state.score.home, away: state.score.away }
@@ -443,6 +451,7 @@ export function simulateAIFixturesInRound(game: GameState, round = game.season.r
       durationSeconds: LEAGUE_MATCH_SECONDS,
     })
     record.autoSimulated = true
+    recordMatchChemistry(game, record.playerStats, now, game.season.gameDayMs)
     applyMatchConditions(game, record.playerStats)
     recordAppearances(game, fixture.homeId, fixture.awayId, record.playerStats)
   }
@@ -458,7 +467,10 @@ export function catchUpSeason(game: GameState, now = Date.now()): { advanced: nu
   expireOffers(game, now)
   // 自由市场每个游戏日补到 200 人，前几天没人要的随机球员销毁（联机由服务器补）。
   refreshLocalFreeMarket(game, now)
-  if (game.activeMatch || game.season.finished) return { advanced: 0, records, rested: settleGameConditions(game, now) }
+  if (game.activeMatch || game.season.finished) {
+    pruneChemistry(game.chemistry, now, game.season.gameDayMs)
+    return { advanced: 0, records, rested: settleGameConditions(game, now) }
+  }
   economyOf(game)
   const target = dueRound(game, now)
   let advanced = 0
@@ -495,6 +507,7 @@ export function catchUpSeason(game: GameState, now = Date.now()): { advanced: nu
   for (const record of records) {
     if (record.isLeague && (record.homeId === PLAYER_TEAM_ID || record.awayId === PLAYER_TEAM_ID)) game.matchHistory.unshift(record)
   }
+  pruneChemistry(game.chemistry, now, game.season.gameDayMs)
   return { advanced, records, rested }
 }
 
@@ -721,6 +734,7 @@ export function finishActiveMatch(game: GameState, engine: GameEngine, now = Dat
   economyOf(game)
   recordMatchInjuries(game, state, active.context.isLeague ? active.startedAt : now, active.context.isLeague)
   const record = createMatchRecord(game, state, active.context)
+  recordMatchChemistry(game, record.playerStats, now, game.season.gameDayMs)
   // 只有联赛扣体能：挑战里的比赛（友谊赛、单场挑战、世界挑战）都不扣。
   if (active.context.isLeague) applyMatchConditions(game, record.playerStats)
   if (active.context.isLeague) {
