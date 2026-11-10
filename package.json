@@ -36,6 +36,7 @@
     "pes:diff": "tsx scripts/pes-diff.ts",
     "pes:freerun": "tsx scripts/pes-freerun.ts",
     "pes:game": "tsx scripts/pes-game.ts",
+    "pes:injuries": "tsx scripts/pes-injuries.ts",
     "typecheck": "tsc --noEmit",
     "build:site": "vite build",
     "build:safe": "bash scripts/build-safe.sh",
