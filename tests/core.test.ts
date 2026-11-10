@@ -111,12 +111,13 @@ describe('CA / PA 与初始数据', () => {
     }
   })
 
-  it('30 个事件、3 条各 3 段链、4 条主线', () => {
-    expect(EVENT_BY_ID.size).toBe(30)
+  it('33 个事件、3 条各 3 段链、4 条主线', () => {
+    expect(EVENT_BY_ID.size).toBe(33)
     for (const chain of ['passing', 'defending', 'finishing']) {
       expect([...EVENT_BY_ID.values()].filter((event) => event.chain === chain && event.stage).length).toBe(3)
     }
     expect([...EVENT_BY_ID.values()].filter((event) => event.category === 'mainline').length).toBe(4)
+    expect([...EVENT_BY_ID.values()].filter((event) => event.category === 'teammate').length).toBe(3)
     // 只有入队测试和毕业赛是必出的；两次阶段测验在窗口内靠概率出现。
     expect([...EVENT_BY_ID.values()].filter((event) => event.mainline).map((event) => event.id)).toEqual(['main_intake', 'main_graduation'])
   })
