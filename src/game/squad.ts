@@ -165,8 +165,11 @@ function bestRoleFor(player: Player, slot: FormationSlot, staminaWeight: number,
 
 /** 一个位置的候选人：优先用可踢这个位置的（熟练度 ≥ 80），实在没有才让别的位置顶上；停赛的能不用就不用。 */
 function candidatesFor(free: Player[], position: Position, context: AutoAssignContext): Player[] {
-  const available = free.filter((player) => !context.suspended?.(player))
-  const pool = available.length ? available : free
+  // 受伤的人不能被自动填充选中；宁可留空让玩家手动处理，也不静默把伤员排进首发。
+  const healthy = free.filter((player) => !context.injured?.(player))
+  if (!healthy.length) return []
+  const available = healthy.filter((player) => !context.suspended?.(player))
+  const pool = available.length ? available : healthy
   const learned = pool.filter((player) => player.positions[position] >= PLAYABLE_PROFICIENCY)
   return learned.length ? learned : pool
 }
@@ -233,7 +236,7 @@ export function autoAssignLineup(
     if (mode === 'half') rotateTiredStarters(roster, starters, used, formation.slots, context)
   }
 
-  const remaining = roster.filter((player) => !used.has(player.id))
+  const remaining = roster.filter((player) => !used.has(player.id) && !context.injured?.(player))
   return {
     formationId,
     starters,

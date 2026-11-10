@@ -20,7 +20,7 @@ import { ensurePve } from './pve.ts'
 import { cupPlayerFixture, cupTeam, enterCup } from './cup-run.ts'
 import type { CupId } from './data/cup-config.ts'
 import { emptyAutoSubs, validateAutoSubPlan } from './match/management.ts'
-import { recordMatchInjuries } from './injury.ts'
+import { injuryUntil, recordMatchInjuries } from './injury.ts'
 import { economyOf } from './economy.ts'
 import { partnerAssignment, trainingDate, trainingOptions, type TrainingActivity } from './training-calendar.ts'
 import { recordTrainingChemistry } from './chemistry.ts'
@@ -611,7 +611,8 @@ export function setAutoSubs(game: GameState, plan: unknown): { ok: boolean; erro
 }
 
 export function autoLineup(game: GameState, formationId = game.lineup.formationId): { ok: boolean; errors: string[] } {
-  return setLineup(game, autoFillLineup(game.roster, formationId, game.lineup.tactics))
+  const available = game.roster.filter((player) => injuryUntil(game, player) === null)
+  return setLineup(game, autoFillLineup(available, formationId, game.lineup.tactics))
 }
 
 export function startNextSeasonAction(game: GameState, now = Date.now()): { ok: boolean; error?: string } {
@@ -813,7 +814,7 @@ export function restoreActiveEngine(game: GameState): GameEngine | null {
 
 export function syncActiveEngine(game: GameState, engine: GameEngine, now = Date.now()): void {
   if (!game.activeMatch) return
-  recordMatchInjuries(game, engine.state, game.activeMatch.context.isLeague ? game.activeMatch.startedAt : now, game.activeMatch.context.isLeague)
+  if (game.activeMatch.context.isLeague) recordMatchInjuries(game, engine.state, game.activeMatch.startedAt, true)
   game.activeMatch.engineState = engine.serialize()
   game.activeMatch.instructions = [...engine.state.instructions]
   saveGame(game)

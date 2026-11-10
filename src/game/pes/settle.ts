@@ -59,6 +59,8 @@ export interface PesSettlementInit {
   offside: boolean
   /** 赛前的伤病，球员带伤上场（`prepareMatchInjuries`） */
   injuries?: GameState['injuries']
+  /** 挑战赛：不生成新的伤病。 */
+  noInjuries?: boolean
   now?: number
   tuning?: Partial<SettlementTuning>
 }
@@ -118,6 +120,7 @@ export function createGameState(init: PesSettlementInit): MatchState {
     decisionRng: { state: '0', inc: '1' },
     resultRng: { state: '0', inc: '1' },
     lastGoalBy: null,
+    ...(init.noInjuries ? { noInjuries: true } : {}),
   }
   for (const team of state.teams) {
     for (const player of [...team.players, ...team.bench]) {
@@ -432,7 +435,7 @@ export class PesSettlement implements ContactModel {
 
   /** 身体接触后受伤（现有 `maybeInjure` 的概率部分）。 */
   private injury(player: MatchPlayerState, pid: number): { pid: number; days: number } {
-    if (player.injured) return { pid: -1, days: 0 }
+    if (this.game.noInjuries || player.injured) return { pid: -1, days: 0 }
     const { risk } = this.kernel.injuryOdds(player)
     const rng = derivedRng(this.game.seed, 'injury', this.game.step, player.id)
     if (!rng.chance(risk)) return { pid: -1, days: 0 }

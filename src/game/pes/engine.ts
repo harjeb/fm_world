@@ -41,6 +41,7 @@ export class PesEngine {
         shootoutOffset: source.shootoutOffset,
         durationSeconds: source.durationSeconds,
         offside: source.offside,
+        noInjuries: source.noInjuries,
       })
   }
 

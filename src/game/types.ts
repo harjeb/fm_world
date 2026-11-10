@@ -1127,6 +1127,8 @@ export type MatchContext = {
   knockout?: boolean
   /** 传奇挑战：90 分钟平局直接结束，不点球。 */
   allowDraw?: boolean
+  /** 挑战赛：满状态入场，不生成新的伤病；默认所有非联赛比赛。 */
+  noInjuries?: boolean
   shootoutOffset?: { home: number; away: number }
   /** 记录 id 的去重键；比赛种子仍用 seed（巅峰重试时对手/结果不变）。 */
   recordKey?: string | number

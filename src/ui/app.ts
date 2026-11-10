@@ -1417,7 +1417,8 @@ document.addEventListener('click', async (event) => {
         break
       }
       if (ui.lineupDraft && actionEl.dataset.formation && actionEl.dataset.formation !== ui.lineupDraft.formationId) {
-        ui.lineupDraft = structuredClone(autoFillLineup(game.roster, actionEl.dataset.formation as Lineup['formationId'], ui.lineupDraft.tactics))
+        const available = game.roster.filter((player) => injuryUntil(game, player) === null)
+        ui.lineupDraft = structuredClone(autoFillLineup(available, actionEl.dataset.formation as Lineup['formationId'], ui.lineupDraft.tactics))
         ui.lineupSlot = null
         render()
       }

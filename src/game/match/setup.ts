@@ -199,9 +199,18 @@ export function playersAtPerformance(players: Player[], factor: number): Player[
   }))
 }
 
+/** 挑战赛不继承赛前体能，也不让赛前伤病标记进入比赛。 */
+function playersAtFullCondition(players: Player[]): Player[] {
+  return players.map((player) => ({ ...player, condition: 100 }))
+}
+
 export function buildMatchEngineForGame(game: GameState, context: MatchContext, ai: AITeam, now = Date.now(), suspended?: Set<string>, rulesVersion?: number): GameEngine {
   // 欠薪：一线队在比赛里只能发挥一半（见 economy.ts）。
-  const roster = playersAtPerformance(game.roster, matchPerformanceOf(game))
+  const challenge = !context.isLeague
+  const baseRoster = playersAtPerformance(game.roster, matchPerformanceOf(game))
+  // 所有非联赛挑战都从满状态开始；联赛仍按存档体能。
+  const roster = challenge ? playersAtFullCondition(baseRoster) : baseRoster
+
   const playerInput = teamInputFromLineup(roster, game.lineup, {
     id: 'player',
     name: game.clubName,
@@ -222,8 +231,9 @@ export function buildMatchEngineForGame(game: GameState, context: MatchContext, 
       shootoutOffset: context.shootoutOffset,
       durationSeconds: context.durationSeconds,
       offside: context.offside ?? false,
+      noInjuries: context.noInjuries ?? challenge,
     })
-    prepareMatchInjuries(pes.state, game.injuries, now)
+    if (!challenge && !context.noInjuries) prepareMatchInjuries(pes.state, game.injuries, now)
     return pes
   }
   const engine = new MatchEngine({
@@ -234,9 +244,10 @@ export function buildMatchEngineForGame(game: GameState, context: MatchContext, 
     shootoutOffset: context.shootoutOffset,
     durationSeconds: context.durationSeconds,
     offside: context.offside ?? false,
+    noInjuries: context.noInjuries ?? challenge,
     ...(rulesVersion === undefined ? {} : { rulesVersion }),
   })
-  prepareMatchInjuries(engine.state, game.injuries, now)
+  if (!challenge && !context.noInjuries) prepareMatchInjuries(engine.state, game.injuries, now)
   return engine
 }
 

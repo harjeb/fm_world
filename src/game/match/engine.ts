@@ -100,11 +100,12 @@ export class MatchEngine {
   private continuous: boolean
   private legacyRules: boolean
   private offside: boolean
+  private noInjuries = false
   private recordPlayback = true
   private playbackStepActive = false
   private playbackBeforeReset?: MatchPlaybackPose
 
-  constructor(options: { seed: number; home: MatchTeamInput; away: MatchTeamInput; knockout: boolean; shootoutOffset?: { home: number; away: number }; durationSeconds?: number; offside?: boolean; recordPlayback?: boolean; rulesVersion?: number }) {
+  constructor(options: { seed: number; home: MatchTeamInput; away: MatchTeamInput; knockout: boolean; shootoutOffset?: { home: number; away: number }; durationSeconds?: number; offside?: boolean; noInjuries?: boolean; recordPlayback?: boolean; rulesVersion?: number }) {
     const home = buildMatchTeam(options.home, 'home')
     const away = buildMatchTeam(options.away, 'away')
     this.decisionRng = derivedRng(options.seed, 'match-decision')
@@ -115,6 +116,7 @@ export class MatchEngine {
     this.continuous = this.rules === 'v3'
     this.legacyRules = this.rules === 'legacy'
     this.offside = options.offside ?? false
+    this.noInjuries = options.noInjuries ?? false
     this.recordPlayback = options.recordPlayback ?? true
     this.state = {
       seed: options.seed,
@@ -131,6 +133,7 @@ export class MatchEngine {
       pendingSetPiece: { type: 'kickoff', teamSide: 'home', x: PITCH_LENGTH / 2, y: GOAL_Y },
       finished: false,
       offside: this.offside,
+      ...(this.noInjuries ? { noInjuries: true } : {}),
       shootout: null,
       ...(options.shootoutOffset ? { shootoutOffset: { ...options.shootoutOffset } } : {}),
       log: [],
@@ -163,6 +166,7 @@ export class MatchEngine {
     engine.state = state
     restoreCommentary(state)
     engine.offside = state.offside ?? false
+    engine.noInjuries = state.noInjuries === true
     engine.decisionRng = PCG32.fromState(state.decisionRng.state, state.decisionRng.inc)
     engine.resultRng = PCG32.fromState(state.resultRng.state, state.resultRng.inc)
     engine.knockout = false
@@ -2705,7 +2709,7 @@ export class MatchEngine {
   }
 
   private maybeInjure(player: MatchPlayerState): void {
-    if (player.injured) return
+    if (this.noInjuries || player.injured) return
     const { personId, risk } = this.kernel.injuryOdds(player)
     const rng = derivedRng(this.state.seed, 'injury', this.state.step, player.id)
     if (rng.chance(risk)) {

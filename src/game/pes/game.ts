@@ -80,6 +80,8 @@ export interface PesGameOptions {
   offside?: boolean
   /** 赛前伤病、当前时间 */
   injuries?: Parameters<typeof import('../injury.ts').prepareMatchInjuries>[1]
+  /** 挑战赛：不生成新的伤病。 */
+  noInjuries?: boolean
   now?: number
   recordHz?: number
   /** 覆盖默认的 GAME_RULES */
@@ -134,6 +136,7 @@ export class PesGame {
       durationSeconds: duration,
       offside: source.offside ?? false,
       injuries: source.injuries,
+      noInjuries: source.noInjuries,
       now: source.now,
     })
     const game = this.settlement.game

@@ -78,14 +78,14 @@ describe('人物伤病', () => {
     expect(injuryUntil(game, game.roster.find(p => p.id === player.id)!, until - 1)).toBe(until)
   })
 
-  it('友谊赛沿用未恢复伤病，到期后下一场恢复且不会因重复结算延长', () => {
+  it('挑战赛忽略赛前伤病，不会带入也不会延长伤期', () => {
     const game = createInitialGame(12)
     const starter = game.roster.find(p => p.id === game.lineup.starters[0].playerId)!
     const until = 2_000_000
     game.injuries = { [personKey(starter)]: until }
     expect(startSingleChallenge(game, game.aiTeams[0].id, until - 1).ok).toBe(true)
     let engine = restoreActiveEngine(game)!
-    expect(engine.getTeam('home').players.find(p => p.sourceId === starter.id)!.injured).toBe(true)
+    expect(engine.getTeam('home').players.find(p => p.sourceId === starter.id)!.injured).not.toBe(true)
     engine.simulate()
     expect(finishMatch(game, engine, until - 1)).not.toBeNull()
     expect(game.injuries[personKey(starter)]).toBe(until)

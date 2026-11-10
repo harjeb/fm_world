@@ -732,7 +732,7 @@ export function finishActiveMatch(game: GameState, engine: GameEngine, now = Dat
   const state = engine.serialize()
   if (!state.finished) return null
   economyOf(game)
-  recordMatchInjuries(game, state, active.context.isLeague ? active.startedAt : now, active.context.isLeague)
+  if (active.context.isLeague) recordMatchInjuries(game, state, active.startedAt, true)
   const record = createMatchRecord(game, state, active.context)
   recordMatchChemistry(game, record.playerStats, now, game.season.gameDayMs)
   // 只有联赛扣体能：挑战里的比赛（友谊赛、单场挑战、世界挑战）都不扣。

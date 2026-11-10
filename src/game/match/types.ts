@@ -241,6 +241,8 @@ export type MatchState = {
   pendingSetPiece: SetPieceState | null
   finished: boolean
   offside?: boolean
+  /** 挑战赛：不生成新的伤病。 */
+  noInjuries?: boolean
   shootout: ShootoutState | null
   /** 两回合次回合：上一回合比分，已换算成本场主客方向。 */
   shootoutOffset?: { home: number; away: number }
@@ -280,6 +282,8 @@ export type MatchEngineOptions = {
   shootoutOffset?: { home: number; away: number }
   durationSeconds?: number
   offside?: boolean
+  /** 挑战赛：不生成新的伤病。 */
+  noInjuries?: boolean
   /** 2 只用于回归对照；默认使用当前规则版本。 */
   rulesVersion?: number
 }
