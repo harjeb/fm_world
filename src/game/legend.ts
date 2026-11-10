@@ -9,11 +9,43 @@ import { curatedProfileFor } from './data/profiles-curated.ts'
 import { fmProfileFor } from './data/fm-profiles.generated.ts'
 import { styleSkillFor, styleTraitFor, styleWeightsFor } from './data/players.ts'
 import { frozenPveTeam } from './pve-content.ts'
+import { startingCa } from './pve-strength.ts'
 
 /**
  * 历史/生成队的编译器：7 项主属性按 avg 展开，隐藏属性参考 FM/手工画像。
  * 仅在离线生成快照或测试时使用；运行时读取已提交的完整属性快照。
+ *
+ * 冻结快照时再按 tier 校准首发 CA，保证 S+ > S > A > B；
+ * `avg` 仍是生成形状的目标，而最终 CA 以快照为准。
  */
+
+/** 冻结传奇队时使用的首发 CA 档位；区间不重叠，确保档位与实战难度一致。 */
+export const LEGEND_TIER_CA: Record<LegendTeamDef['tier'], readonly [number, number]> = {
+  'S+': [1150, 1180],
+  S: [1100, 1149],
+  A: [1040, 1099],
+  B: [960, 1039],
+}
+
+/**
+ * 按当前构建强度在档位内排序并均匀分配目标 CA。
+ * 最高档上限 1180、最低档下限 960；同档内强队仍然更强。
+ */
+export function legendTierTargets(): Map<string, number> {
+  const targets = new Map<string, number>()
+  for (const tier of ['S+', 'S', 'A', 'B'] as const) {
+    const defs = LEGEND_TEAMS.filter((def) => def.tier === tier)
+    const [min, max] = LEGEND_TIER_CA[tier]
+    const ranked = defs
+      .map((def) => ({ def, ca: startingCa(buildHistoricTeam(def)) }))
+      .sort((a, b) => b.ca - a.ca)
+    const step = ranked.length > 1 ? (max - min) / (ranked.length - 1) : 0
+    ranked.forEach(({ def }, index) => {
+      targets.set(def.id, Math.round(max - step * index))
+    })
+  }
+  return targets
+}
 
 function hash(input: string): number {
   let h = 2166136261 >>> 0

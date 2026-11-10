@@ -1,23 +1,10 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { loadPveContent } from '../src/game/pve-content.ts'
 beforeAll(loadPveContent)
-import { attrRating } from '../src/game/scale.ts'
-import { legendTeamById } from '../src/game/legend.ts'
+import { LEGEND_TIER_CA, legendTeamById } from '../src/game/legend.ts'
 import { LEGEND_TEAMS } from '../src/game/data/legend-teams.ts'
 import { FORMATIONS } from '../src/game/data/formations.ts'
-import type { AttrKey, Player } from '../src/game/types.ts'
-
-const MAIN_FIELD: AttrKey[] = ['passing', 'shooting', 'dribbling', 'tackling', 'strength', 'speed', 'acceleration']
-const MAIN_GK: AttrKey[] = ['reflexes', 'handling', 'rushing', 'oneOnOne', 'passing', 'composure']
-
-function mainKeys(player: Player): AttrKey[] {
-  return player.positions.GK > 0 ? MAIN_GK : MAIN_FIELD
-}
-
-function mainRatings(player: Player): number[] {
-  const gk = player.positions.GK > 0
-  return mainKeys(player).map((key) => attrRating(key, player.attrs[key], gk))
-}
+import { startingCa } from '../src/game/pve-strength.ts'
 
 describe('传奇队数据', () => {
   it('50 支，每队 16 人，7 项主属性平均目标在 80–100', () => {
@@ -46,17 +33,20 @@ describe('传奇队数据', () => {
     }
   })
 
-  it('实际主属性平均与目标误差不超过 1.5，且每名球员至少有一项主属性低于 88', () => {
+  it('冻结后的首发 CA 落在 S+/S/A/B 档位区间，且档位严格分离', () => {
+    const byTier = new Map<string, number[]>()
     for (const def of LEGEND_TEAMS) {
       const team = legendTeamById(def.id)!
-      for (let index = 0; index < def.players.length; index++) {
-        const target = def.players[index][5]
-        const player = team.players[index]
-        const ratings = mainRatings(player)
-        const average = ratings.reduce((sum, value) => sum + value, 0) / ratings.length
-        expect(Math.abs(average - target), `${player.name} ${average.toFixed(1)} vs ${target}`).toBeLessThanOrEqual(1.5)
-        expect(Math.min(...ratings), `${player.name} 最弱主属性`).toBeLessThan(88)
-      }
+      const ca = startingCa(team)
+      const [min, max] = LEGEND_TIER_CA[def.tier]
+      expect(ca, def.id).toBeGreaterThanOrEqual(min - 0.01)
+      expect(ca, def.id).toBeLessThanOrEqual(max + 0.01)
+      byTier.set(def.tier, [...(byTier.get(def.tier) ?? []), ca])
+    }
+    const tiers = ['S+', 'S', 'A', 'B'] as const
+    for (let index = 0; index < tiers.length - 1; index++) {
+      const lower = byTier.get(tiers[index])!, higher = byTier.get(tiers[index + 1])!
+      expect(Math.min(...lower)).toBeGreaterThan(Math.max(...higher))
     }
   })
 

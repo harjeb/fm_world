@@ -1,7 +1,8 @@
 import { caOf } from '../src/game/ca.ts'
 import { attrRating } from '../src/game/scale.ts'
-import { allLegendTeams, legendTeamById } from '../src/game/legend.ts'
+import { LEGEND_TIER_CA, allLegendTeams, legendTeamById } from '../src/game/legend.ts'
 import { LEGEND_TEAMS } from '../src/game/data/legend-teams.ts'
+import { startingCa } from '../src/game/pve-strength.ts'
 import { FORMATIONS } from '../src/game/data/formations.ts'
 import type { AttrKey, Player } from '../src/game/types.ts'
 
@@ -58,14 +59,12 @@ function validate(): string[] {
       }
       if (player.positions[slot.position] < 80) errors.push(`${def.id}: ${player.name} 在 ${slot.position} 熟练度不足`)
     }
-    for (let i = 0; i < def.players.length; i++) {
-      const target = def.players[i][5]
-      if (target < 80 || target > 100) errors.push(`${def.id}: ${def.players[i][0]} 主属性平均目标 ${target} 越界`)
-      const player = team.players[i]
-      const average = meanRating(player)
-      if (Math.abs(average - target) > 1.5) errors.push(`${def.id}: ${player.name} 主属性平均 ${average.toFixed(1)} ≠ ${target}`)
-      if (Math.min(...mainRatings(player)) >= 88) errors.push(`${def.id}: ${player.name} 没有弱项（最低主属性 ≥ 88）`)
+    for (const player of def.players) {
+      if (player[5] < 80 || player[5] > 100) errors.push(`${def.id}: ${player[0]} 主属性平均目标 ${player[5]} 越界`)
     }
+    const [minCa, maxCa] = LEGEND_TIER_CA[def.tier]
+    const ca = startingCa(team)
+    if (ca < minCa - 0.01 || ca > maxCa + 0.01) errors.push(`${def.id}: ${def.tier} 档首发 CA ${ca.toFixed(1)} 不在 ${minCa}–${maxCa}`)
   }
   return errors
 }
@@ -78,16 +77,14 @@ if (errors.length) {
   console.log(`校验失败 ${errors.length} 条：`)
   for (const error of errors.slice(0, 40)) console.log(`  - ${error}`)
 } else {
-  console.log('校验通过：每队 16 人、首发位置匹配、7 项主属性平均 80–100、每人至少一项主属性 < 88。')
+  console.log('校验通过：每队 16 人、首发位置匹配、原始名单主属性目标 80–100、首发 CA 落在档位区间。')
 }
 
 for (const tier of ['S+', 'S', 'A', 'B'] as const) {
   const defs = LEGEND_TEAMS.filter((team) => team.tier === tier)
-  const rows = defs.map((def) => {
-    const team = legendTeamById(def.id)!
-    return team.players.slice(0, 11).reduce((sum, player) => sum + meanRating(player), 0) / 11
-  })
-  console.log(`${tier}: ${defs.length} 队，首发主属性平均 ${(rows.reduce((sum, value) => sum + value, 0) / rows.length).toFixed(1)}`)
+  const rows = defs.map((def) => startingCa(legendTeamById(def.id)!))
+  const [minCa, maxCa] = LEGEND_TIER_CA[tier]
+  console.log(`${tier}: ${defs.length} 队，首发平均 CA ${(rows.reduce((sum, value) => sum + value, 0) / rows.length).toFixed(1)}（档位 ${minCa}–${maxCa}）`)
 }
 
 for (const id of ['milan-1988-89', 'barcelona-2010-11']) {
