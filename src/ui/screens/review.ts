@@ -6,7 +6,7 @@ import { buildReview } from '../../game/review.ts'
 import { PLAYER_TEAM_ID } from '../../game/season.ts'
 import { clubLook, clubName, compareRow, crest, distinctKit, emptyState, icon, pageHead, panel, recordResult, resultPill } from '../components.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
-import { clockText, esc, skillName } from '../format.ts'
+import { clockText, esc, matchModeLabel, pveModeLabel, skillName } from '../format.ts'
 import { tipAttrs } from '../tooltip.ts'
 import { game, replay, resetReplay, ui } from '../state.ts'
 
@@ -102,7 +102,7 @@ function renderRecord(record: MatchRecord): string {
   const passRate = (stats: typeof home) => (stats.passes > 0 ? Math.round((stats.passesCompleted / stats.passes) * 100) : 0)
   return `
     ${pageHead({
-      kicker: `<button class="link" data-action="back-review">${icon('left', 12)} 返回记录</button><span class="kicker-sep">${record.isLeague ? `联赛第 ${record.round} 轮` : '友谊赛'} · 种子 ${record.seed}</span>`,
+      kicker: `<button class="link" data-action="back-review">${icon('left', 12)} 返回记录</button><span class="kicker-sep">${record.isLeague ? `联赛第 ${record.round} 轮` : pveModeLabel(record.mode, record.stage)} · 种子 ${record.seed}</span>`,
       title: `${esc(record.homeName)} vs ${esc(record.awayName)}`,
     })}
     ${renderReplay(record)}
@@ -159,7 +159,7 @@ export function renderReview(): string {
     })}
     ${records.length === 0 ? emptyState('还没有比赛。先去赛季或挑战打一场。') : panel(`全部比赛 <small>${records.length}</small>`, `<div class="table-scroll"><table class="dt records"><thead><tr><th>赛事</th><th class="num">主队</th><th class="center">比分</th><th>客队</th><th>结果</th><th class="num">射门</th><th class="num">xG</th><th class="num">种子</th><th></th></tr></thead><tbody>
       ${records.map((item) => `<tr tabindex="0" class="clickable" data-action="open-review" data-record="${esc(item.id)}" data-key="${esc(item.id)}">
-        <td class="dim">${item.isLeague ? `联赛第 ${item.round} 轮` : '友谊赛'}</td>
+        <td class="dim">${matchModeLabel(item)}</td>
         <td class="num">${clubName(item.homeId)}</td>
         <td class="center score-cell"><b>${item.score.home} : ${item.score.away}</b>${item.shootout ? `<small>点球 ${item.shootout.home}:${item.shootout.away}</small>` : ''}</td>
         <td>${clubName(item.awayId)}</td>

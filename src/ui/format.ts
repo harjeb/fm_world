@@ -1,4 +1,4 @@
-import type { AttrKey, Player, Position, SkillId, Tactics, TraitId, TrainingLogEntry } from '../game/types.ts'
+import type { AttrKey, MatchRecord, MatchMode, Player, Position, SkillId, Tactics, TraitId, TrainingLogEntry } from '../game/types.ts'
 import { ATTR_META } from '../game/data/attributes.ts'
 import { ALL_ATTRIBUTES } from '../game/types.ts'
 import { SKILLS } from '../game/data/skills.ts'
@@ -14,6 +14,18 @@ export function esc(value: unknown): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;')
+}
+
+/** PvE 比赛的模式标签；旧战报没有 mode 时按友谊赛显示。 */
+export function pveModeLabel(mode?: MatchMode, stage?: number): string {
+  if (mode === 'legend') return '传奇挑战'
+  if (mode === 'cup') return '杯赛'
+  if (mode === 'peak') return `巅峰之路 · 第 ${stage ?? '?'} 关`
+  return '友谊赛'
+}
+
+export function matchModeLabel(record: Pick<MatchRecord, 'isLeague' | 'round' | 'mode' | 'stage'>): string {
+  return record.isLeague ? `联赛第 ${record.round} 轮` : pveModeLabel(record.mode, record.stage)
 }
 
 export function pct(value: number, digits = 0): string {

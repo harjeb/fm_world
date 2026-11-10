@@ -667,6 +667,13 @@ export type MatchRecord = {
   seasonIndex?: number
   durationSeconds?: number
   isLeague: boolean
+  /** PvE 模式；联赛和旧战报没有。 */
+  mode?: MatchMode
+  /** 巅峰之路关卡；仅 mode = peak。 */
+  stage?: number
+  /** 杯赛 id / 场次 id；仅 mode = cup。 */
+  cupId?: string
+  cupFixtureId?: string
   round?: number
   homeId: string
   awayId: string
@@ -808,6 +815,101 @@ export type EconomyState = {
   lastIncomeRound: number
 }
 
+export type MatchMode = 'friendly' | 'legend' | 'cup' | 'peak'
+
+export type PveLegendRecord = {
+  played: number
+  won: number
+  drawn: number
+  lost: number
+  goals: number
+  conceded: number
+}
+
+export type PvePeakHistoryEntry = {
+  stage: number
+  at: number
+  matchId?: string
+  won: boolean
+  score?: { home: number; away: number }
+}
+
+export type CupRunStatus = 'active' | 'eliminated' | 'champion' | 'void'
+
+export type CupTableRow = {
+  teamId: string
+  played: number
+  won: number
+  drawn: number
+  lost: number
+  gf: number
+  ga: number
+  points: number
+}
+
+export type CupFixture = {
+  id: string
+  round: number
+  homeId: string
+  awayId: string
+  played: boolean
+  score?: { home: number; away: number }
+  shootout?: { home: number; away: number }
+  matchId?: string
+}
+
+export type CupTie = {
+  id: string
+  round: 'r16' | 'qf' | 'sf' | 'final'
+  legs: CupFixture[]
+  aggregate?: { home: number; away: number }
+  shootout?: { home: number; away: number }
+  winnerId?: string
+}
+
+export type CupGroupState = {
+  index: number
+  teamIds: string[]
+  fixtures: CupFixture[]
+  table: CupTableRow[]
+}
+
+export type CupRun = {
+  cupId: string
+  seasonIndex: number
+  status: CupRunStatus
+  stage: 'group' | 'r16' | 'qf' | 'sf' | 'final' | 'done'
+  participants: Record<string, { name: string; kind: 'player' | 'world' | 'random'; defId?: string }>
+  groups: CupGroupState[]
+  playerGroupIndex: number
+  /** 小组赛当前轮次（1–3）。 */
+  groupRound: number
+  qualifiers?: string[]
+  knockout?: { round: 'r16' | 'qf' | 'sf' | 'final'; ties: CupTie[] }
+  finalMatchId?: string
+}
+
+export type TrophyRecord = {
+  cupId: string
+  cupName: string
+  seasonIndex: number
+  wonAt: number
+  finalOpponent: string
+  finalScore: { home: number; away: number }
+  finalShootout?: { home: number; away: number }
+  matchId?: string
+}
+
+export type PveState = {
+  legends: Record<string, PveLegendRecord>
+  peak: {
+    cleared: number
+    history: PvePeakHistoryEntry[]
+  }
+  cups: Record<string, CupRun>
+  trophies: TrophyRecord[]
+}
+
 export type GameState = {
   version: number
   createdAt: number
@@ -851,6 +953,8 @@ export type GameState = {
   freeStars: Player[]
   matchHistory: MatchRecord[]
   challengeHistory: MatchRecord[]
+  /** PvE 进度：传奇战绩、巅峰通关、杯赛/奖杯。旧存档读档时补齐。 */
+  pve?: PveState
   activeMatch?: ActiveMatchSave
   ui?: { screen: string }
   world?: WorldState
@@ -888,6 +992,12 @@ export type AIClubState = {
 
 export type MatchContext = {
   isLeague: boolean
+  mode?: MatchMode
+  stage?: number
+  cupId?: string
+  cupFixtureId?: string
+  /** 记录 id 的去重键；比赛种子仍用 seed（巅峰重试时对手/结果不变）。 */
+  recordKey?: string | number
   round?: number
   opponentId: string
   opponentName: string

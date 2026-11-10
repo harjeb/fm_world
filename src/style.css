@@ -1336,3 +1336,48 @@ circle.pm-5 { fill: var(--h6); }
   .club-pick-row { grid-template-columns: minmax(0, 1fr) auto; }
   .club-pick-players { display: none; }
 }
+
+/* ---------- PvE 挑战：传奇 / 杯赛 / 巅峰 ---------- */
+.challenge-mode-tabs { margin-bottom: 12px; }
+.cup-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.cup-card .panel-body { display: flex; flex-direction: column; gap: 10px; }
+.cup-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cup-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.cup-group { border: 1px solid var(--line-2); border-radius: var(--radius); padding: 8px; background: var(--raised); }
+.cup-group h3 { font-size: 12px; margin-bottom: 6px; color: var(--text-2); }
+.cup-group ul { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.cup-group li { display: flex; gap: 6px; align-items: center; font-size: 12px; }
+.peak-track { display: grid; grid-template-columns: repeat(20, minmax(0, 1fr)); gap: 3px; }
+.peak-cell { height: 16px; border-radius: 3px; background: var(--raised); border: 1px solid var(--line); }
+.peak-cell.done { background: var(--good); border-color: transparent; }
+.peak-cell.current { background: var(--accent); border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 1px; }
+.peak-cell.boss { border-color: var(--warn); }
+.peak-legend { display: flex; gap: 12px; padding: 8px 12px; font-size: 11px; color: var(--text-2); }
+.peak-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; background: var(--raised); border: 1px solid var(--line); }
+.peak-legend i.done { background: var(--good); border-color: transparent; }
+.peak-legend i.current { background: var(--accent); border-color: var(--accent); }
+.peak-legend i.boss { border-color: var(--warn); }
+.peak-current { display: flex; align-items: center; gap: 14px; padding: 12px; flex-wrap: wrap; }
+.peak-stage-no { font-family: var(--font-num); font-size: 22px; font-weight: 700; color: var(--accent); min-width: 80px; }
+.peak-stage-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 180px; }
+.peak-stage-main b { font-size: 16px; }
+.peak-stage-ca { display: flex; flex-direction: column; align-items: flex-end; font-size: 12px; }
+.peak-stage-ca b { font-family: var(--font-num); font-size: 20px; }
+.peak-current.done { color: var(--good); }
+@media (max-width: 900px) {
+  .cup-cards { grid-template-columns: 1fr; }
+  .cup-groups { grid-template-columns: 1fr; }
+  .peak-track { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+}
+
+/* ---------- 荣誉橱窗 ---------- */
+.trophy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; padding: 10px; }
+.trophy-card { display: flex; gap: 8px; align-items: center; border: 1px solid var(--line-2); border-radius: var(--radius); padding: 8px; background: var(--raised); color: var(--warn); }
+.trophy-card div { display: flex; flex-direction: column; }
+.trophy-list { border-top: 1px solid var(--line); }
+.trophy-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
+.trophy-row .result-teams { flex: 1; }
+
+/* 杯赛：前 2 出线与玩家比赛 */
+.cup-qualified td:first-child { box-shadow: inset 3px 0 var(--good); }
+.cup-fixture.mine { border-color: var(--accent); background: rgba(79, 208, 138, 0.06); }

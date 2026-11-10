@@ -25,6 +25,10 @@ import {
   startNextSeasonAction,
   startChallengeWithOpponent,
   startSingleChallenge,
+  startLegendChallenge,
+  startPeakChallenge,
+  enterCupAction,
+  startCupMatch,
   startWorldChallenge,
   startTraining,
   syncActiveEngine,
@@ -64,6 +68,7 @@ import { isPesEngine, setPesViewHooks } from './pes-pitch.ts'
 import { game, replay, resetReplay, setGame, stopReplay, ui, type ClubTab, type Screen, type SquadSortKey, type TransferTab } from './state.ts'
 import { renderAcademy } from './screens/academy.ts'
 import { renderChallenge } from './screens/challenge.ts'
+import type { CupId } from '../game/data/cup-config.ts'
 import { renderClub } from './screens/club.ts'
 import { renderTransfer } from './screens/transfer.ts'
 import { renderHome } from './screens/home.ts'
@@ -784,6 +789,19 @@ document.addEventListener('click', async (event) => {
     render()
     return
   }
+  const challengeMode = target.closest<HTMLElement>('[data-challenge-mode]')
+  if (challengeMode?.dataset.challengeMode) {
+    ui.challengeMode = challengeMode.dataset.challengeMode as typeof ui.challengeMode
+    ui.cupPreviewId = null
+    render()
+    return
+  }
+  const legendTier = target.closest<HTMLElement>('[data-legend-tier]')
+  if (legendTier?.dataset.legendTier) {
+    ui.legendTier = legendTier.dataset.legendTier as typeof ui.legendTier
+    render()
+    return
+  }
   const challengeDiv = target.closest<HTMLElement>('[data-challenge-div]')
   if (challengeDiv?.dataset.challengeDiv) {
     ui.challengeDivision = challengeDiv.dataset.challengeDiv
@@ -1456,6 +1474,43 @@ document.addEventListener('click', async (event) => {
       const teamId = actionEl.dataset.team
       if (!teamId) break
       openFriendly(startSingleChallenge(game, teamId))
+      break
+    }
+    case 'start-legend-challenge': {
+      const teamId = actionEl.dataset.team
+      if (!teamId) break
+      openFriendly(startLegendChallenge(game, teamId))
+      break
+    }
+    case 'start-peak-stage': {
+      const stage = Number(actionEl.dataset.stage)
+      if (!Number.isFinite(stage)) break
+      openFriendly(startPeakChallenge(game, stage))
+      break
+    }
+    case 'cup-preview': {
+      const cupId = actionEl.dataset.cup
+      if (!cupId) break
+      ui.cupPreviewId = ui.cupPreviewId === cupId ? null : cupId
+      render()
+      break
+    }
+    case 'enter-cup': {
+      const cupId = actionEl.dataset.cup as CupId | undefined
+      if (!cupId) break
+      const result = enterCupAction(game, cupId)
+      if (!result.ok) {
+        showNotice(result.error ?? '无法报名杯赛')
+        break
+      }
+      ui.cupPreviewId = cupId
+      render()
+      break
+    }
+    case 'start-cup-match': {
+      const cupId = actionEl.dataset.cup as CupId | undefined
+      if (!cupId) break
+      openFriendly(startCupMatch(game, cupId))
       break
     }
     case 'match-toggle':

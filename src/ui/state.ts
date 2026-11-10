@@ -1,6 +1,7 @@
 import type { AttrKey, AutoSubPlan, GameState, Lineup, Position, SkillId } from '../game/types.ts'
 import { loadGame, saveGame, setTeamPickPending } from '../game/state.ts'
 import { createWorldGame, type ClubPreview } from '../game/world.ts'
+import { ensurePve } from '../game/pve.ts'
 import { restoreActiveEngine } from '../game/actions.ts'
 import type { GameEngine } from '../game/pes/engine.ts'
 import type { SeasonGoal, SquadRole } from '../game/negotiation.ts'
@@ -27,6 +28,7 @@ export type Screen = 'club' | 'transfer' | 'home' | 'academy' | 'inventory' | 't
 export type ClubTab = 'facilities' | 'contracts' | 'history'
 export type TransferTab = 'market' | 'free' | 'ai' | 'offers'
 export type SquadSortKey = 'pos' | 'name' | 'age' | 'ca' | 'condition' | 'energy' | 'value' | `attr${number}`
+export type ChallengeMode = 'friendly' | 'legend' | 'cup' | 'peak'
 
 export type UIState = {
   screen: Screen
@@ -51,6 +53,12 @@ export type UIState = {
   /** 正在确认删除的球员卡。 */
   cardDeleteId: string | null
   seasonRound: number | null
+  /** 挑战页当前模式。 */
+  challengeMode: ChallengeMode
+  /** 传奇挑战档位筛选。 */
+  legendTier: 'ALL' | 'S+' | 'S' | 'A' | 'B'
+  /** 杯赛页正在预览分组的杯赛。 */
+  cupPreviewId: string | null
   /** 友谊赛页面选中的联赛分区（可以约世界任意球队）。 */
   challengeDivision: string | null
   worldDivision: string | null
@@ -113,6 +121,7 @@ const SAVE_SCREEN: Screen[] = ['club', 'transfer', 'home', 'academy', 'inventory
 const saved = loadGame()
 /** 当前存档。其他模块通过 live binding 读到最新值，替换时用 setGame。 */
 export let game: GameState = saved ?? createWorldGame()
+ensurePve(game)
 if (!saved) {
   saveGame(game)
   // 这支球队是系统随手分的：玩家选离线模式时会先让他自己挑一支。
@@ -143,6 +152,9 @@ export const ui: UIState = {
   inventorySort: 'new',
   cardDeleteId: null,
   seasonRound: null,
+  challengeMode: 'friendly',
+  legendTier: 'ALL',
+  cupPreviewId: null,
   challengeDivision: null,
   worldDivision: null,
   worldClubId: null,

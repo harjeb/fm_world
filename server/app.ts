@@ -5,6 +5,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { createInitialGame, GAME_VERSION, upgradeLegacySignatures } from '../src/game/state.ts'
 import { ensureCards } from '../src/game/cards.ts'
+import { ensurePve } from '../src/game/pve.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
 import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, wageForPlayer, worldForClub, worldSlots, worldWageBill } from '../src/game/world.ts'
 import { lineupLockState } from '../src/game/season.ts'
@@ -935,6 +936,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (markedShared) account.game.shared = true
       const signaturesAdded = upgradeLegacySignatures(account.game)
       const cardsAdded = ensureCards(account.game)
+      const pveAdded = ensurePve(account.game)
       const namesUpgraded = upgradeNames(account.game)
       const traitsUpgraded = upgradeStarTraits(account.game)
       const attrsUpgraded = upgradeBurstAttr(account.game)
@@ -942,9 +944,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const sharedFixturesChanged = pullSharedFixtures(account)
       const sharedWorldChanged = pullSharedWorld(account)
       const publishedMatchesChanged = syncPublishedMatches(account)
-      // 体能每小时按比例恢复（见 condition.ts）；接管球队的名单以账号为准，publishClub 再写回共享名册。
+      // 体能每小时按比例恢复；PvE 迁移不覆盖 main 的体能和共享名册逻辑。
       const rested = settleAccountConditions(account)
-      let migrated = markedShared || elevenUpgraded || signaturesAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || sharedTeamsChanged || sharedFixturesChanged || sharedWorldChanged || publishedMatchesChanged || rested || absorbInto(account)
+      let migrated = markedShared || elevenUpgraded || signaturesAdded || cardsAdded || pveAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || sharedTeamsChanged || sharedFixturesChanged || sharedWorldChanged || publishedMatchesChanged || rested || absorbInto(account)
       const economyAdded = account.game.economy == null || account.game.economy.fans === undefined
       economyOf(account.game)
       const progressingLeague = !!account.game.activeMatch?.context.isLeague
@@ -1677,6 +1679,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       body.game.injuries = { ...(body.game.injuries ?? {}), ...(account.game.injuries ?? {}) }
       upgradeLegacySignatures(body.game)
       ensureCards(body.game)
+      ensurePve(body.game)
       upgradeNames(body.game)
       upgradeStarTraits(body.game)
       upgradeBurstAttr(body.game)

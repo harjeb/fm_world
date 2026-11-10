@@ -380,6 +380,22 @@ function styleWeight(style: StyleId, attr: AttrKey, isGk: boolean): number {
   return 0.3
 }
 
+export function styleWeightsFor(style: StyleId, isGk: boolean): Partial<Record<AttrKey, number>> {
+  const weights: Partial<Record<AttrKey, number>> = {}
+  for (const key of ALL_ATTRIBUTES) {
+    weights[key] = !isGk && (GK_ATTRIBUTES as readonly string[]).includes(key) ? 0 : styleWeight(style, key, isGk)
+  }
+  return weights
+}
+
+export function styleSkillFor(style: StyleId): SkillId {
+  return STYLE_SKILL[style]
+}
+
+export function styleTraitFor(style: StyleId): BaseTraitId {
+  return STYLE_TRAIT[style]
+}
+
 function clampRating(value: number): number {
   return Math.max(1, Math.min(99, Math.round(value * 10) / 10))
 }

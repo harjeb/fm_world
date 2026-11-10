@@ -44,6 +44,35 @@ function seasonLeague(season: SeasonState): string {
   return `${worldTierLabel(season.tier)}${season.tier === 'division2' ? conference : ''}`
 }
 
+/** 杯赛冠军陈列：按杯赛汇总次数 + 最近夺冠记录。 */
+function trophyCabinet(): string {
+  const trophies = [...(game.pve?.trophies ?? [])].sort((a, b) => b.seasonIndex - a.seasonIndex || b.wonAt - a.wonAt)
+  if (trophies.length === 0) {
+    return panel('荣誉橱窗', '<p class="muted pad">还没有奖杯。赢得杯赛冠军后，奖杯和决赛记录会陈列在这里。</p>', { flush: true })
+  }
+  const counts = new Map<string, { name: string; count: number; last: number }>()
+  for (const trophy of trophies) {
+    const row = counts.get(trophy.cupId) ?? { name: trophy.cupName, count: 0, last: 0 }
+    row.count += 1
+    row.last = Math.max(row.last, trophy.seasonIndex)
+    counts.set(trophy.cupId, row)
+  }
+  return panel(`荣誉橱窗 <small>${trophies.length}</small>`, `
+    <div class="trophy-grid">
+      ${[...counts.values()].map((row) => `<div class="trophy-card">
+        ${icon('star', 20)}
+        <div><b>${esc(row.name)}</b><span class="muted small">×${row.count} · 最近第 ${row.last} 赛季</span></div>
+      </div>`).join('')}
+    </div>
+    <div class="rows trophy-list">
+      ${trophies.map((trophy) => `<div class="row trophy-row">
+        ${icon('star', 14)}
+        <span class="result-teams"><b>${esc(trophy.cupName)}</b> <span class="muted">第 ${trophy.seasonIndex} 赛季 · 决赛 ${esc(trophy.finalOpponent)}</span></span>
+        <span class="num"><b>${trophy.finalScore.home}:${trophy.finalScore.away}</b>${trophy.finalShootout ? ` <small class="muted">点球 ${trophy.finalShootout.home}:${trophy.finalShootout.away}</small>` : ''}</span>
+      </div>`).join('')}
+    </div>`, { flush: true })
+}
+
 /** 每个赛季一行：级别、名次、战绩、冠军，以及下赛季是升级还是降级。 */
 function historyTab(): string {
   const seasons = [...(game.seasonHistory ?? []).filter((season) => season.index !== game.season.index), game.season]
@@ -90,7 +119,7 @@ function historyTab(): string {
     const rank = (item: SeasonState) => TIER_RANK[item.tier!] * 100 - (item.playerFinish ?? 99)
     return rank(season) > rank(pick) ? season : pick
   }, null)
-  return `<div class="kpi-row club-kpis">
+  return `${trophyCabinet()}<div class="kpi-row club-kpis">
       ${tile('已完成赛季', String(done.length), seasons.length > done.length ? '本赛季进行中' : '')}
       ${tile('联赛冠军', String(titles))}
       ${tile('升级次数', String(promotions))}
