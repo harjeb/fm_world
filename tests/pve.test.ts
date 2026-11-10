@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { loadPveContent } from '../src/game/pve-content.ts'
+beforeAll(loadPveContent)
 import { createInitialGame } from '../src/game/state.ts'
 import { ensurePve } from '../src/game/pve.ts'
 import { finishMatch, restoreActiveEngine, startLegendChallenge, startPeakChallenge } from '../src/game/actions.ts'

@@ -14,7 +14,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 1,
     "targetCa": 350,
-    "actualCa": 347.3731835629018,
+    "actualCa": 349.99999999999875,
     "kind": "generated",
     "team": {
       "id": "peak-1",
@@ -42,7 +42,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "GK",
           "gk_shotstopper",
-          45,
+          45.4595,
           "R"
         ],
         [
@@ -51,7 +51,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "W",
           "fb_attacking",
-          45,
+          45.4595,
           "R"
         ],
         [
@@ -60,7 +60,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CB",
           "cb_cover",
-          45,
+          45.4595,
           "R"
         ],
         [
@@ -69,7 +69,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_cover",
-          43,
+          43.4595,
           "R"
         ],
         [
@@ -78,7 +78,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "fb_attacking",
-          43,
+          43.4595,
           "R"
         ],
         [
@@ -87,7 +87,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CM",
           "cm_creator",
-          43,
+          43.4595,
           "R"
         ],
         [
@@ -96,7 +96,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_mezzala",
-          43,
+          43.4595,
           "R"
         ],
         [
@@ -105,7 +105,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "w_crosser",
-          42,
+          42.4595,
           "L"
         ],
         [
@@ -114,7 +114,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CM",
           "cm_creator",
-          42,
+          42.4595,
           "R"
         ],
         [
@@ -123,7 +123,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "fb_attacking",
-          42,
+          42.4595,
           "L"
         ],
         [
@@ -132,7 +132,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "ST",
           "st_false9",
-          42,
+          42.4595,
           "L"
         ],
         [
@@ -141,7 +141,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "GK",
           "gk_wall",
-          40,
+          39.4595,
           "L"
         ],
         [
@@ -150,7 +150,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CB",
           "cb_ballplaying",
-          40,
+          39.4595,
           "R"
         ],
         [
@@ -159,7 +159,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_playmaker",
-          40,
+          39.4595,
           "R"
         ],
         [
@@ -168,7 +168,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_mezzala",
-          40,
+          39.4595,
           "R"
         ],
         [
@@ -177,7 +177,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "ST",
           "st_poacher",
-          40,
+          39.4595,
           "R"
         ]
       ]
@@ -186,7 +186,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 2,
     "targetCa": 360,
-    "actualCa": 359.20187246403435,
+    "actualCa": 360.00000000000085,
     "kind": "generated",
     "team": {
       "id": "peak-2",
@@ -214,7 +214,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_wall",
-          47,
+          47.1357,
           "R"
         ],
         [
@@ -223,7 +223,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_engine",
-          47,
+          47.1357,
           "R"
         ],
         [
@@ -232,7 +232,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CB",
           "cb_stopper",
-          47,
+          47.1357,
           "R"
         ],
         [
@@ -241,7 +241,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_stopper",
-          45,
+          45.1357,
           "R"
         ],
         [
@@ -250,7 +250,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "W",
           "w_crosser",
-          45,
+          45.1357,
           "R"
         ],
         [
@@ -259,7 +259,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "CM",
           "cm_box2box",
-          45,
+          45.1357,
           "L"
         ],
         [
@@ -268,7 +268,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_box2box",
-          45,
+          45.1357,
           "R"
         ],
         [
@@ -277,7 +277,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "W",
           "w_dribbler",
-          44,
+          44.1357,
           "R"
         ],
         [
@@ -286,7 +286,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CM",
           "cm_creator",
-          44,
+          44.1357,
           "R"
         ],
         [
@@ -295,7 +295,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "W",
           "w_playmaker",
-          44,
+          44.1357,
           "R"
         ],
         [
@@ -304,7 +304,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_finisher",
-          44,
+          44.1357,
           "R"
         ],
         [
@@ -313,7 +313,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_sweeper",
-          41,
+          41.1357,
           "R"
         ],
         [
@@ -322,7 +322,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CB",
           "cb_ballplaying",
-          41,
+          41.1357,
           "R"
         ],
         [
@@ -331,7 +331,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "W",
           "w_playmaker",
-          41,
+          41.1357,
           "L"
         ],
         [
@@ -340,7 +340,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_destroyer",
-          41,
+          41.1357,
           "R"
         ],
         [
@@ -349,7 +349,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_target",
-          41,
+          41.1357,
           "R"
         ]
       ]
@@ -358,7 +358,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 3,
     "targetCa": 370,
-    "actualCa": 371.40397419651066,
+    "actualCa": 369.9999999999984,
     "kind": "generated",
     "team": {
       "id": "peak-3",
@@ -386,7 +386,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "GK",
           "gk_sweeper",
-          49,
+          48.7703,
           "R"
         ],
         [
@@ -395,7 +395,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_attacking",
-          49,
+          48.7703,
           "R"
         ],
         [
@@ -404,7 +404,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_ballplaying",
-          49,
+          48.7703,
           "R"
         ],
         [
@@ -413,7 +413,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CB",
           "cb_stopper",
-          47,
+          46.7703,
           "R"
         ],
         [
@@ -422,7 +422,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CB",
           "cb_ballplaying",
-          47,
+          46.7703,
           "R"
         ],
         [
@@ -431,7 +431,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "fb_playmaker",
-          47,
+          46.7703,
           "R"
         ],
         [
@@ -440,7 +440,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CM",
           "cm_box2box",
-          47,
+          46.7703,
           "R"
         ],
         [
@@ -449,7 +449,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_mezzala",
-          46,
+          45.7703,
           "L"
         ],
         [
@@ -458,7 +458,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_creator",
-          46,
+          45.7703,
           "L"
         ],
         [
@@ -467,7 +467,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_runner",
-          46,
+          45.7703,
           "R"
         ],
         [
@@ -476,7 +476,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "ST",
           "st_false9",
-          46,
+          45.7703,
           "R"
         ],
         [
@@ -485,7 +485,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "GK",
           "gk_wall",
-          43,
+          42.7703,
           "R"
         ],
         [
@@ -494,7 +494,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_stopper",
-          43,
+          42.7703,
           "R"
         ],
         [
@@ -503,7 +503,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_crosser",
-          43,
+          42.7703,
           "L"
         ],
         [
@@ -512,7 +512,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_playmaker",
-          43,
+          42.7703,
           "L"
         ],
         [
@@ -521,7 +521,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "ST",
           "st_target",
-          43,
+          42.7703,
           "R"
         ]
       ]
@@ -530,7 +530,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 4,
     "targetCa": 385,
-    "actualCa": 383.15364915824915,
+    "actualCa": 385.0000000000002,
     "kind": "generated",
     "team": {
       "id": "peak-4",
@@ -558,7 +558,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "GK",
           "gk_shotstopper",
-          51,
+          51.287,
           "L"
         ],
         [
@@ -567,7 +567,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_dribbler",
-          51,
+          51.287,
           "L"
         ],
         [
@@ -576,7 +576,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CB",
           "cb_ballplaying",
-          51,
+          51.287,
           "L"
         ],
         [
@@ -585,7 +585,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_stopper",
-          49,
+          49.287,
           "L"
         ],
         [
@@ -594,7 +594,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CB",
           "cb_ballplaying",
-          49,
+          49.287,
           "R"
         ],
         [
@@ -603,7 +603,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "W",
           "w_engine",
-          49,
+          49.287,
           "L"
         ],
         [
@@ -612,7 +612,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CM",
           "cm_engine",
-          49,
+          49.287,
           "R"
         ],
         [
@@ -621,7 +621,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_mezzala",
-          48,
+          48.287,
           "R"
         ],
         [
@@ -630,7 +630,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_box2box",
-          48,
+          48.287,
           "L"
         ],
         [
@@ -639,7 +639,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_poacher",
-          48,
+          48.287,
           "R"
         ],
         [
@@ -648,7 +648,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_runner",
-          48,
+          48.287,
           "L"
         ],
         [
@@ -657,7 +657,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "GK",
           "gk_wall",
-          45,
+          45.287,
           "L"
         ],
         [
@@ -666,7 +666,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_ballplaying",
-          45,
+          45.287,
           "R"
         ],
         [
@@ -675,7 +675,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "W",
           "w_crosser",
-          45,
+          45.287,
           "L"
         ],
         [
@@ -684,7 +684,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CM",
           "cm_engine",
-          45,
+          45.287,
           "L"
         ],
         [
@@ -693,7 +693,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_target",
-          45,
+          45.287,
           "R"
         ]
       ]
@@ -702,7 +702,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 5,
     "targetCa": 395,
-    "actualCa": 398.6552710162228,
+    "actualCa": 395.00000000000165,
     "kind": "generated",
     "team": {
       "id": "peak-5",
@@ -730,7 +730,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "GK",
           "gk_sweeper",
-          53,
+          52.5687,
           "L"
         ],
         [
@@ -739,7 +739,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "W",
           "w_playmaker",
-          53,
+          52.5687,
           "R"
         ],
         [
@@ -748,7 +748,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_cover",
-          53,
+          52.5687,
           "R"
         ],
         [
@@ -757,7 +757,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_cover",
-          51,
+          50.5687,
           "R"
         ],
         [
@@ -766,7 +766,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "fb_playmaker",
-          51,
+          50.5687,
           "R"
         ],
         [
@@ -775,7 +775,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_box2box",
-          51,
+          50.5687,
           "R"
         ],
         [
@@ -784,7 +784,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_creator",
-          51,
+          50.5687,
           "L"
         ],
         [
@@ -793,7 +793,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "W",
           "fb_attacking",
-          50,
+          49.5687,
           "R"
         ],
         [
@@ -802,7 +802,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_playmaker",
-          50,
+          49.5687,
           "R"
         ],
         [
@@ -811,7 +811,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_finisher",
-          50,
+          49.5687,
           "R"
         ],
         [
@@ -820,7 +820,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_false9",
-          50,
+          49.5687,
           "L"
         ],
         [
@@ -829,7 +829,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_sweeper",
-          47,
+          46.5687,
           "R"
         ],
         [
@@ -838,7 +838,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_ballplaying",
-          47,
+          46.5687,
           "R"
         ],
         [
@@ -847,7 +847,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "W",
           "w_crosser",
-          47,
+          46.5687,
           "R"
         ],
         [
@@ -856,7 +856,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CM",
           "cm_engine",
-          47,
+          46.5687,
           "R"
         ],
         [
@@ -865,7 +865,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "ST",
           "st_runner",
-          47,
+          46.5687,
           "R"
         ]
       ]
@@ -874,7 +874,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 6,
     "targetCa": 405,
-    "actualCa": 408.60173894092435,
+    "actualCa": 404.99999999999886,
     "kind": "generated",
     "team": {
       "id": "peak-6",
@@ -902,7 +902,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "GK",
           "gk_sweeper",
-          54,
+          53.6469,
           "L"
         ],
         [
@@ -911,7 +911,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_dribbler",
-          54,
+          53.6469,
           "L"
         ],
         [
@@ -920,7 +920,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_ballplaying",
-          54,
+          53.6469,
           "R"
         ],
         [
@@ -929,7 +929,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_stopper",
-          52,
+          51.6469,
           "L"
         ],
         [
@@ -938,7 +938,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_engine",
-          52,
+          51.6469,
           "L"
         ],
         [
@@ -947,7 +947,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "w_engine",
-          52,
+          51.6469,
           "R"
         ],
         [
@@ -956,7 +956,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_box2box",
-          52,
+          51.6469,
           "R"
         ],
         [
@@ -965,7 +965,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_box2box",
-          51,
+          50.6469,
           "R"
         ],
         [
@@ -974,7 +974,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "W",
           "w_finisher",
-          51,
+          50.6469,
           "R"
         ],
         [
@@ -983,7 +983,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "ST",
           "st_runner",
-          51,
+          50.6469,
           "R"
         ],
         [
@@ -992,7 +992,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_poacher",
-          51,
+          50.6469,
           "R"
         ],
         [
@@ -1001,7 +1001,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_shotstopper",
-          48,
+          47.6469,
           "R"
         ],
         [
@@ -1010,7 +1010,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_ballplaying",
-          48,
+          47.6469,
           "R"
         ],
         [
@@ -1019,7 +1019,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_playmaker",
-          48,
+          47.6469,
           "R"
         ],
         [
@@ -1028,7 +1028,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CM",
           "cm_engine",
-          48,
+          47.6469,
           "R"
         ],
         [
@@ -1037,7 +1037,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "ST",
           "st_false9",
-          48,
+          47.6469,
           "R"
         ]
       ]
@@ -1046,7 +1046,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 7,
     "targetCa": 415,
-    "actualCa": 421.39841860422405,
+    "actualCa": 415.00000000000057,
     "kind": "generated",
     "team": {
       "id": "peak-7",
@@ -1074,7 +1074,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "GK",
           "gk_wall",
-          55,
+          54.5016,
           "R"
         ],
         [
@@ -1083,7 +1083,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_crosser",
-          55,
+          54.5016,
           "R"
         ],
         [
@@ -1092,7 +1092,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_ballplaying",
-          55,
+          54.5016,
           "R"
         ],
         [
@@ -1101,7 +1101,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CB",
           "cb_stopper",
-          53,
+          52.5016,
           "L"
         ],
         [
@@ -1110,7 +1110,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_attacking",
-          53,
+          52.5016,
           "R"
         ],
         [
@@ -1119,7 +1119,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_creator",
-          53,
+          52.5016,
           "R"
         ],
         [
@@ -1128,7 +1128,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "fb_playmaker",
-          53,
+          52.5016,
           "L"
         ],
         [
@@ -1137,7 +1137,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CM",
           "cm_engine",
-          52,
+          51.5016,
           "R"
         ],
         [
@@ -1146,7 +1146,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_mezzala",
-          52,
+          51.5016,
           "R"
         ],
         [
@@ -1155,7 +1155,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_dribbler",
-          52,
+          51.5016,
           "R"
         ],
         [
@@ -1164,7 +1164,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_poacher",
-          52,
+          51.5016,
           "R"
         ],
         [
@@ -1173,7 +1173,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "GK",
           "gk_sweeper",
-          49,
+          48.5016,
           "R"
         ],
         [
@@ -1182,7 +1182,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CB",
           "cb_cover",
-          49,
+          48.5016,
           "R"
         ],
         [
@@ -1191,7 +1191,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "fb_playmaker",
-          49,
+          48.5016,
           "R"
         ],
         [
@@ -1200,7 +1200,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CM",
           "cm_engine",
-          49,
+          48.5016,
           "R"
         ],
         [
@@ -1209,7 +1209,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_poacher",
-          49,
+          48.5016,
           "R"
         ]
       ]
@@ -1218,7 +1218,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 8,
     "targetCa": 430,
-    "actualCa": 437.82520809611265,
+    "actualCa": 430.00000000000085,
     "kind": "generated",
     "team": {
       "id": "peak-8",
@@ -1246,7 +1246,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_wall",
-          56,
+          55.5298,
           "R"
         ],
         [
@@ -1255,7 +1255,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_finisher",
-          56,
+          55.5298,
           "R"
         ],
         [
@@ -1264,7 +1264,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_stopper",
-          56,
+          55.5298,
           "R"
         ],
         [
@@ -1273,7 +1273,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CB",
           "cb_cover",
-          54,
+          53.5298,
           "R"
         ],
         [
@@ -1282,7 +1282,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "w_finisher",
-          54,
+          53.5298,
           "R"
         ],
         [
@@ -1291,7 +1291,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_mezzala",
-          54,
+          53.5298,
           "R"
         ],
         [
@@ -1300,7 +1300,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_dribbler",
-          54,
+          53.5298,
           "R"
         ],
         [
@@ -1309,7 +1309,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_playmaker",
-          53,
+          52.5298,
           "R"
         ],
         [
@@ -1318,7 +1318,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_creator",
-          53,
+          52.5298,
           "R"
         ],
         [
@@ -1327,7 +1327,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "w_dribbler",
-          53,
+          52.5298,
           "L"
         ],
         [
@@ -1336,7 +1336,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "ST",
           "st_finisher",
-          53,
+          52.5298,
           "R"
         ],
         [
@@ -1345,7 +1345,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_shotstopper",
-          50,
+          49.5298,
           "R"
         ],
         [
@@ -1354,7 +1354,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_cover",
-          50,
+          49.5298,
           "R"
         ],
         [
@@ -1363,7 +1363,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_playmaker",
-          50,
+          49.5298,
           "R"
         ],
         [
@@ -1372,7 +1372,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CM",
           "cm_creator",
-          50,
+          49.5298,
           "R"
         ],
         [
@@ -1381,7 +1381,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "ST",
           "st_target",
-          50,
+          49.5298,
           "R"
         ]
       ]
@@ -1390,7 +1390,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 9,
     "targetCa": 440,
-    "actualCa": 438.15582506580955,
+    "actualCa": 440.00000000000017,
     "kind": "generated",
     "team": {
       "id": "peak-9",
@@ -1418,7 +1418,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_wall",
-          56,
+          56.094,
           "R"
         ],
         [
@@ -1427,7 +1427,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CB",
           "cb_stopper",
-          56,
+          56.094,
           "R"
         ],
         [
@@ -1436,7 +1436,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CB",
           "cb_ballplaying",
-          56,
+          56.094,
           "L"
         ],
         [
@@ -1445,7 +1445,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_cover",
-          54,
+          54.094,
           "R"
         ],
         [
@@ -1454,7 +1454,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "W",
           "w_playmaker",
-          54,
+          54.094,
           "R"
         ],
         [
@@ -1463,7 +1463,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CM",
           "cm_mezzala",
-          54,
+          54.094,
           "R"
         ],
         [
@@ -1472,7 +1472,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CM",
           "cm_box2box",
-          54,
+          54.094,
           "R"
         ],
         [
@@ -1481,7 +1481,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CM",
           "cm_destroyer",
-          53,
+          53.094,
           "R"
         ],
         [
@@ -1490,7 +1490,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "fb_attacking",
-          53,
+          53.094,
           "L"
         ],
         [
@@ -1499,7 +1499,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "ST",
           "st_false9",
-          53,
+          53.094,
           "L"
         ],
         [
@@ -1508,7 +1508,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "ST",
           "st_finisher",
-          53,
+          53.094,
           "L"
         ],
         [
@@ -1517,7 +1517,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_wall",
-          50,
+          50.094,
           "R"
         ],
         [
@@ -1526,7 +1526,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_cover",
-          50,
+          50.094,
           "R"
         ],
         [
@@ -1535,7 +1535,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "W",
           "w_finisher",
-          50,
+          50.094,
           "R"
         ],
         [
@@ -1544,7 +1544,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CM",
           "cm_mezzala",
-          50,
+          50.094,
           "R"
         ],
         [
@@ -1553,7 +1553,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_runner",
-          50,
+          50.094,
           "R"
         ]
       ]
@@ -1562,7 +1562,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 10,
     "targetCa": 450,
-    "actualCa": 455.1712702907866,
+    "actualCa": 450.00000000000097,
     "kind": "generated",
     "team": {
       "id": "peak-10",
@@ -1590,7 +1590,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_sweeper",
-          57,
+          56.7099,
           "R"
         ],
         [
@@ -1599,7 +1599,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "W",
           "fb_playmaker",
-          57,
+          56.7099,
           "R"
         ],
         [
@@ -1608,7 +1608,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CB",
           "cb_ballplaying",
-          57,
+          56.7099,
           "R"
         ],
         [
@@ -1617,7 +1617,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_cover",
-          55,
+          54.7099,
           "R"
         ],
         [
@@ -1626,7 +1626,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "fb_attacking",
-          55,
+          54.7099,
           "R"
         ],
         [
@@ -1635,7 +1635,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_box2box",
-          55,
+          54.7099,
           "L"
         ],
         [
@@ -1644,7 +1644,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CM",
           "cm_destroyer",
-          55,
+          54.7099,
           "L"
         ],
         [
@@ -1653,7 +1653,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "w_engine",
-          54,
+          53.7099,
           "R"
         ],
         [
@@ -1662,7 +1662,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CM",
           "cm_destroyer",
-          54,
+          53.7099,
           "R"
         ],
         [
@@ -1671,7 +1671,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "fb_attacking",
-          54,
+          53.7099,
           "R"
         ],
         [
@@ -1680,7 +1680,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_runner",
-          54,
+          53.7099,
           "L"
         ],
         [
@@ -1689,7 +1689,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "GK",
           "gk_shotstopper",
-          51,
+          50.7099,
           "R"
         ],
         [
@@ -1698,7 +1698,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_stopper",
-          51,
+          50.7099,
           "R"
         ],
         [
@@ -1707,7 +1707,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "w_crosser",
-          51,
+          50.7099,
           "L"
         ],
         [
@@ -1716,7 +1716,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CM",
           "cm_mezzala",
-          51,
+          50.7099,
           "R"
         ],
         [
@@ -1725,7 +1725,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_poacher",
-          51,
+          50.7099,
           "R"
         ]
       ]
@@ -1734,7 +1734,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 11,
     "targetCa": 450,
-    "actualCa": 455.6724084236302,
+    "actualCa": 449.9999999999993,
     "kind": "generated",
     "team": {
       "id": "peak-11",
@@ -1762,7 +1762,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "GK",
           "gk_wall",
-          57,
+          56.6237,
           "R"
         ],
         [
@@ -1771,7 +1771,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_playmaker",
-          57,
+          56.6237,
           "R"
         ],
         [
@@ -1780,7 +1780,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CB",
           "cb_stopper",
-          57,
+          56.6237,
           "R"
         ],
         [
@@ -1789,7 +1789,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_stopper",
-          55,
+          54.6237,
           "R"
         ],
         [
@@ -1798,7 +1798,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "W",
           "w_dribbler",
-          55,
+          54.6237,
           "L"
         ],
         [
@@ -1807,7 +1807,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CM",
           "cm_playmaker",
-          55,
+          54.6237,
           "L"
         ],
         [
@@ -1816,7 +1816,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_dribbler",
-          55,
+          54.6237,
           "R"
         ],
         [
@@ -1825,7 +1825,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_engine",
-          54,
+          53.6237,
           "R"
         ],
         [
@@ -1834,7 +1834,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_mezzala",
-          54,
+          53.6237,
           "L"
         ],
         [
@@ -1843,7 +1843,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "w_crosser",
-          54,
+          53.6237,
           "R"
         ],
         [
@@ -1852,7 +1852,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "ST",
           "st_target",
-          54,
+          53.6237,
           "R"
         ],
         [
@@ -1861,7 +1861,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_wall",
-          51,
+          50.6237,
           "R"
         ],
         [
@@ -1870,7 +1870,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_ballplaying",
-          51,
+          50.6237,
           "R"
         ],
         [
@@ -1879,7 +1879,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_crosser",
-          51,
+          50.6237,
           "R"
         ],
         [
@@ -1888,7 +1888,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_mezzala",
-          51,
+          50.6237,
           "R"
         ],
         [
@@ -1897,7 +1897,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "ST",
           "st_runner",
-          51,
+          50.6237,
           "R"
         ]
       ]
@@ -1906,7 +1906,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 12,
     "targetCa": 460,
-    "actualCa": 453.0057441077441,
+    "actualCa": 460.0000000000009,
     "kind": "generated",
     "team": {
       "id": "peak-12",
@@ -1934,7 +1934,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "GK",
           "gk_shotstopper",
-          57,
+          57.4089,
           "R"
         ],
         [
@@ -1943,7 +1943,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "W",
           "w_dribbler",
-          57,
+          57.4089,
           "R"
         ],
         [
@@ -1952,7 +1952,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CB",
           "cb_cover",
-          57,
+          57.4089,
           "R"
         ],
         [
@@ -1961,7 +1961,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CB",
           "cb_stopper",
-          55,
+          55.4089,
           "L"
         ],
         [
@@ -1970,7 +1970,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_engine",
-          55,
+          55.4089,
           "R"
         ],
         [
@@ -1979,7 +1979,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_box2box",
-          55,
+          55.4089,
           "R"
         ],
         [
@@ -1988,7 +1988,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_attacking",
-          55,
+          55.4089,
           "R"
         ],
         [
@@ -1997,7 +1997,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CM",
           "cm_engine",
-          54,
+          54.4089,
           "R"
         ],
         [
@@ -2006,7 +2006,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CM",
           "cm_mezzala",
-          54,
+          54.4089,
           "R"
         ],
         [
@@ -2015,7 +2015,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "W",
           "w_crosser",
-          54,
+          54.4089,
           "R"
         ],
         [
@@ -2024,7 +2024,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_false9",
-          54,
+          54.4089,
           "L"
         ],
         [
@@ -2033,7 +2033,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "GK",
           "gk_shotstopper",
-          51,
+          51.4089,
           "R"
         ],
         [
@@ -2042,7 +2042,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CB",
           "cb_stopper",
-          51,
+          51.4089,
           "L"
         ],
         [
@@ -2051,7 +2051,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "W",
           "w_crosser",
-          51,
+          51.4089,
           "R"
         ],
         [
@@ -2060,7 +2060,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CM",
           "cm_box2box",
-          51,
+          51.4089,
           "R"
         ],
         [
@@ -2069,7 +2069,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_false9",
-          51,
+          51.4089,
           "R"
         ]
       ]
@@ -2078,7 +2078,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 13,
     "targetCa": 470,
-    "actualCa": 470.6323836271809,
+    "actualCa": 470,
     "kind": "generated",
     "team": {
       "id": "peak-13",
@@ -2106,7 +2106,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_wall",
-          58,
+          57.9105,
           "R"
         ],
         [
@@ -2115,7 +2115,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_playmaker",
-          58,
+          57.9105,
           "R"
         ],
         [
@@ -2124,7 +2124,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CB",
           "cb_cover",
-          58,
+          57.9105,
           "R"
         ],
         [
@@ -2133,7 +2133,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_cover",
-          56,
+          55.9105,
           "R"
         ],
         [
@@ -2142,7 +2142,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_dribbler",
-          56,
+          55.9105,
           "R"
         ],
         [
@@ -2151,7 +2151,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_playmaker",
-          56,
+          55.9105,
           "R"
         ],
         [
@@ -2160,7 +2160,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_playmaker",
-          56,
+          55.9105,
           "R"
         ],
         [
@@ -2169,7 +2169,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_box2box",
-          55,
+          54.9105,
           "R"
         ],
         [
@@ -2178,7 +2178,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "W",
           "w_dribbler",
-          55,
+          54.9105,
           "R"
         ],
         [
@@ -2187,7 +2187,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_target",
-          55,
+          54.9105,
           "R"
         ],
         [
@@ -2196,7 +2196,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_false9",
-          55,
+          54.9105,
           "R"
         ],
         [
@@ -2205,7 +2205,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "GK",
           "gk_wall",
-          52,
+          51.9105,
           "L"
         ],
         [
@@ -2214,7 +2214,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CB",
           "cb_cover",
-          52,
+          51.9105,
           "L"
         ],
         [
@@ -2223,7 +2223,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "fb_attacking",
-          52,
+          51.9105,
           "R"
         ],
         [
@@ -2232,7 +2232,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_creator",
-          52,
+          51.9105,
           "R"
         ],
         [
@@ -2241,7 +2241,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_poacher",
-          52,
+          51.9105,
           "L"
         ]
       ]
@@ -2250,7 +2250,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 14,
     "targetCa": 485,
-    "actualCa": 490.9657461738597,
+    "actualCa": 485.0000000000007,
     "kind": "generated",
     "team": {
       "id": "peak-14",
@@ -2278,7 +2278,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "GK",
           "gk_sweeper",
-          59,
+          58.6389,
           "R"
         ],
         [
@@ -2287,7 +2287,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_stopper",
-          59,
+          58.6389,
           "R"
         ],
         [
@@ -2296,7 +2296,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_stopper",
-          59,
+          58.6389,
           "L"
         ],
         [
@@ -2305,7 +2305,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CB",
           "cb_stopper",
-          57,
+          56.6389,
           "R"
         ],
         [
@@ -2314,7 +2314,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "fb_playmaker",
-          57,
+          56.6389,
           "L"
         ],
         [
@@ -2323,7 +2323,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_creator",
-          57,
+          56.6389,
           "L"
         ],
         [
@@ -2332,7 +2332,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CM",
           "cm_box2box",
-          57,
+          56.6389,
           "L"
         ],
         [
@@ -2341,7 +2341,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_crosser",
-          56,
+          55.6389,
           "R"
         ],
         [
@@ -2350,7 +2350,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "w_crosser",
-          56,
+          55.6389,
           "R"
         ],
         [
@@ -2359,7 +2359,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "ST",
           "st_target",
-          56,
+          55.6389,
           "L"
         ],
         [
@@ -2368,7 +2368,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_engine",
-          56,
+          55.6389,
           "R"
         ],
         [
@@ -2377,7 +2377,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "GK",
           "gk_shotstopper",
-          53,
+          52.6389,
           "R"
         ],
         [
@@ -2386,7 +2386,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_stopper",
-          53,
+          52.6389,
           "R"
         ],
         [
@@ -2395,7 +2395,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "W",
           "fb_attacking",
-          53,
+          52.6389,
           "L"
         ],
         [
@@ -2404,7 +2404,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_creator",
-          53,
+          52.6389,
           "R"
         ],
         [
@@ -2413,7 +2413,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "ST",
           "st_false9",
-          53,
+          52.6389,
           "R"
         ]
       ]
@@ -2422,7 +2422,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 15,
     "targetCa": 495,
-    "actualCa": 486.3884334037344,
+    "actualCa": 495.0000000000011,
     "kind": "generated",
     "team": {
       "id": "peak-15",
@@ -2450,7 +2450,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "GK",
           "gk_wall",
-          59,
+          59.4789,
           "R"
         ],
         [
@@ -2459,7 +2459,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_engine",
-          59,
+          59.4789,
           "R"
         ],
         [
@@ -2468,7 +2468,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_cover",
-          59,
+          59.4789,
           "L"
         ],
         [
@@ -2477,7 +2477,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_cover",
-          57,
+          57.4789,
           "L"
         ],
         [
@@ -2486,7 +2486,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "fb_playmaker",
-          57,
+          57.4789,
           "R"
         ],
         [
@@ -2495,7 +2495,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "CM",
           "cm_mezzala",
-          57,
+          57.4789,
           "R"
         ],
         [
@@ -2504,7 +2504,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "W",
           "fb_playmaker",
-          57,
+          57.4789,
           "R"
         ],
         [
@@ -2513,7 +2513,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_box2box",
-          56,
+          56.4789,
           "R"
         ],
         [
@@ -2522,7 +2522,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_creator",
-          56,
+          56.4789,
           "R"
         ],
         [
@@ -2531,7 +2531,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "W",
           "w_dribbler",
-          56,
+          56.4789,
           "L"
         ],
         [
@@ -2540,7 +2540,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_false9",
-          56,
+          56.4789,
           "R"
         ],
         [
@@ -2549,7 +2549,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "GK",
           "gk_wall",
-          53,
+          53.4789,
           "R"
         ],
         [
@@ -2558,7 +2558,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CB",
           "cb_stopper",
-          53,
+          53.4789,
           "R"
         ],
         [
@@ -2567,7 +2567,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "fb_attacking",
-          53,
+          53.4789,
           "L"
         ],
         [
@@ -2576,7 +2576,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CM",
           "cm_destroyer",
-          53,
+          53.4789,
           "L"
         ],
         [
@@ -2585,7 +2585,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "ST",
           "st_false9",
-          53,
+          53.4789,
           "R"
         ]
       ]
@@ -2594,7 +2594,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 16,
     "targetCa": 505,
-    "actualCa": 507.67282806550355,
+    "actualCa": 504.9999999999989,
     "kind": "generated",
     "team": {
       "id": "peak-16",
@@ -2622,7 +2622,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "GK",
           "gk_shotstopper",
-          60,
+          59.814,
           "R"
         ],
         [
@@ -2631,7 +2631,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_stopper",
-          60,
+          59.814,
           "L"
         ],
         [
@@ -2640,7 +2640,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_cover",
-          60,
+          59.814,
           "L"
         ],
         [
@@ -2649,7 +2649,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CB",
           "cb_cover",
-          58,
+          57.814,
           "R"
         ],
         [
@@ -2658,7 +2658,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "W",
           "w_crosser",
-          58,
+          57.814,
           "R"
         ],
         [
@@ -2667,7 +2667,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_playmaker",
-          58,
+          57.814,
           "R"
         ],
         [
@@ -2676,7 +2676,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "CM",
           "cm_engine",
-          58,
+          57.814,
           "L"
         ],
         [
@@ -2685,7 +2685,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CM",
           "cm_destroyer",
-          57,
+          56.814,
           "R"
         ],
         [
@@ -2694,7 +2694,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "fb_playmaker",
-          57,
+          56.814,
           "L"
         ],
         [
@@ -2703,7 +2703,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "ST",
           "st_target",
-          57,
+          56.814,
           "L"
         ],
         [
@@ -2712,7 +2712,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_finisher",
-          57,
+          56.814,
           "L"
         ],
         [
@@ -2721,7 +2721,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "GK",
           "gk_shotstopper",
-          54,
+          53.814,
           "R"
         ],
         [
@@ -2730,7 +2730,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CB",
           "cb_stopper",
-          54,
+          53.814,
           "R"
         ],
         [
@@ -2739,7 +2739,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "w_finisher",
-          54,
+          53.814,
           "R"
         ],
         [
@@ -2748,7 +2748,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_mezzala",
-          54,
+          53.814,
           "R"
         ],
         [
@@ -2757,7 +2757,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_finisher",
-          54,
+          53.814,
           "R"
         ]
       ]
@@ -2766,7 +2766,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 17,
     "targetCa": 515,
-    "actualCa": 506.94778753290484,
+    "actualCa": 514.9999999999998,
     "kind": "generated",
     "team": {
       "id": "peak-17",
@@ -2794,7 +2794,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_sweeper",
-          60,
+          60.4543,
           "R"
         ],
         [
@@ -2803,7 +2803,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "W",
           "w_playmaker",
-          60,
+          60.4543,
           "L"
         ],
         [
@@ -2812,7 +2812,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_ballplaying",
-          60,
+          60.4543,
           "R"
         ],
         [
@@ -2821,7 +2821,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_ballplaying",
-          58,
+          58.4543,
           "R"
         ],
         [
@@ -2830,7 +2830,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_crosser",
-          58,
+          58.4543,
           "R"
         ],
         [
@@ -2839,7 +2839,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_mezzala",
-          58,
+          58.4543,
           "R"
         ],
         [
@@ -2848,7 +2848,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CM",
           "cm_playmaker",
-          58,
+          58.4543,
           "R"
         ],
         [
@@ -2857,7 +2857,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_dribbler",
-          57,
+          57.4543,
           "R"
         ],
         [
@@ -2866,7 +2866,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_mezzala",
-          57,
+          57.4543,
           "R"
         ],
         [
@@ -2875,7 +2875,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "fb_playmaker",
-          57,
+          57.4543,
           "R"
         ],
         [
@@ -2884,7 +2884,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_target",
-          57,
+          57.4543,
           "R"
         ],
         [
@@ -2893,7 +2893,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "GK",
           "gk_sweeper",
-          54,
+          54.4543,
           "L"
         ],
         [
@@ -2902,7 +2902,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_ballplaying",
-          54,
+          54.4543,
           "R"
         ],
         [
@@ -2911,7 +2911,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "w_finisher",
-          54,
+          54.4543,
           "R"
         ],
         [
@@ -2920,7 +2920,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CM",
           "cm_box2box",
-          54,
+          54.4543,
           "L"
         ],
         [
@@ -2929,7 +2929,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_runner",
-          54,
+          54.4543,
           "R"
         ]
       ]
@@ -2938,7 +2938,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 18,
     "targetCa": 530,
-    "actualCa": 524.4228309458217,
+    "actualCa": 529.9999999999997,
     "kind": "generated",
     "team": {
       "id": "peak-18",
@@ -2966,7 +2966,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "GK",
           "gk_sweeper",
-          61,
+          61.2977,
           "R"
         ],
         [
@@ -2975,7 +2975,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_crosser",
-          61,
+          61.2977,
           "L"
         ],
         [
@@ -2984,7 +2984,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CB",
           "cb_cover",
-          61,
+          61.2977,
           "R"
         ],
         [
@@ -2993,7 +2993,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CB",
           "cb_ballplaying",
-          59,
+          59.2977,
           "L"
         ],
         [
@@ -3002,7 +3002,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "W",
           "w_playmaker",
-          59,
+          59.2977,
           "L"
         ],
         [
@@ -3011,7 +3011,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_destroyer",
-          59,
+          59.2977,
           "R"
         ],
         [
@@ -3020,7 +3020,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "fb_playmaker",
-          59,
+          59.2977,
           "R"
         ],
         [
@@ -3029,7 +3029,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_playmaker",
-          58,
+          58.2977,
           "L"
         ],
         [
@@ -3038,7 +3038,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_box2box",
-          58,
+          58.2977,
           "R"
         ],
         [
@@ -3047,7 +3047,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "w_finisher",
-          58,
+          58.2977,
           "R"
         ],
         [
@@ -3056,7 +3056,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_runner",
-          58,
+          58.2977,
           "L"
         ],
         [
@@ -3065,7 +3065,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_shotstopper",
-          55,
+          55.2977,
           "R"
         ],
         [
@@ -3074,7 +3074,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "CB",
           "cb_ballplaying",
-          55,
+          55.2977,
           "L"
         ],
         [
@@ -3083,7 +3083,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "fb_playmaker",
-          55,
+          55.2977,
           "R"
         ],
         [
@@ -3092,7 +3092,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_engine",
-          55,
+          55.2977,
           "R"
         ],
         [
@@ -3101,7 +3101,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_finisher",
-          55,
+          55.2977,
           "R"
         ]
       ]
@@ -3110,7 +3110,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 19,
     "targetCa": 540,
-    "actualCa": 541.6789374104683,
+    "actualCa": 540.0000000000003,
     "kind": "generated",
     "team": {
       "id": "peak-19",
@@ -3138,7 +3138,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "GK",
           "gk_wall",
-          62,
+          61.8342,
           "R"
         ],
         [
@@ -3147,7 +3147,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "W",
           "w_playmaker",
-          62,
+          61.8342,
           "R"
         ],
         [
@@ -3156,7 +3156,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CB",
           "cb_stopper",
-          62,
+          61.8342,
           "R"
         ],
         [
@@ -3165,7 +3165,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_cover",
-          60,
+          59.8342,
           "R"
         ],
         [
@@ -3174,7 +3174,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "W",
           "fb_attacking",
-          60,
+          59.8342,
           "R"
         ],
         [
@@ -3183,7 +3183,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CM",
           "cm_engine",
-          60,
+          59.8342,
           "L"
         ],
         [
@@ -3192,7 +3192,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CM",
           "cm_creator",
-          60,
+          59.8342,
           "R"
         ],
         [
@@ -3201,7 +3201,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_engine",
-          59,
+          58.8342,
           "R"
         ],
         [
@@ -3210,7 +3210,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_attacking",
-          59,
+          58.8342,
           "L"
         ],
         [
@@ -3219,7 +3219,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "ST",
           "st_finisher",
-          59,
+          58.8342,
           "R"
         ],
         [
@@ -3228,7 +3228,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "W",
           "fb_attacking",
-          59,
+          58.8342,
           "R"
         ],
         [
@@ -3237,7 +3237,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "GK",
           "gk_wall",
-          56,
+          55.8342,
           "L"
         ],
         [
@@ -3246,7 +3246,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_ballplaying",
-          56,
+          55.8342,
           "L"
         ],
         [
@@ -3255,7 +3255,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_playmaker",
-          56,
+          55.8342,
           "R"
         ],
         [
@@ -3264,7 +3264,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_playmaker",
-          56,
+          55.8342,
           "L"
         ],
         [
@@ -3273,7 +3273,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "ST",
           "st_poacher",
-          56,
+          55.8342,
           "L"
         ]
       ]
@@ -3282,7 +3282,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 20,
     "targetCa": 550,
-    "actualCa": 542.5597088215488,
+    "actualCa": 550.0000000000008,
     "kind": "generated",
     "team": {
       "id": "peak-20",
@@ -3310,7 +3310,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "GK",
           "gk_shotstopper",
-          62,
+          62.3688,
           "R"
         ],
         [
@@ -3319,7 +3319,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_finisher",
-          62,
+          62.3688,
           "R"
         ],
         [
@@ -3328,7 +3328,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CB",
           "cb_cover",
-          62,
+          62.3688,
           "L"
         ],
         [
@@ -3337,7 +3337,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CB",
           "cb_stopper",
-          60,
+          60.3688,
           "R"
         ],
         [
@@ -3346,7 +3346,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "w_engine",
-          60,
+          60.3688,
           "R"
         ],
         [
@@ -3355,7 +3355,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CM",
           "cm_mezzala",
-          60,
+          60.3688,
           "L"
         ],
         [
@@ -3364,7 +3364,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_destroyer",
-          60,
+          60.3688,
           "R"
         ],
         [
@@ -3373,7 +3373,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "CM",
           "cm_box2box",
-          59,
+          59.3688,
           "R"
         ],
         [
@@ -3382,7 +3382,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "fb_playmaker",
-          59,
+          59.3688,
           "R"
         ],
         [
@@ -3391,7 +3391,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_runner",
-          59,
+          59.3688,
           "R"
         ],
         [
@@ -3400,7 +3400,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "W",
           "fb_attacking",
-          59,
+          59.3688,
           "R"
         ],
         [
@@ -3409,7 +3409,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_shotstopper",
-          56,
+          56.3688,
           "R"
         ],
         [
@@ -3418,7 +3418,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_ballplaying",
-          56,
+          56.3688,
           "R"
         ],
         [
@@ -3427,7 +3427,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "w_finisher",
-          56,
+          56.3688,
           "R"
         ],
         [
@@ -3436,7 +3436,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_creator",
-          56,
+          56.3688,
           "R"
         ],
         [
@@ -3445,7 +3445,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "ST",
           "st_poacher",
-          56,
+          56.3688,
           "R"
         ]
       ]
@@ -3454,7 +3454,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 21,
     "targetCa": 550,
-    "actualCa": 543.2859761095806,
+    "actualCa": 550.0000000000003,
     "kind": "generated",
     "team": {
       "id": "peak-21",
@@ -3482,7 +3482,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "GK",
           "gk_sweeper",
-          62,
+          62.35,
           "L"
         ],
         [
@@ -3491,7 +3491,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "w_finisher",
-          62,
+          62.35,
           "L"
         ],
         [
@@ -3500,7 +3500,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "CB",
           "cb_cover",
-          62,
+          62.35,
           "R"
         ],
         [
@@ -3509,7 +3509,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_stopper",
-          60,
+          60.35,
           "R"
         ],
         [
@@ -3518,7 +3518,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "W",
           "w_engine",
-          60,
+          60.35,
           "L"
         ],
         [
@@ -3527,7 +3527,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_creator",
-          60,
+          60.35,
           "R"
         ],
         [
@@ -3536,7 +3536,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "fb_playmaker",
-          60,
+          60.35,
           "L"
         ],
         [
@@ -3545,7 +3545,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CM",
           "cm_creator",
-          59,
+          59.35,
           "R"
         ],
         [
@@ -3554,7 +3554,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CM",
           "cm_creator",
-          59,
+          59.35,
           "R"
         ],
         [
@@ -3563,7 +3563,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "fb_playmaker",
-          59,
+          59.35,
           "R"
         ],
         [
@@ -3572,7 +3572,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_finisher",
-          59,
+          59.35,
           "R"
         ],
         [
@@ -3581,7 +3581,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "GK",
           "gk_wall",
-          56,
+          56.35,
           "R"
         ],
         [
@@ -3590,7 +3590,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CB",
           "cb_cover",
-          56,
+          56.35,
           "R"
         ],
         [
@@ -3599,7 +3599,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "W",
           "w_finisher",
-          56,
+          56.35,
           "R"
         ],
         [
@@ -3608,7 +3608,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_box2box",
-          56,
+          56.35,
           "R"
         ],
         [
@@ -3617,7 +3617,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "ST",
           "st_runner",
-          56,
+          56.35,
           "R"
         ]
       ]
@@ -3626,7 +3626,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 22,
     "targetCa": 560,
-    "actualCa": 560.243344738292,
+    "actualCa": 559.9999999999983,
     "kind": "generated",
     "team": {
       "id": "peak-22",
@@ -3654,7 +3654,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "GK",
           "gk_wall",
-          63,
+          62.9761,
           "R"
         ],
         [
@@ -3663,7 +3663,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_finisher",
-          63,
+          62.9761,
           "R"
         ],
         [
@@ -3672,7 +3672,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CB",
           "cb_ballplaying",
-          63,
+          62.9761,
           "R"
         ],
         [
@@ -3681,7 +3681,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_stopper",
-          61,
+          60.9761,
           "R"
         ],
         [
@@ -3690,7 +3690,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "w_dribbler",
-          61,
+          60.9761,
           "R"
         ],
         [
@@ -3699,7 +3699,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "CM",
           "cm_playmaker",
-          61,
+          60.9761,
           "R"
         ],
         [
@@ -3708,7 +3708,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_engine",
-          61,
+          60.9761,
           "L"
         ],
         [
@@ -3717,7 +3717,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CM",
           "cm_engine",
-          60,
+          59.9761,
           "R"
         ],
         [
@@ -3726,7 +3726,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_crosser",
-          60,
+          59.9761,
           "R"
         ],
         [
@@ -3735,7 +3735,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "ST",
           "st_false9",
-          60,
+          59.9761,
           "R"
         ],
         [
@@ -3744,7 +3744,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_crosser",
-          60,
+          59.9761,
           "R"
         ],
         [
@@ -3753,7 +3753,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "GK",
           "gk_shotstopper",
-          57,
+          56.9761,
           "R"
         ],
         [
@@ -3762,7 +3762,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_stopper",
-          57,
+          56.9761,
           "L"
         ],
         [
@@ -3771,7 +3771,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "W",
           "fb_playmaker",
-          57,
+          56.9761,
           "R"
         ],
         [
@@ -3780,7 +3780,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CM",
           "cm_creator",
-          57,
+          56.9761,
           "R"
         ],
         [
@@ -3789,7 +3789,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "ST",
           "st_poacher",
-          57,
+          56.9761,
           "R"
         ]
       ]
@@ -3798,7 +3798,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 23,
     "targetCa": 570,
-    "actualCa": 561.0387769176614,
+    "actualCa": 570.0000000000008,
     "kind": "generated",
     "team": {
       "id": "peak-23",
@@ -3826,7 +3826,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "GK",
           "gk_shotstopper",
-          63,
+          63.4627,
           "R"
         ],
         [
@@ -3835,7 +3835,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "W",
           "w_crosser",
-          63,
+          63.4627,
           "R"
         ],
         [
@@ -3844,7 +3844,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_cover",
-          63,
+          63.4627,
           "R"
         ],
         [
@@ -3853,7 +3853,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_cover",
-          61,
+          61.4627,
           "R"
         ],
         [
@@ -3862,7 +3862,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "fb_attacking",
-          61,
+          61.4627,
           "R"
         ],
         [
@@ -3871,7 +3871,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_mezzala",
-          61,
+          61.4627,
           "L"
         ],
         [
@@ -3880,7 +3880,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_destroyer",
-          61,
+          61.4627,
           "R"
         ],
         [
@@ -3889,7 +3889,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_engine",
-          60,
+          60.4627,
           "R"
         ],
         [
@@ -3898,7 +3898,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_crosser",
-          60,
+          60.4627,
           "R"
         ],
         [
@@ -3907,7 +3907,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "ST",
           "st_poacher",
-          60,
+          60.4627,
           "R"
         ],
         [
@@ -3916,7 +3916,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "w_crosser",
-          60,
+          60.4627,
           "R"
         ],
         [
@@ -3925,7 +3925,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "GK",
           "gk_shotstopper",
-          57,
+          57.4627,
           "L"
         ],
         [
@@ -3934,7 +3934,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_ballplaying",
-          57,
+          57.4627,
           "L"
         ],
         [
@@ -3943,7 +3943,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "W",
           "fb_playmaker",
-          57,
+          57.4627,
           "R"
         ],
         [
@@ -3952,7 +3952,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_mezzala",
-          57,
+          57.4627,
           "R"
         ],
         [
@@ -3961,7 +3961,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_false9",
-          57,
+          57.4627,
           "R"
         ]
       ]
@@ -3970,7 +3970,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 24,
     "targetCa": 575,
-    "actualCa": 577.3964079185797,
+    "actualCa": 574.9999999999993,
     "kind": "generated",
     "team": {
       "id": "peak-24",
@@ -3998,7 +3998,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "GK",
           "gk_sweeper",
-          64,
+          63.8659,
           "R"
         ],
         [
@@ -4007,7 +4007,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "W",
           "w_playmaker",
-          64,
+          63.8659,
           "R"
         ],
         [
@@ -4016,7 +4016,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_ballplaying",
-          64,
+          63.8659,
           "R"
         ],
         [
@@ -4025,7 +4025,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CB",
           "cb_cover",
-          62,
+          61.8659,
           "R"
         ],
         [
@@ -4034,7 +4034,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "w_dribbler",
-          62,
+          61.8659,
           "R"
         ],
         [
@@ -4043,7 +4043,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_engine",
-          62,
+          61.8659,
           "L"
         ],
         [
@@ -4052,7 +4052,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CM",
           "cm_engine",
-          62,
+          61.8659,
           "R"
         ],
         [
@@ -4061,7 +4061,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_engine",
-          61,
+          60.8659,
           "L"
         ],
         [
@@ -4070,7 +4070,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_box2box",
-          61,
+          60.8659,
           "L"
         ],
         [
@@ -4079,7 +4079,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "w_playmaker",
-          61,
+          60.8659,
           "R"
         ],
         [
@@ -4088,7 +4088,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "ST",
           "st_poacher",
-          61,
+          60.8659,
           "R"
         ],
         [
@@ -4097,7 +4097,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_sweeper",
-          58,
+          57.8659,
           "L"
         ],
         [
@@ -4106,7 +4106,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CB",
           "cb_ballplaying",
-          58,
+          57.8659,
           "L"
         ],
         [
@@ -4115,7 +4115,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_engine",
-          58,
+          57.8659,
           "R"
         ],
         [
@@ -4124,7 +4124,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_mezzala",
-          58,
+          57.8659,
           "R"
         ],
         [
@@ -4133,7 +4133,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_false9",
-          58,
+          57.8659,
           "R"
         ]
       ]
@@ -4142,7 +4142,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 25,
     "targetCa": 585,
-    "actualCa": 581.6460514202632,
+    "actualCa": 585.0000000000018,
     "kind": "generated",
     "team": {
       "id": "peak-25",
@@ -4170,7 +4170,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_sweeper",
-          64,
+          64.1947,
           "R"
         ],
         [
@@ -4179,7 +4179,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "W",
           "fb_attacking",
-          64,
+          64.1947,
           "R"
         ],
         [
@@ -4188,7 +4188,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CB",
           "cb_stopper",
-          64,
+          64.1947,
           "R"
         ],
         [
@@ -4197,7 +4197,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_stopper",
-          62,
+          62.1947,
           "R"
         ],
         [
@@ -4206,7 +4206,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_engine",
-          62,
+          62.1947,
           "R"
         ],
         [
@@ -4215,7 +4215,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_crosser",
-          62,
+          62.1947,
           "R"
         ],
         [
@@ -4224,7 +4224,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CM",
           "cm_mezzala",
-          62,
+          62.1947,
           "R"
         ],
         [
@@ -4233,7 +4233,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CM",
           "cm_mezzala",
-          61,
+          61.1947,
           "R"
         ],
         [
@@ -4242,7 +4242,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "W",
           "w_engine",
-          61,
+          61.1947,
           "L"
         ],
         [
@@ -4251,7 +4251,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "ST",
           "st_target",
-          61,
+          61.1947,
           "L"
         ],
         [
@@ -4260,7 +4260,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_poacher",
-          61,
+          61.1947,
           "R"
         ],
         [
@@ -4269,7 +4269,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "GK",
           "gk_shotstopper",
-          58,
+          58.1947,
           "R"
         ],
         [
@@ -4278,7 +4278,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_stopper",
-          58,
+          58.1947,
           "R"
         ],
         [
@@ -4287,7 +4287,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "fb_attacking",
-          58,
+          58.1947,
           "R"
         ],
         [
@@ -4296,7 +4296,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_destroyer",
-          58,
+          58.1947,
           "R"
         ],
         [
@@ -4305,7 +4305,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "ST",
           "st_runner",
-          58,
+          58.1947,
           "R"
         ]
       ]
@@ -4314,7 +4314,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 26,
     "targetCa": 595,
-    "actualCa": 598.643460869299,
+    "actualCa": 594.9999999999992,
     "kind": "generated",
     "team": {
       "id": "peak-26",
@@ -4342,7 +4342,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_shotstopper",
-          65,
+          64.7652,
           "R"
         ],
         [
@@ -4351,7 +4351,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_ballplaying",
-          65,
+          64.7652,
           "L"
         ],
         [
@@ -4360,7 +4360,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_ballplaying",
-          65,
+          64.7652,
           "R"
         ],
         [
@@ -4369,7 +4369,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CB",
           "cb_stopper",
-          63,
+          62.7652,
           "L"
         ],
         [
@@ -4378,7 +4378,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_playmaker",
-          63,
+          62.7652,
           "R"
         ],
         [
@@ -4387,7 +4387,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_playmaker",
-          63,
+          62.7652,
           "R"
         ],
         [
@@ -4396,7 +4396,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_engine",
-          63,
+          62.7652,
           "L"
         ],
         [
@@ -4405,7 +4405,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "w_finisher",
-          62,
+          61.7652,
           "L"
         ],
         [
@@ -4414,7 +4414,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_crosser",
-          62,
+          61.7652,
           "R"
         ],
         [
@@ -4423,7 +4423,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "ST",
           "st_finisher",
-          62,
+          61.7652,
           "L"
         ],
         [
@@ -4432,7 +4432,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "w_engine",
-          62,
+          61.7652,
           "R"
         ],
         [
@@ -4441,7 +4441,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_wall",
-          59,
+          58.7652,
           "L"
         ],
         [
@@ -4450,7 +4450,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_ballplaying",
-          59,
+          58.7652,
           "L"
         ],
         [
@@ -4459,7 +4459,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "w_finisher",
-          59,
+          58.7652,
           "R"
         ],
         [
@@ -4468,7 +4468,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_box2box",
-          59,
+          58.7652,
           "L"
         ],
         [
@@ -4477,7 +4477,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_runner",
-          59,
+          58.7652,
           "R"
         ]
       ]
@@ -4486,7 +4486,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 27,
     "targetCa": 605,
-    "actualCa": 602.4961518793999,
+    "actualCa": 604.9999999999986,
     "kind": "generated",
     "team": {
       "id": "peak-27",
@@ -4514,7 +4514,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "GK",
           "gk_shotstopper",
-          65,
+          65.1216,
           "R"
         ],
         [
@@ -4523,7 +4523,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "w_crosser",
-          65,
+          65.1216,
           "R"
         ],
         [
@@ -4532,7 +4532,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_stopper",
-          65,
+          65.1216,
           "R"
         ],
         [
@@ -4541,7 +4541,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_cover",
-          63,
+          63.1216,
           "R"
         ],
         [
@@ -4550,7 +4550,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_dribbler",
-          63,
+          63.1216,
           "R"
         ],
         [
@@ -4559,7 +4559,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "CM",
           "cm_destroyer",
-          63,
+          63.1216,
           "R"
         ],
         [
@@ -4568,7 +4568,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_creator",
-          63,
+          63.1216,
           "L"
         ],
         [
@@ -4577,7 +4577,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CM",
           "cm_destroyer",
-          62,
+          62.1216,
           "R"
         ],
         [
@@ -4586,7 +4586,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_destroyer",
-          62,
+          62.1216,
           "R"
         ],
         [
@@ -4595,7 +4595,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_runner",
-          62,
+          62.1216,
           "L"
         ],
         [
@@ -4604,7 +4604,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_false9",
-          62,
+          62.1216,
           "R"
         ],
         [
@@ -4613,7 +4613,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_sweeper",
-          59,
+          59.1216,
           "L"
         ],
         [
@@ -4622,7 +4622,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_cover",
-          59,
+          59.1216,
           "R"
         ],
         [
@@ -4631,7 +4631,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_playmaker",
-          59,
+          59.1216,
           "R"
         ],
         [
@@ -4640,7 +4640,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_destroyer",
-          59,
+          59.1216,
           "L"
         ],
         [
@@ -4649,7 +4649,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_runner",
-          59,
+          59.1216,
           "R"
         ]
       ]
@@ -4658,7 +4658,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 28,
     "targetCa": 610,
-    "actualCa": 618.1504816406489,
+    "actualCa": 609.9999999999989,
     "kind": "generated",
     "team": {
       "id": "peak-28",
@@ -4686,7 +4686,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_shotstopper",
-          66,
+          65.5313,
           "R"
         ],
         [
@@ -4695,7 +4695,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "W",
           "w_playmaker",
-          66,
+          65.5313,
           "R"
         ],
         [
@@ -4704,7 +4704,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CB",
           "cb_ballplaying",
-          66,
+          65.5313,
           "R"
         ],
         [
@@ -4713,7 +4713,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CB",
           "cb_cover",
-          64,
+          63.5313,
           "R"
         ],
         [
@@ -4722,7 +4722,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_playmaker",
-          64,
+          63.5313,
           "R"
         ],
         [
@@ -4731,7 +4731,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_destroyer",
-          64,
+          63.5313,
           "R"
         ],
         [
@@ -4740,7 +4740,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_playmaker",
-          64,
+          63.5313,
           "R"
         ],
         [
@@ -4749,7 +4749,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "W",
           "w_finisher",
-          63,
+          62.5313,
           "L"
         ],
         [
@@ -4758,7 +4758,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CM",
           "cm_box2box",
-          63,
+          62.5313,
           "L"
         ],
         [
@@ -4767,7 +4767,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "fb_playmaker",
-          63,
+          62.5313,
           "R"
         ],
         [
@@ -4776,7 +4776,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "ST",
           "st_target",
-          63,
+          62.5313,
           "L"
         ],
         [
@@ -4785,7 +4785,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_sweeper",
-          60,
+          59.5313,
           "R"
         ],
         [
@@ -4794,7 +4794,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_cover",
-          60,
+          59.5313,
           "L"
         ],
         [
@@ -4803,7 +4803,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "fb_playmaker",
-          60,
+          59.5313,
           "R"
         ],
         [
@@ -4812,7 +4812,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_box2box",
-          60,
+          59.5313,
           "R"
         ],
         [
@@ -4821,7 +4821,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_target",
-          60,
+          59.5313,
           "R"
         ]
       ]
@@ -4830,7 +4830,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 29,
     "targetCa": 620,
-    "actualCa": 617.8585636945209,
+    "actualCa": 620.000000000001,
     "kind": "generated",
     "team": {
       "id": "peak-29",
@@ -4858,7 +4858,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "GK",
           "gk_shotstopper",
-          66,
+          66.0314,
           "R"
         ],
         [
@@ -4867,7 +4867,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "W",
           "w_playmaker",
-          66,
+          66.0314,
           "R"
         ],
         [
@@ -4876,7 +4876,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "CB",
           "cb_cover",
-          66,
+          66.0314,
           "R"
         ],
         [
@@ -4885,7 +4885,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_stopper",
-          64,
+          64.0314,
           "R"
         ],
         [
@@ -4894,7 +4894,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CB",
           "cb_stopper",
-          64,
+          64.0314,
           "R"
         ],
         [
@@ -4903,7 +4903,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "W",
           "fb_attacking",
-          64,
+          64.0314,
           "L"
         ],
         [
@@ -4912,7 +4912,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_box2box",
-          64,
+          64.0314,
           "R"
         ],
         [
@@ -4921,7 +4921,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CM",
           "cm_engine",
-          63,
+          63.0314,
           "R"
         ],
         [
@@ -4930,7 +4930,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_engine",
-          63,
+          63.0314,
           "L"
         ],
         [
@@ -4939,7 +4939,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_target",
-          63,
+          63.0314,
           "L"
         ],
         [
@@ -4948,7 +4948,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "ST",
           "st_finisher",
-          63,
+          63.0314,
           "R"
         ],
         [
@@ -4957,7 +4957,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_sweeper",
-          60,
+          60.0314,
           "R"
         ],
         [
@@ -4966,7 +4966,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "CB",
           "cb_ballplaying",
-          60,
+          60.0314,
           "R"
         ],
         [
@@ -4975,7 +4975,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "fb_attacking",
-          60,
+          60.0314,
           "L"
         ],
         [
@@ -4984,7 +4984,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_playmaker",
-          60,
+          60.0314,
           "R"
         ],
         [
@@ -4993,7 +4993,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "ST",
           "st_false9",
-          60,
+          60.0314,
           "R"
         ]
       ]
@@ -5002,7 +5002,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 30,
     "targetCa": 630,
-    "actualCa": 622.240694670952,
+    "actualCa": 630.0000000000002,
     "kind": "generated",
     "team": {
       "id": "peak-30",
@@ -5030,7 +5030,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "GK",
           "gk_shotstopper",
-          66,
+          66.3229,
           "R"
         ],
         [
@@ -5039,7 +5039,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "W",
           "w_finisher",
-          66,
+          66.3229,
           "R"
         ],
         [
@@ -5048,7 +5048,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_stopper",
-          66,
+          66.3229,
           "L"
         ],
         [
@@ -5057,7 +5057,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_ballplaying",
-          64,
+          64.3229,
           "L"
         ],
         [
@@ -5066,7 +5066,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CB",
           "cb_cover",
-          64,
+          64.3229,
           "R"
         ],
         [
@@ -5075,7 +5075,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "W",
           "w_dribbler",
-          64,
+          64.3229,
           "R"
         ],
         [
@@ -5084,7 +5084,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_creator",
-          64,
+          64.3229,
           "R"
         ],
         [
@@ -5093,7 +5093,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_destroyer",
-          63,
+          63.3229,
           "R"
         ],
         [
@@ -5102,7 +5102,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_destroyer",
-          63,
+          63.3229,
           "R"
         ],
         [
@@ -5111,7 +5111,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "ST",
           "st_target",
-          63,
+          63.3229,
           "R"
         ],
         [
@@ -5120,7 +5120,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "ST",
           "st_target",
-          63,
+          63.3229,
           "R"
         ],
         [
@@ -5129,7 +5129,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "GK",
           "gk_wall",
-          60,
+          60.3229,
           "R"
         ],
         [
@@ -5138,7 +5138,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_ballplaying",
-          60,
+          60.3229,
           "R"
         ],
         [
@@ -5147,7 +5147,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_attacking",
-          60,
+          60.3229,
           "R"
         ],
         [
@@ -5156,7 +5156,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CM",
           "cm_creator",
-          60,
+          60.3229,
           "R"
         ],
         [
@@ -5165,7 +5165,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "ST",
           "st_false9",
-          60,
+          60.3229,
           "R"
         ]
       ]
@@ -5174,7 +5174,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 31,
     "targetCa": 630,
-    "actualCa": 635.9158148974594,
+    "actualCa": 629.9999999999999,
     "kind": "generated",
     "team": {
       "id": "peak-31",
@@ -5202,7 +5202,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "GK",
           "gk_shotstopper",
-          67,
+          66.6994,
           "L"
         ],
         [
@@ -5211,7 +5211,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_dribbler",
-          67,
+          66.6994,
           "R"
         ],
         [
@@ -5220,7 +5220,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_cover",
-          67,
+          66.6994,
           "R"
         ],
         [
@@ -5229,7 +5229,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "CB",
           "cb_ballplaying",
-          65,
+          64.6994,
           "R"
         ],
         [
@@ -5238,7 +5238,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_crosser",
-          65,
+          64.6994,
           "R"
         ],
         [
@@ -5247,7 +5247,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_engine",
-          65,
+          64.6994,
           "R"
         ],
         [
@@ -5256,7 +5256,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "w_playmaker",
-          65,
+          64.6994,
           "R"
         ],
         [
@@ -5265,7 +5265,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_mezzala",
-          64,
+          63.6994,
           "R"
         ],
         [
@@ -5274,7 +5274,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_box2box",
-          64,
+          63.6994,
           "R"
         ],
         [
@@ -5283,7 +5283,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "W",
           "w_finisher",
-          64,
+          63.6994,
           "L"
         ],
         [
@@ -5292,7 +5292,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "ST",
           "st_finisher",
-          64,
+          63.6994,
           "R"
         ],
         [
@@ -5301,7 +5301,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_sweeper",
-          61,
+          60.6994,
           "R"
         ],
         [
@@ -5310,7 +5310,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_ballplaying",
-          61,
+          60.6994,
           "R"
         ],
         [
@@ -5319,7 +5319,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "W",
           "w_crosser",
-          61,
+          60.6994,
           "R"
         ],
         [
@@ -5328,7 +5328,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CM",
           "cm_engine",
-          61,
+          60.6994,
           "L"
         ],
         [
@@ -5337,7 +5337,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_runner",
-          61,
+          60.6994,
           "R"
         ]
       ]
@@ -5346,7 +5346,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 32,
     "targetCa": 640,
-    "actualCa": 637.3592074227118,
+    "actualCa": 640.0000000000013,
     "kind": "generated",
     "team": {
       "id": "peak-32",
@@ -5374,7 +5374,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "GK",
           "gk_wall",
-          67,
+          67.1081,
           "R"
         ],
         [
@@ -5383,7 +5383,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "W",
           "w_dribbler",
-          67,
+          67.1081,
           "L"
         ],
         [
@@ -5392,7 +5392,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_cover",
-          67,
+          67.1081,
           "R"
         ],
         [
@@ -5401,7 +5401,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_cover",
-          65,
+          65.1081,
           "R"
         ],
         [
@@ -5410,7 +5410,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "w_playmaker",
-          65,
+          65.1081,
           "R"
         ],
         [
@@ -5419,7 +5419,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "CM",
           "cm_destroyer",
-          65,
+          65.1081,
           "L"
         ],
         [
@@ -5428,7 +5428,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "w_finisher",
-          65,
+          65.1081,
           "R"
         ],
         [
@@ -5437,7 +5437,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_box2box",
-          64,
+          64.1081,
           "R"
         ],
         [
@@ -5446,7 +5446,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_engine",
-          64,
+          64.1081,
           "R"
         ],
         [
@@ -5455,7 +5455,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "fb_playmaker",
-          64,
+          64.1081,
           "R"
         ],
         [
@@ -5464,7 +5464,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "ST",
           "st_poacher",
-          64,
+          64.1081,
           "R"
         ],
         [
@@ -5473,7 +5473,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "GK",
           "gk_wall",
-          61,
+          61.1081,
           "R"
         ],
         [
@@ -5482,7 +5482,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "CB",
           "cb_stopper",
-          61,
+          61.1081,
           "R"
         ],
         [
@@ -5491,7 +5491,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "W",
           "w_finisher",
-          61,
+          61.1081,
           "R"
         ],
         [
@@ -5500,7 +5500,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_mezzala",
-          61,
+          61.1081,
           "R"
         ],
         [
@@ -5509,7 +5509,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_false9",
-          61,
+          61.1081,
           "L"
         ]
       ]
@@ -5518,7 +5518,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 33,
     "targetCa": 650,
-    "actualCa": 656.1986925987144,
+    "actualCa": 649.9999999999989,
     "kind": "generated",
     "team": {
       "id": "peak-33",
@@ -5546,7 +5546,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_wall",
-          68,
+          67.6916,
           "L"
         ],
         [
@@ -5555,7 +5555,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_engine",
-          68,
+          67.6916,
           "L"
         ],
         [
@@ -5564,7 +5564,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CB",
           "cb_ballplaying",
-          68,
+          67.6916,
           "R"
         ],
         [
@@ -5573,7 +5573,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CB",
           "cb_stopper",
-          66,
+          65.6916,
           "R"
         ],
         [
@@ -5582,7 +5582,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_finisher",
-          66,
+          65.6916,
           "R"
         ],
         [
@@ -5591,7 +5591,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CM",
           "cm_engine",
-          66,
+          65.6916,
           "R"
         ],
         [
@@ -5600,7 +5600,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_box2box",
-          66,
+          65.6916,
           "R"
         ],
         [
@@ -5609,7 +5609,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "w_playmaker",
-          65,
+          64.6916,
           "R"
         ],
         [
@@ -5618,7 +5618,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_playmaker",
-          65,
+          64.6916,
           "R"
         ],
         [
@@ -5627,7 +5627,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "w_finisher",
-          65,
+          64.6916,
           "R"
         ],
         [
@@ -5636,7 +5636,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_runner",
-          65,
+          64.6916,
           "R"
         ],
         [
@@ -5645,7 +5645,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "GK",
           "gk_wall",
-          62,
+          61.6916,
           "R"
         ],
         [
@@ -5654,7 +5654,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CB",
           "cb_stopper",
-          62,
+          61.6916,
           "L"
         ],
         [
@@ -5663,7 +5663,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_finisher",
-          62,
+          61.6916,
           "R"
         ],
         [
@@ -5672,7 +5672,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CM",
           "cm_mezzala",
-          62,
+          61.6916,
           "R"
         ],
         [
@@ -5681,7 +5681,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "ST",
           "st_runner",
-          62,
+          61.6916,
           "R"
         ]
       ]
@@ -5690,7 +5690,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 34,
     "targetCa": 655,
-    "actualCa": 660.5515289623509,
+    "actualCa": 655,
     "kind": "generated",
     "team": {
       "id": "peak-34",
@@ -5718,7 +5718,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "GK",
           "gk_wall",
-          68,
+          67.6818,
           "R"
         ],
         [
@@ -5727,7 +5727,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_stopper",
-          68,
+          67.6818,
           "R"
         ],
         [
@@ -5736,7 +5736,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_stopper",
-          68,
+          67.6818,
           "R"
         ],
         [
@@ -5745,7 +5745,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_stopper",
-          66,
+          65.6818,
           "R"
         ],
         [
@@ -5754,7 +5754,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "fb_attacking",
-          66,
+          65.6818,
           "R"
         ],
         [
@@ -5763,7 +5763,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_creator",
-          66,
+          65.6818,
           "R"
         ],
         [
@@ -5772,7 +5772,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CM",
           "cm_mezzala",
-          66,
+          65.6818,
           "R"
         ],
         [
@@ -5781,7 +5781,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "W",
           "w_playmaker",
-          65,
+          64.6818,
           "R"
         ],
         [
@@ -5790,7 +5790,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "w_dribbler",
-          65,
+          64.6818,
           "L"
         ],
         [
@@ -5799,7 +5799,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "ST",
           "st_target",
-          65,
+          64.6818,
           "R"
         ],
         [
@@ -5808,7 +5808,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_engine",
-          65,
+          64.6818,
           "L"
         ],
         [
@@ -5817,7 +5817,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "GK",
           "gk_sweeper",
-          62,
+          61.6818,
           "R"
         ],
         [
@@ -5826,7 +5826,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_cover",
-          62,
+          61.6818,
           "R"
         ],
         [
@@ -5835,7 +5835,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "fb_attacking",
-          62,
+          61.6818,
           "R"
         ],
         [
@@ -5844,7 +5844,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_destroyer",
-          62,
+          61.6818,
           "R"
         ],
         [
@@ -5853,7 +5853,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "ST",
           "st_target",
-          62,
+          61.6818,
           "R"
         ]
       ]
@@ -5862,7 +5862,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 35,
     "targetCa": 665,
-    "actualCa": 658.140527104377,
+    "actualCa": 665.0000000000005,
     "kind": "generated",
     "team": {
       "id": "peak-35",
@@ -5890,7 +5890,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "GK",
           "gk_shotstopper",
-          68,
+          68.3074,
           "L"
         ],
         [
@@ -5899,7 +5899,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "fb_attacking",
-          68,
+          68.3074,
           "L"
         ],
         [
@@ -5908,7 +5908,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_stopper",
-          68,
+          68.3074,
           "R"
         ],
         [
@@ -5917,7 +5917,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_ballplaying",
-          66,
+          66.3074,
           "L"
         ],
         [
@@ -5926,7 +5926,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_engine",
-          66,
+          66.3074,
           "L"
         ],
         [
@@ -5935,7 +5935,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CM",
           "cm_mezzala",
-          66,
+          66.3074,
           "L"
         ],
         [
@@ -5944,7 +5944,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_playmaker",
-          66,
+          66.3074,
           "L"
         ],
         [
@@ -5953,7 +5953,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_engine",
-          65,
+          65.3074,
           "R"
         ],
         [
@@ -5962,7 +5962,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_creator",
-          65,
+          65.3074,
           "R"
         ],
         [
@@ -5971,7 +5971,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "ST",
           "st_runner",
-          65,
+          65.3074,
           "R"
         ],
         [
@@ -5980,7 +5980,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "ST",
           "st_runner",
-          65,
+          65.3074,
           "R"
         ],
         [
@@ -5989,7 +5989,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "GK",
           "gk_sweeper",
-          62,
+          62.3074,
           "R"
         ],
         [
@@ -5998,7 +5998,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CB",
           "cb_cover",
-          62,
+          62.3074,
           "R"
         ],
         [
@@ -6007,7 +6007,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "fb_attacking",
-          62,
+          62.3074,
           "R"
         ],
         [
@@ -6016,7 +6016,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CM",
           "cm_destroyer",
-          62,
+          62.3074,
           "L"
         ],
         [
@@ -6025,7 +6025,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "ST",
           "st_runner",
-          62,
+          62.3074,
           "R"
         ]
       ]
@@ -6034,7 +6034,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 36,
     "targetCa": 675,
-    "actualCa": 676.9515706121824,
+    "actualCa": 675.0000000000014,
     "kind": "generated",
     "team": {
       "id": "peak-36",
@@ -6062,7 +6062,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "GK",
           "gk_sweeper",
-          69,
+          68.9073,
           "R"
         ],
         [
@@ -6071,7 +6071,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_dribbler",
-          69,
+          68.9073,
           "L"
         ],
         [
@@ -6080,7 +6080,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_cover",
-          69,
+          68.9073,
           "R"
         ],
         [
@@ -6089,7 +6089,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_cover",
-          67,
+          66.9073,
           "L"
         ],
         [
@@ -6098,7 +6098,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_crosser",
-          67,
+          66.9073,
           "R"
         ],
         [
@@ -6107,7 +6107,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "CM",
           "cm_mezzala",
-          67,
+          66.9073,
           "R"
         ],
         [
@@ -6116,7 +6116,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_box2box",
-          67,
+          66.9073,
           "R"
         ],
         [
@@ -6125,7 +6125,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_destroyer",
-          66,
+          65.9073,
           "R"
         ],
         [
@@ -6134,7 +6134,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "w_playmaker",
-          66,
+          65.9073,
           "L"
         ],
         [
@@ -6143,7 +6143,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "ST",
           "st_finisher",
-          66,
+          65.9073,
           "L"
         ],
         [
@@ -6152,7 +6152,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_engine",
-          66,
+          65.9073,
           "R"
         ],
         [
@@ -6161,7 +6161,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "GK",
           "gk_sweeper",
-          63,
+          62.9073,
           "R"
         ],
         [
@@ -6170,7 +6170,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_cover",
-          63,
+          62.9073,
           "R"
         ],
         [
@@ -6179,7 +6179,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "W",
           "w_crosser",
-          63,
+          62.9073,
           "R"
         ],
         [
@@ -6188,7 +6188,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_playmaker",
-          63,
+          62.9073,
           "L"
         ],
         [
@@ -6197,7 +6197,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_target",
-          63,
+          62.9073,
           "R"
         ]
       ]
@@ -6206,7 +6206,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 37,
     "targetCa": 685,
-    "actualCa": 678.4802111233547,
+    "actualCa": 684.9999999999993,
     "kind": "generated",
     "team": {
       "id": "peak-37",
@@ -6234,7 +6234,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_shotstopper",
-          69,
+          69.2758,
           "R"
         ],
         [
@@ -6243,7 +6243,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "W",
           "w_crosser",
-          69,
+          69.2758,
           "R"
         ],
         [
@@ -6252,7 +6252,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_stopper",
-          69,
+          69.2758,
           "R"
         ],
         [
@@ -6261,7 +6261,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_cover",
-          67,
+          67.2758,
           "R"
         ],
         [
@@ -6270,7 +6270,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "w_crosser",
-          67,
+          67.2758,
           "L"
         ],
         [
@@ -6279,7 +6279,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CM",
           "cm_creator",
-          67,
+          67.2758,
           "L"
         ],
         [
@@ -6288,7 +6288,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "w_crosser",
-          67,
+          67.2758,
           "L"
         ],
         [
@@ -6297,7 +6297,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CM",
           "cm_playmaker",
-          66,
+          66.2758,
           "R"
         ],
         [
@@ -6306,7 +6306,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_mezzala",
-          66,
+          66.2758,
           "L"
         ],
         [
@@ -6315,7 +6315,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "w_dribbler",
-          66,
+          66.2758,
           "R"
         ],
         [
@@ -6324,7 +6324,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "ST",
           "st_target",
-          66,
+          66.2758,
           "R"
         ],
         [
@@ -6333,7 +6333,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "GK",
           "gk_wall",
-          63,
+          63.2758,
           "L"
         ],
         [
@@ -6342,7 +6342,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CB",
           "cb_cover",
-          63,
+          63.2758,
           "L"
         ],
         [
@@ -6351,7 +6351,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_engine",
-          63,
+          63.2758,
           "R"
         ],
         [
@@ -6360,7 +6360,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_playmaker",
-          63,
+          63.2758,
           "R"
         ],
         [
@@ -6369,7 +6369,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "ST",
           "st_poacher",
-          63,
+          63.2758,
           "R"
         ]
       ]
@@ -6378,7 +6378,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 38,
     "targetCa": 690,
-    "actualCa": 699.5972402448729,
+    "actualCa": 689.9999999999991,
     "kind": "generated",
     "team": {
       "id": "peak-38",
@@ -6406,7 +6406,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "GK",
           "gk_sweeper",
-          70,
+          69.5275,
           "R"
         ],
         [
@@ -6415,7 +6415,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "W",
           "fb_playmaker",
-          70,
+          69.5275,
           "L"
         ],
         [
@@ -6424,7 +6424,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_stopper",
-          70,
+          69.5275,
           "R"
         ],
         [
@@ -6433,7 +6433,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_ballplaying",
-          68,
+          67.5275,
           "R"
         ],
         [
@@ -6442,7 +6442,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CB",
           "cb_ballplaying",
-          68,
+          67.5275,
           "R"
         ],
         [
@@ -6451,7 +6451,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "W",
           "fb_attacking",
-          68,
+          67.5275,
           "R"
         ],
         [
@@ -6460,7 +6460,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_engine",
-          68,
+          67.5275,
           "R"
         ],
         [
@@ -6469,7 +6469,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_mezzala",
-          67,
+          66.5275,
           "L"
         ],
         [
@@ -6478,7 +6478,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_destroyer",
-          67,
+          66.5275,
           "R"
         ],
         [
@@ -6487,7 +6487,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_poacher",
-          67,
+          66.5275,
           "R"
         ],
         [
@@ -6496,7 +6496,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "ST",
           "st_poacher",
-          67,
+          66.5275,
           "R"
         ],
         [
@@ -6505,7 +6505,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "GK",
           "gk_shotstopper",
-          64,
+          63.5275,
           "R"
         ],
         [
@@ -6514,7 +6514,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "CB",
           "cb_stopper",
-          64,
+          63.5275,
           "R"
         ],
         [
@@ -6523,7 +6523,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "fb_attacking",
-          64,
+          63.5275,
           "L"
         ],
         [
@@ -6532,7 +6532,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_box2box",
-          64,
+          63.5275,
           "R"
         ],
         [
@@ -6541,7 +6541,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "ST",
           "st_target",
-          64,
+          63.5275,
           "L"
         ]
       ]
@@ -6550,7 +6550,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 39,
     "targetCa": 700,
-    "actualCa": 697.6279496051424,
+    "actualCa": 699.9999999999991,
     "kind": "generated",
     "team": {
       "id": "peak-39",
@@ -6578,7 +6578,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "GK",
           "gk_sweeper",
-          70,
+          70.1818,
           "R"
         ],
         [
@@ -6587,7 +6587,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "W",
           "w_playmaker",
-          70,
+          70.1818,
           "R"
         ],
         [
@@ -6596,7 +6596,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_ballplaying",
-          70,
+          70.1818,
           "R"
         ],
         [
@@ -6605,7 +6605,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_cover",
-          68,
+          68.1818,
           "L"
         ],
         [
@@ -6614,7 +6614,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "W",
           "w_crosser",
-          68,
+          68.1818,
           "R"
         ],
         [
@@ -6623,7 +6623,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "CM",
           "cm_mezzala",
-          68,
+          68.1818,
           "R"
         ],
         [
@@ -6632,7 +6632,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_mezzala",
-          68,
+          68.1818,
           "L"
         ],
         [
@@ -6641,7 +6641,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_box2box",
-          67,
+          67.1818,
           "R"
         ],
         [
@@ -6650,7 +6650,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CM",
           "cm_creator",
-          67,
+          67.1818,
           "R"
         ],
         [
@@ -6659,7 +6659,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "ST",
           "st_false9",
-          67,
+          67.1818,
           "L"
         ],
         [
@@ -6668,7 +6668,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_target",
-          67,
+          67.1818,
           "R"
         ],
         [
@@ -6677,7 +6677,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "GK",
           "gk_wall",
-          64,
+          64.1818,
           "R"
         ],
         [
@@ -6686,7 +6686,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CB",
           "cb_ballplaying",
-          64,
+          64.1818,
           "R"
         ],
         [
@@ -6695,7 +6695,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "W",
           "w_playmaker",
-          64,
+          64.1818,
           "R"
         ],
         [
@@ -6704,7 +6704,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CM",
           "cm_creator",
-          64,
+          64.1818,
           "R"
         ],
         [
@@ -6713,7 +6713,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_poacher",
-          64,
+          64.1818,
           "R"
         ]
       ]
@@ -6722,7 +6722,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 40,
     "targetCa": 710,
-    "actualCa": 719.2147146219772,
+    "actualCa": 709.9999999999994,
     "kind": "generated",
     "team": {
       "id": "peak-40",
@@ -6750,7 +6750,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "GK",
           "gk_wall",
-          71,
+          70.5382,
           "R"
         ],
         [
@@ -6759,7 +6759,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_ballplaying",
-          71,
+          70.5382,
           "R"
         ],
         [
@@ -6768,7 +6768,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_stopper",
-          71,
+          70.5382,
           "R"
         ],
         [
@@ -6777,7 +6777,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CB",
           "cb_stopper",
-          69,
+          68.5382,
           "R"
         ],
         [
@@ -6786,7 +6786,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "w_crosser",
-          69,
+          68.5382,
           "R"
         ],
         [
@@ -6795,7 +6795,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_creator",
-          69,
+          68.5382,
           "R"
         ],
         [
@@ -6804,7 +6804,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_box2box",
-          69,
+          68.5382,
           "L"
         ],
         [
@@ -6813,7 +6813,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_destroyer",
-          68,
+          67.5382,
           "L"
         ],
         [
@@ -6822,7 +6822,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_playmaker",
-          68,
+          67.5382,
           "R"
         ],
         [
@@ -6831,7 +6831,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_false9",
-          68,
+          67.5382,
           "R"
         ],
         [
@@ -6840,7 +6840,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "ST",
           "st_false9",
-          68,
+          67.5382,
           "R"
         ],
         [
@@ -6849,7 +6849,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "GK",
           "gk_sweeper",
-          65,
+          64.5382,
           "L"
         ],
         [
@@ -6858,7 +6858,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_ballplaying",
-          65,
+          64.5382,
           "R"
         ],
         [
@@ -6867,7 +6867,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "W",
           "w_finisher",
-          65,
+          64.5382,
           "R"
         ],
         [
@@ -6876,7 +6876,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CM",
           "cm_engine",
-          65,
+          64.5382,
           "R"
         ],
         [
@@ -6885,7 +6885,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_false9",
-          65,
+          64.5382,
           "R"
         ]
       ]
@@ -6894,7 +6894,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 41,
     "targetCa": 710,
-    "actualCa": 718.3224870462199,
+    "actualCa": 710.0000000000005,
     "kind": "generated",
     "team": {
       "id": "peak-41",
@@ -6922,7 +6922,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "GK",
           "gk_wall",
-          71,
+          70.5931,
           "R"
         ],
         [
@@ -6931,7 +6931,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "W",
           "w_playmaker",
-          71,
+          70.5931,
           "R"
         ],
         [
@@ -6940,7 +6940,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_stopper",
-          71,
+          70.5931,
           "R"
         ],
         [
@@ -6949,7 +6949,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CB",
           "cb_stopper",
-          69,
+          68.5931,
           "R"
         ],
         [
@@ -6958,7 +6958,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "w_crosser",
-          69,
+          68.5931,
           "R"
         ],
         [
@@ -6967,7 +6967,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CM",
           "cm_destroyer",
-          69,
+          68.5931,
           "R"
         ],
         [
@@ -6976,7 +6976,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_box2box",
-          69,
+          68.5931,
           "R"
         ],
         [
@@ -6985,7 +6985,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CM",
           "cm_playmaker",
-          68,
+          67.5931,
           "R"
         ],
         [
@@ -6994,7 +6994,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_box2box",
-          68,
+          67.5931,
           "L"
         ],
         [
@@ -7003,7 +7003,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "ST",
           "st_target",
-          68,
+          67.5931,
           "R"
         ],
         [
@@ -7012,7 +7012,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "ST",
           "st_target",
-          68,
+          67.5931,
           "R"
         ],
         [
@@ -7021,7 +7021,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_wall",
-          65,
+          64.5931,
           "R"
         ],
         [
@@ -7030,7 +7030,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_stopper",
-          65,
+          64.5931,
           "R"
         ],
         [
@@ -7039,7 +7039,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_finisher",
-          65,
+          64.5931,
           "R"
         ],
         [
@@ -7048,7 +7048,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CM",
           "cm_engine",
-          65,
+          64.5931,
           "R"
         ],
         [
@@ -7057,7 +7057,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "ST",
           "st_runner",
-          65,
+          64.5931,
           "R"
         ]
       ]
@@ -7066,7 +7066,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 42,
     "targetCa": 720,
-    "actualCa": 717.7224030762168,
+    "actualCa": 720.0000000000013,
     "kind": "generated",
     "team": {
       "id": "peak-42",
@@ -7094,7 +7094,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_sweeper",
-          71,
+          71.1085,
           "R"
         ],
         [
@@ -7103,7 +7103,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "W",
           "fb_playmaker",
-          71,
+          71.1085,
           "R"
         ],
         [
@@ -7112,7 +7112,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CB",
           "cb_stopper",
-          71,
+          71.1085,
           "R"
         ],
         [
@@ -7121,7 +7121,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CB",
           "cb_cover",
-          69,
+          69.1085,
           "R"
         ],
         [
@@ -7130,7 +7130,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "w_crosser",
-          69,
+          69.1085,
           "L"
         ],
         [
@@ -7139,7 +7139,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "fb_playmaker",
-          69,
+          69.1085,
           "L"
         ],
         [
@@ -7148,7 +7148,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_creator",
-          69,
+          69.1085,
           "R"
         ],
         [
@@ -7157,7 +7157,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_box2box",
-          68,
+          68.1085,
           "R"
         ],
         [
@@ -7166,7 +7166,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_crosser",
-          68,
+          68.1085,
           "L"
         ],
         [
@@ -7175,7 +7175,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_target",
-          68,
+          68.1085,
           "R"
         ],
         [
@@ -7184,7 +7184,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "ST",
           "st_poacher",
-          68,
+          68.1085,
           "R"
         ],
         [
@@ -7193,7 +7193,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "GK",
           "gk_sweeper",
-          65,
+          65.1085,
           "R"
         ],
         [
@@ -7202,7 +7202,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CB",
           "cb_ballplaying",
-          65,
+          65.1085,
           "L"
         ],
         [
@@ -7211,7 +7211,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_playmaker",
-          65,
+          65.1085,
           "R"
         ],
         [
@@ -7220,7 +7220,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_engine",
-          65,
+          65.1085,
           "R"
         ],
         [
@@ -7229,7 +7229,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_runner",
-          65,
+          65.1085,
           "R"
         ]
       ]
@@ -7238,7 +7238,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 43,
     "targetCa": 725,
-    "actualCa": 716.3696730731558,
+    "actualCa": 724.9999999999987,
     "kind": "generated",
     "team": {
       "id": "peak-43",
@@ -7266,7 +7266,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "GK",
           "gk_wall",
-          71,
+          71.41,
           "R"
         ],
         [
@@ -7275,7 +7275,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "w_crosser",
-          71,
+          71.41,
           "R"
         ],
         [
@@ -7284,7 +7284,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CB",
           "cb_ballplaying",
-          71,
+          71.41,
           "L"
         ],
         [
@@ -7293,7 +7293,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "CB",
           "cb_ballplaying",
-          69,
+          69.41,
           "R"
         ],
         [
@@ -7302,7 +7302,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "W",
           "w_engine",
-          69,
+          69.41,
           "R"
         ],
         [
@@ -7311,7 +7311,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_creator",
-          69,
+          69.41,
           "R"
         ],
         [
@@ -7320,7 +7320,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "w_finisher",
-          69,
+          69.41,
           "R"
         ],
         [
@@ -7329,7 +7329,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CM",
           "cm_engine",
-          68,
+          68.41,
           "L"
         ],
         [
@@ -7338,7 +7338,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_mezzala",
-          68,
+          68.41,
           "R"
         ],
         [
@@ -7347,7 +7347,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "W",
           "fb_playmaker",
-          68,
+          68.41,
           "R"
         ],
         [
@@ -7356,7 +7356,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "ST",
           "st_finisher",
-          68,
+          68.41,
           "R"
         ],
         [
@@ -7365,7 +7365,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "GK",
           "gk_shotstopper",
-          65,
+          65.41,
           "R"
         ],
         [
@@ -7374,7 +7374,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CB",
           "cb_stopper",
-          65,
+          65.41,
           "L"
         ],
         [
@@ -7383,7 +7383,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "fb_attacking",
-          65,
+          65.41,
           "R"
         ],
         [
@@ -7392,7 +7392,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CM",
           "cm_engine",
-          65,
+          65.41,
           "R"
         ],
         [
@@ -7401,7 +7401,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_runner",
-          65,
+          65.41,
           "R"
         ]
       ]
@@ -7410,7 +7410,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 44,
     "targetCa": 735,
-    "actualCa": 739.3597178604224,
+    "actualCa": 735.0000000000014,
     "kind": "generated",
     "team": {
       "id": "peak-44",
@@ -7438,7 +7438,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "GK",
           "gk_sweeper",
-          72,
+          71.7761,
           "R"
         ],
         [
@@ -7447,7 +7447,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_cover",
-          72,
+          71.7761,
           "R"
         ],
         [
@@ -7456,7 +7456,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_ballplaying",
-          72,
+          71.7761,
           "R"
         ],
         [
@@ -7465,7 +7465,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "CB",
           "cb_ballplaying",
-          70,
+          69.7761,
           "R"
         ],
         [
@@ -7474,7 +7474,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_crosser",
-          70,
+          69.7761,
           "R"
         ],
         [
@@ -7483,7 +7483,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_engine",
-          70,
+          69.7761,
           "R"
         ],
         [
@@ -7492,7 +7492,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_creator",
-          70,
+          69.7761,
           "L"
         ],
         [
@@ -7501,7 +7501,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "w_playmaker",
-          69,
+          68.7761,
           "R"
         ],
         [
@@ -7510,7 +7510,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_crosser",
-          69,
+          68.7761,
           "R"
         ],
         [
@@ -7519,7 +7519,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "ST",
           "st_target",
-          69,
+          68.7761,
           "L"
         ],
         [
@@ -7528,7 +7528,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "W",
           "fb_attacking",
-          69,
+          68.7761,
           "L"
         ],
         [
@@ -7537,7 +7537,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "GK",
           "gk_wall",
-          66,
+          65.7761,
           "R"
         ],
         [
@@ -7546,7 +7546,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_stopper",
-          66,
+          65.7761,
           "R"
         ],
         [
@@ -7555,7 +7555,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "W",
           "w_finisher",
-          66,
+          65.7761,
           "L"
         ],
         [
@@ -7564,7 +7564,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_engine",
-          66,
+          65.7761,
           "R"
         ],
         [
@@ -7573,7 +7573,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_target",
-          66,
+          65.7761,
           "L"
         ]
       ]
@@ -7582,7 +7582,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 45,
     "targetCa": 740,
-    "actualCa": 738.7739512947658,
+    "actualCa": 739.9999999999984,
     "kind": "generated",
     "team": {
       "id": "peak-45",
@@ -7610,7 +7610,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "GK",
           "gk_sweeper",
-          72,
+          72.0471,
           "R"
         ],
         [
@@ -7619,7 +7619,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_playmaker",
-          72,
+          72.0471,
           "R"
         ],
         [
@@ -7628,7 +7628,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_stopper",
-          72,
+          72.0471,
           "R"
         ],
         [
@@ -7637,7 +7637,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_stopper",
-          70,
+          70.0471,
           "R"
         ],
         [
@@ -7646,7 +7646,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "w_engine",
-          70,
+          70.0471,
           "R"
         ],
         [
@@ -7655,7 +7655,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "W",
           "fb_playmaker",
-          70,
+          70.0471,
           "R"
         ],
         [
@@ -7664,7 +7664,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_mezzala",
-          70,
+          70.0471,
           "R"
         ],
         [
@@ -7673,7 +7673,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_playmaker",
-          69,
+          69.0471,
           "R"
         ],
         [
@@ -7682,7 +7682,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "fb_attacking",
-          69,
+          69.0471,
           "L"
         ],
         [
@@ -7691,7 +7691,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_finisher",
-          69,
+          69.0471,
           "R"
         ],
         [
@@ -7700,7 +7700,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "ST",
           "st_target",
-          69,
+          69.0471,
           "R"
         ],
         [
@@ -7709,7 +7709,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "GK",
           "gk_wall",
-          66,
+          66.0471,
           "R"
         ],
         [
@@ -7718,7 +7718,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_ballplaying",
-          66,
+          66.0471,
           "R"
         ],
         [
@@ -7727,7 +7727,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_engine",
-          66,
+          66.0471,
           "R"
         ],
         [
@@ -7736,7 +7736,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CM",
           "cm_box2box",
-          66,
+          66.0471,
           "R"
         ],
         [
@@ -7745,7 +7745,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "ST",
           "st_poacher",
-          66,
+          66.0471,
           "R"
         ]
       ]
@@ -7754,7 +7754,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 46,
     "targetCa": 750,
-    "actualCa": 759.2799987909395,
+    "actualCa": 750.0000000000014,
     "kind": "generated",
     "team": {
       "id": "peak-46",
@@ -7782,7 +7782,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "GK",
           "gk_wall",
-          73,
+          72.5794,
           "R"
         ],
         [
@@ -7791,7 +7791,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "W",
           "w_crosser",
-          73,
+          72.5794,
           "R"
         ],
         [
@@ -7800,7 +7800,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_ballplaying",
-          73,
+          72.5794,
           "R"
         ],
         [
@@ -7809,7 +7809,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "CB",
           "cb_cover",
-          71,
+          70.5794,
           "L"
         ],
         [
@@ -7818,7 +7818,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "fb_playmaker",
-          71,
+          70.5794,
           "L"
         ],
         [
@@ -7827,7 +7827,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_mezzala",
-          71,
+          70.5794,
           "R"
         ],
         [
@@ -7836,7 +7836,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_playmaker",
-          71,
+          70.5794,
           "R"
         ],
         [
@@ -7845,7 +7845,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_crosser",
-          70,
+          69.5794,
           "R"
         ],
         [
@@ -7854,7 +7854,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CM",
           "cm_playmaker",
-          70,
+          69.5794,
           "L"
         ],
         [
@@ -7863,7 +7863,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "W",
           "w_playmaker",
-          70,
+          69.5794,
           "L"
         ],
         [
@@ -7872,7 +7872,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "ST",
           "st_finisher",
-          70,
+          69.5794,
           "R"
         ],
         [
@@ -7881,7 +7881,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "GK",
           "gk_sweeper",
-          67,
+          66.5794,
           "R"
         ],
         [
@@ -7890,7 +7890,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CB",
           "cb_stopper",
-          67,
+          66.5794,
           "R"
         ],
         [
@@ -7899,7 +7899,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_engine",
-          67,
+          66.5794,
           "R"
         ],
         [
@@ -7908,7 +7908,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CM",
           "cm_mezzala",
-          67,
+          66.5794,
           "R"
         ],
         [
@@ -7917,7 +7917,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_false9",
-          67,
+          66.5794,
           "R"
         ]
       ]
@@ -7926,7 +7926,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 47,
     "targetCa": 755,
-    "actualCa": 760.6408282614019,
+    "actualCa": 755.0000000000008,
     "kind": "generated",
     "team": {
       "id": "peak-47",
@@ -7954,7 +7954,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_shotstopper",
-          73,
+          72.7267,
           "R"
         ],
         [
@@ -7963,7 +7963,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "W",
           "fb_playmaker",
-          73,
+          72.7267,
           "R"
         ],
         [
@@ -7972,7 +7972,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_cover",
-          73,
+          72.7267,
           "R"
         ],
         [
@@ -7981,7 +7981,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_cover",
-          71,
+          70.7267,
           "R"
         ],
         [
@@ -7990,7 +7990,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "w_finisher",
-          71,
+          70.7267,
           "L"
         ],
         [
@@ -7999,7 +7999,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_creator",
-          71,
+          70.7267,
           "R"
         ],
         [
@@ -8008,7 +8008,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "fb_attacking",
-          71,
+          70.7267,
           "R"
         ],
         [
@@ -8017,7 +8017,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CM",
           "cm_box2box",
-          70,
+          69.7267,
           "R"
         ],
         [
@@ -8026,7 +8026,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "CM",
           "cm_destroyer",
-          70,
+          69.7267,
           "R"
         ],
         [
@@ -8035,7 +8035,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "fb_attacking",
-          70,
+          69.7267,
           "R"
         ],
         [
@@ -8044,7 +8044,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "ST",
           "st_false9",
-          70,
+          69.7267,
           "R"
         ],
         [
@@ -8053,7 +8053,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "GK",
           "gk_shotstopper",
-          67,
+          66.7267,
           "R"
         ],
         [
@@ -8062,7 +8062,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_stopper",
-          67,
+          66.7267,
           "R"
         ],
         [
@@ -8071,7 +8071,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "W",
           "w_crosser",
-          67,
+          66.7267,
           "L"
         ],
         [
@@ -8080,7 +8080,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CM",
           "cm_destroyer",
-          67,
+          66.7267,
           "L"
         ],
         [
@@ -8089,7 +8089,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_finisher",
-          67,
+          66.7267,
           "R"
         ]
       ]
@@ -8098,7 +8098,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 48,
     "targetCa": 765,
-    "actualCa": 758.593476516682,
+    "actualCa": 765.0000000000007,
     "kind": "generated",
     "team": {
       "id": "peak-48",
@@ -8126,7 +8126,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "GK",
           "gk_sweeper",
-          73,
+          73.2981,
           "R"
         ],
         [
@@ -8135,7 +8135,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "fb_attacking",
-          73,
+          73.2981,
           "L"
         ],
         [
@@ -8144,7 +8144,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CB",
           "cb_ballplaying",
-          73,
+          73.2981,
           "R"
         ],
         [
@@ -8153,7 +8153,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_stopper",
-          71,
+          71.2981,
           "L"
         ],
         [
@@ -8162,7 +8162,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "W",
           "w_crosser",
-          71,
+          71.2981,
           "L"
         ],
         [
@@ -8171,7 +8171,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_playmaker",
-          71,
+          71.2981,
           "R"
         ],
         [
@@ -8180,7 +8180,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CM",
           "cm_playmaker",
-          71,
+          71.2981,
           "R"
         ],
         [
@@ -8189,7 +8189,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CM",
           "cm_engine",
-          70,
+          70.2981,
           "R"
         ],
         [
@@ -8198,7 +8198,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_engine",
-          70,
+          70.2981,
           "L"
         ],
         [
@@ -8207,7 +8207,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "ST",
           "st_false9",
-          70,
+          70.2981,
           "R"
         ],
         [
@@ -8216,7 +8216,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "fb_attacking",
-          70,
+          70.2981,
           "R"
         ],
         [
@@ -8225,7 +8225,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_shotstopper",
-          67,
+          67.2981,
           "R"
         ],
         [
@@ -8234,7 +8234,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_ballplaying",
-          67,
+          67.2981,
           "R"
         ],
         [
@@ -8243,7 +8243,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "W",
           "fb_attacking",
-          67,
+          67.2981,
           "R"
         ],
         [
@@ -8252,7 +8252,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "CM",
           "cm_engine",
-          67,
+          67.2981,
           "L"
         ],
         [
@@ -8261,7 +8261,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_target",
-          67,
+          67.2981,
           "R"
         ]
       ]
@@ -8270,7 +8270,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 49,
     "targetCa": 770,
-    "actualCa": 761.1564508937862,
+    "actualCa": 770.0000000000008,
     "kind": "generated",
     "team": {
       "id": "peak-49",
@@ -8298,7 +8298,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "GK",
           "gk_sweeper",
-          73,
+          73.4322,
           "R"
         ],
         [
@@ -8307,7 +8307,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_dribbler",
-          73,
+          73.4322,
           "R"
         ],
         [
@@ -8316,7 +8316,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CB",
           "cb_stopper",
-          73,
+          73.4322,
           "R"
         ],
         [
@@ -8325,7 +8325,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_stopper",
-          71,
+          71.4322,
           "R"
         ],
         [
@@ -8334,7 +8334,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "W",
           "fb_attacking",
-          71,
+          71.4322,
           "R"
         ],
         [
@@ -8343,7 +8343,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "CM",
           "cm_destroyer",
-          71,
+          71.4322,
           "R"
         ],
         [
@@ -8352,7 +8352,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CM",
           "cm_destroyer",
-          71,
+          71.4322,
           "L"
         ],
         [
@@ -8361,7 +8361,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "W",
           "fb_attacking",
-          70,
+          70.4322,
           "R"
         ],
         [
@@ -8370,7 +8370,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CM",
           "cm_box2box",
-          70,
+          70.4322,
           "L"
         ],
         [
@@ -8379,7 +8379,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "w_engine",
-          70,
+          70.4322,
           "R"
         ],
         [
@@ -8388,7 +8388,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "ST",
           "st_false9",
-          70,
+          70.4322,
           "R"
         ],
         [
@@ -8397,7 +8397,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "GK",
           "gk_shotstopper",
-          67,
+          67.4322,
           "R"
         ],
         [
@@ -8406,7 +8406,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_stopper",
-          67,
+          67.4322,
           "R"
         ],
         [
@@ -8415,7 +8415,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "W",
           "w_playmaker",
-          67,
+          67.4322,
           "R"
         ],
         [
@@ -8424,7 +8424,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CM",
           "cm_destroyer",
-          67,
+          67.4322,
           "R"
         ],
         [
@@ -8433,7 +8433,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_target",
-          67,
+          67.4322,
           "R"
         ]
       ]
@@ -8442,7 +8442,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 50,
     "targetCa": 780,
-    "actualCa": 782.3185839608202,
+    "actualCa": 780.0000000000007,
     "kind": "generated",
     "team": {
       "id": "peak-50",
@@ -8470,7 +8470,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "GK",
           "gk_sweeper",
-          74,
+          73.9315,
           "R"
         ],
         [
@@ -8479,7 +8479,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_stopper",
-          74,
+          73.9315,
           "R"
         ],
         [
@@ -8488,7 +8488,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "CB",
           "cb_cover",
-          74,
+          73.9315,
           "L"
         ],
         [
@@ -8497,7 +8497,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "CB",
           "cb_ballplaying",
-          72,
+          71.9315,
           "R"
         ],
         [
@@ -8506,7 +8506,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "w_playmaker",
-          72,
+          71.9315,
           "L"
         ],
         [
@@ -8515,7 +8515,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_playmaker",
-          72,
+          71.9315,
           "R"
         ],
         [
@@ -8524,7 +8524,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_engine",
-          72,
+          71.9315,
           "R"
         ],
         [
@@ -8533,7 +8533,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "W",
           "w_engine",
-          71,
+          70.9315,
           "R"
         ],
         [
@@ -8542,7 +8542,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_dribbler",
-          71,
+          70.9315,
           "L"
         ],
         [
@@ -8551,7 +8551,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "ST",
           "st_target",
-          71,
+          70.9315,
           "R"
         ],
         [
@@ -8560,7 +8560,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_finisher",
-          71,
+          70.9315,
           "R"
         ],
         [
@@ -8569,7 +8569,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "GK",
           "gk_sweeper",
-          68,
+          67.9315,
           "R"
         ],
         [
@@ -8578,7 +8578,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CB",
           "cb_cover",
-          68,
+          67.9315,
           "R"
         ],
         [
@@ -8587,7 +8587,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "W",
           "fb_playmaker",
-          68,
+          67.9315,
           "R"
         ],
         [
@@ -8596,7 +8596,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CM",
           "cm_engine",
-          68,
+          67.9315,
           "R"
         ],
         [
@@ -8605,7 +8605,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_runner",
-          68,
+          67.9315,
           "R"
         ]
       ]
@@ -8614,7 +8614,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 51,
     "targetCa": 780,
-    "actualCa": 784.4316693816959,
+    "actualCa": 779.9999999999993,
     "kind": "generated",
     "team": {
       "id": "peak-51",
@@ -8642,7 +8642,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "GK",
           "gk_sweeper",
-          74,
+          73.7759,
           "R"
         ],
         [
@@ -8651,7 +8651,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "fb_attacking",
-          74,
+          73.7759,
           "R"
         ],
         [
@@ -8660,7 +8660,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_cover",
-          74,
+          73.7759,
           "R"
         ],
         [
@@ -8669,7 +8669,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CB",
           "cb_ballplaying",
-          72,
+          71.7759,
           "L"
         ],
         [
@@ -8678,7 +8678,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "CB",
           "cb_stopper",
-          72,
+          71.7759,
           "L"
         ],
         [
@@ -8687,7 +8687,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "w_playmaker",
-          72,
+          71.7759,
           "R"
         ],
         [
@@ -8696,7 +8696,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_creator",
-          72,
+          71.7759,
           "R"
         ],
         [
@@ -8705,7 +8705,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_playmaker",
-          71,
+          70.7759,
           "R"
         ],
         [
@@ -8714,7 +8714,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_creator",
-          71,
+          70.7759,
           "R"
         ],
         [
@@ -8723,7 +8723,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "ST",
           "st_runner",
-          71,
+          70.7759,
           "R"
         ],
         [
@@ -8732,7 +8732,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "ST",
           "st_runner",
-          71,
+          70.7759,
           "R"
         ],
         [
@@ -8741,7 +8741,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_shotstopper",
-          68,
+          67.7759,
           "R"
         ],
         [
@@ -8750,7 +8750,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_stopper",
-          68,
+          67.7759,
           "L"
         ],
         [
@@ -8759,7 +8759,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "W",
           "w_playmaker",
-          68,
+          67.7759,
           "R"
         ],
         [
@@ -8768,7 +8768,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_mezzala",
-          68,
+          67.7759,
           "R"
         ],
         [
@@ -8777,7 +8777,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_finisher",
-          68,
+          67.7759,
           "R"
         ]
       ]
@@ -8786,7 +8786,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 52,
     "targetCa": 790,
-    "actualCa": 784.0507735292318,
+    "actualCa": 790.0000000000007,
     "kind": "generated",
     "team": {
       "id": "peak-52",
@@ -8814,7 +8814,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_wall",
-          74,
+          74.3177,
           "R"
         ],
         [
@@ -8823,7 +8823,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "W",
           "fb_attacking",
-          74,
+          74.3177,
           "R"
         ],
         [
@@ -8832,7 +8832,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CB",
           "cb_cover",
-          74,
+          74.3177,
           "R"
         ],
         [
@@ -8841,7 +8841,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CB",
           "cb_cover",
-          72,
+          72.3177,
           "L"
         ],
         [
@@ -8850,7 +8850,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "W",
           "fb_attacking",
-          72,
+          72.3177,
           "R"
         ],
         [
@@ -8859,7 +8859,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "w_playmaker",
-          72,
+          72.3177,
           "L"
         ],
         [
@@ -8868,7 +8868,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_mezzala",
-          72,
+          72.3177,
           "R"
         ],
         [
@@ -8877,7 +8877,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_mezzala",
-          71,
+          71.3177,
           "R"
         ],
         [
@@ -8886,7 +8886,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "fb_attacking",
-          71,
+          71.3177,
           "R"
         ],
         [
@@ -8895,7 +8895,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "ST",
           "st_poacher",
-          71,
+          71.3177,
           "L"
         ],
         [
@@ -8904,7 +8904,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_false9",
-          71,
+          71.3177,
           "R"
         ],
         [
@@ -8913,7 +8913,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "GK",
           "gk_shotstopper",
-          68,
+          68.3177,
           "R"
         ],
         [
@@ -8922,7 +8922,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_cover",
-          68,
+          68.3177,
           "R"
         ],
         [
@@ -8931,7 +8931,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_playmaker",
-          68,
+          68.3177,
           "L"
         ],
         [
@@ -8940,7 +8940,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_mezzala",
-          68,
+          68.3177,
           "L"
         ],
         [
@@ -8949,7 +8949,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "ST",
           "st_target",
-          68,
+          68.3177,
           "R"
         ]
       ]
@@ -8958,7 +8958,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 53,
     "targetCa": 795,
-    "actualCa": 802.8750174288336,
+    "actualCa": 794.9999999999989,
     "kind": "generated",
     "team": {
       "id": "peak-53",
@@ -8986,7 +8986,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_shotstopper",
-          75,
+          74.6767,
           "R"
         ],
         [
@@ -8995,7 +8995,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_engine",
-          75,
+          74.6767,
           "R"
         ],
         [
@@ -9004,7 +9004,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CB",
           "cb_cover",
-          75,
+          74.6767,
           "R"
         ],
         [
@@ -9013,7 +9013,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CB",
           "cb_ballplaying",
-          73,
+          72.6767,
           "R"
         ],
         [
@@ -9022,7 +9022,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_ballplaying",
-          73,
+          72.6767,
           "R"
         ],
         [
@@ -9031,7 +9031,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "w_engine",
-          73,
+          72.6767,
           "R"
         ],
         [
@@ -9040,7 +9040,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CM",
           "cm_box2box",
-          73,
+          72.6767,
           "R"
         ],
         [
@@ -9049,7 +9049,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_destroyer",
-          72,
+          71.6767,
           "R"
         ],
         [
@@ -9058,7 +9058,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CM",
           "cm_destroyer",
-          72,
+          71.6767,
           "R"
         ],
         [
@@ -9067,7 +9067,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "ST",
           "st_runner",
-          72,
+          71.6767,
           "L"
         ],
         [
@@ -9076,7 +9076,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_false9",
-          72,
+          71.6767,
           "L"
         ],
         [
@@ -9085,7 +9085,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "GK",
           "gk_wall",
-          69,
+          68.6767,
           "R"
         ],
         [
@@ -9094,7 +9094,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_ballplaying",
-          69,
+          68.6767,
           "R"
         ],
         [
@@ -9103,7 +9103,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "fb_playmaker",
-          69,
+          68.6767,
           "R"
         ],
         [
@@ -9112,7 +9112,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_destroyer",
-          69,
+          68.6767,
           "R"
         ],
         [
@@ -9121,7 +9121,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_runner",
-          69,
+          68.6767,
           "R"
         ]
       ]
@@ -9130,7 +9130,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 54,
     "targetCa": 805,
-    "actualCa": 802.7040757147231,
+    "actualCa": 804.9999999999999,
     "kind": "generated",
     "team": {
       "id": "peak-54",
@@ -9158,7 +9158,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "GK",
           "gk_sweeper",
-          75,
+          75.1085,
           "R"
         ],
         [
@@ -9167,7 +9167,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "W",
           "w_crosser",
-          75,
+          75.1085,
           "L"
         ],
         [
@@ -9176,7 +9176,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_stopper",
-          75,
+          75.1085,
           "R"
         ],
         [
@@ -9185,7 +9185,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_stopper",
-          73,
+          73.1085,
           "L"
         ],
         [
@@ -9194,7 +9194,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CB",
           "cb_cover",
-          73,
+          73.1085,
           "R"
         ],
         [
@@ -9203,7 +9203,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "W",
           "fb_playmaker",
-          73,
+          73.1085,
           "R"
         ],
         [
@@ -9212,7 +9212,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CM",
           "cm_mezzala",
-          73,
+          73.1085,
           "L"
         ],
         [
@@ -9221,7 +9221,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_playmaker",
-          72,
+          72.1085,
           "R"
         ],
         [
@@ -9230,7 +9230,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_playmaker",
-          72,
+          72.1085,
           "R"
         ],
         [
@@ -9239,7 +9239,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "ST",
           "st_finisher",
-          72,
+          72.1085,
           "R"
         ],
         [
@@ -9248,7 +9248,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_finisher",
-          72,
+          72.1085,
           "R"
         ],
         [
@@ -9257,7 +9257,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "GK",
           "gk_sweeper",
-          69,
+          69.1085,
           "R"
         ],
         [
@@ -9266,7 +9266,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_cover",
-          69,
+          69.1085,
           "R"
         ],
         [
@@ -9275,7 +9275,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "w_dribbler",
-          69,
+          69.1085,
           "R"
         ],
         [
@@ -9284,7 +9284,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CM",
           "cm_creator",
-          69,
+          69.1085,
           "R"
         ],
         [
@@ -9293,7 +9293,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "ST",
           "st_runner",
-          69,
+          69.1085,
           "R"
         ]
       ]
@@ -9302,7 +9302,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 55,
     "targetCa": 810,
-    "actualCa": 803.0380561493726,
+    "actualCa": 809.9999999999993,
     "kind": "generated",
     "team": {
       "id": "peak-55",
@@ -9330,7 +9330,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_shotstopper",
-          75,
+          75.2523,
           "L"
         ],
         [
@@ -9339,7 +9339,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_stopper",
-          75,
+          75.2523,
           "R"
         ],
         [
@@ -9348,7 +9348,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_ballplaying",
-          75,
+          75.2523,
           "L"
         ],
         [
@@ -9357,7 +9357,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_cover",
-          73,
+          73.2523,
           "R"
         ],
         [
@@ -9366,7 +9366,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "w_crosser",
-          73,
+          73.2523,
           "R"
         ],
         [
@@ -9375,7 +9375,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_box2box",
-          73,
+          73.2523,
           "R"
         ],
         [
@@ -9384,7 +9384,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CM",
           "cm_destroyer",
-          73,
+          73.2523,
           "R"
         ],
         [
@@ -9393,7 +9393,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "W",
           "w_crosser",
-          72,
+          72.2523,
           "R"
         ],
         [
@@ -9402,7 +9402,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "fb_attacking",
-          72,
+          72.2523,
           "L"
         ],
         [
@@ -9411,7 +9411,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_false9",
-          72,
+          72.2523,
           "R"
         ],
         [
@@ -9420,7 +9420,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_dribbler",
-          72,
+          72.2523,
           "L"
         ],
         [
@@ -9429,7 +9429,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_sweeper",
-          69,
+          69.2523,
           "R"
         ],
         [
@@ -9438,7 +9438,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_cover",
-          69,
+          69.2523,
           "L"
         ],
         [
@@ -9447,7 +9447,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_finisher",
-          69,
+          69.2523,
           "R"
         ],
         [
@@ -9456,7 +9456,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_destroyer",
-          69,
+          69.2523,
           "L"
         ],
         [
@@ -9465,7 +9465,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_poacher",
-          69,
+          69.2523,
           "R"
         ]
       ]
@@ -9474,7 +9474,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 56,
     "targetCa": 820,
-    "actualCa": 827.5506792868074,
+    "actualCa": 819.9999999999992,
     "kind": "generated",
     "team": {
       "id": "peak-56",
@@ -9502,7 +9502,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "GK",
           "gk_sweeper",
-          76,
+          75.7267,
           "L"
         ],
         [
@@ -9511,7 +9511,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_engine",
-          76,
+          75.7267,
           "R"
         ],
         [
@@ -9520,7 +9520,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_cover",
-          76,
+          75.7267,
           "R"
         ],
         [
@@ -9529,7 +9529,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CB",
           "cb_cover",
-          74,
+          73.7267,
           "R"
         ],
         [
@@ -9538,7 +9538,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_cover",
-          74,
+          73.7267,
           "R"
         ],
         [
@@ -9547,7 +9547,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "W",
           "w_finisher",
-          74,
+          73.7267,
           "L"
         ],
         [
@@ -9556,7 +9556,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CM",
           "cm_destroyer",
-          74,
+          73.7267,
           "R"
         ],
         [
@@ -9565,7 +9565,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CM",
           "cm_playmaker",
-          73,
+          72.7267,
           "L"
         ],
         [
@@ -9574,7 +9574,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CM",
           "cm_destroyer",
-          73,
+          72.7267,
           "R"
         ],
         [
@@ -9583,7 +9583,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "ST",
           "st_runner",
-          73,
+          72.7267,
           "R"
         ],
         [
@@ -9592,7 +9592,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "ST",
           "st_finisher",
-          73,
+          72.7267,
           "R"
         ],
         [
@@ -9601,7 +9601,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "GK",
           "gk_wall",
-          70,
+          69.7267,
           "R"
         ],
         [
@@ -9610,7 +9610,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CB",
           "cb_cover",
-          70,
+          69.7267,
           "L"
         ],
         [
@@ -9619,7 +9619,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "W",
           "w_dribbler",
-          70,
+          69.7267,
           "R"
         ],
         [
@@ -9628,7 +9628,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_playmaker",
-          70,
+          69.7267,
           "R"
         ],
         [
@@ -9637,7 +9637,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "ST",
           "st_false9",
-          70,
+          69.7267,
           "R"
         ]
       ]
@@ -9646,7 +9646,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 57,
     "targetCa": 825,
-    "actualCa": 825.7289650933577,
+    "actualCa": 825.000000000001,
     "kind": "generated",
     "team": {
       "id": "peak-57",
@@ -9818,7 +9818,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 58,
     "targetCa": 835,
-    "actualCa": 845.7170745454546,
+    "actualCa": 835.0000000000015,
     "kind": "generated",
     "team": {
       "id": "peak-58",
@@ -9846,7 +9846,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "GK",
           "gk_wall",
-          77,
+          76.52,
           "R"
         ],
         [
@@ -9855,7 +9855,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CB",
           "cb_ballplaying",
-          77,
+          76.52,
           "R"
         ],
         [
@@ -9864,7 +9864,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_ballplaying",
-          77,
+          76.52,
           "R"
         ],
         [
@@ -9873,7 +9873,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_ballplaying",
-          75,
+          74.52,
           "R"
         ],
         [
@@ -9882,7 +9882,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_finisher",
-          75,
+          74.52,
           "R"
         ],
         [
@@ -9891,7 +9891,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_mezzala",
-          75,
+          74.52,
           "R"
         ],
         [
@@ -9900,7 +9900,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_playmaker",
-          75,
+          74.52,
           "R"
         ],
         [
@@ -9909,7 +9909,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "W",
           "w_finisher",
-          74,
+          73.52,
           "R"
         ],
         [
@@ -9918,7 +9918,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_attacking",
-          74,
+          73.52,
           "R"
         ],
         [
@@ -9927,7 +9927,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "ST",
           "st_target",
-          74,
+          73.52,
           "R"
         ],
         [
@@ -9936,7 +9936,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_engine",
-          74,
+          73.52,
           "R"
         ],
         [
@@ -9945,7 +9945,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_sweeper",
-          71,
+          70.52,
           "L"
         ],
         [
@@ -9954,7 +9954,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "CB",
           "cb_cover",
-          71,
+          70.52,
           "R"
         ],
         [
@@ -9963,7 +9963,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "W",
           "w_playmaker",
-          71,
+          70.52,
           "R"
         ],
         [
@@ -9972,7 +9972,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_creator",
-          71,
+          70.52,
           "R"
         ],
         [
@@ -9981,7 +9981,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "ST",
           "st_false9",
-          71,
+          70.52,
           "L"
         ]
       ]
@@ -9990,7 +9990,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 59,
     "targetCa": 840,
-    "actualCa": 846.6465995592287,
+    "actualCa": 840.0000000000001,
     "kind": "generated",
     "team": {
       "id": "peak-59",
@@ -10018,7 +10018,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "GK",
           "gk_shotstopper",
-          77,
+          76.6782,
           "R"
         ],
         [
@@ -10027,7 +10027,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "w_crosser",
-          77,
+          76.6782,
           "R"
         ],
         [
@@ -10036,7 +10036,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_cover",
-          77,
+          76.6782,
           "R"
         ],
         [
@@ -10045,7 +10045,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_stopper",
-          75,
+          74.6782,
           "R"
         ],
         [
@@ -10054,7 +10054,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "w_finisher",
-          75,
+          74.6782,
           "L"
         ],
         [
@@ -10063,7 +10063,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CM",
           "cm_box2box",
-          75,
+          74.6782,
           "R"
         ],
         [
@@ -10072,7 +10072,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CM",
           "cm_destroyer",
-          75,
+          74.6782,
           "R"
         ],
         [
@@ -10081,7 +10081,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_attacking",
-          74,
+          73.6782,
           "L"
         ],
         [
@@ -10090,7 +10090,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CM",
           "cm_destroyer",
-          74,
+          73.6782,
           "R"
         ],
         [
@@ -10099,7 +10099,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "W",
           "fb_playmaker",
-          74,
+          73.6782,
           "R"
         ],
         [
@@ -10108,7 +10108,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_poacher",
-          74,
+          73.6782,
           "R"
         ],
         [
@@ -10117,7 +10117,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_shotstopper",
-          71,
+          70.6782,
           "L"
         ],
         [
@@ -10126,7 +10126,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_stopper",
-          71,
+          70.6782,
           "R"
         ],
         [
@@ -10135,7 +10135,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_engine",
-          71,
+          70.6782,
           "R"
         ],
         [
@@ -10144,7 +10144,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_creator",
-          71,
+          70.6782,
           "R"
         ],
         [
@@ -10153,7 +10153,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_finisher",
-          71,
+          70.6782,
           "R"
         ]
       ]
@@ -10162,7 +10162,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 60,
     "targetCa": 850,
-    "actualCa": 844.9303828619529,
+    "actualCa": 849.9999999999997,
     "kind": "generated",
     "team": {
       "id": "peak-60",
@@ -10190,7 +10190,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "GK",
           "gk_wall",
-          77,
+          77.2088,
           "L"
         ],
         [
@@ -10199,7 +10199,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_ballplaying",
-          77,
+          77.2088,
           "R"
         ],
         [
@@ -10208,7 +10208,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_stopper",
-          77,
+          77.2088,
           "R"
         ],
         [
@@ -10217,7 +10217,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_ballplaying",
-          75,
+          75.2088,
           "L"
         ],
         [
@@ -10226,7 +10226,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_attacking",
-          75,
+          75.2088,
           "L"
         ],
         [
@@ -10235,7 +10235,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "CM",
           "cm_playmaker",
-          75,
+          75.2088,
           "R"
         ],
         [
@@ -10244,7 +10244,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CM",
           "cm_box2box",
-          75,
+          75.2088,
           "R"
         ],
         [
@@ -10253,7 +10253,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "w_engine",
-          74,
+          74.2088,
           "L"
         ],
         [
@@ -10262,7 +10262,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "W",
           "w_dribbler",
-          74,
+          74.2088,
           "R"
         ],
         [
@@ -10271,7 +10271,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_false9",
-          74,
+          74.2088,
           "R"
         ],
         [
@@ -10280,7 +10280,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "w_crosser",
-          74,
+          74.2088,
           "L"
         ],
         [
@@ -10289,7 +10289,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "GK",
           "gk_sweeper",
-          71,
+          71.2088,
           "L"
         ],
         [
@@ -10298,7 +10298,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_ballplaying",
-          71,
+          71.2088,
           "R"
         ],
         [
@@ -10307,7 +10307,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "w_dribbler",
-          71,
+          71.2088,
           "R"
         ],
         [
@@ -10316,7 +10316,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CM",
           "cm_playmaker",
-          71,
+          71.2088,
           "R"
         ],
         [
@@ -10325,7 +10325,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "ST",
           "st_finisher",
-          71,
+          71.2088,
           "R"
         ]
       ]
@@ -10334,7 +10334,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 61,
     "targetCa": 850,
-    "actualCa": 843.1505480777472,
+    "actualCa": 849.9999999999999,
     "kind": "generated",
     "team": {
       "id": "peak-61",
@@ -10362,7 +10362,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "GK",
           "gk_shotstopper",
-          77,
+          77.25,
           "R"
         ],
         [
@@ -10371,7 +10371,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_crosser",
-          77,
+          77.25,
           "R"
         ],
         [
@@ -10380,7 +10380,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_stopper",
-          77,
+          77.25,
           "R"
         ],
         [
@@ -10389,7 +10389,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_ballplaying",
-          75,
+          75.25,
           "R"
         ],
         [
@@ -10398,7 +10398,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_playmaker",
-          75,
+          75.25,
           "R"
         ],
         [
@@ -10407,7 +10407,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "W",
           "fb_attacking",
-          75,
+          75.25,
           "R"
         ],
         [
@@ -10416,7 +10416,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CM",
           "cm_playmaker",
-          75,
+          75.25,
           "L"
         ],
         [
@@ -10425,7 +10425,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CM",
           "cm_box2box",
-          74,
+          74.25,
           "R"
         ],
         [
@@ -10434,7 +10434,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_playmaker",
-          74,
+          74.25,
           "L"
         ],
         [
@@ -10443,7 +10443,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_target",
-          74,
+          74.25,
           "R"
         ],
         [
@@ -10452,7 +10452,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "ST",
           "st_finisher",
-          74,
+          74.25,
           "R"
         ],
         [
@@ -10461,7 +10461,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "GK",
           "gk_wall",
-          71,
+          71.25,
           "R"
         ],
         [
@@ -10470,7 +10470,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_ballplaying",
-          71,
+          71.25,
           "R"
         ],
         [
@@ -10479,7 +10479,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "W",
           "w_finisher",
-          71,
+          71.25,
           "L"
         ],
         [
@@ -10488,7 +10488,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_destroyer",
-          71,
+          71.25,
           "L"
         ],
         [
@@ -10497,7 +10497,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_false9",
-          71,
+          71.25,
           "L"
         ]
       ]
@@ -10506,7 +10506,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 62,
     "targetCa": 860,
-    "actualCa": 870.0566452372208,
+    "actualCa": 860,
     "kind": "generated",
     "team": {
       "id": "peak-62",
@@ -10534,7 +10534,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_shotstopper",
-          78,
+          77.5283,
           "L"
         ],
         [
@@ -10543,7 +10543,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CB",
           "cb_ballplaying",
-          78,
+          77.5283,
           "R"
         ],
         [
@@ -10552,7 +10552,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CB",
           "cb_stopper",
-          78,
+          77.5283,
           "R"
         ],
         [
@@ -10561,7 +10561,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CB",
           "cb_stopper",
-          76,
+          75.5283,
           "L"
         ],
         [
@@ -10570,7 +10570,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "W",
           "w_playmaker",
-          76,
+          75.5283,
           "R"
         ],
         [
@@ -10579,7 +10579,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CM",
           "cm_creator",
-          76,
+          75.5283,
           "L"
         ],
         [
@@ -10588,7 +10588,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "CM",
           "cm_mezzala",
-          76,
+          75.5283,
           "R"
         ],
         [
@@ -10597,7 +10597,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_playmaker",
-          75,
+          74.5283,
           "R"
         ],
         [
@@ -10606,7 +10606,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_playmaker",
-          75,
+          74.5283,
           "R"
         ],
         [
@@ -10615,7 +10615,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_runner",
-          75,
+          74.5283,
           "R"
         ],
         [
@@ -10624,7 +10624,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_finisher",
-          75,
+          74.5283,
           "R"
         ],
         [
@@ -10633,7 +10633,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "GK",
           "gk_shotstopper",
-          72,
+          71.5283,
           "R"
         ],
         [
@@ -10642,7 +10642,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CB",
           "cb_cover",
-          72,
+          71.5283,
           "R"
         ],
         [
@@ -10651,7 +10651,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "w_playmaker",
-          72,
+          71.5283,
           "R"
         ],
         [
@@ -10660,7 +10660,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CM",
           "cm_creator",
-          72,
+          71.5283,
           "R"
         ],
         [
@@ -10669,7 +10669,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_target",
-          72,
+          71.5283,
           "R"
         ]
       ]
@@ -10678,7 +10678,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 63,
     "targetCa": 865,
-    "actualCa": 865.126798469544,
+    "actualCa": 865.0000000000003,
     "kind": "generated",
     "team": {
       "id": "peak-63",
@@ -10850,7 +10850,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 64,
     "targetCa": 875,
-    "actualCa": 867.8249701530455,
+    "actualCa": 874.9999999999995,
     "kind": "generated",
     "team": {
       "id": "peak-64",
@@ -10878,7 +10878,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_shotstopper",
-          78,
+          78.2981,
           "R"
         ],
         [
@@ -10887,7 +10887,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "w_crosser",
-          78,
+          78.2981,
           "R"
         ],
         [
@@ -10896,7 +10896,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CB",
           "cb_ballplaying",
-          78,
+          78.2981,
           "R"
         ],
         [
@@ -10905,7 +10905,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_stopper",
-          76,
+          76.2981,
           "R"
         ],
         [
@@ -10914,7 +10914,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "fb_attacking",
-          76,
+          76.2981,
           "L"
         ],
         [
@@ -10923,7 +10923,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_creator",
-          76,
+          76.2981,
           "R"
         ],
         [
@@ -10932,7 +10932,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_creator",
-          76,
+          76.2981,
           "L"
         ],
         [
@@ -10941,7 +10941,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_playmaker",
-          75,
+          75.2981,
           "R"
         ],
         [
@@ -10950,7 +10950,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "w_engine",
-          75,
+          75.2981,
           "R"
         ],
         [
@@ -10959,7 +10959,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "ST",
           "st_poacher",
-          75,
+          75.2981,
           "R"
         ],
         [
@@ -10968,7 +10968,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_playmaker",
-          75,
+          75.2981,
           "R"
         ],
         [
@@ -10977,7 +10977,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_shotstopper",
-          72,
+          72.2981,
           "L"
         ],
         [
@@ -10986,7 +10986,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_ballplaying",
-          72,
+          72.2981,
           "R"
         ],
         [
@@ -10995,7 +10995,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "fb_attacking",
-          72,
+          72.2981,
           "R"
         ],
         [
@@ -11004,7 +11004,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CM",
           "cm_creator",
-          72,
+          72.2981,
           "R"
         ],
         [
@@ -11013,7 +11013,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_false9",
-          72,
+          72.2981,
           "L"
         ]
       ]
@@ -11022,7 +11022,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 65,
     "targetCa": 880,
-    "actualCa": 873.5899735935109,
+    "actualCa": 880.0000000000003,
     "kind": "generated",
     "team": {
       "id": "peak-65",
@@ -11050,7 +11050,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_wall",
-          78,
+          78.3047,
           "R"
         ],
         [
@@ -11059,7 +11059,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_cover",
-          78,
+          78.3047,
           "R"
         ],
         [
@@ -11068,7 +11068,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_cover",
-          78,
+          78.3047,
           "R"
         ],
         [
@@ -11077,7 +11077,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CB",
           "cb_cover",
-          76,
+          76.3047,
           "R"
         ],
         [
@@ -11086,7 +11086,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "w_finisher",
-          76,
+          76.3047,
           "R"
         ],
         [
@@ -11095,7 +11095,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_destroyer",
-          76,
+          76.3047,
           "R"
         ],
         [
@@ -11104,7 +11104,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CM",
           "cm_destroyer",
-          76,
+          76.3047,
           "L"
         ],
         [
@@ -11113,7 +11113,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "W",
           "w_crosser",
-          75,
+          75.3047,
           "L"
         ],
         [
@@ -11122,7 +11122,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "w_finisher",
-          75,
+          75.3047,
           "R"
         ],
         [
@@ -11131,7 +11131,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "ST",
           "st_runner",
-          75,
+          75.3047,
           "L"
         ],
         [
@@ -11140,7 +11140,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "w_dribbler",
-          75,
+          75.3047,
           "R"
         ],
         [
@@ -11149,7 +11149,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "GK",
           "gk_shotstopper",
-          72,
+          72.3047,
           "L"
         ],
         [
@@ -11158,7 +11158,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_stopper",
-          72,
+          72.3047,
           "R"
         ],
         [
@@ -11167,7 +11167,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "w_finisher",
-          72,
+          72.3047,
           "R"
         ],
         [
@@ -11176,7 +11176,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_mezzala",
-          72,
+          72.3047,
           "R"
         ],
         [
@@ -11185,7 +11185,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "ST",
           "st_runner",
-          72,
+          72.3047,
           "R"
         ]
       ]
@@ -11194,7 +11194,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 66,
     "targetCa": 890,
-    "actualCa": 891.9073698132844,
+    "actualCa": 890.0000000000003,
     "kind": "generated",
     "team": {
       "id": "peak-66",
@@ -11222,7 +11222,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_wall",
-          79,
+          78.9021,
           "L"
         ],
         [
@@ -11231,7 +11231,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_stopper",
-          79,
+          78.9021,
           "R"
         ],
         [
@@ -11240,7 +11240,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_stopper",
-          79,
+          78.9021,
           "L"
         ],
         [
@@ -11249,7 +11249,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_stopper",
-          77,
+          76.9021,
           "R"
         ],
         [
@@ -11258,7 +11258,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "w_finisher",
-          77,
+          76.9021,
           "R"
         ],
         [
@@ -11267,7 +11267,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CM",
           "cm_engine",
-          77,
+          76.9021,
           "R"
         ],
         [
@@ -11276,7 +11276,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CM",
           "cm_creator",
-          77,
+          76.9021,
           "R"
         ],
         [
@@ -11285,7 +11285,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_playmaker",
-          76,
+          75.9021,
           "R"
         ],
         [
@@ -11294,7 +11294,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_engine",
-          76,
+          75.9021,
           "L"
         ],
         [
@@ -11303,7 +11303,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "ST",
           "st_runner",
-          76,
+          75.9021,
           "R"
         ],
         [
@@ -11312,7 +11312,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "w_dribbler",
-          76,
+          75.9021,
           "R"
         ],
         [
@@ -11321,7 +11321,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "GK",
           "gk_shotstopper",
-          73,
+          72.9021,
           "R"
         ],
         [
@@ -11330,7 +11330,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_cover",
-          73,
+          72.9021,
           "L"
         ],
         [
@@ -11339,7 +11339,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "fb_attacking",
-          73,
+          72.9021,
           "L"
         ],
         [
@@ -11348,7 +11348,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CM",
           "cm_playmaker",
-          73,
+          72.9021,
           "R"
         ],
         [
@@ -11357,7 +11357,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "ST",
           "st_finisher",
-          73,
+          72.9021,
           "R"
         ]
       ]
@@ -11366,7 +11366,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 67,
     "targetCa": 895,
-    "actualCa": 889.9039175573921,
+    "actualCa": 895.0000000000005,
     "kind": "generated",
     "team": {
       "id": "peak-67",
@@ -11394,7 +11394,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "GK",
           "gk_wall",
-          79,
+          79.157,
           "L"
         ],
         [
@@ -11403,7 +11403,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "fb_attacking",
-          79,
+          79.157,
           "L"
         ],
         [
@@ -11412,7 +11412,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_stopper",
-          79,
+          79.157,
           "R"
         ],
         [
@@ -11421,7 +11421,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_stopper",
-          77,
+          77.157,
           "L"
         ],
         [
@@ -11430,7 +11430,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "fb_attacking",
-          77,
+          77.157,
           "R"
         ],
         [
@@ -11439,7 +11439,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CM",
           "cm_playmaker",
-          77,
+          77.157,
           "R"
         ],
         [
@@ -11448,7 +11448,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_attacking",
-          77,
+          77.157,
           "R"
         ],
         [
@@ -11457,7 +11457,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_creator",
-          76,
+          76.157,
           "R"
         ],
         [
@@ -11466,7 +11466,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CM",
           "cm_destroyer",
-          76,
+          76.157,
           "R"
         ],
         [
@@ -11475,7 +11475,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "fb_attacking",
-          76,
+          76.157,
           "L"
         ],
         [
@@ -11484,7 +11484,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "ST",
           "st_target",
-          76,
+          76.157,
           "R"
         ],
         [
@@ -11493,7 +11493,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_wall",
-          73,
+          73.157,
           "R"
         ],
         [
@@ -11502,7 +11502,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_ballplaying",
-          73,
+          73.157,
           "R"
         ],
         [
@@ -11511,7 +11511,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "W",
           "w_playmaker",
-          73,
+          73.157,
           "R"
         ],
         [
@@ -11520,7 +11520,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_creator",
-          73,
+          73.157,
           "R"
         ],
         [
@@ -11529,7 +11529,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_poacher",
-          73,
+          73.157,
           "L"
         ]
       ]
@@ -11538,7 +11538,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 68,
     "targetCa": 905,
-    "actualCa": 914.3710785583103,
+    "actualCa": 905.0000000000011,
     "kind": "generated",
     "team": {
       "id": "peak-68",
@@ -11566,7 +11566,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_sweeper",
-          80,
+          79.5882,
           "R"
         ],
         [
@@ -11575,7 +11575,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "W",
           "w_crosser",
-          80,
+          79.5882,
           "R"
         ],
         [
@@ -11584,7 +11584,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CB",
           "cb_cover",
-          80,
+          79.5882,
           "R"
         ],
         [
@@ -11593,7 +11593,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_stopper",
-          78,
+          77.5882,
           "R"
         ],
         [
@@ -11602,7 +11602,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_stopper",
-          78,
+          77.5882,
           "R"
         ],
         [
@@ -11611,7 +11611,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "fb_playmaker",
-          78,
+          77.5882,
           "L"
         ],
         [
@@ -11620,7 +11620,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_creator",
-          78,
+          77.5882,
           "L"
         ],
         [
@@ -11629,7 +11629,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CM",
           "cm_destroyer",
-          77,
+          76.5882,
           "L"
         ],
         [
@@ -11638,7 +11638,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CM",
           "cm_box2box",
-          77,
+          76.5882,
           "R"
         ],
         [
@@ -11647,7 +11647,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "ST",
           "st_poacher",
-          77,
+          76.5882,
           "R"
         ],
         [
@@ -11656,7 +11656,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "ST",
           "st_false9",
-          77,
+          76.5882,
           "L"
         ],
         [
@@ -11665,7 +11665,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_wall",
-          74,
+          73.5882,
           "R"
         ],
         [
@@ -11674,7 +11674,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CB",
           "cb_cover",
-          74,
+          73.5882,
           "L"
         ],
         [
@@ -11683,7 +11683,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "w_crosser",
-          74,
+          73.5882,
           "L"
         ],
         [
@@ -11692,7 +11692,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_box2box",
-          74,
+          73.5882,
           "R"
         ],
         [
@@ -11701,7 +11701,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_false9",
-          74,
+          73.5882,
           "R"
         ]
       ]
@@ -11710,7 +11710,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 69,
     "targetCa": 910,
-    "actualCa": 915.5853568074687,
+    "actualCa": 910.0000000000005,
     "kind": "generated",
     "team": {
       "id": "peak-69",
@@ -11738,7 +11738,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "GK",
           "gk_wall",
-          80,
+          79.6994,
           "L"
         ],
         [
@@ -11747,7 +11747,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "W",
           "w_playmaker",
-          80,
+          79.6994,
           "R"
         ],
         [
@@ -11756,7 +11756,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CB",
           "cb_stopper",
-          80,
+          79.6994,
           "L"
         ],
         [
@@ -11765,7 +11765,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_cover",
-          78,
+          77.6994,
           "L"
         ],
         [
@@ -11774,7 +11774,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_dribbler",
-          78,
+          77.6994,
           "R"
         ],
         [
@@ -11783,7 +11783,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_mezzala",
-          78,
+          77.6994,
           "L"
         ],
         [
@@ -11792,7 +11792,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_creator",
-          78,
+          77.6994,
           "R"
         ],
         [
@@ -11801,7 +11801,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_attacking",
-          77,
+          76.6994,
           "L"
         ],
         [
@@ -11810,7 +11810,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "CM",
           "cm_creator",
-          77,
+          76.6994,
           "R"
         ],
         [
@@ -11819,7 +11819,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "W",
           "w_crosser",
-          77,
+          76.6994,
           "R"
         ],
         [
@@ -11828,7 +11828,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_runner",
-          77,
+          76.6994,
           "R"
         ],
         [
@@ -11837,7 +11837,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_wall",
-          74,
+          73.6994,
           "R"
         ],
         [
@@ -11846,7 +11846,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_cover",
-          74,
+          73.6994,
           "L"
         ],
         [
@@ -11855,7 +11855,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_engine",
-          74,
+          73.6994,
           "R"
         ],
         [
@@ -11864,7 +11864,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_creator",
-          74,
+          73.6994,
           "R"
         ],
         [
@@ -11873,7 +11873,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_poacher",
-          74,
+          73.6994,
           "R"
         ]
       ]
@@ -11882,7 +11882,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 70,
     "targetCa": 920,
-    "actualCa": 912.535308962351,
+    "actualCa": 919.9999999999986,
     "kind": "generated",
     "team": {
       "id": "peak-70",
@@ -11910,7 +11910,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_wall",
-          80,
+          80.3406,
           "R"
         ],
         [
@@ -11919,7 +11919,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_ballplaying",
-          80,
+          80.3406,
           "R"
         ],
         [
@@ -11928,7 +11928,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_stopper",
-          80,
+          80.3406,
           "R"
         ],
         [
@@ -11937,7 +11937,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_stopper",
-          78,
+          78.3406,
           "L"
         ],
         [
@@ -11946,7 +11946,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "w_engine",
-          78,
+          78.3406,
           "R"
         ],
         [
@@ -11955,7 +11955,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_destroyer",
-          78,
+          78.3406,
           "R"
         ],
         [
@@ -11964,7 +11964,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_mezzala",
-          78,
+          78.3406,
           "R"
         ],
         [
@@ -11973,7 +11973,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "W",
           "w_engine",
-          77,
+          77.3406,
           "R"
         ],
         [
@@ -11982,7 +11982,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_crosser",
-          77,
+          77.3406,
           "R"
         ],
         [
@@ -11991,7 +11991,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_false9",
-          77,
+          77.3406,
           "R"
         ],
         [
@@ -12000,7 +12000,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "W",
           "fb_attacking",
-          77,
+          77.3406,
           "R"
         ],
         [
@@ -12009,7 +12009,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "GK",
           "gk_sweeper",
-          74,
+          74.3406,
           "L"
         ],
         [
@@ -12018,7 +12018,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_cover",
-          74,
+          74.3406,
           "R"
         ],
         [
@@ -12027,7 +12027,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "w_finisher",
-          74,
+          74.3406,
           "R"
         ],
         [
@@ -12036,7 +12036,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_creator",
-          74,
+          74.3406,
           "R"
         ],
         [
@@ -12045,7 +12045,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_finisher",
-          74,
+          74.3406,
           "R"
         ]
       ]
@@ -12054,7 +12054,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 71,
     "targetCa": 920,
-    "actualCa": 914.1894825650444,
+    "actualCa": 920.0000000000008,
     "kind": "generated",
     "team": {
       "id": "peak-71",
@@ -12082,7 +12082,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_sweeper",
-          80,
+          80.2835,
           "R"
         ],
         [
@@ -12091,7 +12091,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "W",
           "w_engine",
-          80,
+          80.2835,
           "R"
         ],
         [
@@ -12100,7 +12100,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_ballplaying",
-          80,
+          80.2835,
           "R"
         ],
         [
@@ -12109,7 +12109,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CB",
           "cb_stopper",
-          78,
+          78.2835,
           "L"
         ],
         [
@@ -12118,7 +12118,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_stopper",
-          78,
+          78.2835,
           "R"
         ],
         [
@@ -12127,7 +12127,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_finisher",
-          78,
+          78.2835,
           "L"
         ],
         [
@@ -12136,7 +12136,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CM",
           "cm_box2box",
-          78,
+          78.2835,
           "R"
         ],
         [
@@ -12145,7 +12145,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_destroyer",
-          77,
+          77.2835,
           "R"
         ],
         [
@@ -12154,7 +12154,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_playmaker",
-          77,
+          77.2835,
           "L"
         ],
         [
@@ -12163,7 +12163,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_poacher",
-          77,
+          77.2835,
           "R"
         ],
         [
@@ -12172,7 +12172,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_false9",
-          77,
+          77.2835,
           "R"
         ],
         [
@@ -12181,7 +12181,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "GK",
           "gk_wall",
-          74,
+          74.2835,
           "R"
         ],
         [
@@ -12190,7 +12190,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_ballplaying",
-          74,
+          74.2835,
           "R"
         ],
         [
@@ -12199,7 +12199,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "W",
           "w_engine",
-          74,
+          74.2835,
           "R"
         ],
         [
@@ -12208,7 +12208,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_creator",
-          74,
+          74.2835,
           "L"
         ],
         [
@@ -12217,7 +12217,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "ST",
           "st_target",
-          74,
+          74.2835,
           "R"
         ]
       ]
@@ -12226,7 +12226,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 72,
     "targetCa": 930,
-    "actualCa": 938.3305533425159,
+    "actualCa": 929.9999999999992,
     "kind": "generated",
     "team": {
       "id": "peak-72",
@@ -12254,7 +12254,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_sweeper",
-          81,
+          80.6755,
           "R"
         ],
         [
@@ -12263,7 +12263,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_dribbler",
-          81,
+          80.6755,
           "R"
         ],
         [
@@ -12272,7 +12272,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_ballplaying",
-          81,
+          80.6755,
           "R"
         ],
         [
@@ -12281,7 +12281,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_stopper",
-          79,
+          78.6755,
           "L"
         ],
         [
@@ -12290,7 +12290,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_crosser",
-          79,
+          78.6755,
           "L"
         ],
         [
@@ -12299,7 +12299,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_dribbler",
-          79,
+          78.6755,
           "R"
         ],
         [
@@ -12308,7 +12308,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CM",
           "cm_box2box",
-          79,
+          78.6755,
           "L"
         ],
         [
@@ -12317,7 +12317,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CM",
           "cm_mezzala",
-          78,
+          77.6755,
           "R"
         ],
         [
@@ -12326,7 +12326,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_playmaker",
-          78,
+          77.6755,
           "R"
         ],
         [
@@ -12335,7 +12335,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "ST",
           "st_finisher",
-          78,
+          77.6755,
           "R"
         ],
         [
@@ -12344,7 +12344,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_poacher",
-          78,
+          77.6755,
           "R"
         ],
         [
@@ -12353,7 +12353,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "GK",
           "gk_wall",
-          75,
+          74.6755,
           "L"
         ],
         [
@@ -12362,7 +12362,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_ballplaying",
-          75,
+          74.6755,
           "L"
         ],
         [
@@ -12371,7 +12371,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "fb_attacking",
-          75,
+          74.6755,
           "R"
         ],
         [
@@ -12380,7 +12380,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_playmaker",
-          75,
+          74.6755,
           "R"
         ],
         [
@@ -12389,7 +12389,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "ST",
           "st_poacher",
-          75,
+          74.6755,
           "R"
         ]
       ]
@@ -12398,7 +12398,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 73,
     "targetCa": 940,
-    "actualCa": 937.7849557667586,
+    "actualCa": 940.0000000000005,
     "kind": "generated",
     "team": {
       "id": "peak-73",
@@ -12426,7 +12426,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "GK",
           "gk_sweeper",
-          81,
+          81.1592,
           "R"
         ],
         [
@@ -12435,7 +12435,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "fb_playmaker",
-          81,
+          81.1592,
           "R"
         ],
         [
@@ -12444,7 +12444,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CB",
           "cb_ballplaying",
-          81,
+          81.1592,
           "R"
         ],
         [
@@ -12453,7 +12453,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_ballplaying",
-          79,
+          79.1592,
           "L"
         ],
         [
@@ -12462,7 +12462,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "w_finisher",
-          79,
+          79.1592,
           "R"
         ],
         [
@@ -12471,7 +12471,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_mezzala",
-          79,
+          79.1592,
           "R"
         ],
         [
@@ -12480,7 +12480,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_dribbler",
-          79,
+          79.1592,
           "R"
         ],
         [
@@ -12489,7 +12489,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CM",
           "cm_box2box",
-          78,
+          78.1592,
           "R"
         ],
         [
@@ -12498,7 +12498,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CM",
           "cm_creator",
-          78,
+          78.1592,
           "R"
         ],
         [
@@ -12507,7 +12507,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_finisher",
-          78,
+          78.1592,
           "R"
         ],
         [
@@ -12516,7 +12516,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_false9",
-          78,
+          78.1592,
           "R"
         ],
         [
@@ -12525,7 +12525,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_wall",
-          75,
+          75.1592,
           "R"
         ],
         [
@@ -12534,7 +12534,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_cover",
-          75,
+          75.1592,
           "R"
         ],
         [
@@ -12543,7 +12543,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "W",
           "w_engine",
-          75,
+          75.1592,
           "L"
         ],
         [
@@ -12552,7 +12552,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CM",
           "cm_playmaker",
-          75,
+          75.1592,
           "R"
         ],
         [
@@ -12561,7 +12561,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "ST",
           "st_false9",
-          75,
+          75.1592,
           "R"
         ]
       ]
@@ -12570,7 +12570,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 74,
     "targetCa": 945,
-    "actualCa": 936.0025701867157,
+    "actualCa": 944.9999999999992,
     "kind": "generated",
     "team": {
       "id": "peak-74",
@@ -12598,7 +12598,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "GK",
           "gk_shotstopper",
-          81,
+          81.3591,
           "L"
         ],
         [
@@ -12607,7 +12607,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "fb_playmaker",
-          81,
+          81.3591,
           "R"
         ],
         [
@@ -12616,7 +12616,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_stopper",
-          81,
+          81.3591,
           "R"
         ],
         [
@@ -12625,7 +12625,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_cover",
-          79,
+          79.3591,
           "R"
         ],
         [
@@ -12634,7 +12634,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "fb_playmaker",
-          79,
+          79.3591,
           "R"
         ],
         [
@@ -12643,7 +12643,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "w_playmaker",
-          79,
+          79.3591,
           "R"
         ],
         [
@@ -12652,7 +12652,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_creator",
-          79,
+          79.3591,
           "R"
         ],
         [
@@ -12661,7 +12661,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_mezzala",
-          78,
+          78.3591,
           "R"
         ],
         [
@@ -12670,7 +12670,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_crosser",
-          78,
+          78.3591,
           "R"
         ],
         [
@@ -12679,7 +12679,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "ST",
           "st_target",
-          78,
+          78.3591,
           "R"
         ],
         [
@@ -12688,7 +12688,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "ST",
           "st_finisher",
-          78,
+          78.3591,
           "L"
         ],
         [
@@ -12697,7 +12697,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "GK",
           "gk_shotstopper",
-          75,
+          75.3591,
           "R"
         ],
         [
@@ -12706,7 +12706,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_ballplaying",
-          75,
+          75.3591,
           "R"
         ],
         [
@@ -12715,7 +12715,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "w_crosser",
-          75,
+          75.3591,
           "L"
         ],
         [
@@ -12724,7 +12724,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_creator",
-          75,
+          75.3591,
           "L"
         ],
         [
@@ -12733,7 +12733,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_finisher",
-          75,
+          75.3591,
           "L"
         ]
       ]
@@ -12742,7 +12742,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 75,
     "targetCa": 955,
-    "actualCa": 963.8256884205693,
+    "actualCa": 954.999999999999,
     "kind": "generated",
     "team": {
       "id": "peak-75",
@@ -12770,7 +12770,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "GK",
           "gk_sweeper",
-          82,
+          81.6591,
           "L"
         ],
         [
@@ -12779,7 +12779,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CB",
           "cb_ballplaying",
-          82,
+          81.6591,
           "L"
         ],
         [
@@ -12788,7 +12788,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_stopper",
-          82,
+          81.6591,
           "R"
         ],
         [
@@ -12797,7 +12797,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "CB",
           "cb_cover",
-          80,
+          79.6591,
           "L"
         ],
         [
@@ -12806,7 +12806,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "W",
           "w_dribbler",
-          80,
+          79.6591,
           "R"
         ],
         [
@@ -12815,7 +12815,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "CM",
           "cm_engine",
-          80,
+          79.6591,
           "R"
         ],
         [
@@ -12824,7 +12824,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "CM",
           "cm_creator",
-          80,
+          79.6591,
           "R"
         ],
         [
@@ -12833,7 +12833,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_dribbler",
-          79,
+          78.6591,
           "R"
         ],
         [
@@ -12842,7 +12842,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "fb_attacking",
-          79,
+          78.6591,
           "R"
         ],
         [
@@ -12851,7 +12851,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_false9",
-          79,
+          78.6591,
           "L"
         ],
         [
@@ -12860,7 +12860,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "w_finisher",
-          79,
+          78.6591,
           "R"
         ],
         [
@@ -12869,7 +12869,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_sweeper",
-          76,
+          75.6591,
           "R"
         ],
         [
@@ -12878,7 +12878,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_cover",
-          76,
+          75.6591,
           "L"
         ],
         [
@@ -12887,7 +12887,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "W",
           "w_dribbler",
-          76,
+          75.6591,
           "R"
         ],
         [
@@ -12896,7 +12896,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_destroyer",
-          76,
+          75.6591,
           "L"
         ],
         [
@@ -12905,7 +12905,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_false9",
-          76,
+          75.6591,
           "R"
         ]
       ]
@@ -12914,7 +12914,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 76,
     "targetCa": 965,
-    "actualCa": 958.7964306887053,
+    "actualCa": 964.9999999999986,
     "kind": "generated",
     "team": {
       "id": "peak-76",
@@ -12942,7 +12942,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "GK",
           "gk_shotstopper",
-          82,
+          82.25,
           "L"
         ],
         [
@@ -12951,7 +12951,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "W",
           "w_finisher",
-          82,
+          82.25,
           "R"
         ],
         [
@@ -12960,7 +12960,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_ballplaying",
-          82,
+          82.25,
           "R"
         ],
         [
@@ -12969,7 +12969,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_ballplaying",
-          80,
+          80.25,
           "R"
         ],
         [
@@ -12978,7 +12978,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "fb_attacking",
-          80,
+          80.25,
           "L"
         ],
         [
@@ -12987,7 +12987,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_box2box",
-          80,
+          80.25,
           "R"
         ],
         [
@@ -12996,7 +12996,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CM",
           "cm_playmaker",
-          80,
+          80.25,
           "R"
         ],
         [
@@ -13005,7 +13005,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_destroyer",
-          79,
+          79.25,
           "L"
         ],
         [
@@ -13014,7 +13014,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "w_crosser",
-          79,
+          79.25,
           "R"
         ],
         [
@@ -13023,7 +13023,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "ST",
           "st_false9",
-          79,
+          79.25,
           "R"
         ],
         [
@@ -13032,7 +13032,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_playmaker",
-          79,
+          79.25,
           "R"
         ],
         [
@@ -13041,7 +13041,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "GK",
           "gk_sweeper",
-          76,
+          76.25,
           "L"
         ],
         [
@@ -13050,7 +13050,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_cover",
-          76,
+          76.25,
           "R"
         ],
         [
@@ -13059,7 +13059,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "W",
           "w_dribbler",
-          76,
+          76.25,
           "R"
         ],
         [
@@ -13068,7 +13068,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_playmaker",
-          76,
+          76.25,
           "R"
         ],
         [
@@ -13077,7 +13077,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "ST",
           "st_runner",
-          76,
+          76.25,
           "L"
         ]
       ]
@@ -13086,7 +13086,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 77,
     "targetCa": 975,
-    "actualCa": 982.0786018885827,
+    "actualCa": 975.0000000000005,
     "kind": "generated",
     "team": {
       "id": "peak-77",
@@ -13114,7 +13114,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "GK",
           "gk_wall",
-          83,
+          82.6816,
           "R"
         ],
         [
@@ -13123,7 +13123,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "w_crosser",
-          83,
+          82.6816,
           "R"
         ],
         [
@@ -13132,7 +13132,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_stopper",
-          83,
+          82.6816,
           "L"
         ],
         [
@@ -13141,7 +13141,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CB",
           "cb_ballplaying",
-          81,
+          80.6816,
           "R"
         ],
         [
@@ -13150,7 +13150,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "fb_attacking",
-          81,
+          80.6816,
           "L"
         ],
         [
@@ -13159,7 +13159,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_destroyer",
-          81,
+          80.6816,
           "R"
         ],
         [
@@ -13168,7 +13168,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_creator",
-          81,
+          80.6816,
           "L"
         ],
         [
@@ -13177,7 +13177,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "fb_attacking",
-          80,
+          79.6816,
           "R"
         ],
         [
@@ -13186,7 +13186,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_creator",
-          80,
+          79.6816,
           "R"
         ],
         [
@@ -13195,7 +13195,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "W",
           "w_playmaker",
-          80,
+          79.6816,
           "L"
         ],
         [
@@ -13204,7 +13204,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "ST",
           "st_poacher",
-          80,
+          79.6816,
           "R"
         ],
         [
@@ -13213,7 +13213,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_wall",
-          77,
+          76.6816,
           "R"
         ],
         [
@@ -13222,7 +13222,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_cover",
-          77,
+          76.6816,
           "R"
         ],
         [
@@ -13231,7 +13231,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "w_playmaker",
-          77,
+          76.6816,
           "L"
         ],
         [
@@ -13240,7 +13240,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_playmaker",
-          77,
+          76.6816,
           "R"
         ],
         [
@@ -13249,7 +13249,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "ST",
           "st_poacher",
-          77,
+          76.6816,
           "R"
         ]
       ]
@@ -13258,7 +13258,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 78,
     "targetCa": 980,
-    "actualCa": 985.62572832262,
+    "actualCa": 979.9999999999999,
     "kind": "generated",
     "team": {
       "id": "peak-78",
@@ -13286,7 +13286,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "GK",
           "gk_shotstopper",
-          83,
+          82.7984,
           "R"
         ],
         [
@@ -13295,7 +13295,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_playmaker",
-          83,
+          82.7984,
           "R"
         ],
         [
@@ -13304,7 +13304,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_cover",
-          83,
+          82.7984,
           "R"
         ],
         [
@@ -13313,7 +13313,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CB",
           "cb_cover",
-          81,
+          80.7984,
           "R"
         ],
         [
@@ -13322,7 +13322,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "w_engine",
-          81,
+          80.7984,
           "L"
         ],
         [
@@ -13331,7 +13331,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CM",
           "cm_destroyer",
-          81,
+          80.7984,
           "R"
         ],
         [
@@ -13340,7 +13340,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CM",
           "cm_mezzala",
-          81,
+          80.7984,
           "L"
         ],
         [
@@ -13349,7 +13349,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CM",
           "cm_engine",
-          80,
+          79.7984,
           "L"
         ],
         [
@@ -13358,7 +13358,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CM",
           "cm_playmaker",
-          80,
+          79.7984,
           "R"
         ],
         [
@@ -13367,7 +13367,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_runner",
-          80,
+          79.7984,
           "R"
         ],
         [
@@ -13376,7 +13376,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "ST",
           "st_false9",
-          80,
+          79.7984,
           "R"
         ],
         [
@@ -13385,7 +13385,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_shotstopper",
-          77,
+          76.7984,
           "L"
         ],
         [
@@ -13394,7 +13394,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "日本",
           "CB",
           "cb_ballplaying",
-          77,
+          76.7984,
           "R"
         ],
         [
@@ -13403,7 +13403,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "w_engine",
-          77,
+          76.7984,
           "R"
         ],
         [
@@ -13412,7 +13412,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "CM",
           "cm_box2box",
-          77,
+          76.7984,
           "R"
         ],
         [
@@ -13421,7 +13421,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "ST",
           "st_runner",
-          77,
+          76.7984,
           "R"
         ]
       ]
@@ -13430,7 +13430,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 79,
     "targetCa": 990,
-    "actualCa": 986.1075192623201,
+    "actualCa": 989.999999999999,
     "kind": "generated",
     "team": {
       "id": "peak-79",
@@ -13458,7 +13458,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "GK",
           "gk_wall",
-          83,
+          83.1817,
           "R"
         ],
         [
@@ -13467,7 +13467,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "印度",
           "W",
           "w_dribbler",
-          83,
+          83.1817,
           "R"
         ],
         [
@@ -13476,7 +13476,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "CB",
           "cb_cover",
-          83,
+          83.1817,
           "R"
         ],
         [
@@ -13485,7 +13485,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "CB",
           "cb_stopper",
-          81,
+          81.1817,
           "R"
         ],
         [
@@ -13494,7 +13494,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_cover",
-          81,
+          81.1817,
           "R"
         ],
         [
@@ -13503,7 +13503,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "fb_playmaker",
-          81,
+          81.1817,
           "L"
         ],
         [
@@ -13512,7 +13512,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_creator",
-          81,
+          81.1817,
           "R"
         ],
         [
@@ -13521,7 +13521,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_mezzala",
-          80,
+          80.1817,
           "R"
         ],
         [
@@ -13530,7 +13530,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_creator",
-          80,
+          80.1817,
           "R"
         ],
         [
@@ -13539,7 +13539,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "ST",
           "st_target",
-          80,
+          80.1817,
           "R"
         ],
         [
@@ -13548,7 +13548,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "ST",
           "st_poacher",
-          80,
+          80.1817,
           "L"
         ],
         [
@@ -13557,7 +13557,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "GK",
           "gk_wall",
-          77,
+          77.1817,
           "R"
         ],
         [
@@ -13566,7 +13566,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_ballplaying",
-          77,
+          77.1817,
           "L"
         ],
         [
@@ -13575,7 +13575,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "fb_attacking",
-          77,
+          77.1817,
           "L"
         ],
         [
@@ -13584,7 +13584,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "CM",
           "cm_engine",
-          77,
+          77.1817,
           "R"
         ],
         [
@@ -13593,7 +13593,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "瑞典",
           "ST",
           "st_poacher",
-          77,
+          77.1817,
           "R"
         ]
       ]
@@ -13602,7 +13602,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 80,
     "targetCa": 1000,
-    "actualCa": 1003.8010147903274,
+    "actualCa": 1000.0000000000007,
     "kind": "generated",
     "team": {
       "id": "peak-80",
@@ -13630,7 +13630,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "GK",
           "gk_wall",
-          84,
+          83.8651,
           "R"
         ],
         [
@@ -13639,7 +13639,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "fb_playmaker",
-          84,
+          83.8651,
           "L"
         ],
         [
@@ -13648,7 +13648,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CB",
           "cb_ballplaying",
-          84,
+          83.8651,
           "R"
         ],
         [
@@ -13657,7 +13657,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_ballplaying",
-          82,
+          81.8651,
           "R"
         ],
         [
@@ -13666,7 +13666,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_engine",
-          82,
+          81.8651,
           "R"
         ],
         [
@@ -13675,7 +13675,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "中国",
           "W",
           "w_engine",
-          82,
+          81.8651,
           "R"
         ],
         [
@@ -13684,7 +13684,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "摩洛哥",
           "CM",
           "cm_box2box",
-          82,
+          81.8651,
           "R"
         ],
         [
@@ -13693,7 +13693,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_mezzala",
-          81,
+          80.8651,
           "L"
         ],
         [
@@ -13702,7 +13702,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "韩国",
           "W",
           "fb_playmaker",
-          81,
+          80.8651,
           "R"
         ],
         [
@@ -13711,7 +13711,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "ST",
           "st_target",
-          81,
+          80.8651,
           "R"
         ],
         [
@@ -13720,7 +13720,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_finisher",
-          81,
+          80.8651,
           "R"
         ],
         [
@@ -13729,7 +13729,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "加纳",
           "GK",
           "gk_wall",
-          78,
+          77.8651,
           "L"
         ],
         [
@@ -13738,7 +13738,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_cover",
-          78,
+          77.8651,
           "R"
         ],
         [
@@ -13747,7 +13747,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "英格兰",
           "W",
           "fb_playmaker",
-          78,
+          77.8651,
           "R"
         ],
         [
@@ -13756,7 +13756,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_destroyer",
-          78,
+          77.8651,
           "L"
         ],
         [
@@ -13765,7 +13765,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_runner",
-          78,
+          77.8651,
           "R"
         ]
       ]
@@ -13774,7 +13774,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
   {
     "stage": 81,
     "targetCa": 1000,
-    "actualCa": 1005.2732668717475,
+    "actualCa": 1000.000000000001,
     "kind": "national",
     "team": {
       "id": "cmr-1990",
@@ -13801,16 +13801,16 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "喀麦隆",
           "GK",
           "gk_wall",
-          83,
+          82.745,
           "R"
         ],
         [
-          "埃布韦莱",
-          "Emmanuel Ebwelle",
+          "贝尔坦·埃布韦莱",
+          "Bertin Ebwellé",
           "喀麦隆",
           "W",
           "fb_attacking",
-          81,
+          80.745,
           "R"
         ],
         [
@@ -13819,7 +13819,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "喀麦隆",
           "CB",
           "cb_stopper",
-          83,
+          82.745,
           "R"
         ],
         [
@@ -13828,7 +13828,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "喀麦隆",
           "CB",
           "cb_stopper",
-          82,
+          81.745,
           "R"
         ],
         [
@@ -13837,7 +13837,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "喀麦隆",
           "W",
           "fb_attacking",
-          82,
+          81.745,
           "R"
         ],
         [
@@ -13846,7 +13846,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "喀麦隆",
           "W",
           "w_engine",
-          81,
+          80.745,
           "R"
         ],
         [
@@ -13855,7 +13855,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "喀麦隆",
           "CM",
           "cm_box2box",
-          82,
+          81.745,
           "R"
         ],
         [
@@ -13864,7 +13864,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "喀麦隆",
           "CM",
           "cm_destroyer",
-          82,
+          81.745,
           "R"
         ],
         [
@@ -13873,7 +13873,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "喀麦隆",
           "W",
           "w_dribbler",
-          81,
+          80.745,
           "R"
         ],
         [
@@ -13882,7 +13882,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "喀麦隆",
           "ST",
           "st_poacher",
-          84,
+          83.745,
           "R"
         ],
         [
@@ -13891,7 +13891,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "喀麦隆",
           "ST",
           "st_target",
-          83,
+          82.745,
           "R"
         ],
         [
@@ -13900,16 +13900,16 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "喀麦隆",
           "GK",
           "gk_wall",
-          78,
+          77.745,
           "R"
         ],
         [
-          "弗特姆巴",
-          "Emile Feutmba",
+          "罗杰·弗特姆巴",
+          "Roger Feutmba",
           "喀麦隆",
           "CM",
           "cm_playmaker",
-          78,
+          77.745,
           "R"
         ],
         [
@@ -13918,7 +13918,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "喀麦隆",
           "W",
           "fb_attacking",
-          78,
+          77.745,
           "R"
         ],
         [
@@ -13927,26 +13927,141 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "喀麦隆",
           "CB",
           "cb_stopper",
-          78,
+          77.745,
           "R"
         ],
         [
-          "比伊克",
-          "Emmanuel Biyik",
+          "约姆比",
+          "Alphonse Yombi",
           "喀麦隆",
-          "ST",
-          "st_finisher",
-          78,
+          "CB",
+          "cb_stopper",
+          77.745,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/1990_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Thomas N'Kono": {
+          "number": 16,
+          "birthDate": "1956-07-20",
+          "age": 33,
+          "sourceName": "Thomas N'Kono",
+          "sourcePosition": "1GK"
+        },
+        "Bertin Ebwellé": {
+          "number": 5,
+          "birthDate": "1962-09-11",
+          "age": 27,
+          "sourceName": "Bertin Ebwellé",
+          "sourcePosition": "2DF"
+        },
+        "Emmanuel Kundé": {
+          "number": 6,
+          "birthDate": "1956-07-15",
+          "age": 33,
+          "sourceName": "Emmanuel Kundé",
+          "sourcePosition": "2DF"
+        },
+        "Benjamin Massing": {
+          "number": 4,
+          "birthDate": "1962-06-20",
+          "age": 27,
+          "sourceName": "Benjamin Massing",
+          "sourcePosition": "2DF"
+        },
+        "Stephen Tataw": {
+          "number": 14,
+          "birthDate": "1963-03-31",
+          "age": 27,
+          "sourceName": "Stephen Tataw (captain)",
+          "sourcePosition": "2DF"
+        },
+        "Louis-Paul Mfede": {
+          "number": 10,
+          "birthDate": "1961-02-26",
+          "age": 29,
+          "sourceName": "Louis-Paul M'Fédé",
+          "sourcePosition": "3MF"
+        },
+        "Cyrille Makanaky": {
+          "number": 20,
+          "birthDate": "1965-06-28",
+          "age": 24,
+          "sourceName": "Cyrille Makanaky",
+          "sourcePosition": "3MF"
+        },
+        "Emile Mbouh": {
+          "number": 8,
+          "birthDate": "1966-05-30",
+          "age": 24,
+          "sourceName": "Émile Mbouh",
+          "sourcePosition": "3MF"
+        },
+        "Thomas Libiih": {
+          "number": 15,
+          "birthDate": "1967-11-17",
+          "age": 22,
+          "sourceName": "Thomas Libiih",
+          "sourcePosition": "3MF"
+        },
+        "Roger Milla": {
+          "number": 9,
+          "birthDate": "1952-05-20",
+          "age": 38,
+          "sourceName": "Roger Milla",
+          "sourcePosition": "4FW"
+        },
+        "François Omam-Biyik": {
+          "number": 7,
+          "birthDate": "1966-05-21",
+          "age": 24,
+          "sourceName": "François Omam-Biyik",
+          "sourcePosition": "4FW"
+        },
+        "Joseph-Antoine Bell": {
+          "number": 1,
+          "birthDate": "1954-10-08",
+          "age": 35,
+          "sourceName": "Joseph-Antoine Bell",
+          "sourcePosition": "1GK"
+        },
+        "Roger Feutmba": {
+          "number": 19,
+          "birthDate": "1968-10-31",
+          "age": 21,
+          "sourceName": "Roger Feutmba",
+          "sourcePosition": "3MF"
+        },
+        "Jean-Claude Pagal": {
+          "number": 13,
+          "birthDate": "1964-09-15",
+          "age": 25,
+          "sourceName": "Jean-Claude Pagal",
+          "sourcePosition": "2DF"
+        },
+        "André Kana-Biyik": {
+          "number": 2,
+          "birthDate": "1965-09-01",
+          "age": 24,
+          "sourceName": "André Kana-Biyik",
+          "sourcePosition": "2DF"
+        },
+        "Alphonse Yombi": {
+          "number": 12,
+          "birthDate": "1969-06-30",
+          "age": 20,
+          "sourceName": "Alphonse Yombi",
+          "sourcePosition": "2DF"
+        }
+      },
       "targetCa": 1000
     }
   },
   {
     "stage": 82,
     "targetCa": 1015,
-    "actualCa": 1023.1072129170494,
+    "actualCa": 1015.000000000001,
     "kind": "national",
     "team": {
       "id": "nga-1994",
@@ -13973,7 +14088,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "GK",
           "gk_wall",
-          82,
+          81.616,
           "R"
         ],
         [
@@ -13982,7 +14097,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "fb_attacking",
-          82,
+          81.616,
           "R"
         ],
         [
@@ -13991,7 +14106,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_stopper",
-          82,
+          81.616,
           "R"
         ],
         [
@@ -14000,7 +14115,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CB",
           "cb_cover",
-          83,
+          82.616,
           "R"
         ],
         [
@@ -14009,7 +14124,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "fb_attacking",
-          81,
+          80.616,
           "R"
         ],
         [
@@ -14018,7 +14133,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_finisher",
-          83,
+          82.616,
           "R"
         ],
         [
@@ -14027,7 +14142,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CM",
           "cm_playmaker",
-          83,
+          82.616,
           "R"
         ],
         [
@@ -14036,7 +14151,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CM",
           "cm_creator",
-          84,
+          83.616,
           "R"
         ],
         [
@@ -14045,7 +14160,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "W",
           "w_dribbler",
-          84,
+          83.616,
           "R"
         ],
         [
@@ -14054,7 +14169,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "ST",
           "st_target",
-          84,
+          83.616,
           "R"
         ],
         [
@@ -14063,7 +14178,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "ST",
           "st_runner",
-          83,
+          82.616,
           "R"
         ],
         [
@@ -14072,7 +14187,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "GK",
           "gk_wall",
-          78,
+          77.616,
           "R"
         ],
         [
@@ -14081,16 +14196,16 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "CM",
           "cm_engine",
-          78,
+          77.616,
           "R"
         ],
         [
-          "埃克波",
-          "Friday Ekpo",
+          "埃泽古",
+          "Emeka Ezeugo",
           "尼日利亚",
           "CM",
           "cm_box2box",
-          78,
+          77.616,
           "R"
         ],
         [
@@ -14099,26 +14214,141 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "尼日利亚",
           "ST",
           "st_false9",
-          78,
+          77.616,
           "R"
         ],
         [
-          "卡努",
-          "Nwankwo Kanu",
+          "阿德波尤",
+          "Mutiu Adepoju",
           "尼日利亚",
-          "ST",
-          "st_target",
-          78,
+          "CM",
+          "cm_box2box",
+          77.616,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/1994_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Peter Rufai": {
+          "number": 1,
+          "birthDate": "1963-08-24",
+          "age": 30,
+          "sourceName": "Peter Rufai",
+          "sourcePosition": "1GK"
+        },
+        "Augustine Eguavoen": {
+          "number": 2,
+          "birthDate": "1965-08-19",
+          "age": 28,
+          "sourceName": "Augustine Eguavoen",
+          "sourcePosition": "2DF"
+        },
+        "Uche Okechukwu": {
+          "number": 5,
+          "birthDate": "1967-09-27",
+          "age": 26,
+          "sourceName": "Uche Okechukwu",
+          "sourcePosition": "2DF"
+        },
+        "Stephen Keshi": {
+          "number": 4,
+          "birthDate": "1962-01-23",
+          "age": 32,
+          "sourceName": "Stephen Keshi (captain)",
+          "sourcePosition": "2DF"
+        },
+        "Benedict Iroha": {
+          "number": 3,
+          "birthDate": "1969-11-29",
+          "age": 24,
+          "sourceName": "Benedict Iroha",
+          "sourcePosition": "2DF"
+        },
+        "Emmanuel Amunike": {
+          "number": 11,
+          "birthDate": "1970-12-25",
+          "age": 23,
+          "sourceName": "Emmanuel Amunike",
+          "sourcePosition": "3MF"
+        },
+        "Sunday Oliseh": {
+          "number": 15,
+          "birthDate": "1974-09-14",
+          "age": 19,
+          "sourceName": "Sunday Oliseh",
+          "sourcePosition": "3MF"
+        },
+        "Jay-Jay Okocha": {
+          "number": 10,
+          "birthDate": "1973-08-14",
+          "age": 20,
+          "sourceName": "Jay-Jay Okocha",
+          "sourcePosition": "3MF"
+        },
+        "Finidi George": {
+          "number": 7,
+          "birthDate": "1971-04-15",
+          "age": 23,
+          "sourceName": "Finidi George",
+          "sourcePosition": "3MF"
+        },
+        "Rashidi Yekini": {
+          "number": 9,
+          "birthDate": "1963-10-23",
+          "age": 30,
+          "sourceName": "Rashidi Yekini",
+          "sourcePosition": "4FW"
+        },
+        "Daniel Amokachi": {
+          "number": 14,
+          "birthDate": "1972-12-30",
+          "age": 21,
+          "sourceName": "Daniel Amokachi",
+          "sourcePosition": "4FW"
+        },
+        "Wilfred Agbonavbare": {
+          "number": 22,
+          "birthDate": "1966-10-05",
+          "age": 27,
+          "sourceName": "Wilfred Agbonavbare",
+          "sourcePosition": "1GK"
+        },
+        "Thompson Oliha": {
+          "number": 8,
+          "birthDate": "1968-10-04",
+          "age": 25,
+          "sourceName": "Thompson Oliha",
+          "sourcePosition": "3MF"
+        },
+        "Emeka Ezeugo": {
+          "number": 13,
+          "birthDate": "1965-12-16",
+          "age": 28,
+          "sourceName": "Emeka Ezeugo",
+          "sourcePosition": "2DF"
+        },
+        "Samson Siasia": {
+          "number": 12,
+          "birthDate": "1967-08-14",
+          "age": 26,
+          "sourceName": "Samson Siasia",
+          "sourcePosition": "4FW"
+        },
+        "Mutiu Adepoju": {
+          "number": 21,
+          "birthDate": "1970-12-22",
+          "age": 23,
+          "sourceName": "Mutiu Adepoju",
+          "sourcePosition": "3MF"
+        }
+      },
       "targetCa": 1015
     }
   },
   {
     "stage": 83,
     "targetCa": 1030,
-    "actualCa": 1030.4883897000307,
+    "actualCa": 1029.9999999999993,
     "kind": "national",
     "team": {
       "id": "sen-2002",
@@ -14145,7 +14375,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "GK",
           "gk_wall",
-          83,
+          82.9998,
           "R"
         ],
         [
@@ -14154,7 +14384,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "W",
           "fb_attacking",
-          82,
+          81.9998,
           "R"
         ],
         [
@@ -14163,7 +14393,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CB",
           "cb_stopper",
-          83,
+          82.9998,
           "R"
         ],
         [
@@ -14172,7 +14402,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CB",
           "cb_cover",
-          83,
+          82.9998,
           "R"
         ],
         [
@@ -14181,7 +14411,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "W",
           "fb_attacking",
-          82,
+          81.9998,
           "R"
         ],
         [
@@ -14190,7 +14420,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "W",
           "w_playmaker",
-          83,
+          82.9998,
           "R"
         ],
         [
@@ -14199,7 +14429,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CM",
           "cm_destroyer",
-          83,
+          82.9998,
           "R"
         ],
         [
@@ -14208,7 +14438,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CM",
           "cm_box2box",
-          84,
+          83.9998,
           "R"
         ],
         [
@@ -14217,7 +14447,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "W",
           "w_finisher",
-          84,
+          83.9998,
           "R"
         ],
         [
@@ -14226,25 +14456,25 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "ST",
           "st_runner",
-          85,
+          84.9998,
           "R"
         ],
         [
-          "萨尔",
-          "Boubacar Sarr",
+          "索莱曼·卡马拉",
+          "Souleymane Camara",
           "塞内加尔",
           "ST",
           "st_target",
-          83,
+          82.9998,
           "R"
         ],
         [
-          "恩迪亚耶",
-          "Khalilou Ndiaye",
+          "奥马尔·迪亚洛",
+          "Omar Diallo",
           "塞内加尔",
           "GK",
           "gk_wall",
-          79,
+          78.9998,
           "R"
         ],
         [
@@ -14253,16 +14483,16 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CB",
           "cb_stopper",
-          79,
+          78.9998,
           "R"
         ],
         [
-          "特拉奥雷",
-          "Omar Traoré",
+          "帕普·马利克·迪奥普",
+          "Pape Malick Diop",
           "塞内加尔",
           "CB",
           "cb_cover",
-          79,
+          78.9998,
           "R"
         ],
         [
@@ -14271,33 +14501,148 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "塞内加尔",
           "CM",
           "cm_destroyer",
-          79,
+          78.9998,
           "R"
         ],
         [
-          "索莱曼·卡马拉",
-          "Souleymane Camara",
+          "穆萨·恩迪亚耶",
+          "Moussa Ndiaye",
           "塞内加尔",
-          "ST",
-          "st_poacher",
-          79,
+          "W",
+          "w_dribbler",
+          78.9998,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/2002_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Tony Sylva": {
+          "number": 1,
+          "birthDate": "1975-05-17",
+          "age": 27,
+          "sourceName": "Tony Sylva",
+          "sourcePosition": "1GK"
+        },
+        "Omar Daf": {
+          "number": 2,
+          "birthDate": "1977-02-12",
+          "age": 25,
+          "sourceName": "Omar Daf",
+          "sourcePosition": "2DF"
+        },
+        "Lamine Diatta": {
+          "number": 13,
+          "birthDate": "1975-07-02",
+          "age": 26,
+          "sourceName": "Lamine Diatta",
+          "sourcePosition": "2DF"
+        },
+        "Ferdinand Coly": {
+          "number": 17,
+          "birthDate": "1973-09-10",
+          "age": 28,
+          "sourceName": "Ferdinand Coly",
+          "sourcePosition": "2DF"
+        },
+        "Aliou Cissé": {
+          "number": 6,
+          "birthDate": "1976-03-24",
+          "age": 26,
+          "sourceName": "Aliou Cissé (c)",
+          "sourcePosition": "2DF"
+        },
+        "Khalilou Fadiga": {
+          "number": 10,
+          "birthDate": "1974-12-30",
+          "age": 27,
+          "sourceName": "Khalilou Fadiga",
+          "sourcePosition": "3MF"
+        },
+        "Salif Diao": {
+          "number": 15,
+          "birthDate": "1977-02-10",
+          "age": 25,
+          "sourceName": "Salif Diao",
+          "sourcePosition": "3MF"
+        },
+        "Papa Bouba Diop": {
+          "number": 19,
+          "birthDate": "1978-01-28",
+          "age": 24,
+          "sourceName": "Papa Bouba Diop",
+          "sourcePosition": "3MF"
+        },
+        "Henri Camara": {
+          "number": 7,
+          "birthDate": "1977-05-10",
+          "age": 25,
+          "sourceName": "Henri Camara",
+          "sourcePosition": "4FW"
+        },
+        "El Hadji Diouf": {
+          "number": 11,
+          "birthDate": "1981-01-15",
+          "age": 21,
+          "sourceName": "El Hadji Diouf",
+          "sourcePosition": "4FW"
+        },
+        "Souleymane Camara": {
+          "number": 9,
+          "birthDate": "1982-12-22",
+          "age": 19,
+          "sourceName": "Souleymane Camara",
+          "sourcePosition": "4FW"
+        },
+        "Omar Diallo": {
+          "number": 16,
+          "birthDate": "1972-09-28",
+          "age": 29,
+          "sourceName": "Omar Diallo",
+          "sourcePosition": "1GK"
+        },
+        "Habib Beye": {
+          "number": 21,
+          "birthDate": "1977-10-19",
+          "age": 24,
+          "sourceName": "Habib Beye",
+          "sourcePosition": "2DF"
+        },
+        "Pape Malick Diop": {
+          "number": 4,
+          "birthDate": "1974-12-29",
+          "age": 27,
+          "sourceName": "Pape Malick Diop",
+          "sourcePosition": "2DF"
+        },
+        "Amdy Faye": {
+          "number": 12,
+          "birthDate": "1977-03-12",
+          "age": 25,
+          "sourceName": "Amdy Faye",
+          "sourcePosition": "3MF"
+        },
+        "Moussa Ndiaye": {
+          "number": 14,
+          "birthDate": "1979-02-20",
+          "age": 23,
+          "sourceName": "Moussa N'Diaye",
+          "sourcePosition": "3MF"
+        }
+      },
       "targetCa": 1030
     }
   },
   {
     "stage": 84,
     "targetCa": 1045,
-    "actualCa": 1033.2197426354453,
+    "actualCa": 1045.0000000000002,
     "kind": "national",
     "team": {
-      "id": "den-1992",
+      "id": "den-1998",
       "club": "丹麦",
       "clubEn": "Denmark",
-      "season": "1992",
-      "coach": "理查德·穆勒-尼尔森",
+      "season": "1998",
+      "coach": "博·约翰松",
       "tier": "A",
       "formationId": "4-4-2",
       "tactics": {
@@ -14309,7 +14654,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
       },
       "color": "#c60c30",
       "accent": "#ffffff",
-      "note": "1992 欧洲杯冠军；临时顶替南斯拉夫参赛的童话。",
+      "note": "1998 世界杯八强；劳德鲁普兄弟领衔，不再混用 1992 欧洲杯阵容。",
       "players": [
         [
           "舒梅切尔",
@@ -14317,7 +14662,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "丹麦",
           "GK",
           "gk_wall",
-          85,
+          85.4999,
           "R"
         ],
         [
@@ -14326,61 +14671,61 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "丹麦",
           "W",
           "fb_attacking",
-          82,
+          82.4999,
           "L"
         ],
         [
-          "肯特·尼尔森",
-          "Kent Nielsen",
+          "里佩尔",
+          "Marc Rieper",
           "丹麦",
           "CB",
           "cb_stopper",
-          83,
+          83.4999,
           "R"
         ],
         [
-          "奥尔森",
-          "Lars Olsen",
+          "霍格",
+          "Jes Høgh",
           "丹麦",
           "CB",
           "cb_cover",
-          83,
+          83.4999,
           "R"
         ],
         [
-          "西维贝克",
-          "John Sivebæk",
+          "赫尔维格",
+          "Thomas Helveg",
           "丹麦",
           "W",
           "fb_attacking",
-          82,
+          82.4999,
           "R"
         ],
         [
-          "克里斯托夫特",
-          "Kim Christofte",
+          "约根森",
+          "Martin Jørgensen",
           "丹麦",
           "W",
           "w_engine",
-          82,
+          82.4999,
           "R"
         ],
         [
-          "维尔福特",
-          "Kim Vilfort",
+          "托夫丁",
+          "Stig Tøfting",
           "丹麦",
           "CM",
           "cm_box2box",
-          83,
+          83.4999,
           "R"
         ],
         [
-          "拉尔森",
-          "Henrik Larsen",
+          "阿兰·尼尔森",
+          "Allan Nielsen",
           "丹麦",
           "CM",
           "cm_playmaker",
-          83,
+          83.4999,
           "R"
         ],
         [
@@ -14389,7 +14734,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "丹麦",
           "W",
           "w_playmaker",
-          85,
+          85.4999,
           "R"
         ],
         [
@@ -14398,71 +14743,186 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "丹麦",
           "ST",
           "st_false9",
-          85,
+          85.4999,
           "R"
         ],
         [
-          "波尔森",
-          "Flemming Povlsen",
+          "桑德",
+          "Ebbe Sand",
           "丹麦",
           "ST",
           "st_finisher",
-          83,
+          83.4999,
           "R"
         ],
         [
-          "霍格",
-          "Lars Høgh",
+          "莫恩斯·克罗格",
+          "Mogens Krogh",
           "丹麦",
           "GK",
           "gk_wall",
-          79,
+          79.4999,
           "R"
         ],
         [
-          "延森",
-          "John Jensen",
+          "弗兰森",
+          "Per Frandsen",
           "丹麦",
           "CM",
           "cm_engine",
-          79,
+          79.4999,
           "R"
         ],
         [
-          "埃斯特鲁普",
-          "Lars Elstrup",
+          "莫勒",
+          "Peter Møller",
           "丹麦",
           "ST",
           "st_target",
-          79,
+          79.4999,
           "R"
         ],
         [
-          "默尔比",
-          "Jan Mølby",
+          "戈尔德贝克",
+          "Bjarne Goldbæk",
           "丹麦",
           "CM",
           "cm_playmaker",
-          79,
+          79.4999,
           "R"
         ],
         [
-          "克里斯滕森",
-          "Bent Christensen",
+          "维格霍斯特",
+          "Morten Wieghorst",
           "丹麦",
-          "W",
-          "w_dribbler",
-          79,
+          "CM",
+          "cm_destroyer",
+          79.4999,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/1998_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Peter Schmeichel": {
+          "number": 1,
+          "birthDate": "1963-11-18",
+          "age": 34,
+          "sourceName": "Peter Schmeichel",
+          "sourcePosition": "1GK"
+        },
+        "Jan Heintze": {
+          "number": 5,
+          "birthDate": "1963-08-17",
+          "age": 34,
+          "sourceName": "Jan Heintze",
+          "sourcePosition": "2DF"
+        },
+        "Marc Rieper": {
+          "number": 3,
+          "birthDate": "1968-06-05",
+          "age": 30,
+          "sourceName": "Marc Rieper",
+          "sourcePosition": "2DF"
+        },
+        "Jes Høgh": {
+          "number": 4,
+          "birthDate": "1966-05-07",
+          "age": 32,
+          "sourceName": "Jes Høgh",
+          "sourcePosition": "2DF"
+        },
+        "Thomas Helveg": {
+          "number": 6,
+          "birthDate": "1971-06-24",
+          "age": 26,
+          "sourceName": "Thomas Helveg",
+          "sourcePosition": "2DF"
+        },
+        "Martin Jørgensen": {
+          "number": 21,
+          "birthDate": "1975-10-06",
+          "age": 22,
+          "sourceName": "Martin Jørgensen",
+          "sourcePosition": "3MF"
+        },
+        "Stig Tøfting": {
+          "number": 15,
+          "birthDate": "1969-08-14",
+          "age": 28,
+          "sourceName": "Stig Tøfting",
+          "sourcePosition": "3MF"
+        },
+        "Allan Nielsen": {
+          "number": 7,
+          "birthDate": "1971-03-13",
+          "age": 27,
+          "sourceName": "Allan Nielsen",
+          "sourcePosition": "3MF"
+        },
+        "Brian Laudrup": {
+          "number": 11,
+          "birthDate": "1969-02-22",
+          "age": 29,
+          "sourceName": "Brian Laudrup",
+          "sourcePosition": "4FW"
+        },
+        "Michael Laudrup": {
+          "number": 10,
+          "birthDate": "1964-06-15",
+          "age": 33,
+          "sourceName": "Michael Laudrup (captain)",
+          "sourcePosition": "3MF"
+        },
+        "Ebbe Sand": {
+          "number": 19,
+          "birthDate": "1972-07-19",
+          "age": 25,
+          "sourceName": "Ebbe Sand",
+          "sourcePosition": "4FW"
+        },
+        "Mogens Krogh": {
+          "number": 16,
+          "birthDate": "1963-10-31",
+          "age": 34,
+          "sourceName": "Mogens Krogh",
+          "sourcePosition": "1GK"
+        },
+        "Per Frandsen": {
+          "number": 8,
+          "birthDate": "1970-02-06",
+          "age": 28,
+          "sourceName": "Per Frandsen",
+          "sourcePosition": "3MF"
+        },
+        "Peter Møller": {
+          "number": 18,
+          "birthDate": "1972-03-23",
+          "age": 26,
+          "sourceName": "Peter Møller",
+          "sourcePosition": "4FW"
+        },
+        "Bjarne Goldbæk": {
+          "number": 17,
+          "birthDate": "1968-10-06",
+          "age": 29,
+          "sourceName": "Bjarne Goldbæk",
+          "sourcePosition": "3MF"
+        },
+        "Morten Wieghorst": {
+          "number": 14,
+          "birthDate": "1971-02-25",
+          "age": 27,
+          "sourceName": "Morten Wieghorst",
+          "sourcePosition": "3MF"
+        }
+      },
       "targetCa": 1045
     }
   },
   {
     "stage": 85,
     "targetCa": 1060,
-    "actualCa": 1057.7215566085092,
+    "actualCa": 1059.9999999999998,
     "kind": "national",
     "team": {
       "id": "bul-1994",
@@ -14489,7 +14949,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "GK",
           "gk_wall",
-          84,
+          84.1163,
           "R"
         ],
         [
@@ -14498,7 +14958,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "W",
           "fb_attacking",
-          84,
+          84.1163,
           "R"
         ],
         [
@@ -14507,7 +14967,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "CB",
           "cb_stopper",
-          84,
+          84.1163,
           "R"
         ],
         [
@@ -14516,7 +14976,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "CB",
           "cb_cover",
-          83,
+          83.1163,
           "R"
         ],
         [
@@ -14525,7 +14985,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "W",
           "fb_attacking",
-          83,
+          83.1163,
           "R"
         ],
         [
@@ -14534,7 +14994,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "W",
           "w_finisher",
-          84,
+          84.1163,
           "R"
         ],
         [
@@ -14543,7 +15003,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "CM",
           "cm_creator",
-          85,
+          85.1163,
           "R"
         ],
         [
@@ -14552,7 +15012,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "CM",
           "cm_box2box",
-          85,
+          85.1163,
           "R"
         ],
         [
@@ -14561,7 +15021,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "W",
           "w_engine",
-          84,
+          84.1163,
           "R"
         ],
         [
@@ -14570,7 +15030,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "ST",
           "st_finisher",
-          86,
+          86.1163,
           "L"
         ],
         [
@@ -14579,25 +15039,25 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "ST",
           "st_runner",
-          85,
+          85.1163,
           "R"
         ],
         [
-          "兹德拉夫科夫",
-          "Zdravko Zdravkov",
+          "普拉门·尼科洛夫",
+          "Plamen Nikolov",
           "保加利亚",
           "GK",
           "gk_wall",
-          80,
+          80.1163,
           "R"
         ],
         [
-          "佩特罗夫",
-          "Petar Petrov",
+          "扬科夫",
+          "Zlatko Yankov",
           "保加利亚",
-          "CB",
-          "cb_stopper",
-          80,
+          "CM",
+          "cm_destroyer",
+          80.1163,
           "R"
         ],
         [
@@ -14606,7 +15066,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "CM",
           "cm_playmaker",
-          80,
+          80.1163,
           "R"
         ],
         [
@@ -14615,26 +15075,141 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "保加利亚",
           "CM",
           "cm_box2box",
-          80,
+          80.1163,
           "R"
         ],
         [
-          "佩内夫",
-          "Lyuboslav Penev",
+          "米赫塔尔斯基",
+          "Petar Mihtarski",
           "保加利亚",
           "ST",
           "st_target",
-          80,
+          80.1163,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/1994_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Borislav Mihaylov": {
+          "number": 1,
+          "birthDate": "1963-02-12",
+          "age": 31,
+          "sourceName": "Borislav Mihaylov (captain)",
+          "sourcePosition": "1GK"
+        },
+        "Tsanko Tsvetanov": {
+          "number": 4,
+          "birthDate": "1970-01-06",
+          "age": 24,
+          "sourceName": "Tsanko Tsvetanov",
+          "sourcePosition": "2DF"
+        },
+        "Trifon Ivanov": {
+          "number": 3,
+          "birthDate": "1965-07-27",
+          "age": 28,
+          "sourceName": "Trifon Ivanov",
+          "sourcePosition": "2DF"
+        },
+        "Petar Hubchev": {
+          "number": 5,
+          "birthDate": "1964-02-26",
+          "age": 30,
+          "sourceName": "Petar Hubchev",
+          "sourcePosition": "2DF"
+        },
+        "Iliyan Kiriakov": {
+          "number": 16,
+          "birthDate": "1967-08-04",
+          "age": 26,
+          "sourceName": "Iliyan Kiryakov",
+          "sourcePosition": "2DF"
+        },
+        "Nasko Sirakov": {
+          "number": 10,
+          "birthDate": "1962-04-26",
+          "age": 32,
+          "sourceName": "Nasko Sirakov",
+          "sourcePosition": "4FW"
+        },
+        "Krasimir Balakov": {
+          "number": 20,
+          "birthDate": "1966-03-29",
+          "age": 28,
+          "sourceName": "Krasimir Balakov",
+          "sourcePosition": "3MF"
+        },
+        "Yordan Lechkov": {
+          "number": 9,
+          "birthDate": "1967-07-09",
+          "age": 26,
+          "sourceName": "Yordan Letchkov",
+          "sourcePosition": "3MF"
+        },
+        "Ivaylo Yordanov": {
+          "number": 13,
+          "birthDate": "1968-04-22",
+          "age": 26,
+          "sourceName": "Ivaylo Yordanov",
+          "sourcePosition": "3MF"
+        },
+        "Hristo Stoichkov": {
+          "number": 8,
+          "birthDate": "1966-02-08",
+          "age": 28,
+          "sourceName": "Hristo Stoichkov",
+          "sourcePosition": "4FW"
+        },
+        "Emil Kostadinov": {
+          "number": 7,
+          "birthDate": "1967-08-12",
+          "age": 26,
+          "sourceName": "Emil Kostadinov",
+          "sourcePosition": "4FW"
+        },
+        "Plamen Nikolov": {
+          "number": 12,
+          "birthDate": "1961-08-20",
+          "age": 32,
+          "sourceName": "Plamen Nikolov",
+          "sourcePosition": "1GK"
+        },
+        "Zlatko Yankov": {
+          "number": 6,
+          "birthDate": "1966-08-07",
+          "age": 27,
+          "sourceName": "Zlatko Yankov",
+          "sourcePosition": "3MF"
+        },
+        "Boncho Genchev": {
+          "number": 14,
+          "birthDate": "1964-07-07",
+          "age": 29,
+          "sourceName": "Boncho Genchev",
+          "sourcePosition": "3MF"
+        },
+        "Daniel Borimirov": {
+          "number": 11,
+          "birthDate": "1970-01-16",
+          "age": 24,
+          "sourceName": "Daniel Borimirov",
+          "sourcePosition": "3MF"
+        },
+        "Petar Mihtarski": {
+          "number": 17,
+          "birthDate": "1966-07-15",
+          "age": 27,
+          "sourceName": "Petar Mihtarski",
+          "sourcePosition": "4FW"
+        }
+      },
       "targetCa": 1060
     }
   },
   {
     "stage": 86,
     "targetCa": 1075,
-    "actualCa": 1065.7438887297214,
+    "actualCa": 1074.9999999999998,
     "kind": "national",
     "team": {
       "id": "tur-2002",
@@ -14661,7 +15236,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "GK",
           "gk_shotstopper",
-          86,
+          86.3292,
           "R"
         ],
         [
@@ -14670,7 +15245,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "W",
           "fb_attacking",
-          84,
+          84.3292,
           "R"
         ],
         [
@@ -14679,7 +15254,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CB",
           "cb_stopper",
-          84,
+          84.3292,
           "R"
         ],
         [
@@ -14688,7 +15263,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CB",
           "cb_cover",
-          84,
+          84.3292,
           "R"
         ],
         [
@@ -14697,7 +15272,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "W",
           "fb_attacking",
-          83,
+          83.3292,
           "R"
         ],
         [
@@ -14706,7 +15281,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CM",
           "cm_playmaker",
-          84,
+          84.3292,
           "R"
         ],
         [
@@ -14715,7 +15290,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CM",
           "cm_creator",
-          85,
+          85.3292,
           "R"
         ],
         [
@@ -14724,7 +15299,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CM",
           "cm_mezzala",
-          85,
+          85.3292,
           "R"
         ],
         [
@@ -14733,7 +15308,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "W",
           "w_finisher",
-          85,
+          85.3292,
           "L"
         ],
         [
@@ -14742,7 +15317,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "ST",
           "st_target",
-          86,
+          86.3292,
           "R"
         ],
         [
@@ -14751,7 +15326,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "W",
           "w_finisher",
-          85,
+          85.3292,
           "R"
         ],
         [
@@ -14760,7 +15335,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "GK",
           "gk_wall",
-          80,
+          80.3292,
           "R"
         ],
         [
@@ -14769,7 +15344,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "W",
           "fb_attacking",
-          80,
+          80.3292,
           "R"
         ],
         [
@@ -14778,7 +15353,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CM",
           "cm_box2box",
-          80,
+          80.3292,
           "R"
         ],
         [
@@ -14787,7 +15362,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "ST",
           "st_poacher",
-          80,
+          80.3292,
           "R"
         ],
         [
@@ -14796,17 +15371,132 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "土耳其",
           "CM",
           "cm_playmaker",
-          80,
+          80.3292,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/2002_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Rüştü Reçber": {
+          "number": 1,
+          "birthDate": "1973-05-10",
+          "age": 29,
+          "sourceName": "Rüştü Reçber",
+          "sourcePosition": "1GK"
+        },
+        "Ergün Penbe": {
+          "number": 18,
+          "birthDate": "1972-05-17",
+          "age": 30,
+          "sourceName": "Ergün Penbe",
+          "sourcePosition": "3MF"
+        },
+        "Alpay Özalan": {
+          "number": 5,
+          "birthDate": "1973-05-29",
+          "age": 29,
+          "sourceName": "Alpay Özalan",
+          "sourcePosition": "2DF"
+        },
+        "Bülent Korkmaz": {
+          "number": 3,
+          "birthDate": "1968-11-24",
+          "age": 33,
+          "sourceName": "Bülent Korkmaz",
+          "sourcePosition": "2DF"
+        },
+        "Fatih Akyel": {
+          "number": 4,
+          "birthDate": "1977-12-26",
+          "age": 24,
+          "sourceName": "Fatih Akyel",
+          "sourcePosition": "2DF"
+        },
+        "Tugay Kerimoğlu": {
+          "number": 8,
+          "birthDate": "1970-08-24",
+          "age": 31,
+          "sourceName": "Tugay Kerimoğlu",
+          "sourcePosition": "3MF"
+        },
+        "Emre Belözoğlu": {
+          "number": 21,
+          "birthDate": "1980-09-07",
+          "age": 21,
+          "sourceName": "Emre Belözoğlu",
+          "sourcePosition": "3MF"
+        },
+        "Yıldıray Baştürk": {
+          "number": 10,
+          "birthDate": "1978-12-24",
+          "age": 23,
+          "sourceName": "Yıldıray Baştürk",
+          "sourcePosition": "3MF"
+        },
+        "Hasan Şaş": {
+          "number": 11,
+          "birthDate": "1976-08-01",
+          "age": 25,
+          "sourceName": "Hasan Şaş",
+          "sourcePosition": "4FW"
+        },
+        "Hakan Şükür": {
+          "number": 9,
+          "birthDate": "1971-09-01",
+          "age": 30,
+          "sourceName": "Hakan Şükür (c)",
+          "sourcePosition": "4FW"
+        },
+        "İlhan Mansız": {
+          "number": 17,
+          "birthDate": "1975-08-10",
+          "age": 26,
+          "sourceName": "İlhan Mansız",
+          "sourcePosition": "4FW"
+        },
+        "Ömer Çatkıç": {
+          "number": 12,
+          "birthDate": "1974-10-15",
+          "age": 27,
+          "sourceName": "Ömer Çatkıç",
+          "sourcePosition": "1GK"
+        },
+        "Ümit Davala": {
+          "number": 22,
+          "birthDate": "1973-07-30",
+          "age": 28,
+          "sourceName": "Ümit Davala",
+          "sourcePosition": "3MF"
+        },
+        "Okan Buruk": {
+          "number": 7,
+          "birthDate": "1973-10-19",
+          "age": 28,
+          "sourceName": "Okan Buruk",
+          "sourcePosition": "3MF"
+        },
+        "Arif Erdem": {
+          "number": 6,
+          "birthDate": "1972-01-02",
+          "age": 30,
+          "sourceName": "Arif Erdem",
+          "sourcePosition": "4FW"
+        },
+        "Mustafa İzzet": {
+          "number": 13,
+          "birthDate": "1974-10-31",
+          "age": 27,
+          "sourceName": "Muzzy Izzet",
+          "sourcePosition": "3MF"
+        }
+      },
       "targetCa": 1075
     }
   },
   {
     "stage": 87,
     "targetCa": 1090,
-    "actualCa": 1091.773424778084,
+    "actualCa": 1089.9999999999993,
     "kind": "national",
     "team": {
       "id": "cro-1998",
@@ -14833,7 +15523,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "GK",
           "gk_wall",
-          85,
+          84.9506,
           "R"
         ],
         [
@@ -14842,7 +15532,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "W",
           "fb_attacking",
-          86,
+          85.9506,
           "L"
         ],
         [
@@ -14851,7 +15541,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CB",
           "cb_stopper",
-          85,
+          84.9506,
           "R"
         ],
         [
@@ -14860,7 +15550,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CB",
           "cb_cover",
-          86,
+          85.9506,
           "R"
         ],
         [
@@ -14869,7 +15559,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "W",
           "fb_attacking",
-          84,
+          83.9506,
           "R"
         ],
         [
@@ -14878,7 +15568,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "W",
           "w_playmaker",
-          85,
+          84.9506,
           "L"
         ],
         [
@@ -14887,7 +15577,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CM",
           "cm_creator",
-          87,
+          86.9506,
           "R"
         ],
         [
@@ -14896,7 +15586,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CM",
           "cm_playmaker",
-          87,
+          86.9506,
           "R"
         ],
         [
@@ -14905,7 +15595,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "W",
           "w_engine",
-          85,
+          84.9506,
           "R"
         ],
         [
@@ -14914,7 +15604,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "ST",
           "st_finisher",
-          87,
+          86.9506,
           "L"
         ],
         [
@@ -14923,16 +15613,16 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "ST",
           "st_poacher",
-          85,
+          84.9506,
           "R"
         ],
         [
-          "布蒂纳",
-          "Tomislav Butina",
+          "姆尔米奇",
+          "Marijan Mrmić",
           "克罗地亚",
           "GK",
           "gk_wall",
-          81,
+          80.9506,
           "R"
         ],
         [
@@ -14941,7 +15631,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CB",
           "cb_stopper",
-          81,
+          80.9506,
           "R"
         ],
         [
@@ -14950,35 +15640,150 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "克罗地亚",
           "CM",
           "cm_destroyer",
-          81,
+          80.9506,
           "R"
         ],
         [
-          "博克西奇",
-          "Alen Bokšić",
+          "克尔潘",
+          "Petar Krpan",
           "克罗地亚",
           "ST",
           "st_finisher",
-          81,
+          80.9506,
           "R"
         ],
         [
-          "武格里内奇",
-          "Davor Vugrinec",
+          "科兹尼库",
+          "Ardian Kozniku",
           "克罗地亚",
           "ST",
           "st_runner",
-          81,
+          80.9506,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/1998_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Dražen Ladić": {
+          "number": 1,
+          "birthDate": "1963-01-01",
+          "age": 35,
+          "sourceName": "Dražen Ladić",
+          "sourcePosition": "1GK"
+        },
+        "Robert Jarni": {
+          "number": 17,
+          "birthDate": "1968-10-26",
+          "age": 29,
+          "sourceName": "Robert Jarni",
+          "sourcePosition": "2DF"
+        },
+        "Slaven Bilić": {
+          "number": 6,
+          "birthDate": "1968-09-11",
+          "age": 29,
+          "sourceName": "Slaven Bilić",
+          "sourcePosition": "2DF"
+        },
+        "Igor Štimac": {
+          "number": 4,
+          "birthDate": "1967-09-06",
+          "age": 30,
+          "sourceName": "Igor Štimac",
+          "sourcePosition": "2DF"
+        },
+        "Dario Šimić": {
+          "number": 20,
+          "birthDate": "1975-11-12",
+          "age": 22,
+          "sourceName": "Dario Šimić",
+          "sourcePosition": "2DF"
+        },
+        "Aljoša Asanović": {
+          "number": 7,
+          "birthDate": "1965-12-14",
+          "age": 32,
+          "sourceName": "Aljoša Asanović",
+          "sourcePosition": "3MF"
+        },
+        "Robert Prosinečki": {
+          "number": 8,
+          "birthDate": "1969-01-12",
+          "age": 29,
+          "sourceName": "Robert Prosinečki",
+          "sourcePosition": "3MF"
+        },
+        "Zvonimir Boban": {
+          "number": 10,
+          "birthDate": "1968-10-08",
+          "age": 29,
+          "sourceName": "Zvonimir Boban (captain)",
+          "sourcePosition": "3MF"
+        },
+        "Mario Stanić": {
+          "number": 13,
+          "birthDate": "1972-04-10",
+          "age": 26,
+          "sourceName": "Mario Stanić",
+          "sourcePosition": "3MF"
+        },
+        "Davor Šuker": {
+          "number": 9,
+          "birthDate": "1968-01-01",
+          "age": 30,
+          "sourceName": "Davor Šuker",
+          "sourcePosition": "4FW"
+        },
+        "Goran Vlaović": {
+          "number": 19,
+          "birthDate": "1972-08-07",
+          "age": 25,
+          "sourceName": "Goran Vlaović",
+          "sourcePosition": "4FW"
+        },
+        "Marijan Mrmić": {
+          "number": 12,
+          "birthDate": "1965-05-06",
+          "age": 33,
+          "sourceName": "Marijan Mrmić",
+          "sourcePosition": "1GK"
+        },
+        "Igor Tudor": {
+          "number": 15,
+          "birthDate": "1978-04-16",
+          "age": 20,
+          "sourceName": "Igor Tudor",
+          "sourcePosition": "2DF"
+        },
+        "Krunoslav Jurčić": {
+          "number": 21,
+          "birthDate": "1969-11-26",
+          "age": 28,
+          "sourceName": "Krunoslav Jurčić",
+          "sourcePosition": "3MF"
+        },
+        "Petar Krpan": {
+          "number": 2,
+          "birthDate": "1974-07-01",
+          "age": 23,
+          "sourceName": "Petar Krpan",
+          "sourcePosition": "4FW"
+        },
+        "Ardian Kozniku": {
+          "number": 16,
+          "birthDate": "1967-10-27",
+          "age": 30,
+          "sourceName": "Ardian Kozniku",
+          "sourcePosition": "4FW"
+        }
+      },
       "targetCa": 1090
     }
   },
   {
     "stage": 88,
     "targetCa": 1105,
-    "actualCa": 1104.2629156228957,
+    "actualCa": 1105.0000000000002,
     "kind": "national",
     "team": {
       "id": "arg-1990",
@@ -15005,7 +15810,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "GK",
           "gk_shotstopper",
-          87,
+          87.028,
           "R"
         ],
         [
@@ -15014,7 +15819,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_stopper",
-          87,
+          87.028,
           "R"
         ],
         [
@@ -15023,7 +15828,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_cover",
-          86,
+          86.028,
           "R"
         ],
         [
@@ -15032,7 +15837,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_stopper",
-          85,
+          85.028,
           "R"
         ],
         [
@@ -15041,7 +15846,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "fb_attacking",
-          85,
+          85.028,
           "L"
         ],
         [
@@ -15050,7 +15855,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_destroyer",
-          86,
+          86.028,
           "R"
         ],
         [
@@ -15059,7 +15864,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_box2box",
-          87,
+          87.028,
           "R"
         ],
         [
@@ -15068,7 +15873,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_creator",
-          88,
+          88.028,
           "L"
         ],
         [
@@ -15077,7 +15882,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "w_engine",
-          86,
+          86.028,
           "R"
         ],
         [
@@ -15086,7 +15891,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "ST",
           "st_runner",
-          87,
+          87.028,
           "R"
         ],
         [
@@ -15095,7 +15900,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "ST",
           "st_target",
-          85,
+          85.028,
           "R"
         ],
         [
@@ -15104,7 +15909,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "GK",
           "gk_wall",
-          82,
+          82.028,
           "R"
         ],
         [
@@ -15113,7 +15918,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_stopper",
-          82,
+          82.028,
           "R"
         ],
         [
@@ -15122,7 +15927,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_cover",
-          82,
+          82.028,
           "R"
         ],
         [
@@ -15131,7 +15936,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "fb_attacking",
-          82,
+          82.028,
           "R"
         ],
         [
@@ -15140,24 +15945,139 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_playmaker",
-          82,
+          82.028,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/1990_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Sergio Goycochea": {
+          "number": 12,
+          "birthDate": "1963-10-17",
+          "age": 26,
+          "sourceName": "Sergio Goycochea",
+          "sourcePosition": "1GK"
+        },
+        "Oscar Ruggeri": {
+          "number": 19,
+          "birthDate": "1962-01-26",
+          "age": 28,
+          "sourceName": "Oscar Ruggeri",
+          "sourcePosition": "2DF"
+        },
+        "Juan Simón": {
+          "number": 20,
+          "birthDate": "1960-03-02",
+          "age": 30,
+          "sourceName": "Juan Simón",
+          "sourcePosition": "2DF"
+        },
+        "Pedro Monzón": {
+          "number": 15,
+          "birthDate": "1962-02-23",
+          "age": 28,
+          "sourceName": "Pedro Monzón",
+          "sourcePosition": "2DF"
+        },
+        "Julio Olarticoechea": {
+          "number": 16,
+          "birthDate": "1958-10-18",
+          "age": 31,
+          "sourceName": "Julio Olarticoechea",
+          "sourcePosition": "2DF"
+        },
+        "José Basualdo": {
+          "number": 4,
+          "birthDate": "1963-06-20",
+          "age": 26,
+          "sourceName": "José Basualdo",
+          "sourcePosition": "3MF"
+        },
+        "Jorge Burruchaga": {
+          "number": 7,
+          "birthDate": "1962-10-09",
+          "age": 27,
+          "sourceName": "Jorge Burruchaga",
+          "sourcePosition": "3MF"
+        },
+        "Diego Maradona": {
+          "number": 10,
+          "birthDate": "1960-10-30",
+          "age": 29,
+          "sourceName": "Diego Maradona (captain)",
+          "sourcePosition": "3MF"
+        },
+        "Pedro Troglio": {
+          "number": 21,
+          "birthDate": "1965-07-28",
+          "age": 24,
+          "sourceName": "Pedro Troglio",
+          "sourcePosition": "3MF"
+        },
+        "Claudio Caniggia": {
+          "number": 8,
+          "birthDate": "1967-01-09",
+          "age": 23,
+          "sourceName": "Claudio Caniggia",
+          "sourcePosition": "4FW"
+        },
+        "Gustavo Dezotti": {
+          "number": 9,
+          "birthDate": "1964-02-14",
+          "age": 26,
+          "sourceName": "Gustavo Dezotti",
+          "sourcePosition": "4FW"
+        },
+        "Nery Pumpido": {
+          "number": 1,
+          "birthDate": "1957-07-30",
+          "age": 32,
+          "sourceName": "Nery Pumpido*",
+          "sourcePosition": "1GK"
+        },
+        "José Serrizuela": {
+          "number": 18,
+          "birthDate": "1962-06-16",
+          "age": 27,
+          "sourceName": "José Serrizuela",
+          "sourcePosition": "2DF"
+        },
+        "Néstor Sensini": {
+          "number": 17,
+          "birthDate": "1966-10-12",
+          "age": 23,
+          "sourceName": "Roberto Sensini",
+          "sourcePosition": "2DF"
+        },
+        "Ricardo Giusti": {
+          "number": 14,
+          "birthDate": "1956-12-11",
+          "age": 33,
+          "sourceName": "Ricardo Giusti",
+          "sourcePosition": "3MF"
+        },
+        "Gabriel Calderón": {
+          "number": 6,
+          "birthDate": "1960-02-07",
+          "age": 30,
+          "sourceName": "Gabriel Calderón",
+          "sourcePosition": "4FW"
+        }
+      },
       "targetCa": 1105
     }
   },
   {
     "stage": 89,
     "targetCa": 1120,
-    "actualCa": 1126.9407061340678,
+    "actualCa": 1120.0000000000005,
     "kind": "national",
     "team": {
       "id": "ned-1998",
       "club": "荷兰",
       "clubEn": "Netherlands",
       "season": "1998",
-      "coach": "弗兰克·里杰卡尔德",
+      "coach": "古斯·希丁克",
       "tier": "S",
       "formationId": "4-3-3",
       "tactics": {
@@ -15177,7 +16097,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "GK",
           "gk_sweeper",
-          88,
+          87.719,
           "R"
         ],
         [
@@ -15186,7 +16106,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "W",
           "fb_attacking",
-          86,
+          85.719,
           "L"
         ],
         [
@@ -15195,7 +16115,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "CB",
           "cb_stopper",
-          88,
+          87.719,
           "R"
         ],
         [
@@ -15204,7 +16124,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "CB",
           "cb_ballplaying",
-          87,
+          86.719,
           "L"
         ],
         [
@@ -15213,7 +16133,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "W",
           "fb_attacking",
-          86,
+          85.719,
           "R"
         ],
         [
@@ -15222,7 +16142,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "CM",
           "cm_destroyer",
-          88,
+          87.719,
           "L"
         ],
         [
@@ -15231,7 +16151,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "CM",
           "cm_box2box",
-          87,
+          86.719,
           "L"
         ],
         [
@@ -15240,7 +16160,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "CM",
           "cm_playmaker",
-          86,
+          85.719,
           "R"
         ],
         [
@@ -15249,7 +16169,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "W",
           "w_dribbler",
-          88,
+          87.719,
           "L"
         ],
         [
@@ -15258,7 +16178,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "ST",
           "st_false9",
-          88,
+          87.719,
           "R"
         ],
         [
@@ -15267,7 +16187,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "W",
           "w_finisher",
-          87,
+          86.719,
           "R"
         ],
         [
@@ -15276,7 +16196,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "GK",
           "gk_wall",
-          82,
+          81.719,
           "R"
         ],
         [
@@ -15285,7 +16205,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "CB",
           "cb_stopper",
-          82,
+          81.719,
           "R"
         ],
         [
@@ -15294,7 +16214,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "CM",
           "cm_box2box",
-          82,
+          81.719,
           "R"
         ],
         [
@@ -15303,7 +16223,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "W",
           "w_dribbler",
-          82,
+          81.719,
           "L"
         ],
         [
@@ -15312,17 +16232,132 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "ST",
           "st_target",
-          82,
+          81.719,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/1998_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Edwin van der Sar": {
+          "number": 1,
+          "birthDate": "1970-10-29",
+          "age": 27,
+          "sourceName": "Edwin van der Sar",
+          "sourcePosition": "1GK"
+        },
+        "Arthur Numan": {
+          "number": 5,
+          "birthDate": "1969-12-14",
+          "age": 28,
+          "sourceName": "Arthur Numan",
+          "sourcePosition": "2DF"
+        },
+        "Jaap Stam": {
+          "number": 3,
+          "birthDate": "1972-07-17",
+          "age": 25,
+          "sourceName": "Jaap Stam",
+          "sourcePosition": "2DF"
+        },
+        "Frank de Boer": {
+          "number": 4,
+          "birthDate": "1970-05-15",
+          "age": 28,
+          "sourceName": "Frank de Boer (captain)",
+          "sourcePosition": "2DF"
+        },
+        "Michael Reiziger": {
+          "number": 2,
+          "birthDate": "1973-05-03",
+          "age": 25,
+          "sourceName": "Michael Reiziger",
+          "sourcePosition": "2DF"
+        },
+        "Edgar Davids": {
+          "number": 16,
+          "birthDate": "1973-03-13",
+          "age": 25,
+          "sourceName": "Edgar Davids",
+          "sourcePosition": "3MF"
+        },
+        "Phillip Cocu": {
+          "number": 11,
+          "birthDate": "1970-10-29",
+          "age": 27,
+          "sourceName": "Phillip Cocu",
+          "sourcePosition": "3MF"
+        },
+        "Ronald de Boer": {
+          "number": 7,
+          "birthDate": "1970-05-15",
+          "age": 28,
+          "sourceName": "Ronald de Boer",
+          "sourcePosition": "3MF"
+        },
+        "Marc Overmars": {
+          "number": 14,
+          "birthDate": "1973-03-29",
+          "age": 25,
+          "sourceName": "Marc Overmars",
+          "sourcePosition": "3MF"
+        },
+        "Dennis Bergkamp": {
+          "number": 8,
+          "birthDate": "1969-05-10",
+          "age": 29,
+          "sourceName": "Dennis Bergkamp",
+          "sourcePosition": "4FW"
+        },
+        "Patrick Kluivert": {
+          "number": 9,
+          "birthDate": "1976-07-01",
+          "age": 21,
+          "sourceName": "Patrick Kluivert",
+          "sourcePosition": "4FW"
+        },
+        "Ruud Hesp": {
+          "number": 22,
+          "birthDate": "1965-10-31",
+          "age": 32,
+          "sourceName": "Ruud Hesp",
+          "sourcePosition": "1GK"
+        },
+        "Winston Bogarde": {
+          "number": 15,
+          "birthDate": "1970-10-22",
+          "age": 27,
+          "sourceName": "Winston Bogarde",
+          "sourcePosition": "2DF"
+        },
+        "Clarence Seedorf": {
+          "number": 10,
+          "birthDate": "1976-04-01",
+          "age": 22,
+          "sourceName": "Clarence Seedorf",
+          "sourcePosition": "3MF"
+        },
+        "Boudewijn Zenden": {
+          "number": 12,
+          "birthDate": "1976-08-15",
+          "age": 21,
+          "sourceName": "Boudewijn Zenden",
+          "sourcePosition": "3MF"
+        },
+        "Pierre van Hooijdonk": {
+          "number": 17,
+          "birthDate": "1969-11-29",
+          "age": 28,
+          "sourceName": "Pierre van Hooijdonk",
+          "sourcePosition": "4FW"
+        }
+      },
       "targetCa": 1120
     }
   },
   {
     "stage": 90,
     "targetCa": 1135,
-    "actualCa": 1146.5226793265995,
+    "actualCa": 1135.0000000000011,
     "kind": "national",
     "team": {
       "id": "ita-2006",
@@ -15349,7 +16384,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "GK",
           "gk_sweeper",
-          89,
+          88.5329,
           "R"
         ],
         [
@@ -15358,7 +16393,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "fb_attacking",
-          87,
+          86.5329,
           "L"
         ],
         [
@@ -15367,7 +16402,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_stopper",
-          89,
+          88.5329,
           "R"
         ],
         [
@@ -15376,7 +16411,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_stopper",
-          87,
+          86.5329,
           "R"
         ],
         [
@@ -15385,7 +16420,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "fb_attacking",
-          88,
+          87.5329,
           "R"
         ],
         [
@@ -15394,7 +16429,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_playmaker",
-          89,
+          88.5329,
           "R"
         ],
         [
@@ -15403,7 +16438,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_destroyer",
-          88,
+          87.5329,
           "R"
         ],
         [
@@ -15412,7 +16447,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "w_engine",
-          87,
+          86.5329,
           "R"
         ],
         [
@@ -15421,7 +16456,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_creator",
-          89,
+          88.5329,
           "R"
         ],
         [
@@ -15430,7 +16465,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "w_playmaker",
-          87,
+          86.5329,
           "R"
         ],
         [
@@ -15439,7 +16474,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_target",
-          88,
+          87.5329,
           "R"
         ],
         [
@@ -15448,7 +16483,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "GK",
           "gk_wall",
-          83,
+          82.5329,
           "R"
         ],
         [
@@ -15457,7 +16492,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_stopper",
-          83,
+          82.5329,
           "R"
         ],
         [
@@ -15466,7 +16501,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_false9",
-          83,
+          82.5329,
           "L"
         ],
         [
@@ -15475,7 +16510,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_poacher",
-          83,
+          82.5329,
           "R"
         ],
         [
@@ -15484,17 +16519,132 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_finisher",
-          83,
+          82.5329,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/2006_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Gianluigi Buffon": {
+          "number": 1,
+          "birthDate": "1978-01-28",
+          "age": 28,
+          "sourceName": "Gianluigi Buffon",
+          "sourcePosition": "1GK"
+        },
+        "Fabio Grosso": {
+          "number": 3,
+          "birthDate": "1977-11-28",
+          "age": 28,
+          "sourceName": "Fabio Grosso",
+          "sourcePosition": "2DF"
+        },
+        "Fabio Cannavaro": {
+          "number": 5,
+          "birthDate": "1973-09-13",
+          "age": 32,
+          "sourceName": "Fabio Cannavaro (c)",
+          "sourcePosition": "2DF"
+        },
+        "Marco Materazzi": {
+          "number": 23,
+          "birthDate": "1973-08-19",
+          "age": 32,
+          "sourceName": "Marco Materazzi",
+          "sourcePosition": "2DF"
+        },
+        "Gianluca Zambrotta": {
+          "number": 19,
+          "birthDate": "1977-02-19",
+          "age": 29,
+          "sourceName": "Gianluca Zambrotta",
+          "sourcePosition": "2DF"
+        },
+        "Andrea Pirlo": {
+          "number": 21,
+          "birthDate": "1979-05-19",
+          "age": 27,
+          "sourceName": "Andrea Pirlo",
+          "sourcePosition": "3MF"
+        },
+        "Gennaro Gattuso": {
+          "number": 8,
+          "birthDate": "1978-01-09",
+          "age": 28,
+          "sourceName": "Gennaro Gattuso",
+          "sourcePosition": "3MF"
+        },
+        "Simone Perrotta": {
+          "number": 20,
+          "birthDate": "1977-09-17",
+          "age": 28,
+          "sourceName": "Simone Perrotta",
+          "sourcePosition": "3MF"
+        },
+        "Francesco Totti": {
+          "number": 10,
+          "birthDate": "1976-09-27",
+          "age": 29,
+          "sourceName": "Francesco Totti",
+          "sourcePosition": "4FW"
+        },
+        "Mauro Camoranesi": {
+          "number": 16,
+          "birthDate": "1976-10-04",
+          "age": 29,
+          "sourceName": "Mauro Camoranesi",
+          "sourcePosition": "3MF"
+        },
+        "Luca Toni": {
+          "number": 9,
+          "birthDate": "1977-05-26",
+          "age": 29,
+          "sourceName": "Luca Toni",
+          "sourcePosition": "4FW"
+        },
+        "Marco Amelia": {
+          "number": 14,
+          "birthDate": "1982-04-02",
+          "age": 24,
+          "sourceName": "Marco Amelia",
+          "sourcePosition": "1GK"
+        },
+        "Andrea Barzagli": {
+          "number": 6,
+          "birthDate": "1981-05-08",
+          "age": 25,
+          "sourceName": "Andrea Barzagli",
+          "sourcePosition": "2DF"
+        },
+        "Alessandro Del Piero": {
+          "number": 7,
+          "birthDate": "1974-11-09",
+          "age": 31,
+          "sourceName": "Alessandro Del Piero",
+          "sourcePosition": "4FW"
+        },
+        "Filippo Inzaghi": {
+          "number": 18,
+          "birthDate": "1973-08-09",
+          "age": 32,
+          "sourceName": "Filippo Inzaghi",
+          "sourcePosition": "4FW"
+        },
+        "Alberto Gilardino": {
+          "number": 11,
+          "birthDate": "1982-07-05",
+          "age": 23,
+          "sourceName": "Alberto Gilardino",
+          "sourcePosition": "4FW"
+        }
+      },
       "targetCa": 1135
     }
   },
   {
     "stage": 91,
     "targetCa": 1150,
-    "actualCa": 1144.5406713835323,
+    "actualCa": 1150.0000000000007,
     "kind": "national",
     "team": {
       "id": "ita-1982",
@@ -15521,7 +16671,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "GK",
           "gk_wall",
-          89,
+          89.1858,
           "R"
         ],
         [
@@ -15530,7 +16680,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "fb_attacking",
-          87,
+          87.1858,
           "L"
         ],
         [
@@ -15539,7 +16689,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_stopper",
-          87,
+          87.1858,
           "R"
         ],
         [
@@ -15548,7 +16698,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_cover",
-          89,
+          89.1858,
           "R"
         ],
         [
@@ -15557,7 +16707,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "fb_attacking",
-          88,
+          88.1858,
           "R"
         ],
         [
@@ -15566,7 +16716,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "w_dribbler",
-          88,
+          88.1858,
           "R"
         ],
         [
@@ -15575,7 +16725,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_destroyer",
-          87,
+          87.1858,
           "R"
         ],
         [
@@ -15584,7 +16734,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_box2box",
-          88,
+          88.1858,
           "R"
         ],
         [
@@ -15593,7 +16743,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "w_playmaker",
-          88,
+          88.1858,
           "R"
         ],
         [
@@ -15602,7 +16752,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_poacher",
-          89,
+          89.1858,
           "R"
         ],
         [
@@ -15611,7 +16761,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "ST",
           "st_target",
-          87,
+          87.1858,
           "R"
         ],
         [
@@ -15620,7 +16770,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "GK",
           "gk_wall",
-          83,
+          83.1858,
           "R"
         ],
         [
@@ -15629,7 +16779,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CB",
           "cb_stopper",
-          83,
+          83.1858,
           "R"
         ],
         [
@@ -15638,16 +16788,16 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "W",
           "w_dribbler",
-          83,
+          83.1858,
           "R"
         ],
         [
-          "贝特加",
-          "Roberto Bettega",
+          "阿尔托贝利",
+          "Alessandro Altobelli",
           "意大利",
           "ST",
           "st_finisher",
-          83,
+          83.1858,
           "R"
         ],
         [
@@ -15656,17 +16806,132 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "意大利",
           "CM",
           "cm_playmaker",
-          83,
+          83.1858,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/1982_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Dino Zoff": {
+          "number": 1,
+          "birthDate": "1942-02-28",
+          "age": 40,
+          "sourceName": "Dino Zoff (captain)",
+          "sourcePosition": "1GK"
+        },
+        "Antonio Cabrini": {
+          "number": 4,
+          "birthDate": "1957-10-08",
+          "age": 24,
+          "sourceName": "Antonio Cabrini",
+          "sourcePosition": "2DF"
+        },
+        "Fulvio Collovati": {
+          "number": 5,
+          "birthDate": "1957-05-09",
+          "age": 25,
+          "sourceName": "Fulvio Collovati",
+          "sourcePosition": "2DF"
+        },
+        "Gaetano Scirea": {
+          "number": 7,
+          "birthDate": "1953-05-25",
+          "age": 29,
+          "sourceName": "Gaetano Scirea",
+          "sourcePosition": "2DF"
+        },
+        "Claudio Gentile": {
+          "number": 6,
+          "birthDate": "1953-09-27",
+          "age": 28,
+          "sourceName": "Claudio Gentile",
+          "sourcePosition": "2DF"
+        },
+        "Bruno Conti": {
+          "number": 16,
+          "birthDate": "1955-03-13",
+          "age": 27,
+          "sourceName": "Bruno Conti",
+          "sourcePosition": "3MF"
+        },
+        "Gabriele Oriali": {
+          "number": 13,
+          "birthDate": "1952-11-25",
+          "age": 29,
+          "sourceName": "Gabriele Oriali",
+          "sourcePosition": "3MF"
+        },
+        "Marco Tardelli": {
+          "number": 14,
+          "birthDate": "1954-09-24",
+          "age": 27,
+          "sourceName": "Marco Tardelli",
+          "sourcePosition": "3MF"
+        },
+        "Giancarlo Antognoni": {
+          "number": 9,
+          "birthDate": "1954-04-01",
+          "age": 28,
+          "sourceName": "Giancarlo Antognoni",
+          "sourcePosition": "3MF"
+        },
+        "Paolo Rossi": {
+          "number": 20,
+          "birthDate": "1956-09-23",
+          "age": 25,
+          "sourceName": "Paolo Rossi",
+          "sourcePosition": "4FW"
+        },
+        "Francesco Graziani": {
+          "number": 19,
+          "birthDate": "1952-12-16",
+          "age": 29,
+          "sourceName": "Francesco Graziani",
+          "sourcePosition": "4FW"
+        },
+        "Giovanni Galli": {
+          "number": 22,
+          "birthDate": "1958-04-29",
+          "age": 24,
+          "sourceName": "Giovanni Galli",
+          "sourcePosition": "1GK"
+        },
+        "Giuseppe Bergomi": {
+          "number": 3,
+          "birthDate": "1963-12-22",
+          "age": 18,
+          "sourceName": "Giuseppe Bergomi",
+          "sourcePosition": "2DF"
+        },
+        "Franco Causio": {
+          "number": 15,
+          "birthDate": "1949-02-01",
+          "age": 33,
+          "sourceName": "Franco Causio",
+          "sourcePosition": "3MF"
+        },
+        "Alessandro Altobelli": {
+          "number": 18,
+          "birthDate": "1955-11-28",
+          "age": 26,
+          "sourceName": "Alessandro Altobelli",
+          "sourcePosition": "4FW"
+        },
+        "Giuseppe Dossena": {
+          "number": 10,
+          "birthDate": "1958-05-02",
+          "age": 24,
+          "sourceName": "Giuseppe Dossena",
+          "sourcePosition": "3MF"
+        }
+      },
       "targetCa": 1150
     }
   },
   {
     "stage": 92,
     "targetCa": 1165,
-    "actualCa": 1175.5897652892563,
+    "actualCa": 1165.0000000000014,
     "kind": "national",
     "team": {
       "id": "arg-1986",
@@ -15693,7 +16958,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "GK",
           "gk_wall",
-          89,
+          88.5542,
           "R"
         ],
         [
@@ -15702,16 +16967,16 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_stopper",
-          89,
+          88.5542,
           "R"
         ],
         [
           "库丘福",
-          "Óscar Cuciuffo",
+          "José Luis Cuciuffo",
           "阿根廷",
           "CB",
           "cb_cover",
-          88,
+          87.5542,
           "R"
         ],
         [
@@ -15720,7 +16985,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CB",
           "cb_stopper",
-          90,
+          89.5542,
           "R"
         ],
         [
@@ -15729,7 +16994,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "fb_attacking",
-          88,
+          87.5542,
           "L"
         ],
         [
@@ -15738,7 +17003,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_destroyer",
-          89,
+          88.5542,
           "R"
         ],
         [
@@ -15747,7 +17012,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_box2box",
-          89,
+          88.5542,
           "R"
         ],
         [
@@ -15756,7 +17021,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_box2box",
-          90,
+          89.5542,
           "R"
         ],
         [
@@ -15765,7 +17030,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "W",
           "fb_attacking",
-          88,
+          87.5542,
           "R"
         ],
         [
@@ -15774,7 +17039,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "ST",
           "st_false9",
-          91,
+          90.5542,
           "L"
         ],
         [
@@ -15783,7 +17048,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "ST",
           "st_target",
-          90,
+          89.5542,
           "R"
         ],
         [
@@ -15792,7 +17057,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "GK",
           "gk_wall",
-          85,
+          84.5542,
           "R"
         ],
         [
@@ -15801,7 +17066,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_playmaker",
-          85,
+          84.5542,
           "R"
         ],
         [
@@ -15810,16 +17075,16 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "CM",
           "cm_creator",
-          85,
+          84.5542,
           "R"
         ],
         [
-          "卡尼吉亚",
-          "Claudio Caniggia",
+          "阿尔米隆",
+          "Sergio Almirón",
           "阿根廷",
           "ST",
           "st_runner",
-          85,
+          84.5542,
           "R"
         ],
         [
@@ -15828,17 +17093,132 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "阿根廷",
           "ST",
           "st_poacher",
-          85,
+          84.5542,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/1986_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Nery Pumpido": {
+          "number": 18,
+          "birthDate": "1957-07-30",
+          "age": 28,
+          "sourceName": "Nery Pumpido",
+          "sourcePosition": "1GK"
+        },
+        "José Luis Brown": {
+          "number": 5,
+          "birthDate": "1956-11-10",
+          "age": 29,
+          "sourceName": "José Luis Brown",
+          "sourcePosition": "2DF"
+        },
+        "José Luis Cuciuffo": {
+          "number": 9,
+          "birthDate": "1961-02-01",
+          "age": 25,
+          "sourceName": "José Luis Cuciuffo",
+          "sourcePosition": "2DF"
+        },
+        "Oscar Ruggeri": {
+          "number": 19,
+          "birthDate": "1962-01-26",
+          "age": 24,
+          "sourceName": "Oscar Ruggeri (vice-captain)",
+          "sourcePosition": "2DF"
+        },
+        "Julio Olarticoechea": {
+          "number": 16,
+          "birthDate": "1958-10-18",
+          "age": 27,
+          "sourceName": "Julio Olarticoechea",
+          "sourcePosition": "2DF"
+        },
+        "Sergio Batista": {
+          "number": 2,
+          "birthDate": "1962-11-09",
+          "age": 23,
+          "sourceName": "Sergio Batista",
+          "sourcePosition": "3MF"
+        },
+        "Héctor Enrique": {
+          "number": 12,
+          "birthDate": "1962-04-26",
+          "age": 24,
+          "sourceName": "Héctor Enrique",
+          "sourcePosition": "3MF"
+        },
+        "Jorge Burruchaga": {
+          "number": 7,
+          "birthDate": "1962-10-09",
+          "age": 23,
+          "sourceName": "Jorge Burruchaga",
+          "sourcePosition": "3MF"
+        },
+        "Ricardo Giusti": {
+          "number": 14,
+          "birthDate": "1956-12-11",
+          "age": 29,
+          "sourceName": "Ricardo Giusti",
+          "sourcePosition": "3MF"
+        },
+        "Diego Maradona": {
+          "number": 10,
+          "birthDate": "1960-10-30",
+          "age": 25,
+          "sourceName": "Diego Maradona (captain)",
+          "sourcePosition": "3MF"
+        },
+        "Jorge Valdano": {
+          "number": 11,
+          "birthDate": "1955-10-04",
+          "age": 30,
+          "sourceName": "Jorge Valdano",
+          "sourcePosition": "4FW"
+        },
+        "Luis Islas": {
+          "number": 15,
+          "birthDate": "1965-12-22",
+          "age": 20,
+          "sourceName": "Luis Islas",
+          "sourcePosition": "1GK"
+        },
+        "Carlos Tapia": {
+          "number": 20,
+          "birthDate": "1962-08-20",
+          "age": 23,
+          "sourceName": "Carlos Tapia",
+          "sourcePosition": "3MF"
+        },
+        "Marcelo Trobbiani": {
+          "number": 21,
+          "birthDate": "1955-02-17",
+          "age": 31,
+          "sourceName": "Marcelo Trobbiani",
+          "sourcePosition": "3MF"
+        },
+        "Sergio Almirón": {
+          "number": 1,
+          "birthDate": "1958-11-18",
+          "age": 27,
+          "sourceName": "Sergio Almirón",
+          "sourcePosition": "4FW"
+        },
+        "Pedro Pasculli": {
+          "number": 17,
+          "birthDate": "1960-05-17",
+          "age": 26,
+          "sourceName": "Pedro Pasculli",
+          "sourcePosition": "4FW"
+        }
+      },
       "targetCa": 1165
     }
   },
   {
     "stage": 93,
     "targetCa": 1180,
-    "actualCa": 1169.1079193970004,
+    "actualCa": 1180.000000000001,
     "kind": "national",
     "team": {
       "id": "bra-1994",
@@ -15865,7 +17245,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_wall",
-          89,
+          89.4924,
           "R"
         ],
         [
@@ -15874,7 +17254,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "fb_attacking",
-          89,
+          89.4924,
           "L"
         ],
         [
@@ -15883,7 +17263,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_cover",
-          89,
+          89.4924,
           "R"
         ],
         [
@@ -15892,7 +17272,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_stopper",
-          88,
+          88.4924,
           "R"
         ],
         [
@@ -15901,7 +17281,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "fb_attacking",
-          88,
+          88.4924,
           "R"
         ],
         [
@@ -15910,7 +17290,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "w_playmaker",
-          88,
+          88.4924,
           "R"
         ],
         [
@@ -15919,7 +17299,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_destroyer",
-          90,
+          90.4924,
           "R"
         ],
         [
@@ -15928,7 +17308,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_playmaker",
-          89,
+          89.4924,
           "R"
         ],
         [
@@ -15937,7 +17317,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "w_engine",
-          88,
+          88.4924,
           "R"
         ],
         [
@@ -15946,7 +17326,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_poacher",
-          90,
+          90.4924,
           "R"
         ],
         [
@@ -15955,7 +17335,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_false9",
-          89,
+          89.4924,
           "L"
         ],
         [
@@ -15964,7 +17344,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_wall",
-          84,
+          84.4924,
           "R"
         ],
         [
@@ -15973,7 +17353,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "fb_attacking",
-          84,
+          84.4924,
           "R"
         ],
         [
@@ -15982,7 +17362,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_stopper",
-          84,
+          84.4924,
           "R"
         ],
         [
@@ -15991,7 +17371,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_creator",
-          84,
+          84.4924,
           "R"
         ],
         [
@@ -16000,17 +17380,132 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_finisher",
-          84,
+          84.4924,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/1994_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Cláudio Taffarel": {
+          "number": 1,
+          "birthDate": "1966-05-08",
+          "age": 28,
+          "sourceName": "Cláudio Taffarel",
+          "sourcePosition": "1GK"
+        },
+        "Branco": {
+          "number": 6,
+          "birthDate": "1964-04-04",
+          "age": 30,
+          "sourceName": "Branco",
+          "sourcePosition": "2DF"
+        },
+        "Aldair": {
+          "number": 13,
+          "birthDate": "1965-11-30",
+          "age": 28,
+          "sourceName": "Aldair",
+          "sourcePosition": "2DF"
+        },
+        "Márcio Santos": {
+          "number": 15,
+          "birthDate": "1969-09-15",
+          "age": 24,
+          "sourceName": "Márcio Santos",
+          "sourcePosition": "2DF"
+        },
+        "Jorginho": {
+          "number": 2,
+          "birthDate": "1964-08-17",
+          "age": 29,
+          "sourceName": "Jorginho",
+          "sourcePosition": "2DF"
+        },
+        "Zinho": {
+          "number": 9,
+          "birthDate": "1967-06-17",
+          "age": 27,
+          "sourceName": "Zinho",
+          "sourcePosition": "3MF"
+        },
+        "Dunga": {
+          "number": 8,
+          "birthDate": "1963-10-31",
+          "age": 30,
+          "sourceName": "Dunga (captain)",
+          "sourcePosition": "3MF"
+        },
+        "Mauro Silva": {
+          "number": 5,
+          "birthDate": "1968-01-12",
+          "age": 26,
+          "sourceName": "Mauro Silva",
+          "sourcePosition": "3MF"
+        },
+        "Mazinho": {
+          "number": 17,
+          "birthDate": "1966-04-08",
+          "age": 28,
+          "sourceName": "Mazinho",
+          "sourcePosition": "3MF"
+        },
+        "Romário": {
+          "number": 11,
+          "birthDate": "1966-01-29",
+          "age": 28,
+          "sourceName": "Romário",
+          "sourcePosition": "4FW"
+        },
+        "Bebeto": {
+          "number": 7,
+          "birthDate": "1964-02-16",
+          "age": 30,
+          "sourceName": "Bebeto",
+          "sourcePosition": "4FW"
+        },
+        "Zetti": {
+          "number": 12,
+          "birthDate": "1965-01-10",
+          "age": 29,
+          "sourceName": "Zetti",
+          "sourcePosition": "1GK"
+        },
+        "Cafu": {
+          "number": 14,
+          "birthDate": "1970-06-07",
+          "age": 24,
+          "sourceName": "Cafu",
+          "sourcePosition": "2DF"
+        },
+        "Ronaldão": {
+          "number": 4,
+          "birthDate": "1965-06-19",
+          "age": 28,
+          "sourceName": "Ronaldão",
+          "sourcePosition": "2DF"
+        },
+        "Raí": {
+          "number": 10,
+          "birthDate": "1965-05-15",
+          "age": 29,
+          "sourceName": "Raí",
+          "sourcePosition": "3MF"
+        },
+        "Müller": {
+          "number": 19,
+          "birthDate": "1966-01-31",
+          "age": 28,
+          "sourceName": "Müller",
+          "sourcePosition": "4FW"
+        }
+      },
       "targetCa": 1180
     }
   },
   {
     "stage": 94,
     "targetCa": 1195,
-    "actualCa": 1199.570593587389,
+    "actualCa": 1194.9999999999995,
     "kind": "national",
     "team": {
       "id": "ger-2014",
@@ -16037,7 +17532,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "GK",
           "gk_sweeper",
-          91,
+          90.8228,
           "R"
         ],
         [
@@ -16046,7 +17541,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "fb_attacking",
-          89,
+          88.8228,
           "L"
         ],
         [
@@ -16055,7 +17550,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_ballplaying",
-          90,
+          89.8228,
           "R"
         ],
         [
@@ -16064,7 +17559,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_stopper",
-          90,
+          89.8228,
           "R"
         ],
         [
@@ -16073,7 +17568,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "fb_playmaker",
-          91,
+          90.8228,
           "R"
         ],
         [
@@ -16082,7 +17577,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_playmaker",
-          90,
+          89.8228,
           "R"
         ],
         [
@@ -16091,7 +17586,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_box2box",
-          89,
+          88.8228,
           "R"
         ],
         [
@@ -16100,7 +17595,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_playmaker",
-          91,
+          90.8228,
           "L"
         ],
         [
@@ -16109,7 +17604,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_playmaker",
-          90,
+          89.8228,
           "L"
         ],
         [
@@ -16118,7 +17613,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "ST",
           "st_poacher",
-          90,
+          89.8228,
           "R"
         ],
         [
@@ -16127,7 +17622,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_finisher",
-          91,
+          90.8228,
           "R"
         ],
         [
@@ -16136,7 +17631,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "GK",
           "gk_wall",
-          85,
+          84.8228,
           "R"
         ],
         [
@@ -16145,7 +17640,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CB",
           "cb_stopper",
-          85,
+          84.8228,
           "R"
         ],
         [
@@ -16154,7 +17649,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_dribbler",
-          85,
+          84.8228,
           "R"
         ],
         [
@@ -16163,7 +17658,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "CM",
           "cm_mezzala",
-          85,
+          84.8228,
           "R"
         ],
         [
@@ -16172,17 +17667,132 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "德国",
           "W",
           "w_finisher",
-          85,
+          84.8228,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/2014_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Manuel Neuer": {
+          "number": 1,
+          "birthDate": "1986-03-27",
+          "age": 28,
+          "sourceName": "Manuel Neuer",
+          "sourcePosition": "1GK"
+        },
+        "Benedikt Höwedes": {
+          "number": 4,
+          "birthDate": "1988-02-29",
+          "age": 26,
+          "sourceName": "Benedikt Höwedes",
+          "sourcePosition": "2DF"
+        },
+        "Mats Hummels": {
+          "number": 5,
+          "birthDate": "1988-12-16",
+          "age": 25,
+          "sourceName": "Mats Hummels",
+          "sourcePosition": "2DF"
+        },
+        "Jérôme Boateng": {
+          "number": 20,
+          "birthDate": "1988-09-03",
+          "age": 25,
+          "sourceName": "Jérôme Boateng",
+          "sourcePosition": "2DF"
+        },
+        "Philipp Lahm": {
+          "number": 16,
+          "birthDate": "1983-11-11",
+          "age": 30,
+          "sourceName": "Philipp Lahm (c)",
+          "sourcePosition": "2DF"
+        },
+        "Bastian Schweinsteiger": {
+          "number": 7,
+          "birthDate": "1984-08-01",
+          "age": 29,
+          "sourceName": "Bastian Schweinsteiger",
+          "sourcePosition": "3MF"
+        },
+        "Sami Khedira": {
+          "number": 6,
+          "birthDate": "1987-04-04",
+          "age": 27,
+          "sourceName": "Sami Khedira",
+          "sourcePosition": "3MF"
+        },
+        "Toni Kroos": {
+          "number": 18,
+          "birthDate": "1990-01-04",
+          "age": 24,
+          "sourceName": "Toni Kroos",
+          "sourcePosition": "3MF"
+        },
+        "Mesut Özil": {
+          "number": 8,
+          "birthDate": "1988-10-15",
+          "age": 25,
+          "sourceName": "Mesut Özil",
+          "sourcePosition": "3MF"
+        },
+        "Miroslav Klose": {
+          "number": 11,
+          "birthDate": "1978-06-09",
+          "age": 36,
+          "sourceName": "Miroslav Klose",
+          "sourcePosition": "4FW"
+        },
+        "Thomas Müller": {
+          "number": 13,
+          "birthDate": "1989-09-13",
+          "age": 24,
+          "sourceName": "Thomas Müller",
+          "sourcePosition": "4FW"
+        },
+        "Ron-Robert Zieler": {
+          "number": 12,
+          "birthDate": "1989-02-12",
+          "age": 25,
+          "sourceName": "Ron-Robert Zieler",
+          "sourcePosition": "1GK"
+        },
+        "Per Mertesacker": {
+          "number": 17,
+          "birthDate": "1984-09-29",
+          "age": 29,
+          "sourceName": "Per Mertesacker",
+          "sourcePosition": "2DF"
+        },
+        "Julian Draxler": {
+          "number": 14,
+          "birthDate": "1993-09-20",
+          "age": 20,
+          "sourceName": "Julian Draxler",
+          "sourcePosition": "3MF"
+        },
+        "Mario Götze": {
+          "number": 19,
+          "birthDate": "1992-06-03",
+          "age": 22,
+          "sourceName": "Mario Götze",
+          "sourcePosition": "3MF"
+        },
+        "André Schürrle": {
+          "number": 9,
+          "birthDate": "1990-11-06",
+          "age": 23,
+          "sourceName": "André Schürrle",
+          "sourcePosition": "4FW"
+        }
+      },
       "targetCa": 1195
     }
   },
   {
     "stage": 95,
     "targetCa": 1210,
-    "actualCa": 1220.880108472605,
+    "actualCa": 1210.0000000000002,
     "kind": "national",
     "team": {
       "id": "fra-1998",
@@ -16209,7 +17819,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "GK",
           "gk_sweeper",
-          91,
+          90.5754,
           "R"
         ],
         [
@@ -16218,7 +17828,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "fb_attacking",
-          91,
+          90.5754,
           "L"
         ],
         [
@@ -16227,7 +17837,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_ballplaying",
-          92,
+          91.5754,
           "R"
         ],
         [
@@ -16236,7 +17846,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CB",
           "cb_stopper",
-          92,
+          91.5754,
           "R"
         ],
         [
@@ -16245,7 +17855,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "fb_attacking",
-          92,
+          91.5754,
           "R"
         ],
         [
@@ -16254,7 +17864,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_destroyer",
-          91,
+          90.5754,
           "R"
         ],
         [
@@ -16263,7 +17873,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_box2box",
-          90,
+          89.5754,
           "L"
         ],
         [
@@ -16272,7 +17882,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "w_playmaker",
-          92,
+          91.5754,
           "R"
         ],
         [
@@ -16281,7 +17891,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_creator",
-          91,
+          90.5754,
           "R"
         ],
         [
@@ -16290,7 +17900,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "w_engine",
-          90,
+          89.5754,
           "R"
         ],
         [
@@ -16299,7 +17909,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_target",
-          89,
+          88.5754,
           "R"
         ],
         [
@@ -16308,7 +17918,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "GK",
           "gk_wall",
-          86,
+          85.5754,
           "R"
         ],
         [
@@ -16317,7 +17927,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "W",
           "fb_attacking",
-          86,
+          85.5754,
           "R"
         ],
         [
@@ -16326,7 +17936,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "CM",
           "cm_box2box",
-          86,
+          85.5754,
           "R"
         ],
         [
@@ -16335,7 +17945,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_target",
-          86,
+          85.5754,
           "R"
         ],
         [
@@ -16344,17 +17954,132 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "法国",
           "ST",
           "st_runner",
-          86,
+          85.5754,
           "L"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/1998_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Fabien Barthez": {
+          "number": 16,
+          "birthDate": "1971-06-28",
+          "age": 26,
+          "sourceName": "Fabien Barthez",
+          "sourcePosition": "1GK"
+        },
+        "Bixente Lizarazu": {
+          "number": 3,
+          "birthDate": "1969-12-09",
+          "age": 28,
+          "sourceName": "Bixente Lizarazu",
+          "sourcePosition": "2DF"
+        },
+        "Laurent Blanc": {
+          "number": 5,
+          "birthDate": "1965-11-19",
+          "age": 32,
+          "sourceName": "Laurent Blanc",
+          "sourcePosition": "2DF"
+        },
+        "Marcel Desailly": {
+          "number": 8,
+          "birthDate": "1968-09-07",
+          "age": 29,
+          "sourceName": "Marcel Desailly",
+          "sourcePosition": "2DF"
+        },
+        "Lilian Thuram": {
+          "number": 15,
+          "birthDate": "1972-01-01",
+          "age": 26,
+          "sourceName": "Lilian Thuram",
+          "sourcePosition": "2DF"
+        },
+        "Didier Deschamps": {
+          "number": 7,
+          "birthDate": "1968-10-15",
+          "age": 29,
+          "sourceName": "Didier Deschamps (captain)",
+          "sourcePosition": "3MF"
+        },
+        "Emmanuel Petit": {
+          "number": 17,
+          "birthDate": "1970-09-22",
+          "age": 27,
+          "sourceName": "Emmanuel Petit",
+          "sourcePosition": "3MF"
+        },
+        "Zinedine Zidane": {
+          "number": 10,
+          "birthDate": "1972-06-23",
+          "age": 25,
+          "sourceName": "Zinedine Zidane",
+          "sourcePosition": "3MF"
+        },
+        "Youri Djorkaeff": {
+          "number": 6,
+          "birthDate": "1968-03-09",
+          "age": 30,
+          "sourceName": "Youri Djorkaeff",
+          "sourcePosition": "3MF"
+        },
+        "Christian Karembeu": {
+          "number": 19,
+          "birthDate": "1970-12-03",
+          "age": 27,
+          "sourceName": "Christian Karembeu",
+          "sourcePosition": "3MF"
+        },
+        "Stéphane Guivarc’h": {
+          "number": 9,
+          "birthDate": "1970-09-06",
+          "age": 27,
+          "sourceName": "Stéphane Guivarc'h",
+          "sourcePosition": "4FW"
+        },
+        "Bernard Lama": {
+          "number": 1,
+          "birthDate": "1963-04-07",
+          "age": 35,
+          "sourceName": "Bernard Lama",
+          "sourcePosition": "1GK"
+        },
+        "Vincent Candela": {
+          "number": 2,
+          "birthDate": "1973-10-24",
+          "age": 24,
+          "sourceName": "Vincent Candela",
+          "sourcePosition": "2DF"
+        },
+        "Patrick Vieira": {
+          "number": 4,
+          "birthDate": "1976-06-23",
+          "age": 21,
+          "sourceName": "Patrick Vieira",
+          "sourcePosition": "3MF"
+        },
+        "Christophe Dugarry": {
+          "number": 21,
+          "birthDate": "1972-03-24",
+          "age": 26,
+          "sourceName": "Christophe Dugarry",
+          "sourcePosition": "4FW"
+        },
+        "Thierry Henry": {
+          "number": 12,
+          "birthDate": "1977-08-17",
+          "age": 20,
+          "sourceName": "Thierry Henry",
+          "sourcePosition": "4FW"
+        }
+      },
       "targetCa": 1210
     }
   },
   {
     "stage": 96,
     "targetCa": 1225,
-    "actualCa": 1218.2381713651669,
+    "actualCa": 1225.0000000000005,
     "kind": "national",
     "team": {
       "id": "bra-2002",
@@ -16381,7 +18106,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_wall",
-          90,
+          90.221,
           "R"
         ],
         [
@@ -16390,7 +18115,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_stopper",
-          92,
+          92.221,
           "R"
         ],
         [
@@ -16399,7 +18124,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_cover",
-          89,
+          89.221,
           "R"
         ],
         [
@@ -16408,7 +18133,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_ballplaying",
-          90,
+          90.221,
           "R"
         ],
         [
@@ -16417,7 +18142,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "fb_attacking",
-          92,
+          92.221,
           "L"
         ],
         [
@@ -16426,7 +18151,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_destroyer",
-          91,
+          91.221,
           "R"
         ],
         [
@@ -16435,16 +18160,16 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_box2box",
-          89,
+          89.221,
           "R"
         ],
         [
-          "儒尼尼奥",
-          "Juninho Paulista",
+          "罗纳尔迪尼奥",
+          "Ronaldinho",
           "巴西",
           "CM",
-          "cm_playmaker",
-          90,
+          "cm_creator",
+          90.221,
           "R"
         ],
         [
@@ -16453,7 +18178,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "fb_attacking",
-          92,
+          92.221,
           "R"
         ],
         [
@@ -16462,7 +18187,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_runner",
-          92,
+          92.221,
           "R"
         ],
         [
@@ -16471,7 +18196,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_false9",
-          92,
+          92.221,
           "L"
         ],
         [
@@ -16480,7 +18205,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_wall",
-          86,
+          86.221,
           "R"
         ],
         [
@@ -16489,7 +18214,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "fb_attacking",
-          86,
+          86.221,
           "R"
         ],
         [
@@ -16498,7 +18223,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_stopper",
-          86,
+          86.221,
           "R"
         ],
         [
@@ -16507,7 +18232,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_mezzala",
-          86,
+          86.221,
           "L"
         ],
         [
@@ -16516,17 +18241,132 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_target",
-          86,
+          86.221,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/2002_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Marcos": {
+          "number": 1,
+          "birthDate": "1973-08-04",
+          "age": 28,
+          "sourceName": "Marcos",
+          "sourcePosition": "1GK"
+        },
+        "Lúcio": {
+          "number": 3,
+          "birthDate": "1978-05-08",
+          "age": 24,
+          "sourceName": "Lúcio",
+          "sourcePosition": "2DF"
+        },
+        "Roque Júnior": {
+          "number": 4,
+          "birthDate": "1976-08-31",
+          "age": 25,
+          "sourceName": "Roque Júnior",
+          "sourcePosition": "2DF"
+        },
+        "Edmílson": {
+          "number": 5,
+          "birthDate": "1976-07-10",
+          "age": 25,
+          "sourceName": "Edmílson",
+          "sourcePosition": "2DF"
+        },
+        "Roberto Carlos": {
+          "number": 6,
+          "birthDate": "1973-04-10",
+          "age": 29,
+          "sourceName": "Roberto Carlos",
+          "sourcePosition": "2DF"
+        },
+        "Gilberto Silva": {
+          "number": 8,
+          "birthDate": "1976-10-07",
+          "age": 25,
+          "sourceName": "Gilberto Silva",
+          "sourcePosition": "3MF"
+        },
+        "Kléberson": {
+          "number": 15,
+          "birthDate": "1979-06-19",
+          "age": 22,
+          "sourceName": "Kléberson",
+          "sourcePosition": "3MF"
+        },
+        "Ronaldinho": {
+          "number": 11,
+          "birthDate": "1980-03-21",
+          "age": 22,
+          "sourceName": "Ronaldinho",
+          "sourcePosition": "3MF"
+        },
+        "Cafu": {
+          "number": 2,
+          "birthDate": "1970-06-07",
+          "age": 31,
+          "sourceName": "Cafu (c)",
+          "sourcePosition": "2DF"
+        },
+        "Ronaldo Nazário": {
+          "number": 9,
+          "birthDate": "1976-09-18",
+          "age": 25,
+          "sourceName": "Ronaldo",
+          "sourcePosition": "4FW"
+        },
+        "Rivaldo": {
+          "number": 10,
+          "birthDate": "1972-04-19",
+          "age": 30,
+          "sourceName": "Rivaldo",
+          "sourcePosition": "3MF"
+        },
+        "Dida": {
+          "number": 12,
+          "birthDate": "1973-10-07",
+          "age": 28,
+          "sourceName": "Dida",
+          "sourcePosition": "1GK"
+        },
+        "Belletti": {
+          "number": 13,
+          "birthDate": "1976-06-20",
+          "age": 25,
+          "sourceName": "Juliano Belletti",
+          "sourcePosition": "2DF"
+        },
+        "Anderson Polga": {
+          "number": 14,
+          "birthDate": "1979-02-09",
+          "age": 23,
+          "sourceName": "Ânderson Polga",
+          "sourcePosition": "2DF"
+        },
+        "Denílson": {
+          "number": 17,
+          "birthDate": "1977-08-24",
+          "age": 24,
+          "sourceName": "Denílson",
+          "sourcePosition": "4FW"
+        },
+        "Luizão": {
+          "number": 21,
+          "birthDate": "1975-11-14",
+          "age": 26,
+          "sourceName": "Luizão",
+          "sourcePosition": "4FW"
+        }
+      },
       "targetCa": 1225
     }
   },
   {
     "stage": 97,
     "targetCa": 1240,
-    "actualCa": 1252.43498922865,
+    "actualCa": 1240,
     "kind": "national",
     "team": {
       "id": "esp-2010",
@@ -16553,7 +18393,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_shotstopper",
-          93,
+          92.5039,
           "R"
         ],
         [
@@ -16562,7 +18402,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "fb_attacking",
-          91,
+          90.5039,
           "L"
         ],
         [
@@ -16571,7 +18411,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CB",
           "cb_ballplaying",
-          92,
+          91.5039,
           "R"
         ],
         [
@@ -16580,7 +18420,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CB",
           "cb_stopper",
-          92,
+          91.5039,
           "R"
         ],
         [
@@ -16589,7 +18429,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "fb_attacking",
-          92,
+          91.5039,
           "R"
         ],
         [
@@ -16598,7 +18438,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CM",
           "cm_destroyer",
-          92,
+          91.5039,
           "R"
         ],
         [
@@ -16607,7 +18447,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CM",
           "cm_playmaker",
-          93,
+          92.5039,
           "R"
         ],
         [
@@ -16616,7 +18456,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CM",
           "cm_playmaker",
-          92,
+          91.5039,
           "R"
         ],
         [
@@ -16625,7 +18465,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "w_playmaker",
-          93,
+          92.5039,
           "R"
         ],
         [
@@ -16634,7 +18474,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "ST",
           "st_finisher",
-          93,
+          92.5039,
           "R"
         ],
         [
@@ -16643,7 +18483,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "w_finisher",
-          91,
+          90.5039,
           "R"
         ],
         [
@@ -16652,7 +18492,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "GK",
           "gk_sweeper",
-          87,
+          86.5039,
           "R"
         ],
         [
@@ -16661,7 +18501,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CB",
           "cb_stopper",
-          87,
+          86.5039,
           "R"
         ],
         [
@@ -16670,7 +18510,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "CM",
           "cm_creator",
-          87,
+          86.5039,
           "R"
         ],
         [
@@ -16679,7 +18519,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "W",
           "w_playmaker",
-          87,
+          86.5039,
           "L"
         ],
         [
@@ -16688,17 +18528,132 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "西班牙",
           "ST",
           "st_runner",
-          87,
+          86.5039,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/2010_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Iker Casillas": {
+          "number": 1,
+          "birthDate": "1981-05-20",
+          "age": 29,
+          "sourceName": "Iker Casillas (c)",
+          "sourcePosition": "1GK"
+        },
+        "Joan Capdevila": {
+          "number": 11,
+          "birthDate": "1978-02-03",
+          "age": 32,
+          "sourceName": "Joan Capdevila",
+          "sourcePosition": "2DF"
+        },
+        "Gerard Piqué": {
+          "number": 3,
+          "birthDate": "1987-02-02",
+          "age": 23,
+          "sourceName": "Gerard Piqué",
+          "sourcePosition": "2DF"
+        },
+        "Carles Puyol": {
+          "number": 5,
+          "birthDate": "1978-04-13",
+          "age": 32,
+          "sourceName": "Carles Puyol",
+          "sourcePosition": "2DF"
+        },
+        "Sergio Ramos": {
+          "number": 15,
+          "birthDate": "1986-03-30",
+          "age": 24,
+          "sourceName": "Sergio Ramos",
+          "sourcePosition": "2DF"
+        },
+        "Sergio Busquets": {
+          "number": 16,
+          "birthDate": "1988-07-16",
+          "age": 21,
+          "sourceName": "Sergio Busquets",
+          "sourcePosition": "3MF"
+        },
+        "Xavi Hernández": {
+          "number": 8,
+          "birthDate": "1980-01-25",
+          "age": 30,
+          "sourceName": "Xavi",
+          "sourcePosition": "3MF"
+        },
+        "Xabi Alonso": {
+          "number": 14,
+          "birthDate": "1981-11-25",
+          "age": 28,
+          "sourceName": "Xabi Alonso",
+          "sourcePosition": "3MF"
+        },
+        "Andrés Iniesta": {
+          "number": 6,
+          "birthDate": "1984-05-11",
+          "age": 26,
+          "sourceName": "Andrés Iniesta",
+          "sourcePosition": "3MF"
+        },
+        "David Villa": {
+          "number": 7,
+          "birthDate": "1981-12-03",
+          "age": 28,
+          "sourceName": "David Villa",
+          "sourcePosition": "4FW"
+        },
+        "Pedro Rodríguez": {
+          "number": 18,
+          "birthDate": "1987-07-28",
+          "age": 22,
+          "sourceName": "Pedro",
+          "sourcePosition": "4FW"
+        },
+        "Víctor Valdés": {
+          "number": 12,
+          "birthDate": "1982-01-14",
+          "age": 28,
+          "sourceName": "Víctor Valdés",
+          "sourcePosition": "1GK"
+        },
+        "Carlos Marchena": {
+          "number": 4,
+          "birthDate": "1979-07-31",
+          "age": 30,
+          "sourceName": "Carlos Marchena",
+          "sourcePosition": "2DF"
+        },
+        "Cesc Fàbregas": {
+          "number": 10,
+          "birthDate": "1987-05-04",
+          "age": 23,
+          "sourceName": "Cesc Fàbregas",
+          "sourcePosition": "3MF"
+        },
+        "David Silva": {
+          "number": 21,
+          "birthDate": "1986-01-08",
+          "age": 24,
+          "sourceName": "David Silva",
+          "sourcePosition": "3MF"
+        },
+        "Fernando Torres": {
+          "number": 9,
+          "birthDate": "1984-03-20",
+          "age": 26,
+          "sourceName": "Fernando Torres",
+          "sourcePosition": "4FW"
+        }
+      },
       "targetCa": 1240
     }
   },
   {
     "stage": 98,
     "targetCa": 1255,
-    "actualCa": 1245.196614937251,
+    "actualCa": 1255.000000000001,
     "kind": "national",
     "team": {
       "id": "ger-1974",
@@ -16725,7 +18680,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "联邦德国",
           "GK",
           "gk_wall",
-          92,
+          92.3866,
           "R"
         ],
         [
@@ -16734,7 +18689,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "联邦德国",
           "W",
           "fb_attacking",
-          93,
+          93.3866,
           "L"
         ],
         [
@@ -16743,7 +18698,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "联邦德国",
           "CB",
           "cb_stopper",
-          91,
+          91.3866,
           "R"
         ],
         [
@@ -16752,7 +18707,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "联邦德国",
           "CB",
           "cb_ballplaying",
-          93,
+          93.3866,
           "R"
         ],
         [
@@ -16761,7 +18716,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "联邦德国",
           "W",
           "fb_attacking",
-          91,
+          91.3866,
           "R"
         ],
         [
@@ -16770,7 +18725,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "联邦德国",
           "W",
           "w_playmaker",
-          92,
+          92.3866,
           "R"
         ],
         [
@@ -16779,7 +18734,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "联邦德国",
           "CM",
           "cm_box2box",
-          91,
+          91.3866,
           "R"
         ],
         [
@@ -16788,7 +18743,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "联邦德国",
           "CM",
           "cm_mezzala",
-          91,
+          91.3866,
           "R"
         ],
         [
@@ -16797,7 +18752,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "联邦德国",
           "W",
           "w_finisher",
-          92,
+          92.3866,
           "R"
         ],
         [
@@ -16806,7 +18761,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "联邦德国",
           "ST",
           "st_poacher",
-          93,
+          93.3866,
           "R"
         ],
         [
@@ -16815,7 +18770,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "联邦德国",
           "ST",
           "st_false9",
-          91,
+          91.3866,
           "R"
         ],
         [
@@ -16824,7 +18779,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "联邦德国",
           "GK",
           "gk_wall",
-          87,
+          87.3866,
           "R"
         ],
         [
@@ -16833,7 +18788,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "联邦德国",
           "CB",
           "cb_stopper",
-          87,
+          87.3866,
           "R"
         ],
         [
@@ -16842,7 +18797,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "联邦德国",
           "CM",
           "cm_playmaker",
-          87,
+          87.3866,
           "R"
         ],
         [
@@ -16851,7 +18806,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "联邦德国",
           "W",
           "w_engine",
-          87,
+          87.3866,
           "R"
         ],
         [
@@ -16860,17 +18815,132 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "联邦德国",
           "CM",
           "cm_box2box",
-          87,
+          87.3866,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/1974_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Sepp Maier": {
+          "number": 1,
+          "birthDate": "1944-02-28",
+          "age": 30,
+          "sourceName": "Sepp Maier",
+          "sourcePosition": "1GK"
+        },
+        "Paul Breitner": {
+          "number": 3,
+          "birthDate": "1951-09-05",
+          "age": 22,
+          "sourceName": "Paul Breitner",
+          "sourcePosition": "2DF"
+        },
+        "Georg Schwarzenbeck": {
+          "number": 4,
+          "birthDate": "1948-04-03",
+          "age": 26,
+          "sourceName": "Hans-Georg Schwarzenbeck",
+          "sourcePosition": "2DF"
+        },
+        "Franz Beckenbauer": {
+          "number": 5,
+          "birthDate": "1945-09-11",
+          "age": 28,
+          "sourceName": "Franz Beckenbauer (captain)",
+          "sourcePosition": "2DF"
+        },
+        "Berti Vogts": {
+          "number": 2,
+          "birthDate": "1946-12-30",
+          "age": 27,
+          "sourceName": "Berti Vogts",
+          "sourcePosition": "2DF"
+        },
+        "Wolfgang Overath": {
+          "number": 12,
+          "birthDate": "1943-09-29",
+          "age": 30,
+          "sourceName": "Wolfgang Overath",
+          "sourcePosition": "3MF"
+        },
+        "Rainer Bonhof": {
+          "number": 16,
+          "birthDate": "1952-03-29",
+          "age": 22,
+          "sourceName": "Rainer Bonhof",
+          "sourcePosition": "3MF"
+        },
+        "Jürgen Grabowski": {
+          "number": 9,
+          "birthDate": "1944-07-07",
+          "age": 29,
+          "sourceName": "Jürgen Grabowski",
+          "sourcePosition": "4FW"
+        },
+        "Uli Hoeneß": {
+          "number": 14,
+          "birthDate": "1952-01-05",
+          "age": 22,
+          "sourceName": "Uli Hoeneß",
+          "sourcePosition": "4FW"
+        },
+        "Gerd Müller": {
+          "number": 13,
+          "birthDate": "1945-11-03",
+          "age": 28,
+          "sourceName": "Gerd Müller",
+          "sourcePosition": "4FW"
+        },
+        "Bernd Hölzenbein": {
+          "number": 17,
+          "birthDate": "1946-03-09",
+          "age": 28,
+          "sourceName": "Bernd Hölzenbein",
+          "sourcePosition": "4FW"
+        },
+        "Wolfgang Kleff": {
+          "number": 22,
+          "birthDate": "1946-11-16",
+          "age": 27,
+          "sourceName": "Wolfgang Kleff",
+          "sourcePosition": "1GK"
+        },
+        "Horst-Dieter Höttges": {
+          "number": 6,
+          "birthDate": "1943-09-10",
+          "age": 30,
+          "sourceName": "Horst-Dieter Höttges",
+          "sourcePosition": "2DF"
+        },
+        "Bernhard Cullmann": {
+          "number": 8,
+          "birthDate": "1949-11-01",
+          "age": 24,
+          "sourceName": "Bernhard Cullmann",
+          "sourcePosition": "3MF"
+        },
+        "Heinz Flohe": {
+          "number": 15,
+          "birthDate": "1948-01-28",
+          "age": 26,
+          "sourceName": "Heinz Flohe",
+          "sourcePosition": "3MF"
+        },
+        "Helmut Kremers": {
+          "number": 20,
+          "birthDate": "1949-03-24",
+          "age": 25,
+          "sourceName": "Helmut Kremers",
+          "sourcePosition": "2DF"
+        }
+      },
       "targetCa": 1255
     }
   },
   {
     "stage": 99,
     "targetCa": 1270,
-    "actualCa": 1271.6095477808385,
+    "actualCa": 1270.0000000000002,
     "kind": "national",
     "team": {
       "id": "ned-1974",
@@ -16897,7 +18967,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "GK",
           "gk_wall",
-          91,
+          90.9166,
           "R"
         ],
         [
@@ -16906,7 +18976,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "W",
           "fb_attacking",
-          94,
+          93.9166,
           "L"
         ],
         [
@@ -16915,7 +18985,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "CB",
           "cb_stopper",
-          92,
+          91.9166,
           "R"
         ],
         [
@@ -16924,7 +18994,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "CB",
           "cb_ballplaying",
-          93,
+          92.9166,
           "R"
         ],
         [
@@ -16933,7 +19003,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "W",
           "fb_attacking",
-          93,
+          92.9166,
           "R"
         ],
         [
@@ -16942,7 +19012,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "CM",
           "cm_destroyer",
-          92,
+          91.9166,
           "R"
         ],
         [
@@ -16951,7 +19021,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "CM",
           "cm_box2box",
-          94,
+          93.9166,
           "R"
         ],
         [
@@ -16960,7 +19030,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "CM",
           "cm_playmaker",
-          93,
+          92.9166,
           "L"
         ],
         [
@@ -16969,7 +19039,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "W",
           "w_finisher",
-          93,
+          92.9166,
           "R"
         ],
         [
@@ -16978,7 +19048,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "ST",
           "st_false9",
-          94,
+          93.9166,
           "R"
         ],
         [
@@ -16987,16 +19057,16 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "W",
           "w_finisher",
-          93,
+          92.9166,
           "L"
         ],
         [
-          "斯赫赖弗斯",
-          "Sies Schrijvers",
+          "皮特·斯赫赖弗斯",
+          "Piet Schrijvers",
           "荷兰",
           "GK",
           "gk_wall",
-          88,
+          87.9166,
           "R"
         ],
         [
@@ -17005,7 +19075,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "CB",
           "cb_stopper",
-          88,
+          87.9166,
           "R"
         ],
         [
@@ -17014,16 +19084,16 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "CM",
           "cm_engine",
-          88,
+          87.9166,
           "R"
         ],
         [
-          "范德克尔霍夫",
-          "Willy van der Kerkhof",
+          "威利·范德克尔霍夫",
+          "Willy van de Kerkhof",
           "荷兰",
           "CM",
           "cm_box2box",
-          88,
+          87.9166,
           "R"
         ],
         [
@@ -17032,17 +19102,132 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "荷兰",
           "ST",
           "st_finisher",
-          88,
+          87.9166,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/1974_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Jan Jongbloed": {
+          "number": 8,
+          "birthDate": "1940-11-25",
+          "age": 33,
+          "sourceName": "Jan Jongbloed",
+          "sourcePosition": "1GK"
+        },
+        "Ruud Krol": {
+          "number": 12,
+          "birthDate": "1949-03-24",
+          "age": 25,
+          "sourceName": "Ruud Krol",
+          "sourcePosition": "2DF"
+        },
+        "Wim Rijsbergen": {
+          "number": 17,
+          "birthDate": "1952-01-18",
+          "age": 22,
+          "sourceName": "Wim Rijsbergen",
+          "sourcePosition": "2DF"
+        },
+        "Arie Haan": {
+          "number": 2,
+          "birthDate": "1948-11-16",
+          "age": 25,
+          "sourceName": "Arie Haan",
+          "sourcePosition": "2DF"
+        },
+        "Wim Suurbier": {
+          "number": 20,
+          "birthDate": "1945-01-16",
+          "age": 29,
+          "sourceName": "Wim Suurbier",
+          "sourcePosition": "2DF"
+        },
+        "Wim Jansen": {
+          "number": 6,
+          "birthDate": "1946-10-28",
+          "age": 27,
+          "sourceName": "Wim Jansen",
+          "sourcePosition": "3MF"
+        },
+        "Johan Neeskens": {
+          "number": 13,
+          "birthDate": "1951-09-15",
+          "age": 22,
+          "sourceName": "Johan Neeskens",
+          "sourcePosition": "3MF"
+        },
+        "Willem van Hanegem": {
+          "number": 3,
+          "birthDate": "1944-02-20",
+          "age": 30,
+          "sourceName": "Willem van Hanegem",
+          "sourcePosition": "3MF"
+        },
+        "Johnny Rep": {
+          "number": 16,
+          "birthDate": "1951-11-25",
+          "age": 22,
+          "sourceName": "Johnny Rep",
+          "sourcePosition": "4FW"
+        },
+        "Johan Cruyff": {
+          "number": 14,
+          "birthDate": "1947-04-25",
+          "age": 27,
+          "sourceName": "Johan Cruyff (captain)",
+          "sourcePosition": "3MF"
+        },
+        "Rob Rensenbrink": {
+          "number": 15,
+          "birthDate": "1947-07-03",
+          "age": 26,
+          "sourceName": "Rob Rensenbrink",
+          "sourcePosition": "4FW"
+        },
+        "Piet Schrijvers": {
+          "number": 18,
+          "birthDate": "1946-12-15",
+          "age": 27,
+          "sourceName": "Piet Schrijvers",
+          "sourcePosition": "1GK"
+        },
+        "Rinus Israël": {
+          "number": 5,
+          "birthDate": "1942-03-19",
+          "age": 32,
+          "sourceName": "Rinus Israël",
+          "sourcePosition": "2DF"
+        },
+        "Theo de Jong": {
+          "number": 7,
+          "birthDate": "1947-08-11",
+          "age": 26,
+          "sourceName": "Theo de Jong",
+          "sourcePosition": "3MF"
+        },
+        "Willy van de Kerkhof": {
+          "number": 11,
+          "birthDate": "1951-09-16",
+          "age": 22,
+          "sourceName": "Willy van de Kerkhof",
+          "sourcePosition": "3MF"
+        },
+        "Ruud Geels": {
+          "number": 1,
+          "birthDate": "1948-07-28",
+          "age": 25,
+          "sourceName": "Ruud Geels",
+          "sourcePosition": "4FW"
+        }
+      },
       "targetCa": 1270
     }
   },
   {
     "stage": 100,
     "targetCa": 1300,
-    "actualCa": 1304.2935982460972,
+    "actualCa": 1299.9999999999995,
     "kind": "national",
     "team": {
       "id": "bra-1970",
@@ -17069,7 +19254,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_wall",
-          93,
+          92.8403,
           "R"
         ],
         [
@@ -17078,7 +19263,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "fb_attacking",
-          92,
+          91.8403,
           "L"
         ],
         [
@@ -17087,7 +19272,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_stopper",
-          93,
+          92.8403,
           "R"
         ],
         [
@@ -17096,7 +19281,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_ballplaying",
-          94,
+          93.8403,
           "R"
         ],
         [
@@ -17105,7 +19290,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "fb_attacking",
-          95,
+          94.8403,
           "R"
         ],
         [
@@ -17114,7 +19299,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_destroyer",
-          94,
+          93.8403,
           "R"
         ],
         [
@@ -17123,7 +19308,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_playmaker",
-          95,
+          94.8403,
           "L"
         ],
         [
@@ -17132,7 +19317,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CM",
           "cm_creator",
-          95,
+          94.8403,
           "L"
         ],
         [
@@ -17141,16 +19326,16 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "w_finisher",
-          95,
+          94.8403,
           "R"
         ],
         [
           "托斯唐",
           "Tostão",
           "巴西",
-          "ST",
-          "st_false9",
-          95,
+          "W",
+          "w_playmaker",
+          94.8403,
           "R"
         ],
         [
@@ -17159,7 +19344,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_false9",
-          95,
+          94.8403,
           "R"
         ],
         [
@@ -17168,7 +19353,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "GK",
           "gk_wall",
-          89,
+          88.8403,
           "R"
         ],
         [
@@ -17177,7 +19362,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "fb_attacking",
-          89,
+          88.8403,
           "R"
         ],
         [
@@ -17186,7 +19371,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "CB",
           "cb_stopper",
-          89,
+          88.8403,
           "R"
         ],
         [
@@ -17195,7 +19380,7 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "W",
           "w_dribbler",
-          89,
+          88.8403,
           "L"
         ],
         [
@@ -17204,10 +19389,125 @@ export const PEAK_STAGES: PeakStageDef[] = [
           "巴西",
           "ST",
           "st_target",
-          89,
+          88.8403,
           "R"
         ]
       ],
+      "source": "https://en.wikipedia.org/wiki/1970_FIFA_World_Cup_squads",
+      "playerInfo": {
+        "Félix": {
+          "number": 1,
+          "birthDate": "1937-12-24",
+          "age": 32,
+          "sourceName": "Félix",
+          "sourcePosition": "1GK"
+        },
+        "Everaldo": {
+          "number": 16,
+          "birthDate": "1944-09-11",
+          "age": 25,
+          "sourceName": "Everaldo",
+          "sourcePosition": "2DF"
+        },
+        "Brito": {
+          "number": 2,
+          "birthDate": "1939-08-09",
+          "age": 30,
+          "sourceName": "Brito",
+          "sourcePosition": "2DF"
+        },
+        "Piazza": {
+          "number": 3,
+          "birthDate": "1943-02-25",
+          "age": 27,
+          "sourceName": "Piazza",
+          "sourcePosition": "3MF"
+        },
+        "Carlos Alberto": {
+          "number": 4,
+          "birthDate": "1944-07-17",
+          "age": 25,
+          "sourceName": "Carlos Alberto (captain)",
+          "sourcePosition": "2DF"
+        },
+        "Clodoaldo": {
+          "number": 5,
+          "birthDate": "1949-09-26",
+          "age": 20,
+          "sourceName": "Clodoaldo",
+          "sourcePosition": "3MF"
+        },
+        "Gérson": {
+          "number": 8,
+          "birthDate": "1941-01-11",
+          "age": 29,
+          "sourceName": "Gérson",
+          "sourcePosition": "3MF"
+        },
+        "Rivelino": {
+          "number": 11,
+          "birthDate": "1946-01-01",
+          "age": 24,
+          "sourceName": "Rivellino",
+          "sourcePosition": "3MF"
+        },
+        "Jairzinho": {
+          "number": 7,
+          "birthDate": "1944-12-25",
+          "age": 25,
+          "sourceName": "Jairzinho",
+          "sourcePosition": "4FW"
+        },
+        "Tostão": {
+          "number": 9,
+          "birthDate": "1947-01-25",
+          "age": 23,
+          "sourceName": "Tostão",
+          "sourcePosition": "4FW"
+        },
+        "Pelé": {
+          "number": 10,
+          "birthDate": "1940-10-23",
+          "age": 29,
+          "sourceName": "Pelé",
+          "sourcePosition": "4FW"
+        },
+        "Ado": {
+          "number": 12,
+          "birthDate": "1946-07-04",
+          "age": 23,
+          "sourceName": "Ado",
+          "sourcePosition": "1GK"
+        },
+        "Zé Maria": {
+          "number": 21,
+          "birthDate": "1949-05-18",
+          "age": 21,
+          "sourceName": "Zé Maria",
+          "sourcePosition": "2DF"
+        },
+        "Joel Camargo": {
+          "number": 17,
+          "birthDate": "1946-09-18",
+          "age": 23,
+          "sourceName": "Joel Camargo",
+          "sourcePosition": "2DF"
+        },
+        "Paulo Cézar Caju": {
+          "number": 18,
+          "birthDate": "1949-06-16",
+          "age": 20,
+          "sourceName": "Paulo Cézar Caju",
+          "sourcePosition": "3MF"
+        },
+        "Roberto Miranda": {
+          "number": 13,
+          "birthDate": "1944-07-31",
+          "age": 25,
+          "sourceName": "Roberto Miranda",
+          "sourcePosition": "4FW"
+        }
+      },
       "targetCa": 1300
     }
   }

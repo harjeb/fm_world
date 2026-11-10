@@ -1,4 +1,5 @@
 import type { ElevenFormationId, Foot, Position, StyleId, Tactics } from '../types.ts'
+import { correctLegendTeam } from './historical-corrections.ts'
 
 /**
  * 传奇挑战：历史强队的复刻阵容。
@@ -21,6 +22,7 @@ export type LegendTeamDef = {
   id: string
   club: string
   clubEn: string
+  country?: string
   season: string
   coach: string
   tier: 'S+' | 'S' | 'A' | 'B'
@@ -31,10 +33,13 @@ export type LegendTeamDef = {
   note: string
   /** 生成队的首发平均 CA 目标；历史球队不填。 */
   targetCa?: number
+  /** 有可核对来源才填写真实号码/年龄；不随机编造历史档案。 */
+  playerInfo?: Record<string, { number: number; age?: number | null; birthDate?: string | null; sourceName?: string; sourcePosition?: string }>
+  source?: string
   players: LegendPlayerTuple[]
 }
 
-export const LEGEND_TEAMS: LegendTeamDef[] = [
+const RAW_LEGEND_TEAMS: LegendTeamDef[] = [
   {
     id: 'barcelona-2010-11',
     club: '巴塞罗那',
@@ -1586,3 +1591,5 @@ export const LEGEND_TEAMS: LegendTeamDef[] = [
     ],
   },
 ]
+
+export const LEGEND_TEAMS: LegendTeamDef[] = RAW_LEGEND_TEAMS.map(correctLegendTeam)

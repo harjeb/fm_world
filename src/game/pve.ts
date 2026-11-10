@@ -1,5 +1,6 @@
 import type { GameState, MatchContext, MatchRecord, PveLegendRecord, PveState } from './types.ts'
 import { recordCupResult } from './cup-run.ts'
+import { archivePastCups } from './pve-season.ts'
 
 const EMPTY_LEGEND: PveLegendRecord = { played: 0, won: 0, drawn: 0, lost: 0, goals: 0, conceded: 0 }
 
@@ -36,13 +37,21 @@ export function ensurePve(game: GameState): boolean {
     pve.trophies = []
     changed = true
   }
+  // 升级前的杯赛没有对手快照，不能让新规则静默换掉旧对手；保留赛果并允许重报。
   for (const run of Object.values(pve.cups)) {
-    if (run && run.status === 'active' && run.seasonIndex !== game.season.index) {
+    if (!run) continue
+    if (!run.groups) { run.groups = []; changed = true }
+    if (!run.participants) { run.participants = {}; changed = true }
+    if (run.status === 'active' && Object.values(run.participants).some((entry) => entry.kind !== 'player' && !entry.snapshot)) {
       run.status = 'void'
       changed = true
     }
   }
-  return changed
+  if (!Number.isInteger(pve.peak.cleared) || pve.peak.cleared < 0 || pve.peak.cleared > 100) {
+    pve.peak.cleared = 0
+    changed = true
+  }
+  return archivePastCups(game) || changed
 }
 
 export function legendRecordOf(game: GameState, legendId: string): PveLegendRecord {

@@ -1378,6 +1378,26 @@ circle.pm-5 { fill: var(--h6); }
 .trophy-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
 .trophy-row .result-teams { flex: 1; }
 
-/* 杯赛：前 2 出线与玩家比赛 */
+/* PvE 详情、赛程、可访问的关卡预览。 */
 .cup-qualified td:first-child { box-shadow: inset 3px 0 var(--good); }
+.cup-fixture { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px; border: 1px solid var(--line); border-radius: var(--radius); margin: 4px 0; }
 .cup-fixture.mine { border-color: var(--accent); background: rgba(79, 208, 138, 0.06); }
+.cup-fixture > span { flex: 1; min-width: 90px; }
+.cup-ties { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 8px; padding: 8px; }
+.cup-tie { border: 1px solid var(--line); padding: 8px; border-radius: var(--radius); }
+.cup-group > summary { cursor: pointer; font-weight: bold; padding: 4px; }
+.cup-group .btn { max-width: 100%; height: auto; white-space: normal; text-align: left; }
+.peak-track { padding: 10px; }
+.peak-track button.peak-cell { height: 30px; min-width: 0; padding: 0; font-family: var(--font-num); font-size: 11px; color: var(--text); }
+.peak-track .national { border-color: var(--warn); }
+.peak-track button:focus-visible, .peak-track button[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pve-detail { margin-top: 16px; }
+.pve-detail .dt td { vertical-align: top; }
+.pve-detail details { white-space: normal; min-width: 180px; max-width: 340px; }
+@media (max-width: 600px) {
+  .challenge-mode-tabs { display: flex; }
+  .challenge-mode-tabs button { flex: 1; padding: 0 6px; }
+  .peak-stage-no { font-size: 18px; }
+  .cup-group { padding: 5px; }
+  .trophy-row { flex-wrap: wrap; }
+}

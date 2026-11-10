@@ -1,0 +1,24 @@
+import fs from 'node:fs'
+import crypto from 'node:crypto'
+import { LEGEND_TEAMS } from '../src/game/data/legend-teams.ts'
+import { PEAK_STAGES } from '../src/game/data/peak-stages.generated.ts'
+import { CUP_TEAM_POOLS } from '../src/game/data/cup-teams.generated.ts'
+import { buildHistoricTeam } from '../src/game/legend.ts'
+import { alignPveStrength, startingCa } from '../src/game/pve-strength.ts'
+import type { AITeam } from '../src/game/types.ts'
+import { validateLineup } from '../src/game/squad.ts'
+
+const legends: Record<string, AITeam> = {}, peak: Record<string, AITeam> = {}, cups: Record<string, AITeam> = {}
+for (const def of LEGEND_TEAMS) legends[def.id] = buildHistoricTeam(def)
+for (const stage of PEAK_STAGES) peak[String(stage.stage)] = alignPveStrength(buildHistoricTeam(stage.team), stage.targetCa)
+for (const pool of Object.values(CUP_TEAM_POOLS)) for (const def of pool) cups[def.id] = alignPveStrength(buildHistoricTeam(def), def.targetCa!)
+for (const team of [...Object.values(legends), ...Object.values(peak), ...Object.values(cups)]) {
+  const check = validateLineup(team.players, team.lineup)
+  if (!check.valid) throw new Error(`${team.id}: ${check.errors.join('；')}`)
+  if (new Set(team.players.map((p) => p.enName)).size !== 16) throw new Error(`${team.id}: 球员重名`)
+}
+for (let i = 1; i < 100; i++) if (startingCa(peak[String(i)]) > startingCa(peak[String(i + 1)]) + 1e-6) throw new Error(`关卡 ${i}→${i + 1} CA 倒退`)
+const body = { version: 2, legends, peak, cups }
+const hash = crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex')
+fs.writeFileSync('src/game/data/pve-snapshots.generated.json', JSON.stringify({ ...body, hash }) + '\n')
+console.log(`冻结 50 传奇 + 100 巅峰 + 44 杯赛，完整属性/首发/替补；SHA256 ${hash}`)

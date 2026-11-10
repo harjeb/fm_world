@@ -1226,6 +1226,8 @@ export function worldWageBill(game: GameState): number {
   return game.roster.reduce((sum, player) => sum + (player.contract?.wage ?? 0), 0)
 }
 
+import { archivePastCups } from './pve-season.ts'
+
 export function advanceWorldSeason(game: GameState, now = Date.now(), protectedClubs: ReadonlySet<string> = new Set(), fillMarket = true): { ok: boolean; error?: string } {
   if (!game.world) return { ok: false, error: '世界数据不存在' }
   if (game.activeMatch || !game.season.finished) return { ok: false, error: '赛季尚未结束或比赛进行中' }
@@ -1263,6 +1265,7 @@ export function advanceWorldSeason(game: GameState, now = Date.now(), protectedC
   game.economy = economyOf(game)
   game.economy.lastIncomeRound = 0
   if (game.market) { game.market.lastSettledRound = 0; for (const listing of game.market.listings) listing.listedRound = 1 }
+  archivePastCups(game)
   return { ok: true }
 }
 
@@ -1285,6 +1288,7 @@ export function advanceSharedAccountSeason(game: GameState, oldWorld: WorldState
   game.economy = economyOf(game)
   game.economy.lastIncomeRound = 0
   if (game.market) { game.market.lastSettledRound = 0; for (const listing of game.market.listings) listing.listedRound = 1 }
+  archivePastCups(game)
 }
 
 /** 旧世界没有 calendarStartAt：按当前赛季开始时间反推游戏第一天，日期不会从今天重新算。 */

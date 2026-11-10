@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { loadPveContent } from '../src/game/pve-content.ts'
+beforeAll(loadPveContent)
 import { renderChallenge } from '../src/ui/screens/challenge.ts'
 import { game, ui } from '../src/ui/state.ts'
 import { enterCup } from '../src/game/cup-run.ts'

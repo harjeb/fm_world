@@ -105,6 +105,7 @@ function renderRecord(record: MatchRecord): string {
       kicker: `<button class="link" data-action="back-review">${icon('left', 12)} 返回记录</button><span class="kicker-sep">${record.isLeague ? `联赛第 ${record.round} 轮` : pveModeLabel(record.mode, record.stage)} · 种子 ${record.seed}</span>`,
       title: `${esc(record.homeName)} vs ${esc(record.awayName)}`,
     })}
+    ${record.aggregateScore ? `<p class="banner info">两回合总比分：${esc(record.homeName)} ${record.aggregateScore.home}:${record.aggregateScore.away} ${esc(record.awayName)}${record.shootout ? ` · 点球 ${record.shootout.home}:${record.shootout.away}` : ''}（不计客场进球）</p>` : ''}
     ${renderReplay(record)}
     <details class="review-details"><summary>${icon('review', 15)}展开完整赛后复盘（含最终结果）</summary>
       <div class="report" style="${recordKits(record)}">

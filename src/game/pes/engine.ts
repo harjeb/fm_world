@@ -38,6 +38,7 @@ export class PesEngine {
         home: source.home,
         away: source.away,
         knockout: source.knockout,
+        shootoutOffset: source.shootoutOffset,
         durationSeconds: source.durationSeconds,
         offside: source.offside,
       })

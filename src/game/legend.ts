@@ -8,13 +8,11 @@ import { bestRoleForPlayer, validateLineup } from './squad.ts'
 import { curatedProfileFor } from './data/profiles-curated.ts'
 import { fmProfileFor } from './data/fm-profiles.generated.ts'
 import { styleSkillFor, styleTraitFor, styleWeightsFor } from './data/players.ts'
+import { frozenPveTeam } from './pve-content.ts'
 
 /**
- * 传奇队构建：把 `legend-teams.ts` 里的 CA 目标展开成具体属性。
- *
- * CA 是 0–1500 制（1500 = 全部属性 100）。属性形状来自球员画像（手工画像 > 风格），
- * 再用一个统一的“地板值”缩放，使最终 `caOf` 对齐目标 CA。
- * 因此 1250–1450 的传奇队属性会集中在 90–100，这是 CA 公式决定的，不是数据错误。
+ * 历史/生成队的编译器：7 项主属性按 avg 展开，隐藏属性参考 FM/手工画像。
+ * 仅在离线生成快照或测试时使用；运行时读取已提交的完整属性快照。
  */
 
 function hash(input: string): number {
@@ -216,9 +214,9 @@ function buildPlayer(def: LegendTeamDef, tuple: LegendPlayerTuple, index: number
     enName,
     country,
     era: eraOf(def.season),
-    number: isGk ? 1 : index + 1,
+    number: def.playerInfo?.[enName]?.number ?? index + 1,
     foot: (foot ?? 'R') as Foot,
-    height: heightFor(pos, random),
+    height: def.season ? 0 : heightFor(pos, random),
     attrs,
     ceilings: { ...attrs },
     pa: actualCa,
@@ -232,7 +230,7 @@ function buildPlayer(def: LegendTeamDef, tuple: LegendPlayerTuple, index: number
     version: 0,
     condition: 100,
     energy: 100,
-    age: 24 + Math.floor(random() * 6),
+    age: def.season ? def.playerInfo?.[enName]?.age ?? undefined : 24 + Math.floor(random() * 6),
     baseAttrs: { ...attrs },
     basePositions: { ...positions },
     basePersonality: { ...personality },
@@ -246,10 +244,9 @@ export function buildHistoricTeam(def: LegendTeamDef): AITeam {
   const used = new Set<string>()
   const starters: { slotId: string; playerId: string; role: ReturnType<typeof bestRoleForPlayer>['role'] }[] = []
   for (const slot of formation.slots) {
-    const pool = players.filter((player) => !used.has(player.id))
-    const exact = pool.find((player) => player.positions[slot.position] >= 80 && (slot.position === 'GK') === (player.positions.GK > 0))
-    const learned = exact ?? pool.find((player) => player.positions[slot.position] >= 80)
-    const pick = learned ?? pool[0]
+    // 锁定前 11 人为首发，按位置分配；绝不能从替补池偷换首发。
+    const pool = players.slice(0, 11).filter((player) => !used.has(player.id))
+    const pick = pool.find((player) => player.positions[slot.position] >= 80)
     if (!pick) throw new Error(`${def.id}: 阵型 ${def.formationId} 缺少可用球员`)
     used.add(pick.id)
     starters.push({ slotId: slot.id, playerId: pick.id, role: bestRoleForPlayer(pick, slot.position, slot).role })
@@ -281,12 +278,12 @@ const cache = new Map<string, AITeam>()
 
 export function legendTeamById(id: string): AITeam | undefined {
   const cached = cache.get(id)
-  if (cached) return cached
+  if (cached) return structuredClone(cached)
   const def = LEGEND_TEAMS.find((team) => team.id === id)
   if (!def) return undefined
-  const team = buildHistoricTeam(def)
+  const team = frozenPveTeam('legends', id)
   cache.set(id, team)
-  return team
+  return structuredClone(team)
 }
 
 export function allLegendTeams(): AITeam[] {

@@ -70,6 +70,7 @@ function validate(): string[] {
   return errors
 }
 
+await (await import('../src/game/pve-content.ts')).loadPveContent()
 const errors = validate()
 const teams = allLegendTeams()
 console.log(`传奇队 ${teams.length} 支，球员 ${teams.reduce((sum, team) => sum + team.players.length, 0)} 名`)

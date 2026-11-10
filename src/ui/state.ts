@@ -57,6 +57,12 @@ export type UIState = {
   challengeMode: ChallengeMode
   /** 传奇挑战档位筛选。 */
   legendTier: 'ALL' | 'S+' | 'S' | 'A' | 'B'
+  legendSearch: string
+  legendEra: string
+  legendCountry: string
+  pveTeamId: string | null
+  peakPreviewStage: number | null
+  cupHistorySeason: number | null
   /** 杯赛页正在预览分组的杯赛。 */
   cupPreviewId: string | null
   /** 友谊赛页面选中的联赛分区（可以约世界任意球队）。 */
@@ -154,6 +160,12 @@ export const ui: UIState = {
   seasonRound: null,
   challengeMode: 'friendly',
   legendTier: 'ALL',
+  legendSearch: '',
+  legendEra: 'ALL',
+  legendCountry: 'ALL',
+  pveTeamId: null,
+  peakPreviewStage: null,
+  cupHistorySeason: null,
   cupPreviewId: null,
   challengeDivision: null,
   worldDivision: null,

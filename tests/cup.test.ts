@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { loadPveContent } from '../src/game/pve-content.ts'
+beforeAll(loadPveContent)
 import { CUP_DEFS, cupDefById } from '../src/game/data/cup-config.ts'
 import { CUP_TEAM_POOLS } from '../src/game/data/cup-teams.generated.ts'
 import { buildCupField, buildCupGroups, cupRandomTeams } from '../src/game/cup.ts'

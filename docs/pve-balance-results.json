@@ -1,0 +1,1057 @@
+{
+  "contentHash": "16540c9c4360a4f52c796bd5d4daa63cb174458a8144329f030ae97ea34bba10",
+  "engine": "PesEngine / rulesVersion 4",
+  "baseline": "玩家完整自动培养一轮；未来 CA 档位为同形状归一化假设，不是声称玩家当前可培养到该数值。",
+  "actualTrainingCa": 409.8,
+  "knockout": "真实点球，不用平局×0.5；整届杯赛 AI 后台用 v2、玩家用 v4，与实际玩法一致。",
+  "caution": "小样本仅用于发现异常，95% 置信区间较宽；不据此擅改 350→1300 曲线。",
+  "rows": [
+    {
+      "opponent": "巅峰 1",
+      "playerCa": 800,
+      "opponentCa": 350,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "巅峰 1",
+      "playerCa": 1000,
+      "opponentCa": 350,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "巅峰 1",
+      "playerCa": 1200,
+      "opponentCa": 350,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "巅峰 1",
+      "playerCa": 1400,
+      "opponentCa": 350,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "巅峰 1",
+      "playerCa": 1500,
+      "opponentCa": 350,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "巅峰 20",
+      "playerCa": 800,
+      "opponentCa": 550,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 7,
+      "advancePct": 87.5,
+      "ci95": [
+        52.9,
+        97.8
+      ]
+    },
+    {
+      "opponent": "巅峰 20",
+      "playerCa": 1000,
+      "opponentCa": 550,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 7,
+      "advancePct": 87.5,
+      "ci95": [
+        52.9,
+        97.8
+      ]
+    },
+    {
+      "opponent": "巅峰 20",
+      "playerCa": 1200,
+      "opponentCa": 550,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "巅峰 20",
+      "playerCa": 1400,
+      "opponentCa": 550,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "巅峰 20",
+      "playerCa": 1500,
+      "opponentCa": 550,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "巅峰 40",
+      "playerCa": 800,
+      "opponentCa": 710,
+      "matches": 8,
+      "regulationDraws": 3,
+      "penalties": 3,
+      "advanced": 1,
+      "advancePct": 12.5,
+      "ci95": [
+        2.2,
+        47.1
+      ]
+    },
+    {
+      "opponent": "巅峰 40",
+      "playerCa": 1000,
+      "opponentCa": 710,
+      "matches": 8,
+      "regulationDraws": 3,
+      "penalties": 3,
+      "advanced": 6,
+      "advancePct": 75,
+      "ci95": [
+        40.9,
+        92.9
+      ]
+    },
+    {
+      "opponent": "巅峰 40",
+      "playerCa": 1200,
+      "opponentCa": 710,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "巅峰 40",
+      "playerCa": 1400,
+      "opponentCa": 710,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "巅峰 40",
+      "playerCa": 1500,
+      "opponentCa": 710,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "巅峰 60",
+      "playerCa": 800,
+      "opponentCa": 850,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 3,
+      "advancePct": 37.5,
+      "ci95": [
+        13.7,
+        69.4
+      ]
+    },
+    {
+      "opponent": "巅峰 60",
+      "playerCa": 1000,
+      "opponentCa": 850,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 5,
+      "advancePct": 62.5,
+      "ci95": [
+        30.6,
+        86.3
+      ]
+    },
+    {
+      "opponent": "巅峰 60",
+      "playerCa": 1200,
+      "opponentCa": 850,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "巅峰 60",
+      "playerCa": 1400,
+      "opponentCa": 850,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "巅峰 60",
+      "playerCa": 1500,
+      "opponentCa": 850,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 7,
+      "advancePct": 87.5,
+      "ci95": [
+        52.9,
+        97.8
+      ]
+    },
+    {
+      "opponent": "巅峰 80",
+      "playerCa": 800,
+      "opponentCa": 1000,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 2,
+      "advancePct": 25,
+      "ci95": [
+        7.1,
+        59.1
+      ]
+    },
+    {
+      "opponent": "巅峰 80",
+      "playerCa": 1000,
+      "opponentCa": 1000,
+      "matches": 8,
+      "regulationDraws": 4,
+      "penalties": 4,
+      "advanced": 2,
+      "advancePct": 25,
+      "ci95": [
+        7.1,
+        59.1
+      ]
+    },
+    {
+      "opponent": "巅峰 80",
+      "playerCa": 1200,
+      "opponentCa": 1000,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 5,
+      "advancePct": 62.5,
+      "ci95": [
+        30.6,
+        86.3
+      ]
+    },
+    {
+      "opponent": "巅峰 80",
+      "playerCa": 1400,
+      "opponentCa": 1000,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 7,
+      "advancePct": 87.5,
+      "ci95": [
+        52.9,
+        97.8
+      ]
+    },
+    {
+      "opponent": "巅峰 80",
+      "playerCa": 1500,
+      "opponentCa": 1000,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "巅峰 90",
+      "playerCa": 800,
+      "opponentCa": 1135,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 0,
+      "advancePct": 0,
+      "ci95": [
+        0,
+        32.4
+      ]
+    },
+    {
+      "opponent": "巅峰 90",
+      "playerCa": 1000,
+      "opponentCa": 1135,
+      "matches": 8,
+      "regulationDraws": 2,
+      "penalties": 2,
+      "advanced": 2,
+      "advancePct": 25,
+      "ci95": [
+        7.1,
+        59.1
+      ]
+    },
+    {
+      "opponent": "巅峰 90",
+      "playerCa": 1200,
+      "opponentCa": 1135,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 3,
+      "advancePct": 37.5,
+      "ci95": [
+        13.7,
+        69.4
+      ]
+    },
+    {
+      "opponent": "巅峰 90",
+      "playerCa": 1400,
+      "opponentCa": 1135,
+      "matches": 8,
+      "regulationDraws": 4,
+      "penalties": 4,
+      "advanced": 6,
+      "advancePct": 75,
+      "ci95": [
+        40.9,
+        92.9
+      ]
+    },
+    {
+      "opponent": "巅峰 90",
+      "playerCa": 1500,
+      "opponentCa": 1135,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 7,
+      "advancePct": 87.5,
+      "ci95": [
+        52.9,
+        97.8
+      ]
+    },
+    {
+      "opponent": "巅峰 100",
+      "playerCa": 800,
+      "opponentCa": 1300,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 0,
+      "advancePct": 0,
+      "ci95": [
+        0,
+        32.4
+      ]
+    },
+    {
+      "opponent": "巅峰 100",
+      "playerCa": 1000,
+      "opponentCa": 1300,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 0,
+      "advancePct": 0,
+      "ci95": [
+        0,
+        32.4
+      ]
+    },
+    {
+      "opponent": "巅峰 100",
+      "playerCa": 1200,
+      "opponentCa": 1300,
+      "matches": 8,
+      "regulationDraws": 3,
+      "penalties": 3,
+      "advanced": 4,
+      "advancePct": 50,
+      "ci95": [
+        21.5,
+        78.5
+      ]
+    },
+    {
+      "opponent": "巅峰 100",
+      "playerCa": 1400,
+      "opponentCa": 1300,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 4,
+      "advancePct": 50,
+      "ci95": [
+        21.5,
+        78.5
+      ]
+    },
+    {
+      "opponent": "巅峰 100",
+      "playerCa": 1500,
+      "opponentCa": 1300,
+      "matches": 8,
+      "regulationDraws": 2,
+      "penalties": 2,
+      "advanced": 4,
+      "advancePct": 50,
+      "ci95": [
+        21.5,
+        78.5
+      ]
+    },
+    {
+      "opponent": "传奇 barcelona-2010-11",
+      "playerCa": 800,
+      "opponentCa": 1144.5,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 1,
+      "advancePct": 12.5,
+      "ci95": [
+        2.2,
+        47.1
+      ]
+    },
+    {
+      "opponent": "传奇 barcelona-2010-11",
+      "playerCa": 1000,
+      "opponentCa": 1144.5,
+      "matches": 8,
+      "regulationDraws": 3,
+      "penalties": 3,
+      "advanced": 1,
+      "advancePct": 12.5,
+      "ci95": [
+        2.2,
+        47.1
+      ]
+    },
+    {
+      "opponent": "传奇 barcelona-2010-11",
+      "playerCa": 1200,
+      "opponentCa": 1144.5,
+      "matches": 8,
+      "regulationDraws": 2,
+      "penalties": 2,
+      "advanced": 3,
+      "advancePct": 37.5,
+      "ci95": [
+        13.7,
+        69.4
+      ]
+    },
+    {
+      "opponent": "传奇 barcelona-2010-11",
+      "playerCa": 1400,
+      "opponentCa": 1144.5,
+      "matches": 8,
+      "regulationDraws": 2,
+      "penalties": 2,
+      "advanced": 6,
+      "advancePct": 75,
+      "ci95": [
+        40.9,
+        92.9
+      ]
+    },
+    {
+      "opponent": "传奇 barcelona-2010-11",
+      "playerCa": 1500,
+      "opponentCa": 1144.5,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 6,
+      "advancePct": 75,
+      "ci95": [
+        40.9,
+        92.9
+      ]
+    },
+    {
+      "opponent": "传奇 milan-1988-89",
+      "playerCa": 800,
+      "opponentCa": 1167,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 0,
+      "advancePct": 0,
+      "ci95": [
+        0,
+        32.4
+      ]
+    },
+    {
+      "opponent": "传奇 milan-1988-89",
+      "playerCa": 1000,
+      "opponentCa": 1167,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 2,
+      "advancePct": 25,
+      "ci95": [
+        7.1,
+        59.1
+      ]
+    },
+    {
+      "opponent": "传奇 milan-1988-89",
+      "playerCa": 1200,
+      "opponentCa": 1167,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 3,
+      "advancePct": 37.5,
+      "ci95": [
+        13.7,
+        69.4
+      ]
+    },
+    {
+      "opponent": "传奇 milan-1988-89",
+      "playerCa": 1400,
+      "opponentCa": 1167,
+      "matches": 8,
+      "regulationDraws": 2,
+      "penalties": 2,
+      "advanced": 2,
+      "advancePct": 25,
+      "ci95": [
+        7.1,
+        59.1
+      ]
+    },
+    {
+      "opponent": "传奇 milan-1988-89",
+      "playerCa": 1500,
+      "opponentCa": 1167,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 6,
+      "advancePct": 75,
+      "ci95": [
+        40.9,
+        92.9
+      ]
+    },
+    {
+      "opponent": "传奇 nottingham-forest-1979-80",
+      "playerCa": 800,
+      "opponentCa": 1072.6,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 0,
+      "advancePct": 0,
+      "ci95": [
+        0,
+        32.4
+      ]
+    },
+    {
+      "opponent": "传奇 nottingham-forest-1979-80",
+      "playerCa": 1000,
+      "opponentCa": 1072.6,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 0,
+      "advancePct": 0,
+      "ci95": [
+        0,
+        32.4
+      ]
+    },
+    {
+      "opponent": "传奇 nottingham-forest-1979-80",
+      "playerCa": 1200,
+      "opponentCa": 1072.6,
+      "matches": 8,
+      "regulationDraws": 3,
+      "penalties": 3,
+      "advanced": 4,
+      "advancePct": 50,
+      "ci95": [
+        21.5,
+        78.5
+      ]
+    },
+    {
+      "opponent": "传奇 nottingham-forest-1979-80",
+      "playerCa": 1400,
+      "opponentCa": 1072.6,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 6,
+      "advancePct": 75,
+      "ci95": [
+        40.9,
+        92.9
+      ]
+    },
+    {
+      "opponent": "传奇 nottingham-forest-1979-80",
+      "playerCa": 1500,
+      "opponentCa": 1072.6,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "杯赛池 community",
+      "playerCa": 800,
+      "opponentCa": 600,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 2,
+      "advancePct": 25,
+      "ci95": [
+        7.1,
+        59.1
+      ]
+    },
+    {
+      "opponent": "杯赛池 community",
+      "playerCa": 1000,
+      "opponentCa": 600,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "杯赛池 community",
+      "playerCa": 1200,
+      "opponentCa": 600,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "杯赛池 community",
+      "playerCa": 1400,
+      "opponentCa": 600,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "杯赛池 community",
+      "playerCa": 1500,
+      "opponentCa": 600,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    },
+    {
+      "opponent": "杯赛池 league",
+      "playerCa": 800,
+      "opponentCa": 907,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 4,
+      "advancePct": 50,
+      "ci95": [
+        21.5,
+        78.5
+      ]
+    },
+    {
+      "opponent": "杯赛池 league",
+      "playerCa": 1000,
+      "opponentCa": 907,
+      "matches": 8,
+      "regulationDraws": 2,
+      "penalties": 2,
+      "advanced": 6,
+      "advancePct": 75,
+      "ci95": [
+        40.9,
+        92.9
+      ]
+    },
+    {
+      "opponent": "杯赛池 league",
+      "playerCa": 1200,
+      "opponentCa": 907,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 7,
+      "advancePct": 87.5,
+      "ci95": [
+        52.9,
+        97.8
+      ]
+    },
+    {
+      "opponent": "杯赛池 league",
+      "playerCa": 1400,
+      "opponentCa": 907,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 7,
+      "advancePct": 87.5,
+      "ci95": [
+        52.9,
+        97.8
+      ]
+    },
+    {
+      "opponent": "杯赛池 league",
+      "playerCa": 1500,
+      "opponentCa": 907,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 7,
+      "advancePct": 87.5,
+      "ci95": [
+        52.9,
+        97.8
+      ]
+    },
+    {
+      "opponent": "杯赛池 champions",
+      "playerCa": 800,
+      "opponentCa": 1035,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 1,
+      "advancePct": 12.5,
+      "ci95": [
+        2.2,
+        47.1
+      ]
+    },
+    {
+      "opponent": "杯赛池 champions",
+      "playerCa": 1000,
+      "opponentCa": 1035,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 2,
+      "advancePct": 25,
+      "ci95": [
+        7.1,
+        59.1
+      ]
+    },
+    {
+      "opponent": "杯赛池 champions",
+      "playerCa": 1200,
+      "opponentCa": 1035,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 7,
+      "advancePct": 87.5,
+      "ci95": [
+        52.9,
+        97.8
+      ]
+    },
+    {
+      "opponent": "杯赛池 champions",
+      "playerCa": 1400,
+      "opponentCa": 1035,
+      "matches": 8,
+      "regulationDraws": 1,
+      "penalties": 1,
+      "advanced": 6,
+      "advancePct": 75,
+      "ci95": [
+        40.9,
+        92.9
+      ]
+    },
+    {
+      "opponent": "杯赛池 champions",
+      "playerCa": 1500,
+      "opponentCa": 1035,
+      "matches": 8,
+      "regulationDraws": 0,
+      "penalties": 0,
+      "advanced": 8,
+      "advancePct": 100,
+      "ci95": [
+        67.6,
+        100
+      ]
+    }
+  ],
+  "tournaments": [
+    {
+      "cup": "community",
+      "playerCa": 800,
+      "samples": 3,
+      "qualified": 3,
+      "champions": 0,
+      "qualificationPct": 100,
+      "championshipPct": 0
+    },
+    {
+      "cup": "community",
+      "playerCa": 1000,
+      "samples": 3,
+      "qualified": 3,
+      "champions": 2,
+      "qualificationPct": 100,
+      "championshipPct": 66.7
+    },
+    {
+      "cup": "community",
+      "playerCa": 1200,
+      "samples": 3,
+      "qualified": 3,
+      "champions": 3,
+      "qualificationPct": 100,
+      "championshipPct": 100
+    },
+    {
+      "cup": "community",
+      "playerCa": 1400,
+      "samples": 3,
+      "qualified": 3,
+      "champions": 3,
+      "qualificationPct": 100,
+      "championshipPct": 100
+    },
+    {
+      "cup": "community",
+      "playerCa": 1500,
+      "samples": 3,
+      "qualified": 3,
+      "champions": 3,
+      "qualificationPct": 100,
+      "championshipPct": 100
+    },
+    {
+      "cup": "league",
+      "playerCa": 800,
+      "samples": 3,
+      "qualified": 3,
+      "champions": 0,
+      "qualificationPct": 100,
+      "championshipPct": 0
+    },
+    {
+      "cup": "league",
+      "playerCa": 1000,
+      "samples": 3,
+      "qualified": 3,
+      "champions": 1,
+      "qualificationPct": 100,
+      "championshipPct": 33.3
+    },
+    {
+      "cup": "league",
+      "playerCa": 1200,
+      "samples": 3,
+      "qualified": 3,
+      "champions": 0,
+      "qualificationPct": 100,
+      "championshipPct": 0
+    },
+    {
+      "cup": "league",
+      "playerCa": 1400,
+      "samples": 3,
+      "qualified": 3,
+      "champions": 3,
+      "qualificationPct": 100,
+      "championshipPct": 100
+    },
+    {
+      "cup": "league",
+      "playerCa": 1500,
+      "samples": 3,
+      "qualified": 3,
+      "champions": 2,
+      "qualificationPct": 100,
+      "championshipPct": 66.7
+    },
+    {
+      "cup": "champions",
+      "playerCa": 800,
+      "samples": 3,
+      "qualified": 0,
+      "champions": 0,
+      "qualificationPct": 0,
+      "championshipPct": 0
+    },
+    {
+      "cup": "champions",
+      "playerCa": 1000,
+      "samples": 3,
+      "qualified": 1,
+      "champions": 0,
+      "qualificationPct": 33.3,
+      "championshipPct": 0
+    },
+    {
+      "cup": "champions",
+      "playerCa": 1200,
+      "samples": 3,
+      "qualified": 3,
+      "champions": 0,
+      "qualificationPct": 100,
+      "championshipPct": 0
+    },
+    {
+      "cup": "champions",
+      "playerCa": 1400,
+      "samples": 3,
+      "qualified": 2,
+      "champions": 0,
+      "qualificationPct": 66.7,
+      "championshipPct": 0
+    },
+    {
+      "cup": "champions",
+      "playerCa": 1500,
+      "samples": 3,
+      "qualified": 3,
+      "champions": 1,
+      "qualificationPct": 100,
+      "championshipPct": 33.3
+    }
+  ]
+}

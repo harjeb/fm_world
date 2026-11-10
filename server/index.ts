@@ -1,6 +1,9 @@
 import { createAppServer, type RegistrationMode } from './app.ts'
+import { loadPveContent } from '../src/game/pve-content.ts'
 
 const port = Number(process.env.PORT ?? 8787)
+// PvE 对手快照很大，启动时只在这里读一次；普通页面不会下载它。
+await loadPveContent()
 
 function readRegistration(): RegistrationMode {
   const raw = (process.env.FM_REGISTRATION ?? 'open').trim().toLowerCase()

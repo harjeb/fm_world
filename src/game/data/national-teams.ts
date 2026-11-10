@@ -1,5 +1,6 @@
 import type { ElevenFormationId, Foot, Position, StyleId, Tactics } from '../types.ts'
 import type { LegendTeamDef, LegendPlayerTuple } from './legend-teams.ts'
+import { correctNationalTeam } from './historical-corrections.ts'
 
 /** 国家队球员：位置/风格 + 相对全队平均的偏移（核心 +3，主力 0，替补 -3）。 */
 type NationalPlayerTuple = [name: string, enName: string, pos: Position, style: StyleId, offset: number, foot?: Foot]
@@ -50,7 +51,7 @@ function nationalTeam(options: NationalTeamOptions, players: NationalPlayerTuple
  * 顺序就是关卡顺序：81 = 第一支，100 = 最后一支。
  * `ca` 是设计目标，生成脚本会把实际首发平均对齐到该值。
  */
-export const NATIONAL_TEAMS: LegendTeamDef[] = [
+const RAW_NATIONAL_TEAMS: LegendTeamDef[] = [
   nationalTeam(
     {
       id: 'cmr-1990', country: '喀麦隆', countryEn: 'Cameroon', year: '1990', coach: '瓦列里·涅波姆尼亚奇', ca: 1000,
@@ -128,27 +129,27 @@ export const NATIONAL_TEAMS: LegendTeamDef[] = [
   ),
   nationalTeam(
     {
-      id: 'den-1992', country: '丹麦', countryEn: 'Denmark', year: '1992', coach: '理查德·穆勒-尼尔森', ca: 1045,
+      id: 'den-1998', country: '丹麦', countryEn: 'Denmark', year: '1998', coach: '博·约翰松', ca: 1045,
       formationId: '4-4-2', tactics: { attack: 'balanced', passing: 'mixed', tempo: 'normal', line: 'mid', press: 'mid' },
-      color: '#c60c30', accent: '#ffffff', note: '1992 欧洲杯冠军；临时顶替南斯拉夫参赛的童话。',
+      color: '#c60c30', accent: '#ffffff', note: '1998 世界杯八强；劳德鲁普兄弟领衔，不再混用 1992 欧洲杯阵容。',
     },
     [
       ['舒梅切尔', 'Peter Schmeichel', 'GK', 'gk_wall', 3],
       ['海因策', 'Jan Heintze', 'W', 'fb_attacking', 0, 'L'],
-      ['肯特·尼尔森', 'Kent Nielsen', 'CB', 'cb_stopper', 1],
-      ['奥尔森', 'Lars Olsen', 'CB', 'cb_cover', 1],
-      ['西维贝克', 'John Sivebæk', 'W', 'fb_attacking', 0],
-      ['克里斯托夫特', 'Kim Christofte', 'W', 'w_engine', 0],
-      ['维尔福特', 'Kim Vilfort', 'CM', 'cm_box2box', 1],
-      ['拉尔森', 'Henrik Larsen', 'CM', 'cm_playmaker', 1],
+      ['里佩尔', 'Marc Rieper', 'CB', 'cb_stopper', 1],
+      ['霍格', 'Jes Høgh', 'CB', 'cb_cover', 1],
+      ['赫尔维格', 'Thomas Helveg', 'W', 'fb_attacking', 0],
+      ['约根森', 'Martin Jørgensen', 'W', 'w_engine', 0],
+      ['托夫丁', 'Stig Tøfting', 'CM', 'cm_box2box', 1],
+      ['索伦·尼尔森', 'Søren Colding', 'CM', 'cm_playmaker', 1],
       ['布莱恩·劳德鲁普', 'Brian Laudrup', 'W', 'w_playmaker', 3],
       ['米歇尔·劳德鲁普', 'Michael Laudrup', 'ST', 'st_false9', 3],
-      ['波尔森', 'Flemming Povlsen', 'ST', 'st_finisher', 1],
-      ['霍格', 'Lars Høgh', 'GK', 'gk_wall', -3],
-      ['延森', 'John Jensen', 'CM', 'cm_engine', -3],
-      ['埃斯特鲁普', 'Lars Elstrup', 'ST', 'st_target', -3],
-      ['默尔比', 'Jan Mølby', 'CM', 'cm_playmaker', -3],
-      ['克里斯滕森', 'Bent Christensen', 'W', 'w_dribbler', -3],
+      ['桑德', 'Ebbe Sand', 'ST', 'st_finisher', 1],
+      ['莫恩斯·克罗格', 'Mogens Krogh', 'GK', 'gk_wall', -3],
+      ['米夏埃尔森', 'Jan Michaelsen', 'CM', 'cm_engine', -3],
+      ['莫勒', 'Peter Møller', 'ST', 'st_target', -3],
+      ['阿兰·尼尔森', 'Allan Nielsen', 'CM', 'cm_playmaker', -3],
+      ['格拉维森', 'Thomas Gravesen', 'CM', 'cm_destroyer', -3],
     ],
   ),
   nationalTeam(
@@ -552,3 +553,5 @@ export const NATIONAL_TEAMS: LegendTeamDef[] = [
     ],
   ),
 ]
+
+export const NATIONAL_TEAMS: LegendTeamDef[] = RAW_NATIONAL_TEAMS.map(correctNationalTeam)

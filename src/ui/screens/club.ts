@@ -69,6 +69,7 @@ function trophyCabinet(): string {
         ${icon('star', 14)}
         <span class="result-teams"><b>${esc(trophy.cupName)}</b> <span class="muted">第 ${trophy.seasonIndex} 赛季 · 决赛 ${esc(trophy.finalOpponent)}</span></span>
         <span class="num"><b>${trophy.finalScore.home}:${trophy.finalScore.away}</b>${trophy.finalShootout ? ` <small class="muted">点球 ${trophy.finalShootout.home}:${trophy.finalShootout.away}</small>` : ''}</span>
+        ${trophy.matchId && game.challengeHistory.some((record) => record.id === trophy.matchId) ? `<button class="btn small ghost" data-action="open-review" data-record="${esc(trophy.matchId)}">决赛战报</button>` : ''}
       </div>`).join('')}
     </div>`, { flush: true })
 }

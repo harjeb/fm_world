@@ -105,7 +105,7 @@ export function renderMatch(): string {
           ${state.shootout ? `<small>点球 ${state.shootout.home} : ${state.shootout.away}</small>` : ''}
           <span class="score-clock">${state.half === 1 ? '上半场' : '下半场'} · <span ${active.context.isLeague ? 'data-league-clock' : isPesEngine(engine) ? 'data-pes-clock' : ''}>${clockText(matchClock)}</span> / ${clockText(MATCH_DISPLAY_SECONDS)}</span>
         </div>
-        <div class="score-team away"><div class="score-team-text"><b>${esc(away.name)}</b><small>${active.context.homeAway === 'away' ? '你 · ' : ''}${active.context.isLeague ? `联赛第 ${active.context.round} 轮` : '友谊赛'}</small></div>${crest({ name: away.name, color: kits.away }, 42)}</div>
+        <div class="score-team away"><div class="score-team-text"><b>${esc(away.name)}</b><small>${active.context.homeAway === 'away' ? '你 · ' : ''}${active.context.isLeague ? `联赛第 ${active.context.round} 轮` : active.context.mode === 'cup' ? '杯赛' : active.context.mode === 'peak' ? `巅峰之路 · 第 ${active.context.stage} 关` : active.context.mode === 'legend' ? '传奇挑战' : '友谊赛'}</small></div>${crest({ name: away.name, color: kits.away }, 42)}</div>
       </div>
       <div class="match-controls">
         <div class="seg" role="group" aria-label="球场视图"><button class="${ui.pitchView === 'match' ? 'active' : ''}" data-pitch-view="match">比赛</button><button class="${ui.pitchView === 'tracking' ? 'active' : ''}" data-pitch-view="tracking">战术轨迹</button></div>

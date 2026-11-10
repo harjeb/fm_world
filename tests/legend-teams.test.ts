@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { loadPveContent } from '../src/game/pve-content.ts'
+beforeAll(loadPveContent)
 import { attrRating } from '../src/game/scale.ts'
 import { legendTeamById } from '../src/game/legend.ts'
 import { LEGEND_TEAMS } from '../src/game/data/legend-teams.ts'

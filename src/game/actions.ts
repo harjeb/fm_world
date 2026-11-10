@@ -718,7 +718,8 @@ export function startLegendChallenge(game: GameState, legendId: string, now = Da
 export function startPeakChallenge(game: GameState, stage: number, now = Date.now()): { ok: boolean; error?: string } {
   const error = validateAutoSubPlan(game.roster, game.lineup, game.autoSubs ?? emptyAutoSubs())[0]
   if (error) return { ok: false, error: `自动换人规则无效：${error}` }
-  const target = Math.round(stage)
+  if (!Number.isInteger(stage)) return { ok: false, error: '关卡编号无效' }
+  const target = stage
   ensurePve(game)
   const cleared = game.pve?.peak.cleared ?? 0
   if (target !== cleared + 1) return { ok: false, error: `只能挑战第 ${cleared + 1} 关` }
@@ -731,9 +732,9 @@ export function startPeakChallenge(game: GameState, stage: number, now = Date.no
 }
 
 /** 报名杯赛：生成混合名单 + 小组赛，并提前结算 AI 对 AI。 */
-export function enterCupAction(game: GameState, cupId: CupId): { ok: boolean; error?: string } {
+export function enterCupAction(game: GameState, cupId: CupId, worldTeams?: readonly AITeam[]): { ok: boolean; error?: string } {
   ensurePve(game)
-  const result = enterCup(game, cupId)
+  const result = enterCup(game, cupId, worldTeams)
   if (result.ok) saveGame(game)
   return { ok: result.ok, error: result.error }
 }
@@ -753,10 +754,15 @@ export function startCupMatch(game: GameState, cupId: CupId, now = Date.now()): 
   if (!opponent) return { ok: false, error: '找不到杯赛对手' }
   const homeAway = fixture.homeId === 'player' ? 'home' : 'away'
   const seed = splitSeed(game.seed, `cup-match-${cupId}-${run.seasonIndex}-${fixture.id}`)
+  const secondLeg = next.tie?.legs.length === 2 && next.tie.legs[1].id === fixture.id
+  const firstScore = secondLeg ? next.tie!.legs[0].score : undefined
+  const knockout = !!next.tie && (next.tie.legs.length === 1 || !!secondLeg)
   const result = startChallengeAgainstTeam(game, opponent, seed, now, 'cup', undefined, fixture.id, {
     homeAway,
     cupId,
     cupFixtureId: fixture.id,
+    knockout,
+    ...(firstScore ? { shootoutOffset: { home: firstScore.away, away: firstScore.home } } : {}),
   })
   if (result.ok) saveGame(game)
   return { ok: result.ok, error: result.error }
@@ -782,7 +788,7 @@ export function startSingleChallenge(game: GameState, aiId: string, now = Date.n
 
 export function restoreActiveEngine(game: GameState): GameEngine | null {
   if (!game.activeMatch) return null
-  return restoreEngine(game.activeMatch.engineState as MatchState, !game.activeMatch.context.isLeague)
+  return restoreEngine(game.activeMatch.engineState as MatchState, game.activeMatch.context.knockout ?? !game.activeMatch.context.isLeague)
 }
 
 export function syncActiveEngine(game: GameState, engine: GameEngine, now = Date.now()): void {

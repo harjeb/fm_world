@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { loadPveContent } from '../src/game/pve-content.ts'
+beforeAll(loadPveContent)
 import { PEAK_STAGES } from '../src/game/data/peak-stages.generated.ts'
 import { PEAK_STAGE_COUNT, buildPeakTeam, peakStageTargetCa } from '../src/game/peak.ts'
 import { caOf } from '../src/game/ca.ts'

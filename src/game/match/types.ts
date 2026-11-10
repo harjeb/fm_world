@@ -241,6 +241,8 @@ export type MatchState = {
   finished: boolean
   offside?: boolean
   shootout: ShootoutState | null
+  /** 两回合次回合：上一回合比分，已换算成本场主客方向。 */
+  shootoutOffset?: { home: number; away: number }
   log: MatchLogEntry[]
   commentary?: CommentaryEntry[]
   stats: { home: MatchTeamStats; away: MatchTeamStats }
@@ -273,6 +275,7 @@ export type MatchEngineOptions = {
   home: MatchTeamInput
   away: MatchTeamInput
   knockout: boolean
+  shootoutOffset?: { home: number; away: number }
   durationSeconds?: number
   offside?: boolean
   /** 2 只用于回归对照；默认使用当前规则版本。 */

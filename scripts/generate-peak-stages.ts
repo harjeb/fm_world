@@ -5,6 +5,8 @@ import { NATIONAL_TEAMS } from '../src/game/data/national-teams.ts'
 import type { LegendTeamDef } from '../src/game/data/legend-teams.ts'
 import { calibrateGeneratedTeam, generateTeam, generatedTeamSpec } from '../src/game/generated-team.ts'
 import { splitSeed } from '../src/game/rng.ts'
+import { buildHistoricTeam } from '../src/game/legend.ts'
+import { alignPveStrength, startingCa } from '../src/game/pve-strength.ts'
 
 export type PeakStageDef = {
   stage: number
@@ -45,6 +47,8 @@ for (let stage = 1; stage <= 100; stage++) {
     console.log(`${String(stage).padStart(3, ' ')}  生成    ${name}  目标 ${targetCa}  实际 ${actualCa.toFixed(0)}  ${actualCa >= targetCa ? '+' : ''}${(actualCa - targetCa).toFixed(0)}`)
   }
 }
+
+for (const stage of stages) stage.actualCa = startingCa(alignPveStrength(buildHistoricTeam(stage.team), stage.targetCa))
 
 const output = `// 由 scripts/generate-peak-stages.ts 生成，请勿手改。\n// 全局种子 0x${PEAK_ROAD_SEED.toString(16)}，所有玩家共享同一套 100 关对手。\nimport type { LegendTeamDef } from './legend-teams.ts'\n\nexport type PeakStageDef = {\n  stage: number\n  targetCa: number\n  actualCa: number\n  kind: 'generated' | 'national'\n  team: LegendTeamDef\n}\n\nexport const PEAK_STAGES: PeakStageDef[] = ${JSON.stringify(stages, null, 2)}\n`
 const target = path.join(process.cwd(), 'src', 'game', 'data', 'peak-stages.generated.ts')

@@ -12,6 +12,7 @@ import { MATCH_MENTALITY_LABELS, MATCH_TACTICS, autoSubDisplaySeconds } from '..
 import { inBox, progressOf, wideZone } from '../match/pitch.ts'
 import { opponentSide, PITCH_LENGTH, PITCH_WIDTH } from '../match/team.ts'
 import { LOGIC_MATCH_SECONDS } from '../match/time.ts'
+import { needsShootout } from '../match/knockout.ts'
 import type { MatchMentality, Tactics } from '../types.ts'
 import type { MatchPlayerState, MatchSide, MatchState, MatchTeamInput, MatchTeamState } from '../match/types.ts'
 import { MotionRatings } from './ability.ts'
@@ -72,6 +73,7 @@ export interface PesGameOptions {
   away: MatchTeamInput
   /** 淘汰赛：常规时间踢平后点球大战 */
   knockout?: boolean
+  shootoutOffset?: { home: number; away: number }
   /** 整场模拟时长 D（秒），默认 900（15 个足球分钟，显示为 90 分钟） */
   durationSeconds?: number
   /** 越位规则，默认不开（和现有引擎一致） */
@@ -135,6 +137,7 @@ export class PesGame {
       now: source.now,
     })
     const game = this.settlement.game
+    if (source.shootoutOffset) game.shootoutOffset = { ...source.shootoutOffset }
     const ratings = new MotionRatings(() => game, () => game.durationSeconds)
     this.match = new PesMatch({
       spec: source.spec ?? makeGamePitch(duration),
@@ -219,8 +222,8 @@ export class PesGame {
     const g = this.state
     if (g.finished) return
     this.settlement.finalize(this.match)
-    if (this.settlement.knockout && g.score.home === g.score.away) {
-      this.settlement.note('info', 'none', '常规时间结束，双方战平，比赛进入点球大战。', {}, g.durationSeconds)
+    if (needsShootout(this.settlement.knockout, g.score, g.shootoutOffset)) {
+      this.settlement.note('info', 'none', g.shootoutOffset ? '两回合总比分战平，进入点球大战（不计客场进球）。' : '常规时间结束，双方战平，比赛进入点球大战。', {}, g.durationSeconds)
       this.shootout()
     }
     g.finished = true

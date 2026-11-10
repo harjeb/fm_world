@@ -2,7 +2,7 @@ import type { AITeam, GameState } from './types.ts'
 import { CUP_SEED, cupDefById, type CupId } from './data/cup-config.ts'
 import { CUP_TEAM_POOLS } from './data/cup-teams.generated.ts'
 import type { LegendTeamDef } from './data/legend-teams.ts'
-import { buildHistoricTeam } from './legend.ts'
+import { frozenPveTeam } from './pve-content.ts'
 import { caOf } from './ca.ts'
 import { cachedOwnerlessTeams } from './world.ts'
 import { derivedRng, splitSeed } from './rng.ts'
@@ -45,10 +45,10 @@ function shuffle<T>(list: readonly T[], rng: { int(maxExclusive: number): number
 
 function randomTeam(def: LegendTeamDef): AITeam {
   const cached = randomTeamCache.get(def.id)
-  if (cached) return cached
-  const team = buildHistoricTeam(def)
+  if (cached) return structuredClone(cached)
+  const team = frozenPveTeam('cups', def.id)
   randomTeamCache.set(def.id, team)
-  return team
+  return structuredClone(team)
 }
 
 /** 随机队池按赛季轮换选取；池子本身是全局固定的，所有玩家相同。 */
@@ -60,7 +60,7 @@ export function cupRandomTeams(cupId: CupId, seasonIndex: number, count?: number
   const rng = derivedRng(splitSeed(CUP_SEED, `cup-random-${cupId}-${seasonIndex}`), 'pick')
   const start = rng.int(pool.length)
   const picked: CupParticipant[] = []
-  for (let i = 0; i < want; i++) {
+  for (let i = 0; i < Math.min(want, pool.length); i++) {
     const teamDef = pool[(start + i) % pool.length]
     const team = randomTeam(teamDef)
     picked.push({ id: team.id, name: team.name, kind: 'random', defId: teamDef.id, team })

@@ -674,6 +674,8 @@ export type MatchRecord = {
   /** 杯赛 id / 场次 id；仅 mode = cup。 */
   cupId?: string
   cupFixtureId?: string
+  /** 次回合总比分，按本场主客方向。 */
+  aggregateScore?: { home: number; away: number }
   round?: number
   homeId: string
   awayId: string
@@ -879,13 +881,15 @@ export type CupRun = {
   seasonIndex: number
   status: CupRunStatus
   stage: 'group' | 'r16' | 'qf' | 'sf' | 'final' | 'done'
-  participants: Record<string, { name: string; kind: 'player' | 'world' | 'random'; defId?: string }>
+  participants: Record<string, { name: string; kind: 'player' | 'world' | 'random'; defId?: string; snapshot?: AITeam }>
   groups: CupGroupState[]
   playerGroupIndex: number
   /** 小组赛当前轮次（1–3）。 */
   groupRound: number
   qualifiers?: string[]
   knockout?: { round: 'r16' | 'qf' | 'sf' | 'final'; ties: CupTie[] }
+  /** 完整淘汰赛路径，当前轮也保留在其中。 */
+  rounds?: { round: 'r16' | 'qf' | 'sf' | 'final'; ties: CupTie[] }[]
   finalMatchId?: string
 }
 
@@ -907,6 +911,7 @@ export type PveState = {
     history: PvePeakHistoryEntry[]
   }
   cups: Record<string, CupRun>
+  cupHistory?: CupRun[]
   trophies: TrophyRecord[]
 }
 
@@ -996,6 +1001,9 @@ export type MatchContext = {
   stage?: number
   cupId?: string
   cupFixtureId?: string
+  /** 小组赛、两回合首回合允许平局；次回合根据总比分决胜。 */
+  knockout?: boolean
+  shootoutOffset?: { home: number; away: number }
   /** 记录 id 的去重键；比赛种子仍用 seed（巅峰重试时对手/结果不变）。 */
   recordKey?: string | number
   round?: number

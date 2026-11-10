@@ -1,81 +1,91 @@
-import { generateTeam, generatedTeamSpec } from '../src/game/generated-team.ts'
-import { buildHistoricTeam, legendTeamById } from '../src/game/legend.ts'
+import fs from 'node:fs'
+import { createInitialGame } from '../src/game/state.ts'
+import { startTraining, runAutoTraining, confirmTraining, startCupMatch, restoreActiveEngine, finishMatch } from '../src/game/actions.ts'
+import { playerTeamForCup, cupRandomTeams } from '../src/game/cup.ts'
+import { enterCup, cupPlayerFixture } from '../src/game/cup-run.ts'
 import { buildPeakTeam } from '../src/game/peak.ts'
-import { CUP_TEAM_POOLS } from '../src/game/data/cup-teams.generated.ts'
-import { simulateAIvsAIState } from '../src/game/match/setup.ts'
-import { LOGIC_MATCH_SECONDS } from '../src/game/match/time.ts'
-import { caOf } from '../src/game/ca.ts'
+import { legendTeamById } from '../src/game/legend.ts'
+import { PesEngine } from '../src/game/pes/engine.ts'
+import { teamInputFromAI } from '../src/game/match/setup.ts'
+import { alignPveStrength, startingCa } from '../src/game/pve-strength.ts'
+import { PVE_CONTENT_HASH, loadPveContent } from '../src/game/pve-content.ts'
+import { splitSeed } from '../src/game/rng.ts'
 import type { AITeam } from '../src/game/types.ts'
+import type { CupId } from '../src/game/data/cup-config.ts'
 
-declare const process: { env: Record<string, string | undefined> }
+const integer = (value: string | undefined, fallback: number, max: number) => Math.max(1, Math.min(max, Math.round(Number(value) || fallback)))
+const matches = integer(process.env.PVE_MATCHES, 6, 1000)
+const cups = integer(process.env.PVE_CUPS, 2, 200)
+const stages = (process.env.PVE_STAGES ?? '1,20,40,60,80,90,100').split(',').map(Number)
+const cas = (process.env.PVE_CAS ?? '800,1000,1200,1400,1500').split(',').map(Number)
+const groups = new Set((process.env.PVE_GROUPS ?? 'peak,legend,cup').split(','))
+await loadPveContent()
+const baseGame = createInitialGame(20261110)
+// 先真实执行玩家自动培养一轮，保留项目/事件/卡片属性形状；未来 CA 档位只用于 P7 假设，不修改玩家成长系统。
+for (const player of baseGame.roster) {
+  if (!startTraining(baseGame, player.id, splitSeed(20261110, `training-${player.id}`)).ok) throw new Error('无法开始基线培养')
+  const result = runAutoTraining(baseGame, player.id, 200)
+  if (!result.completed || !confirmTraining(baseGame, player.id).ok) throw new Error(`基线培养未完成：${player.name}`)
+}
+const trained = playerTeamForCup(baseGame)
+const players = new Map(cas.map((ca) => [ca, alignPveStrength(trained, ca)]))
 
-const MATCHES = Math.max(4, Math.min(60, Number(process.env.PVE_MATCHES ?? 12)))
-const PLAYER_CAS = (process.env.PVE_CAS ?? '400,600,800,1000,1200').split(',').map(Number).filter(Number.isFinite)
-const GROUPS = new Set((process.env.PVE_GROUPS ?? 'peak,legend,cup').split(','))
-const PEAK_STAGES = (process.env.PVE_STAGES ?? '1,10,20,30,40,50,60,70,80,90,100').split(',').map(Number).filter(Number.isFinite)
-const LEGEND_IDS = ['barcelona-2010-11', 'milan-1988-89', 'real-madrid-2016-17', 'ajax-1971-72', 'juventus-1995-96', 'sampdoria-1990-91', 'nottingham-forest-1979-80']
-
-function teamCa(team: AITeam): number {
-  const sorted = [...team.players].sort((a, b) => caOf(b.attrs, b.positions.GK > 0) - caOf(a.attrs, a.positions.GK > 0))
-  return sorted.slice(0, 11).reduce((sum, player) => sum + caOf(player.attrs, player.positions.GK > 0), 0) / Math.min(11, sorted.length || 1)
+function interval(wins: number, n: number) {
+  const z = 1.96, p = wins / n, divisor = 1 + z * z / n
+  const mid = (p + z * z / (2 * n)) / divisor
+  const half = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / divisor
+  return [Math.max(0, mid - half), Math.min(1, mid + half)].map((v) => +(v * 100).toFixed(1))
 }
 
-function playerTeam(targetCa: number, seed: number): AITeam {
-  const spec = generatedTeamSpec(seed, targetCa, `balance-player-${targetCa}`, Math.round(targetCa))
-  // 平衡基线用中性阵型/战术，避免随机战术把 CA 对比搅乱。
-  spec.formationId = '4-3-3'
-  spec.tactics = { attack: 'balanced', passing: 'mixed', tempo: 'normal', line: 'mid', press: 'mid' }
-  const { def } = generateTeam(spec)
-  const team = buildHistoricTeam({ ...def, id: `balance-player-${targetCa}` })
-  return { ...team, id: 'player', name: '测试玩家' }
-}
-
-function simulate(home: AITeam, away: AITeam, count: number, seed: number): { win: number; draw: number; loss: number; playerCa: number; opponentCa: number } {
-  let win = 0
-  let draw = 0
-  let loss = 0
-  for (let index = 0; index < count; index++) {
-    const swap = index % 2 === 1
-    const h = swap ? away : home
-    const a = swap ? home : away
-    const state = simulateAIvsAIState(h, a, seed + index, LOGIC_MATCH_SECONDS)
-    const playerGoals = swap ? state.score.away : state.score.home
-    const opponentGoals = swap ? state.score.home : state.score.away
-    if (playerGoals > opponentGoals) win += 1
-    else if (playerGoals === opponentGoals) draw += 1
-    else loss += 1
+async function matchup(label: string, player: AITeam, opponent: AITeam) {
+  let won = 0, draw = 0, penalties = 0
+  for (let i = 0; i < matches; i++) {
+    const swap = i % 2 === 1
+    const h = swap ? opponent : player, a = swap ? player : opponent
+    const state = new PesEngine({ seed: splitSeed(8122026, `${label}-${startingCa(player).toFixed(0)}-${i}`), home: teamInputFromAI(h), away: teamInputFromAI(a), knockout: true, offside: true }).simulate()
+    const us = swap ? 'away' : 'home', them = swap ? 'home' : 'away'
+    if (state.score[us] === state.score[them]) draw++
+    if (state.shootout) penalties++
+    if (state.shootout ? state.shootout[us] > state.shootout[them] : state.score[us] > state.score[them]) won++
+    await new Promise<void>((resolve) => setImmediate(resolve))
   }
-  return { win, draw, loss, playerCa: teamCa(home), opponentCa: teamCa(away) }
+  return { opponent: label, playerCa: +startingCa(player).toFixed(1), opponentCa: +startingCa(opponent).toFixed(1), matches, regulationDraws: draw, penalties, advanced: won, advancePct: +(100 * won / matches).toFixed(1), ci95: interval(won, matches) }
 }
 
-const players = new Map<number, AITeam>()
-for (const ca of PLAYER_CAS) players.set(ca, playerTeam(ca, 0xba1a5e))
+const rows = []
+if (groups.has('peak')) for (const stage of stages) for (const ca of cas) rows.push(await matchup(`巅峰 ${stage}`, players.get(ca)!, buildPeakTeam(stage)))
+if (groups.has('legend')) for (const id of ['barcelona-2010-11', 'milan-1988-89', 'nottingham-forest-1979-80']) for (const ca of cas) rows.push(await matchup(`传奇 ${id}`, players.get(ca)!, legendTeamById(id)!))
+if (groups.has('cup')) for (const cup of ['community', 'league', 'champions'] as const) for (const ca of cas) rows.push(await matchup(`杯赛池 ${cup}`, players.get(ca)!, cupRandomTeams(cup, 1)[0].team))
 
-const rows: { group: string; name: string; playerCa: number; opponentCa: number; win: number; draw: number; loss: number; advance: number }[] = []
-if (GROUPS.has('peak')) for (const stage of PEAK_STAGES) {
-  const opponent = buildPeakTeam(stage)
-  for (const ca of PLAYER_CAS) {
-    const result = simulate(players.get(ca)!, opponent, MATCHES, 10_000 + stage * 100 + ca)
-    rows.push({ group: 'peak', name: `第 ${stage} 关`, playerCa: result.playerCa, opponentCa: result.opponentCa, win: result.win, draw: result.draw, loss: result.loss, advance: result.win + result.draw * 0.5 })
+const tournaments = []
+if (groups.has('tournament')) for (const cup of ['community', 'league', 'champions'] as CupId[]) for (const ca of cas) {
+  let qualified = 0, champions = 0
+  for (let trial = 0; trial < cups; trial++) {
+    const game = structuredClone(baseGame), player = players.get(ca)!
+    game.roster = structuredClone(player.players); game.lineup = structuredClone(player.lineup)
+    game.seed = splitSeed(8122026, `cup-trial-${trial}`)
+    game.pve = { legends: {}, peak: { cleared: 0, history: [] }, cups: {}, trophies: [] }
+    if (!enterCup(game, cup).ok) throw new Error('杯赛基线报名失败')
+    const run = game.pve.cups[cup]
+    for (let i = 0; run.status === 'active' && i < 10; i++) {
+      if (!cupPlayerFixture(run) || !startCupMatch(game, cup).ok) throw new Error(`杯赛卡住：${cup}/${run.stage}`)
+      const engine = restoreActiveEngine(game)!
+      engine.simulate(); finishMatch(game, engine)
+    }
+    if (run.status === 'active') throw new Error('杯赛超过预期场次仍未结束')
+    if (run.qualifiers?.includes('player')) qualified++
+    if (run.status === 'champion') champions++
+    await new Promise<void>((resolve) => setImmediate(resolve))
   }
+  tournaments.push({ cup, playerCa: ca, samples: cups, qualified, champions, qualificationPct: +(100 * qualified / cups).toFixed(1), championshipPct: +(100 * champions / cups).toFixed(1) })
 }
-if (GROUPS.has('legend')) for (const id of LEGEND_IDS) {
-  const opponent = legendTeamById(id)!
-  for (const ca of PLAYER_CAS) {
-    const result = simulate(players.get(ca)!, opponent, MATCHES, 20_000 + ca + id.length)
-    rows.push({ group: 'legend', name: opponent.name, playerCa: result.playerCa, opponentCa: result.opponentCa, win: result.win, draw: result.draw, loss: result.loss, advance: result.win + result.draw * 0.5 })
-  }
+const report = {
+  contentHash: PVE_CONTENT_HASH, engine: 'PesEngine / rulesVersion 4',
+  baseline: '玩家完整自动培养一轮；未来 CA 档位为同形状归一化假设，不是声称玩家当前可培养到该数值。',
+  actualTrainingCa: +startingCa(trained).toFixed(1),
+  knockout: '真实点球，不用平局×0.5；整届杯赛 AI 后台用 v2、玩家用 v4，与实际玩法一致。',
+  caution: '小样本仅用于发现异常，95% 置信区间较宽；不据此擅改 350→1300 曲线。',
+  rows, tournaments,
 }
-if (GROUPS.has('cup')) for (const [poolId, def] of [['casual', CUP_TEAM_POOLS.casual[0]], ['league', CUP_TEAM_POOLS.league[0]], ['champions', CUP_TEAM_POOLS.champions[0]]] as const) {
-  const opponent = buildHistoricTeam(def)
-  for (const ca of PLAYER_CAS) {
-    const result = simulate(players.get(ca)!, opponent, MATCHES, 30_000 + ca + poolId.length)
-    rows.push({ group: 'cup', name: `杯赛随机 · ${poolId}`, playerCa: result.playerCa, opponentCa: result.opponentCa, win: result.win, draw: result.draw, loss: result.loss, advance: result.win + result.draw * 0.5 })
-  }
-}
-
-console.log(`PvE 平衡：每组 ${MATCHES} 场，玩家 CA -> 胜/平/负（晋级率 = 胜 + 平×0.5）`)
-for (const row of rows) {
-  const pct = (value: number) => `${Math.round((value / MATCHES) * 100)}%`
-  console.log(`${row.group.padEnd(6, ' ')} ${row.name.padEnd(24, ' ')} 玩家 ${Math.round(row.playerCa)} vs ${Math.round(row.opponentCa)}  ${pct(row.win)} / ${pct(row.draw)} / ${pct(row.loss)}  晋级 ${pct(row.advance)}`)
-}
+console.log(JSON.stringify(report, null, 2))
+if (process.env.PVE_REPORT) fs.writeFileSync(process.env.PVE_REPORT, JSON.stringify(report, null, 2) + '\n')

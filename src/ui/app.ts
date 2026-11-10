@@ -69,6 +69,8 @@ import { game, replay, resetReplay, setGame, stopReplay, ui, type ClubTab, type 
 import { renderAcademy } from './screens/academy.ts'
 import { renderChallenge } from './screens/challenge.ts'
 import type { CupId } from '../game/data/cup-config.ts'
+import { buildCupField } from '../game/cup.ts'
+import { loadPveContent } from '../game/pve-content.ts'
 import { renderClub } from './screens/club.ts'
 import { renderTransfer } from './screens/transfer.ts'
 import { renderHome } from './screens/home.ts'
@@ -793,6 +795,31 @@ document.addEventListener('click', async (event) => {
   if (challengeMode?.dataset.challengeMode) {
     ui.challengeMode = challengeMode.dataset.challengeMode as typeof ui.challengeMode
     ui.cupPreviewId = null
+    ui.cupHistorySeason = null
+    ui.pveTeamId = null
+    ui.peakPreviewStage = null
+    render()
+    if (ui.challengeMode !== 'friendly') void loadPveContent().then(() => render()).catch((error) => showNotice(`加载失败，可重新点击模式重试：${String(error)}`))
+    return
+  }
+  const pveTeam = target.closest<HTMLElement>('[data-pve-team]')
+  if (pveTeam) {
+    ui.pveTeamId = ui.pveTeamId === pveTeam.dataset.pveTeam ? null : pveTeam.dataset.pveTeam || null
+    render()
+    if (ui.pveTeamId) document.getElementById('pve-team-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return
+  }
+  const peakStage = target.closest<HTMLElement>('[data-peak-preview]')
+  if (peakStage) {
+    ui.peakPreviewStage = Number(peakStage.dataset.peakPreview)
+    ui.pveTeamId = null
+    render()
+    return
+  }
+  const cupHistory = target.closest<HTMLElement>('[data-cup-history]')
+  if (cupHistory) {
+    ui.cupPreviewId = cupHistory.dataset.cupHistory ?? null
+    ui.cupHistorySeason = Number(cupHistory.dataset.season)
     render()
     return
   }
@@ -1491,20 +1518,40 @@ document.addEventListener('click', async (event) => {
     case 'cup-preview': {
       const cupId = actionEl.dataset.cup
       if (!cupId) break
-      ui.cupPreviewId = ui.cupPreviewId === cupId ? null : cupId
+      ui.cupPreviewId = ui.cupPreviewId === cupId && ui.cupHistorySeason === null ? null : cupId
+      ui.cupHistorySeason = null
       render()
       break
     }
     case 'enter-cup': {
       const cupId = actionEl.dataset.cup as CupId | undefined
       if (!cupId) break
-      const result = enterCupAction(game, cupId)
-      if (!result.ok) {
-        showNotice(result.error ?? '无法报名杯赛')
-        break
+      if (isOnlineMode()) {
+        void (async () => {
+          const season = game.season.index
+          const ids = buildCupField(cupId, game).filter((entry) => entry.kind === 'world').map((entry) => entry.id)
+          showNotice('正在获取杯赛世界队的最新阵容…')
+          try {
+            const results = await Promise.all(ids.map((id) => fetchFriendlyTeam(id)))
+            const failed = results.find((result) => 'error' in result)
+            if (failed && 'error' in failed) { showNotice(failed.error); return }
+            if (game.season.index !== season) { showNotice('赛季已变化，请重新报名。'); return }
+            const teams = results.flatMap((result) => 'team' in result ? [result.team] : [])
+            const result = enterCupAction(game, cupId, teams)
+            if (!result.ok) { showNotice(result.error ?? '无法报名杯赛'); return }
+            ui.notice = ''
+            ui.cupPreviewId = cupId
+            ui.cupHistorySeason = null
+            render()
+          } catch (error) { showNotice(`杯赛阵容获取失败：${String(error)}`) }
+        })()
+      } else {
+        const result = enterCupAction(game, cupId)
+        if (!result.ok) { showNotice(result.error ?? '无法报名杯赛'); break }
+        ui.cupPreviewId = cupId
+        ui.cupHistorySeason = null
+        render()
       }
-      ui.cupPreviewId = cupId
-      render()
       break
     }
     case 'start-cup-match': {
@@ -1659,6 +1706,8 @@ document.addEventListener('click', async (event) => {
 
 document.addEventListener('change', (event) => {
   const target = event.target as HTMLSelectElement | HTMLInputElement
+  if (target.id === 'legend-era') { ui.legendEra = target.value; render(); return }
+  if (target.id === 'legend-country') { ui.legendCountry = target.value; render(); return }
   if (target.id === 'account-club') {
     ui.registrationClubId = target.value
     render()
@@ -1791,6 +1840,7 @@ document.addEventListener('change', (event) => {
 
 document.addEventListener('input', (event) => {
   const target = event.target as HTMLInputElement
+  if (target.id === 'legend-search') { ui.legendSearch = target.value; render(); return }
   if (target.id === 'academy-search') {
     ui.academySearch = target.value
     render()

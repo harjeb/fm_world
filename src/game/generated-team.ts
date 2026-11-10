@@ -108,7 +108,7 @@ function shiftAvg(def: LegendTeamDef, delta: number): LegendTeamDef {
     ...def,
     players: def.players.map((tuple) => [
       tuple[0], tuple[1], tuple[2], tuple[3], tuple[4],
-      clamp(Math.round(tuple[5] + delta), 40, 100),
+      clamp(Math.round((tuple[5] + delta) * 10000) / 10000, 0, 100),
       tuple[6],
     ] as LegendPlayerTuple),
   }
@@ -121,12 +121,12 @@ function starterCa(def: LegendTeamDef): number {
 
 /** 以首发平均 CA 为目标校准整队的 `avg`；返回校准后的定义和实际 CA。 */
 export function calibrateGeneratedTeam(def: LegendTeamDef, targetCa: number): { def: LegendTeamDef; actualCa: number } {
-  let lo = -25
-  let hi = 25
+  let lo = -100
+  let hi = 100
   let best = def
   let bestCa = starterCa(def)
   let bestDiff = Math.abs(bestCa - targetCa)
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 32; i++) {
     const delta = (lo + hi) / 2
     const candidate = shiftAvg(def, delta)
     const ca = starterCa(candidate)

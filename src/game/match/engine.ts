@@ -88,6 +88,8 @@ function rngState(rng: PCG32): RngState {
   return rng.toJSON()
 }
 
+import { needsShootout } from './knockout.ts'
+
 export class MatchEngine {
   state: MatchState
   private decisionRng: PCG32
@@ -102,7 +104,7 @@ export class MatchEngine {
   private playbackStepActive = false
   private playbackBeforeReset?: MatchPlaybackPose
 
-  constructor(options: { seed: number; home: MatchTeamInput; away: MatchTeamInput; knockout: boolean; durationSeconds?: number; offside?: boolean; recordPlayback?: boolean; rulesVersion?: number }) {
+  constructor(options: { seed: number; home: MatchTeamInput; away: MatchTeamInput; knockout: boolean; shootoutOffset?: { home: number; away: number }; durationSeconds?: number; offside?: boolean; recordPlayback?: boolean; rulesVersion?: number }) {
     const home = buildMatchTeam(options.home, 'home')
     const away = buildMatchTeam(options.away, 'away')
     this.decisionRng = derivedRng(options.seed, 'match-decision')
@@ -130,6 +132,7 @@ export class MatchEngine {
       finished: false,
       offside: this.offside,
       shootout: null,
+      ...(options.shootoutOffset ? { shootoutOffset: { ...options.shootoutOffset } } : {}),
       log: [],
       commentary: [],
       stats: {
@@ -993,7 +996,7 @@ export class MatchEngine {
       return true
     }
     if (this.state.half === 2 && this.state.clock >= this.durationSeconds - 1e-6) {
-      if (this.knockout && this.state.score.home === this.state.score.away) this.startShootout()
+      if (needsShootout(this.knockout, this.state.score, this.state.shootoutOffset)) this.startShootout()
       else this.finishMatch('全场结束。')
       return true
     }
@@ -2554,7 +2557,7 @@ export class MatchEngine {
       this.resetKickoffPositions('away')
       this.log('half', 'none', '上半场结束，双方交换半场。', {})
     } else if (this.state.half === 2 && this.state.clock >= this.durationSeconds) {
-      if (this.knockout && this.state.score.home === this.state.score.away) this.startShootout()
+      if (needsShootout(this.knockout, this.state.score, this.state.shootoutOffset)) this.startShootout()
       else this.finishMatch('全场结束。')
     }
   }
@@ -2574,7 +2577,7 @@ export class MatchEngine {
   private startShootout(): void {
     this.state.shootout = { home: 0, away: 0, attemptsHome: 0, attemptsAway: 0, current: 'home', suddenDeath: false, finished: false }
     this.state.phase = 'shootout'
-    this.log('info', 'none', '常规时间结束，双方战平，比赛进入点球大战。', {})
+    this.log('info', 'none', this.state.shootoutOffset ? '两回合总比分战平，进入点球大战（不计客场进球）。' : '常规时间结束，双方战平，比赛进入点球大战。', {})
   }
 
   private advanceShootout(): void {
