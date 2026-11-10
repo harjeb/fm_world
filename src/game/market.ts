@@ -124,8 +124,8 @@ export function freeAgentAsking(game: Pick<GameState, 'cards'>, player: Player):
  * AI 俱乐部对自家某名球员的态度（主力 / 轮换 / 冷板凳、要价、非卖品），见 transfer-rules.ts。
  * 出场时间用存档里记下的最近 20 场；没有记录就按他在阵容里的角色估算。
  */
-export function clubSaleTerms(game: Pick<GameState, 'appearances'>, team: Pick<AITeam, 'lineup'>, player: Player): ReleaseAssessment {
-  return assessRelease({ player, lineup: team.lineup, minutes: game.appearances?.[player.id], value: playerMarketValue(player) })
+export function clubSaleTerms(game: Pick<GameState, 'appearances' | 'cards'>, team: Pick<AITeam, 'lineup'>, player: Player): ReleaseAssessment {
+  return assessRelease({ player, lineup: team.lineup, minutes: game.appearances?.[player.id], value: bestMarketValue(game, player) })
 }
 
 /**
