@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url'
 import { baselineTeams } from '../src/game/pes/baseline.ts'
 import { PesGame } from '../src/game/pes/game.ts'
 import type { TeamSample } from '../src/game/pes/metrics.ts'
-import { attrRating, attrStorage } from '../src/game/scale.ts'
+import { attrLimit, attrRating, attrStorage } from '../src/game/scale.ts'
 import {
   DEFAULT_PARAMS,
   NEUTRAL_INSTRUCTIONS,
@@ -30,7 +30,7 @@ import {
   type TacticalInstructionsV2,
   type TacticsParams,
 } from '../src/game/pes/tactics.ts'
-import type { AttrKey } from '../src/game/types.ts'
+import { ALL_ATTRIBUTES, type AttrKey } from '../src/game/types.ts'
 import type { MatchState, MatchTeamInput } from '../src/game/match/types.ts'
 
 const self = fileURLToPath(import.meta.url)
@@ -106,6 +106,17 @@ export function fixtureHash(): { bytes: number; sha256: string } {
   return { bytes: Buffer.byteLength(text, 'utf8'), sha256: crypto.createHash('sha256').update(text, 'utf8').digest('hex') }
 }
 
+/** 统一属性（`--squad 67` ≈ 主属性存档值 1000）：只改属性，不动位置 / 角色 / 阵型。 */
+function uniformSquad(team: MatchTeamInput, rating: number): void {
+  for (const player of [...team.starters.map((starter) => starter.player), ...team.bench]) {
+    const gk = player.positions.GK > 0
+    for (const key of ALL_ATTRIBUTES) {
+      const limit = attrLimit(key, gk)
+      player.attrs[key] = limit <= 0 ? 0 : Math.min(limit, Math.round(attrStorage(key, rating, gk)))
+    }
+  }
+}
+
 function baseFixture(): { home: MatchTeamInput; away: MatchTeamInput } {
   const { home, away } = baselineTeams(1)
   for (const team of [home, away]) {
@@ -113,6 +124,7 @@ function baseFixture(): { home: MatchTeamInput; away: MatchTeamInput } {
     delete team.chemistry
     for (const starter of team.starters) starter.player.condition = 100
     for (const player of team.bench) player.condition = 100
+    if (SQUAD > 0) uniformSquad(team, SQUAD)
   }
   return { home, away }
 }
@@ -284,19 +296,23 @@ const PARAMS: Partial<TacticsParams> = paramsOption()
 /** 只跑某几类单项（`--only tempo --only intensity`）。 */
 const ONLY = process.argv.flatMap((arg, index) => (arg === '--only' ? [process.argv[index + 1]] : []))
 const CACHE_VERSION = 4
+/** `--squad <rating>`：双方都用同一套全属性等于该值的球员（0 = 保留基线阵容）。 */
+let SQUAD = option('squad', 0)
 // 单项配置在模块加载时注册：子进程也要能查到这些 id。
 const selectedSingles = () => individualConfigs().filter((single) => !ONLY.length || ONLY.includes(single.key))
 if (MODE === 'individual') for (const single of selectedSingles()) ALL_CONFIGS[single.id] = single.config
 
 /* ------------------------------ 子进程 ------------------------------ */
 
-type Job = { mode: string; specs: MatchSpec[]; params: Partial<TacticsParams>; out: string }
+type Job = { mode: string; squad: number; specs: MatchSpec[]; params: Partial<TacticsParams>; out: string }
 
 const childIndex = process.argv.indexOf('--child')
 if (childIndex >= 0) {
   const job = JSON.parse(fs.readFileSync(process.argv[childIndex + 1], 'utf8')) as Job
   // 单项模式的配置 id 由父进程注册；子进程没有 --individual 参数，按 job.mode 补上。
   if (job.mode === 'individual') for (const single of selectedSingles()) ALL_CONFIGS[single.id] = single.config
+  // 子进程没有 CLI 选项：统一属性必须随 job 一起传，否则会静默跑回基线阵容。
+  SQUAD = job.squad
   const rows = job.specs.map((spec) => runMatch(spec, job.params))
   // 写文件而不是 stdout：几千场的结果超过管道缓冲，process.exit 会截断最后一段。
   fs.writeFileSync(job.out, JSON.stringify(rows))
@@ -306,7 +322,7 @@ if (childIndex >= 0) {
 function runJob(specs: MatchSpec[], id: number): Promise<MatchResult[]> {
   const tmp = path.join(os.tmpdir(), `tactics-${process.pid}-${id}.json`)
   const out = path.join(os.tmpdir(), `tactics-${process.pid}-${id}-out.json`)
-  fs.writeFileSync(tmp, JSON.stringify({ mode: MODE, specs, params: PARAMS, out } satisfies Job))
+  fs.writeFileSync(tmp, JSON.stringify({ mode: MODE, squad: SQUAD, specs, params: PARAMS, out } satisfies Job))
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [...process.execArgv, self, '--child', tmp], { stdio: ['ignore', 'ignore', 'inherit'] })
     child.on('error', reject)
@@ -329,7 +345,7 @@ function runJob(specs: MatchSpec[], id: number): Promise<MatchResult[]> {
 const results = new Map<string, MatchResult>()
 const keyOf = (spec: MatchSpec) => `${spec.scenario}|${spec.aConfig}|${spec.famA}|${spec.bConfig ?? 'blank'}|${spec.famB ?? 1}|${spec.seed}|${spec.aHome}`
 const CACHE = path.join(os.tmpdir(), 'fm-tactics-cache.json')
-const paramsKey = JSON.stringify({ version: CACHE_VERSION, params: { ...DEFAULT_PARAMS, ...PARAMS } })
+const paramsKey = JSON.stringify({ version: CACHE_VERSION, squad: SQUAD, params: { ...DEFAULT_PARAMS, ...PARAMS } })
 
 function loadCache(): void {
   try {
@@ -513,7 +529,7 @@ async function main(): Promise<void> {
   loadCache()
   const seeds = Array.from({ length: SEEDS }, (_, i) => SEED0 + i)
   const hash = fixtureHash()
-  console.log(`夹具：${hash.bytes} 字节，SHA-256 ${hash.sha256}`)
+  console.log(`夹具：${hash.bytes} 字节，SHA-256 ${hash.sha256}${SQUAD > 0 ? `（统一属性 ${SQUAD}，与设计文档哈希不同）` : ''}`)
   console.log(`模式 ${MODE}，种子 ${SEEDS}，场景 ${SCENARIOS.join(' / ')}，参数 ${JSON.stringify({ ...DEFAULT_PARAMS, ...PARAMS })}`)
 
   const output: { fixture: unknown; mode: string; seeds: number[]; params: unknown; results: Record<string, any> } = { fixture: hash, mode: MODE, seeds, params: { ...DEFAULT_PARAMS, ...PARAMS }, results: {} }
