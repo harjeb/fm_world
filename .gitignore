@@ -12,3 +12,6 @@ node_modules/
 *.rar
 *.xlsx
 *.fmf
+
+# 战术仿真实验输出数据：体积大、由脚本生成，不纳入版本控制
+docs/tactics-*.json
