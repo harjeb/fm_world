@@ -40,7 +40,11 @@ export type TacticalInstructionsV2 = {
   }
   /** 实验性高级指令；缺省为中性，旧九项模板不自动迁移。 */
   advanced?: {
-    possession?: { receiving?: 'mixed' | 'space' }
+    possession?: {
+      receiving?: 'mixed' | 'space'
+      /** 传中时机：仅开放中性及实验性的尽早传中；晚传尚未实现。 */
+      crossTiming?: 'balanced' | 'early'
+    }
     defense?: { width?: 'narrow' | 'normal' | 'wide' }
   }
 }
@@ -183,6 +187,12 @@ export type TacticsParams = {
   emergencyRadius: number
   /** 上抢球员留人：至少多少名外场球员不承担上抢任务 */
   keepBack: number
+  /** 实验：对已有前插的速度提前量缩放（1 = 旧值）；仅接空当指令生效。 */
+  spaceLeadScale?: number
+  /** 实验：无球宽度相对中性的缩放幅度。 */
+  defenseCompactness?: number
+  /** 实验：窄 / 宽目标相对被盯球员最多额外拉开的距离（K）。 */
+  defenseMarkBuffer?: number
   /** 熟练度：满熟练时的执行强度下限（`eff = minExecution + (1 − minExecution) × fam`） */
   familiarityFloor: number
   /** 熟练度：零熟练、复杂度 1 时的「执行反了」概率 */
@@ -214,6 +224,10 @@ export const DEFAULT_PARAMS: TacticsParams = {
   keepBack: 2,
   familiarityFloor: 0.35,
   familiaritySlip: 0.35,
+  // 空当提前量未证实改善，保留原值；无球宽度采用单项实验中的候选值，仍需正式验收。
+  spaceLeadScale: 1,
+  defenseCompactness: 0.25,
+  defenseMarkBuffer: 3,
 }
 
 /** 单项指令的相对难度（1 = 平均）：用于熟练度惩罚，越高越吃熟练度。 */
@@ -281,9 +295,10 @@ export function validateInstructions(value: unknown): TacticalInstructionsV2 {
     if ('possession' in raw) {
       const part = raw.possession as Record<string, unknown>
       if (!part || typeof part !== 'object' || Array.isArray(part)) throw new Error('无效战术指令 advanced.possession')
-      for (const key of Object.keys(part)) if (key !== 'receiving') throw new Error(`未知战术指令 advanced.possession.${key}`)
+      for (const key of Object.keys(part)) if (key !== 'receiving' && key !== 'crossTiming') throw new Error(`未知战术指令 advanced.possession.${key}`)
       advanced.possession = {}
       if ('receiving' in part) advanced.possession.receiving = pick(part.receiving, 'advanced.possession.receiving', ['mixed', 'space'] as const)
+      if ('crossTiming' in part) advanced.possession.crossTiming = pick(part.crossTiming, 'advanced.possession.crossTiming', ['balanced', 'early'] as const)
     }
     if ('defense' in raw) {
       const part = raw.defense as Record<string, unknown>
@@ -324,5 +339,6 @@ export function sameInstructions(a: TacticalInstructionsV2, b: TacticalInstructi
     && a.defense.line === b.defense.line && a.defense.engagement === b.defense.engagement
     && a.defense.intensity === b.defense.intensity
     && (a.advanced?.possession?.receiving ?? 'mixed') === (b.advanced?.possession?.receiving ?? 'mixed')
+    && (a.advanced?.possession?.crossTiming ?? 'balanced') === (b.advanced?.possession?.crossTiming ?? 'balanced')
     && (a.advanced?.defense?.width ?? 'normal') === (b.advanced?.defense?.width ?? 'normal')
 }

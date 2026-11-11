@@ -784,7 +784,7 @@ async function main(): Promise<void> {
       const values = blocks.map((item, index) => (item.xgd - (na[index].xgd - nb[index].xgd)) * sign)
       return { value: mean(values), ci: bootstrapCi(values) }
     }
-    console.log('\n交互项矩阵：行 A，列 B，`实测 A−B 的 xGD − (A 对中性 − B 对中性)`；* = 区间不含 0')
+    console.log('\n交互残差矩阵：行 A，列 B，`实测 A−B 的 xGD − (A 对中性 − B 对中性)`；* = 未校正区间不含 0，不代表已证实克制')
     console.log(['A\\B'.padEnd(6), ...styles.map((b) => short[b].padEnd(6))].join(' '))
     const interactionOut: Record<string, unknown> = {}
     for (const a of styles) {

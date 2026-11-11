@@ -44,7 +44,8 @@ function main(): void {
   const labelA = `修订 ${a.runner?.revision ?? '?'}`
   const labelB = `修订 ${b.runner?.revision ?? '?'}`
   console.log(`${fileA} (${labelA})  vs  ${fileB} (${labelB})`)
-  console.log(`夹具 ${a.fixture.sha256.slice(0, 12)}…，种子 ${a.seeds.length} 个\n`)
+  console.log(`夹具 ${a.fixture.sha256.slice(0, 12)}…，种子 ${a.seeds.length} 个`)
+  console.log('警告：这里只比较点估计和各自区间，未计算版本间配对差区间；不能据此判定改善或因果。\n')
 
   const sa = strengths(a)
   const sb = strengths(b)
@@ -91,7 +92,7 @@ function main(): void {
     if (!rawA || !rawB || !intA || !intB) continue
     const delta = rawB.xgd - rawA.xgd
     const direction = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat'
-    const verdict = direction === 'flat' ? '无变化' : direction === h.expect ? '符合预期方向' : '**与预期相反**'
+    const verdict = direction === 'flat' ? '点估计未变' : direction === h.expect ? '点估计沿预期方向' : '点估计与预期反向'
     console.log(`  ${h.text}: 原始 ${fmt(rawA.xgd)} → ${fmt(rawB.xgd)}（Δ${fmt(delta)}，${verdict}）；交互 ${fmt(intA.value)} → ${fmt(intB.value)}${mark(intB.ci)}`)
   }
 }

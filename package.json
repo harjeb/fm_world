@@ -40,7 +40,11 @@
     "build:site": "vite build",
     "build:safe": "bash scripts/build-safe.sh",
     "pes:stamina": "tsx scripts/pes-stamina.ts",
-    "tactics:experiment": "tsx scripts/tactics-experiment.ts"
+    "tactics:experiment": "tsx scripts/tactics-experiment.ts",
+    "tactics:ablation": "tsx scripts/tactics-ablation.ts",
+    "tactics:followup": "tsx scripts/tactics-followup.ts",
+    "tactics:cross-experiment": "tsx scripts/tactics-cross-experiment.ts",
+    "tactics:cross-contrasts": "tsx scripts/tactics-cross-contrasts.ts"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

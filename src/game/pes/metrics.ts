@@ -17,7 +17,7 @@
  * 候选期间主动出脚立即确认；原控球队重新控球或死球取消候选；其他无主球暂停计时。
  * 文档里「暂定窗口挂起 / 恢复」的细节没有实现（本实验只用一个活动窗口），不据此宣称通过兼容性验收。
  */
-import type { PesPlayer, TeamIndex } from './spec.ts'
+import type { BallMeta, PesPlayer, PesTeam, TeamIndex } from './spec.ts'
 import type { PesMatch } from './sim.ts'
 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v)
@@ -37,8 +37,40 @@ export type TeamSample = {
   /** 中路传球尝试 / 全部传球尝试 */
   centralPasses: number
   openPasses: number
-  /** 每秒控球宽度采样（米） */
+  /** 每秒控球 / 对手控球期间无球宽度采样（米）。 */
   width: number[]
+  defensiveWidth: number[]
+  /** 空当决策、可行候选、出脚裁决和实际接球；观察而不额外生成候选。 */
+  spaceDecisions: number
+  spaceEligibleDecisions: number
+  spaceCandidates: number
+  spaceRejections: Record<string, number>
+  spacePasses: number
+  spaceSettledOk: number
+  spaceReceived: number
+  spaceReceivedOk: number
+  /** 活球普通传球的实际接球；边路以接球时 abs(y)>HW/3 定义。 */
+  receptions: number
+  wideReceptions: number
+  wideFinalThirdReceptions: number
+  /** 常规传中决策暴露、可行候选、实际出脚及预裁决成功。 */
+  crossDecisions: number
+  crossCandidates: number
+  crossPreferred: number
+  /** 合格传中候选的最佳竞争动作分数减传中分数；正数表示尚不足以胜出。 */
+  crossMargins: number[]
+  crossCanceledControl: number
+  crossCanceledFoul: number
+  crosses: number
+  crossSettledOk: number
+  /** 启用接空当时无球决策的前插申请漏斗。 */
+  runnerDecisions: number
+  runnerBlocked: Record<string, number>
+  runnerTrials: number
+  runnerStarted: number
+  /** 任务分配帧与其中存在本方上抢 / 协防者占用本方盯人槽的帧数。 */
+  taskFrames: number
+  taskConflictFrames: number
   /** 每秒防线深度采样（米，己方球门线为 0） */
   defLine: number[]
   /** 对方控球秒数（HLR / DL 的分母） */
@@ -72,7 +104,12 @@ export type TeamSample = {
 }
 
 export const emptySample = (): TeamSample => ({
-  passDistance: [], centralPasses: 0, openPasses: 0, width: [], defLine: [],
+  passDistance: [], centralPasses: 0, openPasses: 0, width: [], defensiveWidth: [], defLine: [],
+  spaceDecisions: 0, spaceEligibleDecisions: 0, spaceCandidates: 0, spaceRejections: {}, spacePasses: 0, spaceSettledOk: 0, spaceReceived: 0, spaceReceivedOk: 0,
+  receptions: 0, wideReceptions: 0, wideFinalThirdReceptions: 0, crossDecisions: 0, crossCandidates: 0,
+  crossPreferred: 0, crossMargins: [], crossCanceledControl: 0, crossCanceledFoul: 0, crosses: 0, crossSettledOk: 0,
+  runnerDecisions: 0, runnerBlocked: {}, runnerTrials: 0, runnerStarted: 0,
+  taskFrames: 0, taskConflictFrames: 0,
   oppPossessionSeconds: 0, possessionSeconds: 0, highTurnovers: 0, turnovers: 0,
   forwardTurnovers: 0, turnoverWindows: 0, pressFrames: 0, pressU: 0, pressAssignments: 0,
   shapeFrames: 0, lossFrames: 0, lossPressFrames: 0, decideIntervalSum: 0, decideCount: 0,
@@ -88,6 +125,8 @@ export class MatchMetrics {
   private candidate: Candidate | null = null
   private pending: Pending | null = null
   private lastSecond = -1
+  /** 失败传中的 BallMeta.cross 可能为 false；只在埋点内跟踪来源，不改比赛快照。 */
+  private readonly crossFlights = new WeakSet<BallMeta>()
   private readonly starters: [PesPlayer[], PesPlayer[]]
   /** 防线 / 低位中场槽位：开赛阵型 line ≤ 0.35 的非门将球员 */
   private readonly deepSlots: [Set<number>, Set<number>]
@@ -156,6 +195,10 @@ export class MatchMetrics {
           sample.width.push(quantile(ys, 0.9) - quantile(ys, 0.1))
         }
         if (poss !== null && poss !== ti) {
+          if (outfield.length >= 8) {
+            const ys = outfield.map((p) => p.pos.y).sort((a, b) => a - b)
+            sample.defensiveWidth.push(quantile(ys, 0.9) - quantile(ys, 0.1))
+          }
           const deep = team.players.filter((p) => this.deepSlots[ti].has(p.slot))
           if (deep.length) {
             const mean = deep.reduce((sum, p) => sum + (p.pos.x * team.dir + match.spec.HL), 0) / deep.length
@@ -203,6 +246,82 @@ export class MatchMetrics {
     sample.pressFrames++
     sample.pressU += clamp01(u)
     sample.pressAssignments += count
+  }
+
+  /** 空当候选在原决策中已生成；只记录数目，不重复评分或调用 RNG。 */
+  spaceDecision(team: TeamIndex, candidates: number): void {
+    const sample = this.teams[team]
+    sample.spaceDecisions++
+    if (candidates > 0) sample.spaceEligibleDecisions++
+    sample.spaceCandidates += candidates
+  }
+
+  spaceReject(team: TeamIndex, reason: string): void {
+    const sample = this.teams[team]
+    sample.spaceRejections[reason] = (sample.spaceRejections[reason] ?? 0) + 1
+  }
+
+  spacePass(team: TeamIndex, settledOk: boolean): void {
+    this.teams[team].spacePasses++
+    if (settledOk) this.teams[team].spaceSettledOk++
+  }
+
+  spaceReceive(team: TeamIndex, settledOk: boolean): void {
+    this.teams[team].spaceReceived++
+    if (settledOk) this.teams[team].spaceReceivedOk++
+  }
+
+  trackCross(meta: BallMeta): void { this.crossFlights.add(meta) }
+
+  isCross(meta: BallMeta): boolean { return !!meta.cross || this.crossFlights.has(meta) }
+
+  /** 只记录已实际接球的普通传球，不将预裁决当作到位。 */
+  receive(match: PesMatch, receiver: PesPlayer): void {
+    const sample = this.teams[receiver.ti]
+    sample.receptions++
+    if (Math.abs(receiver.pos.y) > match.spec.HW / 3) {
+      sample.wideReceptions++
+      const team = match.teams[receiver.ti]
+      if ((receiver.pos.x * team.dir + match.spec.HL) / match.spec.L >= 2 / 3) sample.wideFinalThirdReceptions++
+    }
+  }
+
+  crossDecision(team: TeamIndex, available: boolean, preferred: boolean, margin?: number): void {
+    const sample = this.teams[team]
+    sample.crossDecisions++
+    if (available) {
+      sample.crossCandidates++
+      if (margin !== undefined && Number.isFinite(margin)) sample.crossMargins.push(margin)
+    }
+    if (available && preferred) sample.crossPreferred++
+  }
+
+  crossCanceled(team: TeamIndex, reason: 'control' | 'foul'): void {
+    const sample = this.teams[team]
+    if (reason === 'control') sample.crossCanceledControl++
+    else sample.crossCanceledFoul++
+  }
+
+  cross(team: TeamIndex, settledOk: boolean): void {
+    const sample = this.teams[team]
+    sample.crosses++
+    if (settledOk) sample.crossSettledOk++
+  }
+
+  runner(team: TeamIndex, result: string): void {
+    const sample = this.teams[team]
+    sample.runnerDecisions++
+    if (result === 'started') { sample.runnerTrials++; sample.runnerStarted++ }
+    else if (result === 'rollMiss') sample.runnerTrials++
+    else sample.runnerBlocked[result] = (sample.runnerBlocked[result] ?? 0) + 1
+  }
+
+  /** marks[slot] 是对手 pid，冲突应检查本方任务球员的 slot。 */
+  tasks(team: TeamIndex, shape: PesTeam): void {
+    const sample = this.teams[team]
+    sample.taskFrames++
+    if (shape.players.some((p) => (p.pid === shape.presser || p.pid === shape.presser2 || p.pid === shape.cover)
+      && (shape.marks[p.slot] ?? -1) >= 0)) sample.taskConflictFrames++
   }
 
   /** 决策间隔埋点（tempo）：外场球员相邻两次决策的模拟秒差。 */
