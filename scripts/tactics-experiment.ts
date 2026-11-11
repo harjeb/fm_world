@@ -47,6 +47,10 @@ type MatchSpec = {
   scenario: Scenario
   aConfig: string
   famA: number
+  /** 对手风格（缺省 = 中性 B0） */
+  bConfig?: string
+  /** 对手熟练度（缺省 = 1） */
+  famB?: number
   /** A 是否主场（每种子主客各一场） */
   aHome: boolean
 }
@@ -153,9 +157,10 @@ function runMatch(spec: MatchSpec, params: Partial<TacticsParams>): MatchResult 
   const base = baseFixture()
   const configs = ALL_CONFIGS
   const aConfig = configs[spec.aConfig]
-  const bConfig = configs.blank
-  const home = spec.aHome ? teamFor(spec.scenario, 'a', aConfig, spec.famA, base) : teamFor(spec.scenario, 'b', bConfig, 1, base)
-  const away = spec.aHome ? teamFor(spec.scenario, 'b', bConfig, 1, base) : teamFor(spec.scenario, 'a', aConfig, spec.famA, base)
+  const bConfig = configs[spec.bConfig ?? 'blank']
+  const famB = spec.famB ?? 1
+  const home = spec.aHome ? teamFor(spec.scenario, 'a', aConfig, spec.famA, base) : teamFor(spec.scenario, 'b', bConfig, famB, base)
+  const away = spec.aHome ? teamFor(spec.scenario, 'b', bConfig, famB, base) : teamFor(spec.scenario, 'a', aConfig, spec.famA, base)
   const game = new PesGame({
     seed: spec.seed, home, away, durationSeconds: 900, offside: true, noInjuries: true, now: 0,
     metrics: true, tacticsParams: params,
@@ -260,7 +265,9 @@ function option(name: string, fallback: number): number {
 }
 
 const MODE = process.argv.includes('--familiarity') ? 'familiarity'
-  : process.argv.includes('--individual') ? 'individual' : 'styles'
+  : process.argv.includes('--individual') ? 'individual'
+    : process.argv.includes('--matrix') ? 'matrix'
+      : process.argv.includes('--matchup') ? 'matchup' : 'styles'
 const SEEDS = option('n', MODE === 'styles' ? 10 : 8)
 const SEED0 = option('seed0', 1)
 const WORKERS = Math.min(2, Math.max(1, option('workers', Math.min(2, os.cpus().length))))
@@ -320,7 +327,7 @@ function runJob(specs: MatchSpec[], id: number): Promise<MatchResult[]> {
 /* ------------------------------ 调度 ------------------------------ */
 
 const results = new Map<string, MatchResult>()
-const keyOf = (spec: MatchSpec) => `${spec.scenario}|${spec.aConfig}|${spec.famA}|${spec.seed}|${spec.aHome}`
+const keyOf = (spec: MatchSpec) => `${spec.scenario}|${spec.aConfig}|${spec.famA}|${spec.bConfig ?? 'blank'}|${spec.famB ?? 1}|${spec.seed}|${spec.aHome}`
 const CACHE = path.join(os.tmpdir(), 'fm-tactics-cache.json')
 const paramsKey = JSON.stringify({ version: CACHE_VERSION, params: { ...DEFAULT_PARAMS, ...PARAMS } })
 
@@ -328,7 +335,11 @@ function loadCache(): void {
   try {
     const raw = JSON.parse(fs.readFileSync(CACHE, 'utf8')) as { params: string; rows: Record<string, MatchResult> }
     if (raw.params !== paramsKey) return
-    for (const [key, row] of Object.entries(raw.rows)) results.set(key, row)
+    for (const [key, row] of Object.entries(raw.rows)) {
+      // 旧缓存键是 scenario|aConfig|famA|seed|aHome；新键在中间加了对手风格和对手熟练度。
+      const parts = key.split('|')
+      results.set(parts.length === 5 ? `${parts[0]}|${parts[1]}|${parts[2]}|blank|1|${parts[3]}|${parts[4]}` : key, row)
+    }
   } catch { /* 没有缓存就重跑 */ }
 }
 
@@ -605,6 +616,181 @@ async function main(): Promise<void> {
       output.results[single.id] = { metric: key, byScenario }
     }
     fs.writeFileSync(path.join('docs', 'tactics-experiment-individual.json'), JSON.stringify(output, null, 2))
+    return
+  }
+
+  if (MODE === 'matrix') {
+    // 风格对位矩阵：每个有序对（A 攻 / B 守）各跑主客两场，只看 mirror 场景（同一批球员）。
+    const styles = STYLE_IDS
+    const specs: MatchSpec[] = []
+    // 只跑无序对：同一有序对的「A 主 + A 客」已经包含两个主客场，反向对位就是它的相反数。
+    for (let i = 0; i < styles.length; i++) for (let j = i + 1; j < styles.length; j++) {
+      for (const seed of seeds) {
+        specs.push({ seed, scenario: 'mirror', aConfig: styles[i], bConfig: styles[j], famA: 1, famB: 1, aHome: true })
+        specs.push({ seed, scenario: 'mirror', aConfig: styles[i], bConfig: styles[j], famA: 1, famB: 1, aHome: false })
+      }
+    }
+    // 每个风格对中性 B0 的强度（同一批种子），用于把「整体强弱」从「克制」里拆出来。
+    for (const style of styles) for (const seed of seeds) {
+      specs.push({ seed, scenario: 'mirror', aConfig: style, bConfig: 'blank', famA: 1, famB: 1, aHome: true })
+      specs.push({ seed, scenario: 'mirror', aConfig: style, bConfig: 'blank', famA: 1, famB: 1, aHome: false })
+    }
+    need(specs)
+    await execute(specs)
+
+    const block = (a: string, b: string): Block[] => seeds.map((seed) => {
+      const home = results.get(`mirror|${a}|1|${b}|1|${seed}|true`)
+      const away = results.get(`mirror|${a}|1|${b}|1|${seed}|false`)
+      if (!home || !away) throw new Error(`缺少结果 ${a} vs ${b} / ${seed}`)
+      return blockOf(home, away, seed, 'mirror')
+    })
+
+    const cell = (a: NamedStyle, b: NamedStyle) => {
+      const forward = styles.indexOf(a) < styles.indexOf(b)
+      const blocks = block(forward ? a : b, forward ? b : a)
+      const sign = forward ? 1 : -1
+      const values = blocks.map((item) => item.xgd * sign)
+      const value = mean(values)
+      const ci = bootstrapCi(values)
+      const wins = mean(blocks.map((item) => (item.gd * sign > 0 ? 1 : item.gd * sign < 0 ? 0 : 0.5)))
+      return { xgd: value, ci, winRate: wins * 100, xgf: mean(blocks.map((i) => (sign > 0 ? i.xgf : i.xga))), xga: mean(blocks.map((i) => (sign > 0 ? i.xga : i.xgf))) }
+    }
+
+    const short: Record<string, string> = {
+      control: '控制', highPress: '高压', tikiTaka: '密短', verticalTiki: '垂密',
+      wingPlay: '双翼', longBall: '长传', fluidCounter: '灵反', directCounter: '快反',
+      catenaccio: '链式', parkBus: '摆巴',
+    }
+    console.log('\n风格对位矩阵：行 = A，列 = B，单元格 = A − B 的 xGD（主客平均，* = 95% 区间不含 0）')
+    console.log(['A\\B'.padEnd(6), ...styles.map((b) => short[b].padEnd(6))].join(' '))
+    const out: Record<string, unknown> = {}
+    for (const a of styles) {
+      const row: string[] = []
+      const rowOut: Record<string, unknown> = {}
+      for (const b of styles) {
+        if (a === b) { row.push('—'.padEnd(6)); continue }
+        const r = cell(a, b)
+        const mark = r.ci[0] > 0 || r.ci[1] < 0 ? '*' : ' '
+        row.push(`${r.xgd >= 0 ? '+' : ''}${r.xgd.toFixed(2)}${mark}`.padEnd(6))
+        rowOut[b] = r
+      }
+      console.log([short[a].padEnd(6), ...row].join(' '))
+      out[a] = rowOut
+    }
+    // 与中性的关系：先算「自身强度」（相对 B0 的 xGD），再看对位是否偏离强度差。
+    const neutral = (style: NamedStyle): Block[] => seeds.map((seed) => {
+      const home = results.get(`mirror|${style}|1|blank|1|${seed}|true`)
+      const away = results.get(`mirror|${style}|1|blank|1|${seed}|false`)
+      if (!home || !away) throw new Error(`缺少中性对照 ${style} / ${seed}`)
+      return blockOf(home, away, seed, 'mirror')
+    })
+    const strength = (style: NamedStyle) => {
+      const values = neutral(style).map((item) => item.xgd)
+      return { xgd: mean(values), ci: bootstrapCi(values) }
+    }
+    console.log('\n相对中性的强度（mirror，xGD vs B0）')
+    for (const a of styles) {
+      const st = strength(a)
+      console.log(`${short[a]}  ${st.xgd >= 0 ? '+' : ''}${st.xgd.toFixed(2)}  [${st.ci[0].toFixed(2)}, ${st.ci[1].toFixed(2)}]`)
+      ;(out as Record<string, unknown>)[`${a}:neutral`] = st
+    }
+
+    // 交互项 = 实测对位 − (A 的强度 − B 的强度)：> 0 才是「克制」，≈ 0 说明只是整体强弱。
+    const interaction = (a: NamedStyle, b: NamedStyle) => {
+      const forward = styles.indexOf(a) < styles.indexOf(b)
+      const first = forward ? a : b
+      const second = forward ? b : a
+      const sign = forward ? 1 : -1
+      const blocks = block(first, second)
+      const na = neutral(first)
+      const nb = neutral(second)
+      const values = blocks.map((item, index) => (item.xgd - (na[index].xgd - nb[index].xgd)) * sign)
+      return { value: mean(values), ci: bootstrapCi(values) }
+    }
+    console.log('\n交互项矩阵：行 A，列 B，`实测 A−B 的 xGD − (A 对中性 − B 对中性)`；* = 区间不含 0')
+    console.log(['A\\B'.padEnd(6), ...styles.map((b) => short[b].padEnd(6))].join(' '))
+    const interactionOut: Record<string, unknown> = {}
+    for (const a of styles) {
+      const row: string[] = []
+      const rowOut: Record<string, unknown> = {}
+      for (const b of styles) {
+        if (a === b) { row.push('—'.padEnd(6)); continue }
+        const r = interaction(a, b)
+        const mark = r.ci[0] > 0 || r.ci[1] < 0 ? '*' : ' '
+        row.push(`${r.value >= 0 ? '+' : ''}${r.value.toFixed(2)}${mark}`.padEnd(6))
+        rowOut[b] = r
+      }
+      console.log([short[a].padEnd(6), ...row].join(' '))
+      interactionOut[a] = rowOut
+    }
+    ;(out as Record<string, unknown>).interaction = interactionOut
+
+    // 每个风格最好 / 最差的对手
+    console.log('\n每个风格的最佳 / 最差对位（xGD）')
+    for (const a of styles) {
+      const cells = styles.filter((b) => b !== a).map((b) => ({ b, ...cell(a, b) }))
+      cells.sort((x, y) => y.xgd - x.xgd)
+      const best = cells[0]
+      const worst = cells[cells.length - 1]
+      console.log(`${short[a]}  最佳 vs ${short[best.b]} ${best.xgd.toFixed(2)} (${best.ci[0].toFixed(2)}, ${best.ci[1].toFixed(2)}) | 最差 vs ${short[worst.b]} ${worst.xgd.toFixed(2)} (${worst.ci[0].toFixed(2)}, ${worst.ci[1].toFixed(2)})`)
+      out[`${a}:best`] = { vs: best.b, xgd: best.xgd, ci: best.ci }
+      out[`${a}:worst`] = { vs: worst.b, xgd: worst.xgd, ci: worst.ci }
+    }
+    output.results = out
+    fs.writeFileSync(path.join('docs', 'tactics-experiment-matrix.json'), JSON.stringify(output, null, 2))
+    return
+  }
+
+  if (MODE === 'matchup') {
+    // 熟练度绑定：同一对位里分别改 A / B 的熟练度，看克制是否还在。
+    const pairs: [NamedStyle, NamedStyle][] = [
+      ['directCounter', 'highPress'], ['directCounter', 'control'], ['longBall', 'highPress'],
+      ['fluidCounter', 'highPress'], ['catenaccio', 'control'], ['parkBus', 'control'],
+      ['wingPlay', 'catenaccio'], ['tikiTaka', 'directCounter'],
+    ]
+    const levels = [1, 0.7, 0.4]
+    const specs: MatchSpec[] = []
+    for (const [a, b] of pairs) for (const famA of levels) for (const famB of levels) for (const seed of seeds) {
+      specs.push({ seed, scenario: 'mirror', aConfig: a, bConfig: b, famA, famB, aHome: true })
+      specs.push({ seed, scenario: 'mirror', aConfig: a, bConfig: b, famA, famB, aHome: false })
+    }
+    need(specs)
+    await execute(specs)
+    const short: Record<string, string> = {
+      control: '控制', highPress: '高压', tikiTaka: '密短', verticalTiki: '垂密',
+      wingPlay: '双翼', longBall: '长传', fluidCounter: '灵反', directCounter: '快反',
+      catenaccio: '链式', parkBus: '摆巴',
+    }
+    const out: Record<string, unknown> = {}
+    console.log('\n熟练度 × 对位：A − B 的 xGD（A 熟练度 → / B 熟练度 ↓）')
+    for (const [a, b] of pairs) {
+      console.log(`\n${short[a]} vs ${short[b]}`)
+      console.log(['A\\B'.padEnd(6), ...levels.map((fam) => `B ${fam.toFixed(1)}`.padEnd(6))].join(' '))
+      const table: Record<string, unknown> = {}
+      for (const famA of levels) {
+        const row: string[] = []
+        const rowOut: Record<string, unknown> = {}
+        for (const famB of levels) {
+          const blocks = seeds.map((seed) => {
+            const home = results.get(`mirror|${a}|${famA}|${b}|${famB}|${seed}|true`)
+            const away = results.get(`mirror|${a}|${famA}|${b}|${famB}|${seed}|false`)
+            if (!home || !away) throw new Error(`缺少结果 ${a} vs ${b} / ${famA} / ${famB} / ${seed}`)
+            return blockOf(home, away, seed, 'mirror')
+          })
+          const value = mean(blocks.map((item) => item.xgd))
+          const ci = bootstrapCi(blocks.map((item) => item.xgd))
+          const ef = mean(blocks.map((item) => item.ef))
+          const hlr = (blocks.reduce((sum, item) => sum + item.hlr, 0)) / blocks.length
+          rowOut[famB] = { xgd: value, ci, ef, hlr }
+          row.push(`${value >= 0 ? '+' : ''}${value.toFixed(2)}`.padEnd(6))
+        }
+        console.log([`A ${famA.toFixed(1)}`.padEnd(6), ...row].join(' '))
+        table[famA] = rowOut
+      }
+      out[`${a}|${b}`] = table
+    }
+    output.results = out
+    fs.writeFileSync(path.join('docs', 'tactics-experiment-matchup.json'), JSON.stringify(output, null, 2))
     return
   }
 
