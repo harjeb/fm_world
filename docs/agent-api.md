@@ -35,7 +35,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 - `auto_lineup` — 自动按阵型选人。
   - `formationId?`: `"4-4-2" | "4-3-3" | "4-2-3-1" | "3-5-2" | "5-3-2" | "4-1-4-1" | "3-4-3" | "4-1-2-1-2"`
-- `set_lineup` — 提交完整阵容。
+- `set_lineup` — 提交完整阵容（支持 11 套战术风格模板与十二项战术指令）。
   ```json
   {
     "action": "set_lineup",
@@ -43,11 +43,20 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
       "formationId": "4-4-2",
       "starters": [{ "slotId": "gk", "playerId": "...", "role": "gk_line" }],
       "bench": ["playerId1", "playerId2", "playerId3"],
-      "tactics": { "attack": "balanced", "passing": "mixed", "tempo": "normal", "line": "mid", "press": "mid" }
+      "tacticalStyle": "highPress",
+      "tacticalInstructions": {
+        "possession": { "focus": "balanced", "passing": "mixed", "tempo": "fast", "width": "normal" },
+        "transition": { "onGain": "counter", "onLoss": "counterpress" },
+        "defense": { "line": "high", "engagement": "high", "intensity": "high" },
+        "advanced": {
+          "possession": { "receiving": "mixed", "crossTiming": "balanced" },
+          "defense": { "width": "normal" }
+        }
+      }
     }
   }
   ```
-  `slotId` 与可选职责见 `state.formations`、`state.roles`。首发必须 11 人（占满阵型的 11 个位置）、1 名门将，替补最多 7 人。边路位置（`W`）同时包括边后卫、边前卫和边锋，站得靠后的是边后卫（默认职责 `w_back`）。也可在顶层同时传 `autoSubs`，以便一次保存新阵容和匹配的新换人计划。已有定时计划若与新阵容冲突，须修改或清除计划后才能保存。
+  `slotId` 与可选职责见 `state.formations`、`state.roles`；全部可用战术风格模板（`blank / control / highPress / tikiTaka / verticalTiki / wingPlay / longBall / fluidCounter / directCounter / catenaccio / parkBus`）及展开指令见 `state.tacticalStyles`，当前阵容的战术执行度（0.50–1.00）见 `state.lineupAnalysis.tacticalFamiliarity`。仅传 `tacticalStyle` 时自动展开该风格模板指令；同时传 `tacticalInstructions` 时可逐项微调（`tactics` 五字段会自动同步）；旧调用只传 `tactics` 仍兼容。首发必须 11 人（占满阵型的 11 个位置）、1 名门将，替补最多 7 人。边路位置（`W`）同时包括边后卫、边前卫和边锋，站得靠后的是边后卫（默认职责 `w_back`）。也可在顶层同时传 `autoSubs`，以便一次保存新阵容和匹配的新换人计划。已有定时计划若与新阵容冲突，须修改或清除计划后才能保存。
 
 - `set_auto_subs` — 设置下一场比赛使用的自动换人计划，例如：
   ```json

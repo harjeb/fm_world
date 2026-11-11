@@ -18,7 +18,7 @@ import type { MatchPlayerState, MatchSide, MatchState, MatchTeamInput, MatchTeam
 import { MotionRatings } from './ability.ts'
 import { formationRows } from './formation.ts'
 import { PesSettlement, type PesSettlementJSON } from './settle.ts'
-import { DEFAULT_PARAMS } from './tactics.ts'
+import { DEFAULT_PARAMS, applyMentalityOverlay, cloneInstructions, legacyTacticsFromInstructions } from './tactics.ts'
 import type { TacticalInstructionsV2, TacticsParams } from './tactics.ts'
 import { PesMatch, type PesTeamInit } from './sim.ts'
 import { GAME_RULES, makeGamePitch, type PesEvent, type PesMatchSnapshot, type PesRules, type PesTactics, type PitchSpec } from './spec.ts'
@@ -343,6 +343,7 @@ export class PesGame {
       stamina: incoming.stamina / Math.max(1, incoming.maxStamina),
       ref: incoming.id,
       num: incoming.number,
+      ...(team.familiarity !== undefined ? { familiarity: team.familiarity } : {}),
     })
     this.settlement.bind(physical.pid, incoming)
     this.settlement.markLeft(outPid, this.match.time)
@@ -357,12 +358,24 @@ export class PesGame {
     const g = this.state
     if (g.finished) return { ok: false, error: '比赛已经结束' }
     if (mentality !== 'attack' && mentality !== 'balanced' && mentality !== 'defend') return { ok: false, error: '无效的比赛心态' }
-    const tactics = MATCH_TACTICS[mentality]
-    const team = g.teams[side === 'home' ? 0 : 1]
-    team.tactics = { ...tactics }
+    const idx = side === 'home' ? 0 : 1
+    const team = g.teams[idx]
     team.mentality = mentality
-    this.match.teams[side === 'home' ? 0 : 1].tactics = tacticsOf(tactics)
-    g.instructions.push({ step: g.step, kind: 'tactic', mentality, tactics: { ...tactics } })
+    if (team.baseInstructions || team.instructions) {
+      const base = team.baseInstructions ?? cloneInstructions(team.instructions!)
+      team.baseInstructions = base
+      const overlaid = applyMentalityOverlay(base, mentality)
+      const tactics = legacyTacticsFromInstructions(overlaid)
+      team.instructions = overlaid
+      team.tactics = { ...tactics }
+      this.match.teams[idx].tactics = tacticsOf(tactics, overlaid)
+      g.instructions.push({ step: g.step, kind: 'tactic', mentality, tactics: { ...tactics } })
+    } else {
+      const tactics = MATCH_TACTICS[mentality]
+      team.tactics = { ...tactics }
+      this.match.teams[idx].tactics = tacticsOf(tactics)
+      g.instructions.push({ step: g.step, kind: 'tactic', mentality, tactics: { ...tactics } })
+    }
     this.settlement.note('tactic', side, `教练调整战术：${MATCH_MENTALITY_LABELS[mentality]}。`, {}, at ?? this.match.time)
     return { ok: true }
   }

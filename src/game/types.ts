@@ -407,6 +407,10 @@ export type Lineup = {
   starters: Starter[]
   bench: string[]
   tactics: Tactics
+  /** 赛前选择的战术风格模板（仅用于展开默认指令与标签展示，不直接参与模拟加成）。 */
+  tacticalStyle?: import('./pes/tactics.ts').StyleId
+  /** 赛前十二项战术指令；缺省时沿用旧五项战术映射。 */
+  tacticalInstructions?: import('./pes/tactics.ts').TacticalInstructionsV2
   /** 玩家自己摆的位置（0–1 归一化坐标），key 是 starter.slotId。没摆过的位置用阵型默认值。 */
   customPositions?: Record<string, { x: number; y: number }>
   /** 玩家命名保存的战术配置。 */

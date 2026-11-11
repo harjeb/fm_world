@@ -2,6 +2,15 @@ import type { FormationId, Lineup, Player, Position, RoleId, Tactics, TacticPres
 import { FORMATIONS, type FormationSlot } from './data/formations.ts'
 import { ROLES, ROLES_BY_POSITION, roleFit, rolesForSlot } from './data/roles.ts'
 import { PLAYABLE_PROFICIENCY, caOf, positionMultiplier } from './ca.ts'
+import { attrRating } from './scale.ts'
+import {
+  NEUTRAL_INSTRUCTIONS,
+  cloneInstructions,
+  isStyleId,
+  legacyTacticsFromInstructions,
+  sameInstructions,
+  tryValidateInstructions,
+} from './pes/tactics.ts'
 
 /** 11 人制：首发人数（每个阵型都是 11 个槽位）。 */
 export const STARTERS = 11
@@ -78,12 +87,13 @@ export function autoFillLineup(
   }
   const remaining = roster.filter((player) => !used.has(player.id))
   const bench = buildBench(remaining)
+  const extras = preservedExtras(previous ?? rememberedExtras(roster), formationId)
   return {
     formationId,
     starters,
     bench,
-    tactics: tactics ?? { ...formation.defaultTactics },
-    ...preservedExtras(previous ?? rememberedExtras(roster), formationId),
+    tactics: tactics ?? (extras.tacticalInstructions ? legacyTacticsFromInstructions(extras.tacticalInstructions) : { ...formation.defaultTactics }),
+    ...extras,
   }
 }
 
@@ -237,12 +247,13 @@ export function autoAssignLineup(
   }
 
   const remaining = roster.filter((player) => !used.has(player.id) && !context.injured?.(player))
+  const extras = preservedExtras(previous ?? rememberedExtras(roster), formationId)
   return {
     formationId,
     starters,
     bench: buildBench(remaining),
-    tactics: tactics ?? { ...formation.defaultTactics },
-    ...preservedExtras(previous ?? rememberedExtras(roster), formationId),
+    tactics: tactics ?? (extras.tacticalInstructions ? legacyTacticsFromInstructions(extras.tacticalInstructions) : { ...formation.defaultTactics }),
+    ...extras,
   }
 }
 
@@ -286,22 +297,27 @@ function rotateTiredStarters(
 }
 
 /**
- * 重置阵容时该跟着留下的东西：同阵型的自定义位置，和所有命名预设。
- * 换阵型时自定义位置失效（槽位变了），但预设必须保留。
+ * 重置阵容时该跟着留下的东西：同阵型的自定义位置、战术风格与十二项指令，以及所有命名预设。
+ * 换阵型时自定义位置失效（槽位变了），但战术指令和预设必须保留。
  */
-function preservedExtras(previous: LineupLike | undefined, formationId: FormationId): Pick<Lineup, 'customPositions' | 'presets'> {
+function preservedExtras(
+  previous: LineupLike | undefined,
+  formationId: FormationId,
+): Pick<Lineup, 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions'> {
   if (!previous) return {}
-  const extras: Pick<Lineup, 'customPositions' | 'presets'> = {}
+  const extras: Pick<Lineup, 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions'> = {}
   if (previous.customPositions && previous.formationId === formationId) {
     const spots = Object.fromEntries(Object.entries(previous.customPositions).map(([slotId, spot]) => [slotId, { ...spot }]))
     if (Object.keys(spots).length) extras.customPositions = spots
   }
+  if (previous.tacticalStyle) extras.tacticalStyle = previous.tacticalStyle
+  if (previous.tacticalInstructions) extras.tacticalInstructions = cloneInstructions(previous.tacticalInstructions)
   if (previous.presets?.length) extras.presets = structuredClone(previous.presets)
   return extras
 }
 
 /** preservedExtras 只需要这几项，所以完整阵容和“记下的快照”都能传进来。 */
-type LineupLike = Pick<Lineup, 'formationId' | 'customPositions' | 'presets'>
+type LineupLike = Pick<Lineup, 'formationId' | 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions'>
 
 /**
  * 最近一次被校验过的玩家阵容里的“额外东西”。
@@ -340,11 +356,13 @@ export function rememberLineupPositions(roster: Player[], lineup: Lineup): void 
     if (spot && Number.isFinite(spot.x) && Number.isFinite(spot.y)) customSpotByPlayer.set(player, { x: spot.x, y: spot.y })
     else customSpotByPlayer.delete(player)
   }
-  if (lineup.customPositions || lineup.presets?.length) {
+  if (lineup.customPositions || lineup.presets?.length || lineup.tacticalStyle || lineup.tacticalInstructions) {
     rememberedSource = {
       players: lineup.starters.flatMap((starter) => playerById(roster, starter.playerId) ?? []),
       formationId: lineup.formationId,
       customPositions: lineup.customPositions ? structuredClone(lineup.customPositions) : undefined,
+      tacticalStyle: lineup.tacticalStyle,
+      tacticalInstructions: lineup.tacticalInstructions ? cloneInstructions(lineup.tacticalInstructions) : undefined,
       presets: lineup.presets ? structuredClone(lineup.presets) : undefined,
     }
   }
@@ -517,8 +535,45 @@ export function validateLineup(roster: Player[], lineup: Lineup): LineupValidati
     benchSet.add(id)
     if (!playerById(roster, id)) errors.push('替补球员不存在')
   }
+  if (lineup.tacticalStyle !== undefined && !isStyleId(lineup.tacticalStyle)) {
+    errors.push(`未知战术风格：${String(lineup.tacticalStyle)}`)
+  }
+  if (lineup.tacticalInstructions !== undefined) {
+    const instCheck = tryValidateInstructions(lineup.tacticalInstructions)
+    if (!instCheck.ok) errors.push(instCheck.error)
+  }
   if (lineup.bench.length < BENCH_SIZE) warnings.push(`替补不足 ${BENCH_SIZE} 人，比赛中换人选择会受限`)
   return { valid: errors.length === 0, errors, warnings }
+}
+
+/**
+ * 计算当前首发的战术执行熟练度（0.50–1.00）：
+ * - 未启用十二项指令或全部处于中性档（空白模板）时为 1.0；
+ * - 启用战术指令时，由首发位置熟练度（权重最高）、战术意识（决断 + 团队配合）与战术研究室阶段（1–25）共同决定。
+ */
+export function computeLineupFamiliarity(roster: Player[], lineup: Lineup, tacticsStage = 1): number {
+  if (!lineup.tacticalInstructions || sameInstructions(lineup.tacticalInstructions, NEUTRAL_INSTRUCTIONS)) return 1
+  const formation = FORMATIONS[lineup.formationId]
+  if (!formation) return 0.75
+  const totalSlots = Math.max(1, formation.slots.length)
+  let profSum = 0
+  let iqSum = 0
+  for (const slot of formation.slots) {
+    const starter = lineup.starters.find((item) => item.slotId === slot.id)
+    const player = starter ? playerById(roster, starter.playerId) : undefined
+    if (!player) continue
+    const gk = player.positions.GK > 0
+    profSum += Math.min(1, Math.max(0, player.positions[slot.position] / 100))
+    const dec = attrRating('decisions', player.attrs.decisions, gk)
+    const tw = attrRating('teamwork', player.attrs.teamwork, gk)
+    iqSum += Math.min(1, Math.max(0, (dec + tw) / 200))
+  }
+  const profScore = profSum / totalSlots
+  const iqScore = iqSum / totalSlots
+  const clampedStage = Number.isFinite(tacticsStage) ? Math.min(25, Math.max(1, tacticsStage)) : 1
+  const facilityScore = (clampedStage - 1) / 24
+  const raw = 0.44 + 0.34 * profScore + 0.12 * iqScore + 0.12 * facilityScore
+  return Math.round(Math.min(1, Math.max(0.5, raw)) * 1000) / 1000
 }
 
 /**

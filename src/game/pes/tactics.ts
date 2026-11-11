@@ -41,7 +41,7 @@ export type TacticalInstructionsV2 = {
   /** 实验性高级指令；缺省为中性，旧九项模板不自动迁移。 */
   advanced?: {
     possession?: {
-      receiving?: 'mixed' | 'space'
+      receiving?: 'feet' | 'mixed' | 'space'
       /** 传中时机：仅开放中性及实验性的尽早传中；晚传尚未实现。 */
       crossTiming?: 'balanced' | 'early'
     }
@@ -150,7 +150,93 @@ export const STYLE_LIST_REV2: readonly StyleDef[] = STYLE_LIST.map((original) =>
   return { ...original, instructions }
 })
 export const STYLES_REV2 = Object.fromEntries(STYLE_LIST_REV2.map((item) => [item.id, item])) as Record<StyleId, StyleDef>
-export const styleByRevision = (id: StyleId, revision: 1 | 2): StyleDef => revision === 1 ? STYLES[id] : STYLES_REV2[id]
+
+/** 正式产品版风格模板（rev 3）：补齐双翼 / 长传的传中时机与控球系的接脚下，旧 rev 1/2 保持只读兼容。 */
+export const ACTIVE_STYLE_REVISION = 3 as const
+export const STYLE_LIST_REV3: readonly StyleDef[] = STYLE_LIST_REV2.map((rev2) => {
+  const instructions = structuredClone(rev2.instructions)
+  if (rev2.id === 'control' || rev2.id === 'tikiTaka') {
+    instructions.advanced = { ...instructions.advanced, possession: { ...instructions.advanced?.possession, receiving: 'feet' } }
+  }
+  if (rev2.id === 'wingPlay') {
+    instructions.possession.passing = 'mixed'
+    instructions.advanced = { ...instructions.advanced, possession: { ...instructions.advanced?.possession, crossTiming: 'early' } }
+  }
+  if (rev2.id === 'longBall') {
+    instructions.advanced = { ...instructions.advanced, possession: { receiving: 'space', crossTiming: 'early' } }
+  }
+  return { ...rev2, instructions }
+})
+export const STYLES_REV3 = Object.fromEntries(STYLE_LIST_REV3.map((item) => [item.id, item])) as Record<StyleId, StyleDef>
+export const styleByRevision = (id: StyleId, revision: 1 | 2 | 3 = ACTIVE_STYLE_REVISION): StyleDef =>
+  revision === 1 ? STYLES[id] : revision === 2 ? STYLES_REV2[id] : STYLES_REV3[id]
+
+export const STYLE_IDS: readonly StyleId[] = STYLE_LIST_REV3.map((item) => item.id)
+export const isStyleId = (value: unknown): value is StyleId => typeof value === 'string' && STYLE_IDS.includes(value as StyleId)
+
+export type StyleMeta = {
+  tagline: string
+  pros: string
+  cons: string
+}
+
+export const STYLE_META: Record<StyleId, StyleMeta> = {
+  blank: {
+    tagline: '各项保持中立均衡，适合完全按阵容特点手动定制每一条指令。',
+    pros: '无极端站位暴露，攻守转换平稳，容错率高。',
+    cons: '缺少鲜明的局部压制或反击锐度。',
+  },
+  control: {
+    tagline: '耐心短传控球、就地反抢与高位防线结合，把比赛纳入我方节奏。',
+    pros: '控球率与前场压制力强，减少无谓丢球。',
+    cons: '防线靠前惧怕速度型身后反击，传接技术差时后场易被断。',
+  },
+  highPress: {
+    tagline: '双人积极围抢 + 高逼抢线 + 得球快节奏直插，在前场窒息对手出球。',
+    pros: '前场夺回球权与就地制造射门能力极强。',
+    cons: '体能消耗最大，下半场末段易脱节并暴露大片身后空当。',
+  },
+  tikiTaka: {
+    tagline: '极致的近距离脚下配合与高位反抢，通过连续短传撕开防线。',
+    pros: '短传衔接最绵密，能有效消解对手球权。',
+    cons: '极度依赖传控属性与战术熟练度，面对密集铁桶阵可能得势不得分。',
+  },
+  verticalTiki: {
+    tagline: '收缩中路短传渗透，同时积极寻找防线身后空当完成纵向刺穿。',
+    pros: '兼顾中路人数优势与突然的直塞威胁。',
+    cons: '两翼宽度较窄，容易被对手收缩中路针对性封堵。',
+  },
+  wingPlay: {
+    tagline: '拉开球场宽度将球输送两翼，利用边路突破与尽早传中冲击禁区。',
+    pros: '能绕开拥挤中路，对收缩窄防线的低位球队尤为奏效。',
+    cons: '需要禁区内有争顶与抢点终结者，中路保护相对分散。',
+  },
+  longBall: {
+    tagline: '直接长传找前锋身后或第一落点，配合尽早传中减少后场停留。',
+    pros: '迅速越过对手高位逼抢，后场失误风险低。',
+    cons: '传球成功率较低、球权易旁落，依赖前场对抗与争顶能力。',
+  },
+  fluidCounter: {
+    tagline: '低位收缩防线诱敌深入，断球后通过中短传配合快速投入反击。',
+    pros: '稳固后防空间的同时打出高质量推进反击。',
+    cons: '主动压迫较少，落后时较难在敌方半场持续抢回球权。',
+  },
+  directCounter: {
+    tagline: '窄防线严守禁区前沿，一旦得球立即直传身后空当高速突袭。',
+    pros: '克制高位防线与大举压上的对手，反击单次威胁极高。',
+    cons: '控球率低，若对手同样回收低位则缺少身后冲刺空间。',
+  },
+  catenaccio: {
+    tagline: '失球立即回撤结成窄低位防线，优先封死中路渗透与身后球。',
+    pros: '禁区正面与身后保护极佳，极难被打穿单刀。',
+    cons: '让出大量外围与两翼空间，容易承受对手持续边路传中。',
+  },
+  parkBus: {
+    tagline: '全员深度退守本方半场并放慢比赛节奏，以守住比分为最高目标。',
+    pros: '体能消耗最低、后场密度最高，适合领先守胜或以弱抗强。',
+    cons: '进攻投入极少，很难主动创造破门良机。',
+  },
+}
 
 /** 文档 4.1 的首选参数；实验脚本可以覆盖，验收报告记录实际使用的值。 */
 export type TacticsParams = {
@@ -236,6 +322,9 @@ export const INSTRUCTION_DIFFICULTY = {
   focus: 0.9,
   tempo: 0.9,
   width: 1.0,
+  receiving: 1.1,
+  crossTiming: 1.0,
+  defenseWidth: 1.0,
   onGain: 1.2,
   onLoss: 1.3,
   line: 1.0,
@@ -245,19 +334,19 @@ export const INSTRUCTION_DIFFICULTY = {
 export type InstructionKey = keyof typeof INSTRUCTION_DIFFICULTY
 
 /** 三档枚举 → -1 / 0 / +1。 */
-const TRI_NEGATIVE = new Set(['middle', 'narrow', 'slow', 'short', 'hold', 'regroup', 'low'])
-const TRI_POSITIVE = new Set(['wing', 'wide', 'fast', 'direct', 'counter', 'counterpress', 'high'])
+const TRI_NEGATIVE = new Set(['middle', 'narrow', 'slow', 'short', 'hold', 'regroup', 'low', 'feet'])
+const TRI_POSITIVE = new Set(['wing', 'wide', 'fast', 'direct', 'counter', 'counterpress', 'high', 'space', 'early'])
 export const triOf = (value: string): Tri => (TRI_NEGATIVE.has(value) ? -1 : TRI_POSITIVE.has(value) ? 1 : 0)
 
 /**
- * 执行强度与「执行反了」的概率（战术难度 / 熟练度的核心）。
+ * 连续执行强度（docs/tactical-design-revision.md 5.2）：
  * - `fam` 0 = 完全不熟，1 = 完全熟练。
- * - `execution` 只看熟练度；`slipChance` 另使用单项难度。风格复杂度标签不直接参与计算。
- * - 参数来自首轮探索，不代表平衡或单调性已验证。
+ * - `q_i = floor + (1 - floor) × clamp(fam, 0, 1) ^ difficulty`；默认 `difficulty = 1` 与旧公式逐位相等。
  */
-export function execution(fam: number, params: TacticsParams = DEFAULT_PARAMS): number {
+export function execution(fam: number, params: TacticsParams = DEFAULT_PARAMS, difficulty = 1): number {
   const f = Math.max(0, Math.min(1, fam))
-  return params.familiarityFloor + (1 - params.familiarityFloor) * f
+  const d = Number.isFinite(difficulty) && difficulty > 0 ? difficulty : 1
+  return params.familiarityFloor + (1 - params.familiarityFloor) * Math.pow(f, d)
 }
 
 export function slipChance(fam: number, difficulty: number, params: TacticsParams = DEFAULT_PARAMS): number {
@@ -287,25 +376,31 @@ export function validateInstructions(value: unknown): TacticalInstructionsV2 {
   const defense = group('defense', ['line', 'engagement', 'intensity'])
   for (const key of Object.keys(v)) if (!['possession', 'transition', 'defense', 'advanced'].includes(key)) throw new Error(`未知战术指令分组 ${key}`)
   let advanced: TacticalInstructionsV2['advanced']
-  if ('advanced' in v) {
+  if ('advanced' in v && v.advanced !== undefined) {
     const raw = v.advanced
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('无效战术指令 advanced')
     for (const key of Object.keys(raw)) if (!['possession', 'defense'].includes(key)) throw new Error(`未知战术指令 advanced.${key}`)
     advanced = {}
-    if ('possession' in raw) {
+    if ('possession' in raw && raw.possession !== undefined) {
       const part = raw.possession as Record<string, unknown>
       if (!part || typeof part !== 'object' || Array.isArray(part)) throw new Error('无效战术指令 advanced.possession')
       for (const key of Object.keys(part)) if (key !== 'receiving' && key !== 'crossTiming') throw new Error(`未知战术指令 advanced.possession.${key}`)
       advanced.possession = {}
-      if ('receiving' in part) advanced.possession.receiving = pick(part.receiving, 'advanced.possession.receiving', ['mixed', 'space'] as const)
-      if ('crossTiming' in part) advanced.possession.crossTiming = pick(part.crossTiming, 'advanced.possession.crossTiming', ['balanced', 'early'] as const)
+      if ('receiving' in part && part.receiving !== undefined) {
+        advanced.possession.receiving = pick(part.receiving, 'advanced.possession.receiving', ['feet', 'mixed', 'space'] as const)
+      }
+      if ('crossTiming' in part && part.crossTiming !== undefined) {
+        advanced.possession.crossTiming = pick(part.crossTiming, 'advanced.possession.crossTiming', ['balanced', 'early'] as const)
+      }
     }
-    if ('defense' in raw) {
+    if ('defense' in raw && raw.defense !== undefined) {
       const part = raw.defense as Record<string, unknown>
       if (!part || typeof part !== 'object' || Array.isArray(part)) throw new Error('无效战术指令 advanced.defense')
       for (const key of Object.keys(part)) if (key !== 'width') throw new Error(`未知战术指令 advanced.defense.${key}`)
       advanced.defense = {}
-      if ('width' in part) advanced.defense.width = pick(part.width, 'advanced.defense.width', ['narrow', 'normal', 'wide'] as const)
+      if ('width' in part && part.width !== undefined) {
+        advanced.defense.width = pick(part.width, 'advanced.defense.width', ['narrow', 'normal', 'wide'] as const)
+      }
     }
   }
   return {
@@ -328,8 +423,42 @@ export function validateInstructions(value: unknown): TacticalInstructionsV2 {
   }
 }
 
+export function tryValidateInstructions(value: unknown): { ok: true; value: TacticalInstructionsV2 } | { ok: false; error: string } {
+  try {
+    return { ok: true, value: validateInstructions(value) }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
 /** 深拷贝 + 冻结检查：模板被复制成可编辑指令，风格 ID 不参与模拟。 */
 export const cloneInstructions = (value: TacticalInstructionsV2): TacticalInstructionsV2 => structuredClone(value)
+
+/** 规范化指令：剔除默认中性的高级子项，便于序列化和模板相等对比。 */
+export function normalizeInstructions(value: TacticalInstructionsV2): TacticalInstructionsV2 {
+  const base: TacticalInstructionsV2 = {
+    possession: { ...value.possession },
+    transition: { ...value.transition },
+    defense: { ...value.defense },
+  }
+  const receiving = value.advanced?.possession?.receiving
+  const crossTiming = value.advanced?.possession?.crossTiming
+  const defWidth = value.advanced?.defense?.width
+  const hasPoss = (receiving && receiving !== 'mixed') || (crossTiming && crossTiming !== 'balanced')
+  const hasDef = defWidth && defWidth !== 'normal'
+  if (hasPoss || hasDef) {
+    base.advanced = {
+      ...(hasPoss ? {
+        possession: {
+          ...(receiving && receiving !== 'mixed' ? { receiving } : {}),
+          ...(crossTiming && crossTiming !== 'balanced' ? { crossTiming } : {}),
+        },
+      } : {}),
+      ...(hasDef ? { defense: { width: defWidth } } : {}),
+    }
+  }
+  return base
+}
 
 /** 两项指令是否逐项相等（「已调整」判定，不比较风格 ID）。 */
 export function sameInstructions(a: TacticalInstructionsV2, b: TacticalInstructionsV2): boolean {
@@ -341,4 +470,320 @@ export function sameInstructions(a: TacticalInstructionsV2, b: TacticalInstructi
     && (a.advanced?.possession?.receiving ?? 'mixed') === (b.advanced?.possession?.receiving ?? 'mixed')
     && (a.advanced?.possession?.crossTiming ?? 'balanced') === (b.advanced?.possession?.crossTiming ?? 'balanced')
     && (a.advanced?.defense?.width ?? 'normal') === (b.advanced?.defense?.width ?? 'normal')
+}
+
+export type LegacyTacticsShape = {
+  attack: 'middle' | 'wing' | 'balanced'
+  passing: 'short' | 'mixed' | 'direct'
+  tempo: 'slow' | 'normal' | 'fast'
+  line: 'low' | 'mid' | 'high'
+  press: 'low' | 'mid' | 'high'
+}
+
+/** 新指令投影回旧五字段：供后台 v2 AI 引擎、旧版摘要和兼容存档使用。 */
+export function legacyTacticsFromInstructions(inst: TacticalInstructionsV2): LegacyTacticsShape {
+  return {
+    attack: inst.possession.focus,
+    passing: inst.possession.passing,
+    tempo: inst.possession.tempo,
+    line: inst.defense.line,
+    press: inst.defense.intensity === 'high' || inst.defense.engagement === 'high'
+      ? 'high'
+      : inst.defense.intensity === 'low' && inst.defense.engagement === 'low'
+        ? 'low'
+        : 'mid',
+  }
+}
+
+/** 旧五字段映射到新指令：旧存档首次在战术页编辑或仅传旧 tactics 时的合并起点。 */
+export function instructionsFromLegacyTactics(
+  tactics: LegacyTacticsShape,
+  base?: TacticalInstructionsV2,
+): TacticalInstructionsV2 {
+  const seed = base ? cloneInstructions(base) : undefined
+  return normalizeInstructions({
+    possession: {
+      focus: tactics.attack,
+      passing: tactics.passing,
+      tempo: tactics.tempo,
+      width: seed?.possession.width ?? (tactics.attack === 'wing' ? 'wide' : tactics.attack === 'middle' ? 'narrow' : 'normal'),
+    },
+    transition: {
+      onGain: seed?.transition.onGain ?? 'balanced',
+      onLoss: seed?.transition.onLoss ?? 'balanced',
+    },
+    defense: {
+      line: tactics.line,
+      engagement: tactics.press,
+      intensity: tactics.press,
+    },
+    ...(seed?.advanced ? { advanced: seed.advanced } : {}),
+  })
+}
+
+/** 识别指令对应的基础风格模板，以及是否相对该模板做过手动调整。 */
+export function inferStyleForInstructions(
+  inst: TacticalInstructionsV2,
+  preferred?: StyleId,
+): { styleId: StyleId; adjusted: boolean } {
+  if (preferred && isStyleId(preferred)) {
+    const def = STYLES_REV3[preferred]
+    if (sameInstructions(inst, def.instructions)) return { styleId: preferred, adjusted: false }
+    // 若与其它某个未调整预设完全一致，也优先尊重玩家显式选中的基准风格并标“已调整”（blank 除外）。
+    if (preferred !== 'blank') return { styleId: preferred, adjusted: true }
+  }
+  for (const item of STYLE_LIST_REV3) {
+    if (item.id !== 'blank' && sameInstructions(inst, item.instructions)) {
+      return { styleId: item.id, adjusted: false }
+    }
+  }
+  if (sameInstructions(inst, NEUTRAL_INSTRUCTIONS)) return { styleId: 'blank', adjusted: false }
+  return { styleId: preferred && isStyleId(preferred) ? preferred : 'blank', adjusted: true }
+}
+
+function shiftTier<T extends string>(current: T, tiers: readonly T[], delta: -1 | 0 | 1): T {
+  const index = tiers.indexOf(current)
+  if (index < 0) return current
+  return tiers[Math.max(0, Math.min(tiers.length - 1, index + delta))]
+}
+
+/**
+ * 临场心态叠加层（docs/fm-tactical-styles-and-instructions.md 3.3 / 3.7）：
+ * 在赛前基准指令上做有界、非累积的一档偏移；切回 `balanced` 精确恢复赛前指令，绝不抹除自定义配置。
+ */
+export function applyMentalityOverlay(
+  base: TacticalInstructionsV2,
+  mentality: 'attack' | 'balanced' | 'defend',
+): TacticalInstructionsV2 {
+  const next = cloneInstructions(base)
+  if (mentality === 'balanced') return next
+  const delta: -1 | 1 = mentality === 'attack' ? 1 : -1
+  next.possession.tempo = shiftTier(base.possession.tempo, ['slow', 'normal', 'fast'] as const, delta)
+  next.defense.line = shiftTier(base.defense.line, ['low', 'mid', 'high'] as const, delta)
+  next.defense.engagement = shiftTier(base.defense.engagement, ['low', 'mid', 'high'] as const, delta)
+  if (mentality === 'attack') {
+    next.transition.onGain = shiftTier(base.transition.onGain, ['hold', 'balanced', 'counter'] as const, 1)
+  } else {
+    next.transition.onLoss = shiftTier(base.transition.onLoss, ['regroup', 'balanced', 'counterpress'] as const, -1)
+    next.defense.intensity = shiftTier(base.defense.intensity, ['low', 'mid', 'high'] as const, -1)
+  }
+  return normalizeInstructions(next)
+}
+
+export type InstructionFieldId =
+  | 'possession.focus'
+  | 'possession.passing'
+  | 'possession.tempo'
+  | 'possession.width'
+  | 'advanced.possession.receiving'
+  | 'advanced.possession.crossTiming'
+  | 'transition.onGain'
+  | 'transition.onLoss'
+  | 'defense.line'
+  | 'defense.engagement'
+  | 'defense.intensity'
+  | 'advanced.defense.width'
+
+export type InstructionFieldDef = {
+  id: InstructionFieldId
+  label: string
+  desc: string
+  options: readonly { value: string; label: string }[]
+}
+
+export const INSTRUCTION_GROUPS: readonly { title: string; fields: readonly InstructionFieldDef[] }[] = [
+  {
+    title: '持球阶段',
+    fields: [
+      {
+        id: 'possession.focus',
+        label: '进攻方向',
+        desc: '决定接应站位与传球目标偏向中路肋部还是两翼走廊。中路人数集中但易拥挤；两翼空间大但依赖传中接应。',
+        options: [
+          { value: 'middle', label: '中路' },
+          { value: 'balanced', label: '均衡' },
+          { value: 'wing', label: '两翼' },
+        ],
+      },
+      {
+        id: 'possession.passing',
+        label: '传球倾向',
+        desc: '短传偏好近距离安全传递，控球稳但推进慢；直传偏好中长距离纵向输送，推进快但易被拦截。',
+        options: [
+          { value: 'short', label: '短传' },
+          { value: 'mixed', label: '混合' },
+          { value: 'direct', label: '直传' },
+        ],
+      },
+      {
+        id: 'possession.tempo',
+        label: '比赛节奏',
+        desc: '控制持球观察停留与出球频率。快节奏抢在防线落位前出球但失误增加；慢节奏耐心控球梳理。',
+        options: [
+          { value: 'slow', label: '偏慢' },
+          { value: 'normal', label: '正常' },
+          { value: 'fast', label: '偏快' },
+        ],
+      },
+      {
+        id: 'possession.width',
+        label: '持球宽度',
+        desc: '进攻时全队横向拉开程度。宽站位能拉扯对手窄防线，但丢球后横向补位距离更远。',
+        options: [
+          { value: 'narrow', label: '收缩' },
+          { value: 'normal', label: '正常' },
+          { value: 'wide', label: '拉开' },
+        ],
+      },
+      {
+        id: 'advanced.possession.receiving',
+        label: '接球方式',
+        desc: '脚下：队友主动回撤接应短传；空当：前锋积极前插防线身后，持球人尝试提前量直塞（对手低位时空间受限）。',
+        options: [
+          { value: 'feet', label: '接脚下' },
+          { value: 'mixed', label: '混合' },
+          { value: 'space', label: '跑空当' },
+        ],
+      },
+      {
+        id: 'advanced.possession.crossTiming',
+        label: '传中时机',
+        desc: '尽早传中允许边路球员在肋部/45度提前起球找禁区队友，不必每次下底；需要禁区内有争顶抢点点位。',
+        options: [
+          { value: 'balanced', label: '常规' },
+          { value: 'early', label: '尽早' },
+        ],
+      },
+    ],
+  },
+  {
+    title: '攻防转换',
+    fields: [
+      {
+        id: 'transition.onGain',
+        label: '得球转换',
+        desc: '夺回球权后数秒内的倾向。反击会立即激发前场跑位与向前传球；稳住队形优先安全第一脚过渡。',
+        options: [
+          { value: 'hold', label: '稳住' },
+          { value: 'balanced', label: '均衡' },
+          { value: 'counter', label: '反击' },
+        ],
+      },
+      {
+        id: 'transition.onLoss',
+        label: '失球转换',
+        desc: '丢球瞬间的反应。就地反抢扩大围抢半径并投入双人压迫（耗体能、怕长传越顶）；回撤优先退回防线位置。',
+        options: [
+          { value: 'regroup', label: '回撤' },
+          { value: 'balanced', label: '均衡' },
+          { value: 'counterpress', label: '反抢' },
+        ],
+      },
+    ],
+  },
+  {
+    title: '无球阶段',
+    fields: [
+      {
+        id: 'defense.line',
+        label: '后防线',
+        desc: '无球时后卫线的站位纵深。高防线压缩中场空间但暴露大片身后草皮；低防线保护禁区与身后但让出外围。',
+        options: [
+          { value: 'low', label: '低位' },
+          { value: 'mid', label: '中位' },
+          { value: 'high', label: '高位' },
+        ],
+      },
+      {
+        id: 'defense.engagement',
+        label: '逼抢线',
+        desc: '从球场哪个区域开始主动上抢。高位在前场就施压对手后卫；低位退回本方半场后再启动常规逼抢。',
+        options: [
+          { value: 'low', label: '低位' },
+          { value: 'mid', label: '中场' },
+          { value: 'high', label: '前场' },
+        ],
+      },
+      {
+        id: 'defense.intensity',
+        label: '压迫频率',
+        desc: '控制上抢搜索半径与协防人数。积极压迫会派出第二名防守人封堵近端出球线，但大幅加快体能消耗。',
+        options: [
+          { value: 'low', label: '克制' },
+          { value: 'mid', label: '均衡' },
+          { value: 'high', label: '积极' },
+        ],
+      },
+      {
+        id: 'advanced.defense.width',
+        label: '防守宽度',
+        desc: '无球落位时的横向紧凑度。收缩中路能封堵直塞线路，代价是边路与弱侧空当更大。',
+        options: [
+          { value: 'narrow', label: '收缩' },
+          { value: 'normal', label: '正常' },
+          { value: 'wide', label: '扩宽' },
+        ],
+      },
+    ],
+  },
+]
+
+export function getInstructionField(inst: TacticalInstructionsV2, field: InstructionFieldId): string {
+  switch (field) {
+    case 'possession.focus': return inst.possession.focus
+    case 'possession.passing': return inst.possession.passing
+    case 'possession.tempo': return inst.possession.tempo
+    case 'possession.width': return inst.possession.width
+    case 'advanced.possession.receiving': return inst.advanced?.possession?.receiving ?? 'mixed'
+    case 'advanced.possession.crossTiming': return inst.advanced?.possession?.crossTiming ?? 'balanced'
+    case 'transition.onGain': return inst.transition.onGain
+    case 'transition.onLoss': return inst.transition.onLoss
+    case 'defense.line': return inst.defense.line
+    case 'defense.engagement': return inst.defense.engagement
+    case 'defense.intensity': return inst.defense.intensity
+    case 'advanced.defense.width': return inst.advanced?.defense?.width ?? 'normal'
+  }
+}
+
+export function setInstructionField(inst: TacticalInstructionsV2, field: InstructionFieldId, value: string): TacticalInstructionsV2 {
+  const next = cloneInstructions(inst)
+  switch (field) {
+    case 'possession.focus':
+      next.possession.focus = value as TacticalInstructionsV2['possession']['focus']
+      break
+    case 'possession.passing':
+      next.possession.passing = value as TacticalInstructionsV2['possession']['passing']
+      break
+    case 'possession.tempo':
+      next.possession.tempo = value as TacticalInstructionsV2['possession']['tempo']
+      break
+    case 'possession.width':
+      next.possession.width = value as TacticalInstructionsV2['possession']['width']
+      break
+    case 'advanced.possession.receiving':
+      next.advanced = { ...next.advanced, possession: { ...next.advanced?.possession, receiving: value as 'feet' | 'mixed' | 'space' } }
+      break
+    case 'advanced.possession.crossTiming':
+      next.advanced = { ...next.advanced, possession: { ...next.advanced?.possession, crossTiming: value as 'balanced' | 'early' } }
+      break
+    case 'transition.onGain':
+      next.transition.onGain = value as TacticalInstructionsV2['transition']['onGain']
+      break
+    case 'transition.onLoss':
+      next.transition.onLoss = value as TacticalInstructionsV2['transition']['onLoss']
+      break
+    case 'defense.line':
+      next.defense.line = value as TacticalInstructionsV2['defense']['line']
+      break
+    case 'defense.engagement':
+      next.defense.engagement = value as TacticalInstructionsV2['defense']['engagement']
+      break
+    case 'defense.intensity':
+      next.defense.intensity = value as TacticalInstructionsV2['defense']['intensity']
+      break
+    case 'advanced.defense.width':
+      next.advanced = { ...next.advanced, defense: { ...next.advanced?.defense, width: value as 'narrow' | 'normal' | 'wide' } }
+      break
+  }
+  return validateInstructions(normalizeInstructions(next))
 }

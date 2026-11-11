@@ -14,7 +14,20 @@ import { FORMATIONS, FORMATION_LIST, isLegacyFormation } from '../src/game/data/
 import { ROLES, ROLES_BY_POSITION } from '../src/game/data/roles.ts'
 import { eventById } from '../src/game/data/events.ts'
 import { branchProbability, eventChance, trainingActionsTotal, eventGrowthScale, TRAINING_ACTION_INFO } from '../src/game/training.ts'
-import { lineupSlots, validateLineup } from '../src/game/squad.ts'
+import { computeLineupFamiliarity, lineupSlots, validateLineup } from '../src/game/squad.ts'
+import {
+  STYLE_LIST_REV3,
+  STYLE_META,
+  cloneInstructions,
+  inferStyleForInstructions,
+  instructionsFromLegacyTactics,
+  isStyleId,
+  legacyTacticsFromInstructions,
+  styleByRevision,
+  tryValidateInstructions,
+  type StyleId,
+  type TacticalInstructionsV2,
+} from '../src/game/pes/tactics.ts'
 import { emptyAutoSubs, validateAutoSubPlan } from '../src/game/match/management.ts'
 import { positionMultiplier } from '../src/game/ca.ts'
 import { displayClock } from '../src/game/match/time.ts'
@@ -371,6 +384,7 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
     autoSubErrors: validateAutoSubPlan(game.roster, game.lineup, game.autoSubs ?? emptyAutoSubs()),
     lineupAnalysis: {
       validation: lineupCheck,
+      tacticalFamiliarity: computeLineupFamiliarity(game.roster, game.lineup, economyOf(game).tactics),
       starters: slots.map((slot) => ({
         slotId: slot.slotId,
         position: slot.position,
@@ -393,6 +407,12 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
       desc: formation.desc,
       slots: formation.slots.map((slot) => ({ id: slot.id, position: slot.position, label: slot.label, defaultRole: slot.defaultRole })),
       defaultTactics: formation.defaultTactics,
+    })),
+    tacticalStyles: STYLE_LIST_REV3.map((style) => ({
+      id: style.id,
+      name: style.name,
+      ...STYLE_META[style.id],
+      instructions: style.instructions,
     })),
     roles: ROLES_BY_POSITION,
     trainingSessions: sessionView,
@@ -471,28 +491,85 @@ function parseTrainingRequest(value: unknown): TrainingRequest | null {
   return null
 }
 
-function parseLineup(game: GameState, value: unknown): Lineup | null {
+function parseLineup(game: GameState, value: unknown): { lineup?: Lineup; error?: string } {
   const raw = asRecord(value)
   const formationId = text(raw.formationId) as FormationId
   const formation = FORMATIONS[formationId]
-  if (!formation) return null
-  if (!Array.isArray(raw.starters) || !Array.isArray(raw.bench)) return null
+  if (!formation) return { error: '无效阵容；需要合法 formationId、starters[{slotId,playerId,role}] 与 bench[playerId]' }
+  if (!Array.isArray(raw.starters) || !Array.isArray(raw.bench)) {
+    return { error: '无效阵容；需要合法 formationId、starters[{slotId,playerId,role}] 与 bench[playerId]' }
+  }
   const starters: Lineup['starters'] = []
   for (const entry of raw.starters) {
     const starter = asRecord(entry)
     const slotId = text(starter.slotId)
     const playerId = text(starter.playerId)
     const slot = formation.slots.find((item) => item.id === slotId)
-    if (!slot || !playerId) return null
+    if (!slot || !playerId) {
+      return { error: '无效阵容；需要合法 formationId、starters[{slotId,playerId,role}] 与 bench[playerId]' }
+    }
     const role = text(starter.role) as RoleId
     starters.push({ slotId, playerId, role: ROLES[role]?.position === slot.position ? role : slot.defaultRole })
   }
-  return {
+
+  let tacticalStyle: StyleId | undefined = game.lineup.tacticalStyle
+  let tacticalInstructions: TacticalInstructionsV2 | undefined = game.lineup.tacticalInstructions
+    ? cloneInstructions(game.lineup.tacticalInstructions)
+    : undefined
+  let tactics: Tactics = isTactics(raw.tactics) ? raw.tactics : game.lineup.tactics
+
+  if (raw.tacticalStyle !== undefined && raw.tacticalStyle !== null && !isStyleId(raw.tacticalStyle)) {
+    return { error: `未知战术风格：${String(raw.tacticalStyle)}` }
+  }
+
+  if (raw.tacticalInstructions !== undefined) {
+    if (raw.tacticalInstructions === null) {
+      tacticalInstructions = undefined
+      if (raw.tacticalStyle === undefined || raw.tacticalStyle === null) tacticalStyle = undefined
+    } else {
+      const check = tryValidateInstructions(raw.tacticalInstructions)
+      if (!check.ok) return { error: `战术指令无效：${check.error}` }
+      tacticalInstructions = check.value
+      tacticalStyle = isStyleId(raw.tacticalStyle) ? raw.tacticalStyle : inferStyleForInstructions(check.value).styleId
+      tactics = legacyTacticsFromInstructions(check.value)
+    }
+  } else if (raw.tacticalStyle !== undefined) {
+    if (raw.tacticalStyle === null) {
+      tacticalStyle = undefined
+      tacticalInstructions = undefined
+    } else {
+      tacticalStyle = raw.tacticalStyle
+      tacticalInstructions = cloneInstructions(styleByRevision(raw.tacticalStyle, 3).instructions)
+      tactics = legacyTacticsFromInstructions(tacticalInstructions)
+    }
+  } else if (isTactics(raw.tactics) && tacticalInstructions) {
+    const prevTactics = game.lineup.tactics
+    const tacticsChanged = raw.tactics.attack !== prevTactics.attack
+      || raw.tactics.passing !== prevTactics.passing
+      || raw.tactics.tempo !== prevTactics.tempo
+      || raw.tactics.line !== prevTactics.line
+      || raw.tactics.press !== prevTactics.press
+    if (tacticsChanged) {
+      tacticalInstructions = instructionsFromLegacyTactics(raw.tactics, tacticalInstructions)
+      tactics = legacyTacticsFromInstructions(tacticalInstructions)
+    }
+  }
+
+  const next: Lineup = {
     formationId,
     starters,
     bench: raw.bench.map((id) => text(id)).filter(Boolean),
-    tactics: isTactics(raw.tactics) ? raw.tactics : game.lineup.tactics,
+    tactics,
+    ...(tacticalStyle ? { tacticalStyle } : {}),
+    ...(tacticalInstructions ? { tacticalInstructions } : {}),
   }
+  if (game.lineup.customPositions && game.lineup.formationId === formationId) {
+    next.customPositions = structuredClone(game.lineup.customPositions)
+  }
+  if (game.lineup.presets?.length) {
+    next.presets = structuredClone(game.lineup.presets)
+  }
+  return { lineup: next }
 }
 
 function matchResult(record: NonNullable<ReturnType<typeof finishMatch>>) {
@@ -710,9 +787,9 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       return result.ok ? { ok: true, result: game.lineup } : { ok: false, error: result.errors.join('；') }
     }
     case 'set_lineup': {
-      const lineup = parseLineup(game, body.lineup)
-      if (!lineup) return { ok: false, error: '无效阵容；需要合法 formationId、starters[{slotId,playerId,role}] 与 bench[playerId]' }
-      const result = setLineup(game, lineup, body.autoSubs === undefined ? game.autoSubs ?? emptyAutoSubs() : body.autoSubs)
+      const parsed = parseLineup(game, body.lineup)
+      if (!parsed.lineup) return { ok: false, error: parsed.error ?? '无效阵容；需要合法 formationId、starters[{slotId,playerId,role}] 与 bench[playerId]' }
+      const result = setLineup(game, parsed.lineup, body.autoSubs === undefined ? game.autoSubs ?? emptyAutoSubs() : body.autoSubs)
       return result.ok ? { ok: true, result: game.lineup } : { ok: false, error: result.errors.join('；') }
     }
     case 'set_auto_subs': {

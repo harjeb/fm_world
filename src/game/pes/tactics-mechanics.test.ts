@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { fixtureTeam } from './fixtures.ts'
 import { PesMatch } from './sim.ts'
 import { GAME_RULES, makePitch11, type PesPlayer, type PesTeam, type PesTactics } from './spec.ts'
-import { DEFAULT_PARAMS, NEUTRAL_INSTRUCTIONS, STYLE_LIST, STYLE_LIST_REV2, cloneInstructions, validateInstructions, type TacticalInstructionsV2 } from './tactics.ts'
+import { DEFAULT_PARAMS, NEUTRAL_INSTRUCTIONS, STYLE_LIST, STYLE_LIST_REV2, STYLE_LIST_REV3, applyMentalityOverlay, cloneInstructions, legacyTacticsFromInstructions, styleByRevision, validateInstructions, type TacticalInstructionsV2 } from './tactics.ts'
 import { MatchMetrics } from './metrics.ts'
 import { baselineTeams } from './baseline.ts'
 import { PesGame } from './game.ts'
@@ -54,6 +54,8 @@ type Internals = {
   execPass(p: PesPlayer, mate: PesPlayer, press: number, target?: { x: number; y: number }): void
   crossOption(p: PesPlayer, press: number): { score: number; mate: PesPlayer; spot: { x: number; y: number } } | null
   launchCross(p: PesPlayer, target: { x: number; y: number }, intended: number, result: 'ok' | 'icpt' | 'miss' | 'out', setResult: boolean): void
+  spaceBehindLine(p: PesPlayer, oppTeam: PesTeam): number
+  secondPresserTarget(t: PesTeam, owner: PesPlayer | null, ip: { x: number; y: number }): { x: number; y: number }
 }
 const internals = (m: PesMatch): Internals => m as unknown as Internals
 
@@ -557,5 +559,165 @@ describe('新指令模板与校验', () => {
     const unsupported = instructions() as unknown as Record<string, unknown>
     unsupported.advanced = { possession: { crossTiming: 'late' } }
     expect(() => validateInstructions(unsupported)).toThrow(/advanced\.possession\.crossTiming/)
+    const feetOk = instructions((v) => { v.advanced = { possession: { receiving: 'feet' } } })
+    expect(validateInstructions(feetOk).advanced?.possession?.receiving).toBe('feet')
+    expect(STYLE_LIST_REV3.find((s) => s.id === 'tikiTaka')?.instructions.advanced?.possession?.receiving).toBe('feet')
+  })
+})
+
+describe('身后空当、A2 协防上抢、连续熟练度与临场心态叠加', () => {
+  it('spaceBehindLine 按对手防线身后到门前的真实纵深计算，高防线暴露空当而低位防线收紧空当', () => {
+    const m = match({ instructions: instructions() }, { instructions: instructions() })
+    const att = m.teams[0] // dir = +1，进攻 +x 方向
+    const def = m.teams[1] // dir = -1，球门在 +HL = +52.5
+    const striker = place(m, outfield(att)[8].pid, 10, 0)
+    // 对手压高防线到 x = +12（距离 +52.5 球门还有 40.5m）
+    for (const o of outfield(def)) place(m, o.pid, 12, -20 + o.slot * 4)
+    place(m, def.players[0].pid, 50, 0)
+    const highLineSpace = internals(m).spaceBehindLine(striker, def)
+    expect(highLineSpace).toBeGreaterThan(15)
+
+    // 对手退守低防线到 x = +40（距离球门仅 12.5m，扣除禁区缓冲后无大片冲刺空当）
+    place(m, striker.pid, 38, 0)
+    for (const o of outfield(def)) place(m, o.pid, 40, -20 + o.slot * 4)
+    const lowBlockSpace = internals(m).spaceBehindLine(striker, def)
+    expect(lowBlockSpace).toBeLessThanOrEqual(4)
+
+    // 已明显越位超过 2.5K 的队友不计有效身后空当
+    for (const o of outfield(def)) place(m, o.pid, 12, -20 + o.slot * 4)
+    place(m, striker.pid, 16, 0)
+    expect(internals(m).spaceBehindLine(striker, def)).toBe(0)
+  })
+
+  it('第二上抢者（A2）封堵最近接应线路或门侧阴影，不与第一上抢者扑同一点', () => {
+    const m = match({ instructions: instructions((v) => { v.defense.intensity = 'high'; v.defense.engagement = 'high' }) }, { instructions: instructions() })
+    const def = m.teams[0] // 守 -HL 球门
+    const att = m.teams[1]
+    park(att, 25, 0)
+    park(def, -25, 0)
+    const carrier = place(m, att.players[2].pid, 6, 4)
+    const option = place(m, att.players[3].pid, 2, -5)
+    const d1 = place(m, outfield(def)[0].pid, 4, 4)
+    const d2 = place(m, outfield(def)[1].pid, 3, -2)
+    m.ball.owner = carrier.pid
+    m.ball.x = carrier.pos.x
+    m.ball.y = carrier.pos.y
+    internals(m).updateShape()
+
+    expect(def.presser).toBe(d1.pid)
+    expect(def.presser2).toBe(d2.pid)
+    const screen = internals(m).secondPresserTarget(def, carrier, { x: carrier.pos.x, y: carrier.pos.y })
+    // 位于 carrier(y=4) 与 option(y=-5) 之间，且相对连线更偏向本方球门 (-x)
+    expect(screen.y).toBeLessThan(carrier.pos.y)
+    expect(screen.y).toBeGreaterThan(option.pos.y)
+    expect(Math.hypot(screen.x - carrier.pos.x, screen.y - carrier.pos.y)).toBeGreaterThan(1.5)
+  })
+
+  it('上抢任务在 0.25s 窗口内保持稳定，球权易主时立即重算；落位窗口下禁区 3m 内仍触发紧急上抢', () => {
+    const m = match(
+      { instructions: instructions((v) => { v.defense.intensity = 'high'; v.defense.engagement = 'high'; v.transition.onLoss = 'regroup' }) },
+      { instructions: instructions() },
+    )
+    const def = m.teams[0]
+    const att = m.teams[1]
+    park(att, 25, 0)
+    park(def, -35, 0)
+    // 先验证开放状态下 0.25s 内稳定、换持球人立即失效
+    def.lossAt = undefined
+    const c1 = place(m, att.players[1].pid, 5, 0)
+    const c2 = place(m, att.players[2].pid, -10, 12)
+    const pA = place(m, outfield(def)[0].pid, 3, 0)
+    const pB = place(m, outfield(def)[1].pid, 2.5, 0.5)
+    const pC = place(m, outfield(def)[2].pid, -11, 12)
+    m.ball.owner = c1.pid
+    m.ball.x = c1.pos.x
+    m.ball.y = c1.pos.y
+    m.time = 10
+    internals(m).updateShape()
+    expect(def.presser).toBe(pA.pid)
+
+    // 0.10s 后 pB 稍微更近，但未到 0.25s 且持球人未变，保持 pA 不抖动
+    place(m, pB.pid, 4.2, 0)
+    m.time = 10.1
+    internals(m).updateShape()
+    expect(def.presser).toBe(pA.pid)
+
+    // 持球人切换到 c2，立即重算为距离 c2 最近的 pC
+    m.ball.owner = c2.pid
+    m.ball.x = c2.pos.x
+    m.ball.y = c2.pos.y
+    m.time = 10.12
+    internals(m).updateShape()
+    expect(def.presser).toBe(pC.pid)
+
+    // 进入丢球立即落位（regroup）窗口：逼抢线外不常规上抢，但本方禁区 3m 贴身必须有 1 人紧急封堵
+    def.lossAt = 10.12
+    const boxAttacker = place(m, att.players[4].pid, -42, 0)
+    const boxDefender = place(m, outfield(def)[3].pid, -44.2, 0.4)
+    m.ball.owner = boxAttacker.pid
+    m.ball.x = boxAttacker.pos.x
+    m.ball.y = boxAttacker.pos.y
+    m.time = 10.2
+    internals(m).updateShape()
+    expect(def.presser).toBe(boxDefender.pid)
+    expect(def.presser2).toBe(-1)
+  })
+
+  it('低熟练度连续缩放 lineBias（不随机翻负、不消耗 RNG），且换人自动继承球队熟练度', () => {
+    const m = match({ instructions: instructions((v) => { v.defense.line = 'high' }) }, { instructions: instructions() })
+    const def = m.teams[0]
+    const att = m.teams[1]
+    for (const p of outfield(def)) p.familiarity = 0.35
+    m.ball.owner = att.players[2].pid
+    m.ball.x = 0
+    m.ball.y = 0
+    const rngBefore = structuredClone(m.rng)
+    for (let i = 0; i < 20; i++) {
+      internals(m).updateShape()
+      expect(def.lineBias).toBeGreaterThan(0)
+      expect(def.lineBias).toBeLessThan(1)
+    }
+    expect(m.rng).toEqual(rngBefore)
+
+    const { home, away } = baselineTeams(1)
+    const homeWithInst = structuredClone(home)
+    homeWithInst.instructions = styleByRevision('highPress', 3).instructions
+    homeWithInst.familiarity = 0.72
+    const g = new PesGame({ seed: 31, home: homeWithInst, away: structuredClone(away), durationSeconds: 60, offside: true, noInjuries: true, now: 0 })
+    const out = g.state.teams[0].players.find((p) => p.position !== 'GK')!
+    const sub = g.state.teams[0].bench.find((p) => p.positions[out.position] > 0)!
+    expect(g.substitute(out.id, sub.id, 'home').ok).toBe(true)
+    const subPhysical = g.match.teams[0].players.find((p) => p.ref === sub.id)!
+    expect(subPhysical.familiarity).toBeCloseTo(0.72, 6)
+  })
+
+  it('临场心态在赛前模板基线上非累积叠加，切回均衡恢复原指令，且跨存档保持一致；新指令不隐性抬高犯规率', () => {
+    const { home, away } = baselineTeams(1)
+    const baseStyle = styleByRevision('tikiTaka', 3)
+    const homeTeam = structuredClone(home)
+    homeTeam.tacticalStyle = 'tikiTaka'
+    homeTeam.instructions = cloneInstructions(baseStyle.instructions)
+    homeTeam.tactics = legacyTacticsFromInstructions(homeTeam.instructions)
+    const g = new PesGame({ seed: 41, home: homeTeam, away: structuredClone(away), durationSeconds: 60, offside: true, noInjuries: true, now: 0 })
+
+    // 新指令球队即使同步了 tactics.press = 'high'，结算层 foulShare 仍保持中性基准
+    const defender = g.state.teams[0].players.find((p) => p.position !== 'GK')!
+    const kernel = (g.settlement as unknown as { kernel: { foulShare(d: typeof defender, opp: (typeof g.state.teams)[0]): number } }).kernel
+    const highPressFoul = kernel.foulShare(defender, g.state.teams[0])
+    const lowPressClone = structuredClone(g.state.teams[0])
+    lowPressClone.tactics.press = 'low'
+    expect(highPressFoul).toBeCloseTo(kernel.foulShare(defender, lowPressClone), 9)
+
+    expect(g.setTactics('attack', 'home').ok).toBe(true)
+    expect(g.state.teams[0].instructions).toEqual(applyMentalityOverlay(baseStyle.instructions, 'attack'))
+    expect(g.match.teams[0].tactics.instructions).toEqual(applyMentalityOverlay(baseStyle.instructions, 'attack'))
+
+    const restored = new PesGame({ snapshot: JSON.parse(JSON.stringify(g.serialize())) })
+    expect(restored.setTactics('defend', 'home').ok).toBe(true)
+    expect(restored.state.teams[0].instructions).toEqual(applyMentalityOverlay(baseStyle.instructions, 'defend'))
+
+    expect(restored.setTactics('balanced', 'home').ok).toBe(true)
+    expect(restored.state.teams[0].instructions).toEqual(baseStyle.instructions)
+    expect(restored.match.teams[0].tactics.instructions).toEqual(baseStyle.instructions)
   })
 })

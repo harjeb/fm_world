@@ -258,7 +258,12 @@ function simulateTrainingExchange(game: GameState, session: TrainingSession): Tr
   const ownRating = lineupRating(roster, lineup)
   const picked = pickExchangeOpponent(game.aiTeams, ownRating, week, (session.exchangeMatches ?? []).map((match) => match.opponentId))
   const opponent = picked.team
-  const home = teamInputFromLineup(roster, lineup, { id: 'player', name: game.clubName, color: '#34d399', accent: '#052e1b' })
+  const home = teamInputFromLineup(
+    roster,
+    lineup,
+    { id: 'player', name: game.clubName, color: '#34d399', accent: '#052e1b' },
+    { tacticsStage: game.economy?.tactics ?? 1 },
+  )
   if (game.autoSubs) home.autoSubs = structuredClone(game.autoSubs)
   withChemistry(home, game.chemistry, Date.now(), game.season.gameDayMs)
   const engine = new Engine({ seed: splitSeed(scheduleSeed, `training-exchange-${week}`), home, away: teamInputFromAI(opponent), knockout: false })
@@ -612,7 +617,7 @@ export function setAutoSubs(game: GameState, plan: unknown): { ok: boolean; erro
 
 export function autoLineup(game: GameState, formationId = game.lineup.formationId): { ok: boolean; errors: string[] } {
   const available = game.roster.filter((player) => injuryUntil(game, player) === null)
-  return setLineup(game, autoFillLineup(available, formationId, game.lineup.tactics))
+  return setLineup(game, autoFillLineup(available, formationId, game.lineup.tactics, game.lineup))
 }
 
 export function startNextSeasonAction(game: GameState, now = Date.now()): { ok: boolean; error?: string } {

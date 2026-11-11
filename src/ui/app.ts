@@ -39,6 +39,15 @@ import {
 import type { TrainingActionId } from '../game/training.ts'
 import type { TrainingActivityId } from '../game/training-calendar.ts'
 import { autoAssignLineup, autoFillLineup, clearStarter, movePlayer, type LineupTarget } from '../game/squad.ts'
+import {
+  cloneInstructions,
+  instructionsFromLegacyTactics,
+  isStyleId,
+  legacyTacticsFromInstructions,
+  setInstructionField,
+  styleByRevision,
+  type InstructionFieldId,
+} from '../game/pes/tactics.ts'
 import { seasonStats } from '../game/player-stats.ts'
 import { injuryUntil } from '../game/injury.ts'
 import { mainAttrsFor } from '../game/rating.ts'
@@ -776,7 +785,7 @@ function autoFillLineupDraft(): Lineup {
   const base = ui.lineupDraft ?? game.lineup
   const minutes = new Map(game.roster.map((player) => [player.id, seasonStats(game, player.id).minutes]))
   const now = Date.now()
-  const lineup = autoAssignLineup(game.roster, base.formationId, base.tactics, undefined, ui.lineupAutoMode, {
+  const lineup = autoAssignLineup(game.roster, base.formationId, base.tactics, base, ui.lineupAutoMode, {
     condition: (player) => player.condition ?? 100,
     minutes: (player) => minutes.get(player.id) ?? 0,
     suspended: (player) => !!game.suspensions?.[player.id],
@@ -1418,14 +1427,46 @@ document.addEventListener('click', async (event) => {
       }
       if (ui.lineupDraft && actionEl.dataset.formation && actionEl.dataset.formation !== ui.lineupDraft.formationId) {
         const available = game.roster.filter((player) => injuryUntil(game, player) === null)
-        ui.lineupDraft = structuredClone(autoFillLineup(available, actionEl.dataset.formation as Lineup['formationId'], ui.lineupDraft.tactics))
+        ui.lineupDraft = structuredClone(
+          autoFillLineup(available, actionEl.dataset.formation as Lineup['formationId'], ui.lineupDraft.tactics, ui.lineupDraft),
+        )
         ui.lineupSlot = null
         render()
       }
       break
+    case 'lineup-instruction': {
+      const field = actionEl.dataset.field as InstructionFieldId | undefined
+      const value = actionEl.dataset.value
+      if (field && value) {
+        updateLineupDraft((draft) => {
+          const base = draft.tacticalInstructions ?? instructionsFromLegacyTactics(draft.tactics)
+          const next = setInstructionField(base, field, value)
+          draft.tacticalInstructions = next
+          draft.tactics = legacyTacticsFromInstructions(next)
+        })
+      }
+      break
+    }
+    case 'lineup-style-reset': {
+      updateLineupDraft((draft) => {
+        const styleId = draft.tacticalStyle && isStyleId(draft.tacticalStyle) ? draft.tacticalStyle : 'blank'
+        const tpl = styleByRevision(styleId, 3)
+        draft.tacticalStyle = styleId
+        draft.tacticalInstructions = cloneInstructions(tpl.instructions)
+        draft.tactics = legacyTacticsFromInstructions(tpl.instructions)
+      })
+      break
+    }
     case 'lineup-tactic': {
       const tactic = actionEl.dataset.tactic as keyof Tactics | undefined
-      if (tactic && actionEl.dataset.value) updateLineupDraft((draft) => { (draft.tactics as unknown as Record<string, string>)[tactic] = actionEl.dataset.value! })
+      if (tactic && actionEl.dataset.value) {
+        updateLineupDraft((draft) => {
+          ;(draft.tactics as unknown as Record<string, string>)[tactic] = actionEl.dataset.value!
+          if (draft.tacticalInstructions) {
+            draft.tacticalInstructions = instructionsFromLegacyTactics(draft.tactics, draft.tacticalInstructions)
+          }
+        })
+      }
       break
     }
     case 'auto-sub-add':
@@ -1774,6 +1815,18 @@ document.addEventListener('change', (event) => {
   if (target.id === 'lineup-auto-mode') {
     ui.lineupAutoMode = target.value === 'half' || target.value === 'full' ? target.value : 'best'
     render()
+    return
+  }
+  if (target.dataset.tacticalStyle !== undefined) {
+    const value = target.value
+    if (isStyleId(value)) {
+      updateLineupDraft((draft) => {
+        const tpl = styleByRevision(value, 3)
+        draft.tacticalStyle = value
+        draft.tacticalInstructions = cloneInstructions(tpl.instructions)
+        draft.tactics = legacyTacticsFromInstructions(tpl.instructions)
+      })
+    }
     return
   }
   if (target.id === 'academy-era') {

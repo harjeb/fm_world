@@ -8,7 +8,7 @@ import { leagueDisplayClock } from '../../game/realtime.ts'
 import { PLAYER_TEAM_ID } from '../../game/season.ts'
 import { MAX_SUBS } from '../../game/squad.ts'
 import { clubLook, compareRow, crest, distinctKit, emptyState, icon, meter, panel, posBadge, primaryPosition } from '../components.ts'
-import { clockText, esc, positionLabel, tacticText } from '../format.ts'
+import { clockText, esc, positionLabel, teamTacticSummary } from '../format.ts'
 import { game, ui } from '../state.ts'
 import { renderCommentary, renderEvent } from './review.ts'
 import { isPesEngine, pesViewEngine } from '../pes-pitch.ts'
@@ -62,7 +62,7 @@ function coachPanel(engine: GameEngine): string {
   return panel('教练调整', `<div class="coach-grid">
       <div class="coach-block">
         <h3>战术心态</h3>
-        <p class="hint">当前：${team.mentality ? MATCH_MENTALITY_LABELS[team.mentality] : '赛前战术'} · ${esc(tacticText(team.tactics))}</p>
+        <p class="hint">当前：${team.mentality ? MATCH_MENTALITY_LABELS[team.mentality] : '赛前战术'} · ${esc(teamTacticSummary(team))}</p>
         <div class="form-row"><label for="match-mentality">比赛指令</label><select id="match-mentality" data-keep-value><option value="attack" ${team.mentality === 'attack' ? 'selected' : ''}>全体进攻</option><option value="balanced" ${!team.mentality || team.mentality === 'balanced' ? 'selected' : ''}>均衡</option><option value="defend" ${team.mentality === 'defend' ? 'selected' : ''}>全体防守</option></select></div>
         <button class="btn primary small" data-action="match-tactics-apply">应用战术</button>
       </div>

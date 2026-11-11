@@ -26,6 +26,7 @@ export type LockedTeam = {
   injuries: Record<string, number>
   suspended: string[]
   medical: number
+  tacticsStage?: number
   /** 锁定时这支队能发挥几成（欠薪 0.5）；没有这一项按 1 算。 */
   performance?: number
   /** 没有教练的电脑球队：体能低于 80 的先休息。有教练的按教练排的阵容。 */
@@ -68,7 +69,7 @@ export function computeMatchJob(job: MatchJob): MatchJobResult {
     // 欠薪的球队按锁定时的状态只发挥一半（见 economy.ts）。
     const factor = locked.performance ?? 1
     const squad = factor < 1 ? { ...locked.team, players: playersAtPerformance(locked.team.players, factor) } : locked.team
-    const team = teamInputFromAI(squad, new Set(locked.suspended), { rotate: !!locked.ai })
+    const team = teamInputFromAI(squad, new Set(locked.suspended), { rotate: !!locked.ai, tacticsStage: locked.tacticsStage })
     if (locked.chemistry) team.chemistry = { ...locked.chemistry }
     if (locked.autoSubs) team.autoSubs = structuredClone(locked.autoSubs)
     return team

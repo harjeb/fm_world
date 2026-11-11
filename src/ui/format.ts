@@ -6,6 +6,7 @@ import { traitNameOf } from '../game/data/star-traits.ts'
 import { caOf } from '../game/ca.ts'
 import { authoredGain, displayAttr, displayCA, displayGain, displayPA, isMainAttr } from '../game/rating.ts'
 import { formatGains } from '../game/training.ts'
+import { STYLES_REV3, inferStyleForInstructions, type StyleId, type TacticalInstructionsV2 } from '../game/pes/tactics.ts'
 
 export function esc(value: unknown): string {
   return String(value ?? '')
@@ -116,6 +117,27 @@ export function tacticText(tactics: Tactics): string {
   const line = { low: '低', mid: '中', high: '高' }[tactics.line]
   const press = { low: '低', mid: '中', high: '高' }[tactics.press]
   return `${attack} / ${passing} / ${tempo} / 防线${line} / 压迫${press}`
+}
+
+/** 阵容战术风格简标（预设面板等处展示）。 */
+export function lineupStyleLabel(source: { tacticalStyle?: StyleId; tacticalInstructions?: TacticalInstructionsV2 }): string {
+  if (!source.tacticalInstructions) return '基础战术'
+  const info = inferStyleForInstructions(source.tacticalInstructions, source.tacticalStyle)
+  return `${STYLES_REV3[info.styleId].name}${info.adjusted ? '·已调整' : ''}`
+}
+
+/** 赛中教练面板显示的当前战术摘要（兼容新十二项指令与旧五项）。 */
+export function teamTacticSummary(team: {
+  tactics: Tactics
+  tacticalStyle?: StyleId
+  baseInstructions?: TacticalInstructionsV2
+  instructions?: TacticalInstructionsV2
+}): string {
+  if (!team.instructions) return tacticText(team.tactics)
+  const base = team.baseInstructions ?? team.instructions
+  const info = inferStyleForInstructions(base, team.tacticalStyle)
+  const styleLabel = `${STYLES_REV3[info.styleId].name}${info.adjusted ? '·已调整' : ''}`
+  return `${styleLabel}（${tacticText(team.tactics)}）`
 }
 
 export function clockText(seconds: number): string {

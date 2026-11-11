@@ -40,6 +40,7 @@ import { MatchQueue, type MatchQueueOptions } from './match-queue.ts'
 import { MatchScheduler } from './match-scheduler.ts'
 import { emptyMatchBook, matchJobId, recordForClub, type LockedTeam, type MatchBook, type MatchJob } from './match-job.ts'
 import { chemistryForPlayers, mergeChemistryTraining } from '../src/game/chemistry.ts'
+import { isStyleId, tryValidateInstructions } from '../src/game/pes/tactics.ts'
 
 type Account = {
   id: string
@@ -433,6 +434,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       injuries,
       suspended: Object.entries(bans).filter(([, ban]) => ban.matches > 0).map(([id]) => id),
       medical: game ? economyOf(game).medical : sharedWorld.aiClubs?.[clubId]?.economy.medical ?? 1,
+      tacticsStage: game ? economyOf(game).tactics : sharedWorld.aiClubs?.[clubId]?.economy.tactics ?? 1,
       // 锁定时还欠薪：这场只发挥一半。
       ...(game && matchPerformanceOf(game) < 1 ? { performance: matchPerformanceOf(game) } : {}),
       // 没有教练的电脑球队：开球时体能低于 80 的先休息（体能在入队时按开球时间结算）。
@@ -1781,6 +1783,22 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (body.game.autoSubs !== undefined) {
         const errors = validateAutoSubPlan(body.game.roster, body.game.lineup, body.game.autoSubs)
         if (errors.length) return json(res, 400, { error: `自动换人规则无效：${errors.join('；')}` })
+      }
+      if (body.game.lineup.tacticalStyle !== undefined && !isStyleId(body.game.lineup.tacticalStyle)) {
+        return json(res, 400, { error: `未知战术风格：${String(body.game.lineup.tacticalStyle)}` })
+      }
+      if (body.game.lineup.tacticalInstructions !== undefined) {
+        const check = tryValidateInstructions(body.game.lineup.tacticalInstructions)
+        if (!check.ok) return json(res, 400, { error: `战术指令无效：${check.error}` })
+      }
+      for (const preset of body.game.lineup.presets ?? []) {
+        if (preset?.lineup?.tacticalStyle !== undefined && !isStyleId(preset.lineup.tacticalStyle)) {
+          return json(res, 400, { error: `预设“${preset.name}”战术风格无效` })
+        }
+        if (preset?.lineup?.tacticalInstructions !== undefined) {
+          const check = tryValidateInstructions(preset.lineup.tacticalInstructions)
+          if (!check.ok) return json(res, 400, { error: `预设“${preset.name}”战术指令无效：${check.error}` })
+        }
       }
       if (account.game.activeMatch?.context.isLeague) {
         body.game.activeMatch = account.game.activeMatch

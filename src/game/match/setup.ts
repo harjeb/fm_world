@@ -6,7 +6,8 @@ import type { MatchTeamInput } from './types.ts'
 import { FORMATIONS } from '../data/formations.ts'
 import { MatchEngine, normalizePossession } from './engine.ts'
 import { PesEngine, type GameEngine } from '../pes/engine.ts'
-import { aiNeedsRotation, aiRotatedLineup, autoFillLineup, validateLineup } from '../squad.ts'
+import { cloneInstructions, legacyTacticsFromInstructions } from '../pes/tactics.ts'
+import { aiNeedsRotation, aiRotatedLineup, autoFillLineup, computeLineupFamiliarity, validateLineup } from '../squad.ts'
 import { prepareMatchInjuries } from '../injury.ts'
 import { LOGIC_MATCH_SECONDS } from './time.ts'
 import { matchPerformanceOf } from '../economy.ts'
@@ -19,7 +20,12 @@ export function withChemistry(input: MatchTeamInput, store: Chemistry | undefine
   return input
 }
 
-export function teamInputFromLineup(roster: Player[], lineup: Lineup, identity: TeamIdentity): MatchTeamInput {
+export function teamInputFromLineup(
+  roster: Player[],
+  lineup: Lineup,
+  identity: TeamIdentity,
+  options?: { tacticsStage?: number },
+): MatchTeamInput {
   const check = validateLineup(roster, lineup)
   if (!check.valid) throw new Error(`阵容不合法：${check.errors.join('；')}`)
   const formation = FORMATIONS[lineup.formationId]
@@ -34,10 +40,19 @@ export function teamInputFromLineup(roster: Player[], lineup: Lineup, identity: 
     if (!player) throw new Error('替补球员不存在')
     return player
   })
+  const instructions = lineup.tacticalInstructions ? cloneInstructions(lineup.tacticalInstructions) : undefined
+  const tactics = instructions ? legacyTacticsFromInstructions(instructions) : { ...lineup.tactics }
   return {
     ...identity,
     formationId: lineup.formationId,
-    tactics: { ...lineup.tactics },
+    tactics,
+    ...(instructions
+      ? {
+          ...(lineup.tacticalStyle ? { tacticalStyle: lineup.tacticalStyle } : {}),
+          instructions,
+          familiarity: computeLineupFamiliarity(roster, lineup, options?.tacticsStage ?? 1),
+        }
+      : {}),
     starters,
     bench,
   }
@@ -59,10 +74,13 @@ export function aiMatchLineup(ai: AITeam, suspended?: Set<string>, rotate = fals
 }
 
 /** 电脑球队的比赛阵容输入（见 aiMatchLineup）。 */
-export function teamInputFromAI(ai: AITeam, suspended?: Set<string>, options: { rotate?: boolean } = {}): MatchTeamInput {
+export function teamInputFromAI(ai: AITeam, suspended?: Set<string>, options: { rotate?: boolean; tacticsStage?: number } = {}): MatchTeamInput {
   const players = suspended?.size ? ai.players.filter((player) => !suspended.has(player.id)) : ai.players
   const lineup = aiMatchLineup(ai, suspended, options.rotate)
-  return { ...teamInputFromLineup(players, lineup, { id: ai.id, name: ai.name, color: ai.color, accent: ai.accent }), autoSubs: { timed: [], staminaBelow: null, onInjury: true } }
+  return {
+    ...teamInputFromLineup(players, lineup, { id: ai.id, name: ai.name, color: ai.color, accent: ai.accent }, { tacticsStage: options.tacticsStage }),
+    autoSubs: { timed: [], staminaBelow: null, onInjury: true },
+  }
 }
 
 /** 两支电脑球队的比赛（联赛、升级附加赛）：体能低于 80 的先休息（rotate 默认开）。 */
@@ -211,12 +229,17 @@ export function buildMatchEngineForGame(game: GameState, context: MatchContext, 
   // 所有非联赛挑战都从满状态开始；联赛仍按存档体能。
   const roster = challenge ? playersAtFullCondition(baseRoster) : baseRoster
 
-  const playerInput = teamInputFromLineup(roster, game.lineup, {
-    id: 'player',
-    name: game.clubName,
-    color: '#34d399',
-    accent: '#052e1b',
-  })
+  const playerInput = teamInputFromLineup(
+    roster,
+    game.lineup,
+    {
+      id: 'player',
+      name: game.clubName,
+      color: '#34d399',
+      accent: '#052e1b',
+    },
+    { tacticsStage: game.economy?.tactics ?? 1 },
+  )
   if (game.autoSubs) playerInput.autoSubs = structuredClone(game.autoSubs)
   // 对手是电脑球队：体能低于 80 的先休息。
   const aiInput = teamInputFromAI(ai, suspended, { rotate: true })

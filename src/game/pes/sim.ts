@@ -25,7 +25,6 @@ import {
   DEFAULT_PARAMS,
   execution,
   INSTRUCTION_DIFFICULTY,
-  slipChance,
   triOf,
   type TacticalInstructionsV2,
   type TacticsParams,
@@ -436,7 +435,15 @@ export class PesMatch {
   }
 
   private reactionTime(p: PesPlayer): number {
-    const tempo = this.teams[p.ti].tactics.tempo
+    const t = this.teams[p.ti]
+    if (t.tactics.instructions) {
+      const rawTempo = this.tacticsParams.tempoValue[t.tactics.instructions.possession.tempo]
+      const effTempo = 0.5 + (rawTempo - 0.5) * execution(p.familiarity ?? 1, this.tacticsParams, INSTRUCTION_DIFFICULTY.tempo)
+      const base = 0.29 - 0.16 * effTempo
+      const skill = 0.13 * (1 - p.ab.positioning)
+      return clamp(base + skill + this.rng.float() * 0.07, 0.09, 0.45)
+    }
+    const tempo = t.tactics.tempo
     const base = 0.26 - 0.1 * tempo
     const skill = 0.13 * (1 - p.ab.positioning)
     return clamp(base + skill + this.rng.float() * 0.07, 0.1, 0.45)
@@ -496,12 +503,13 @@ export class PesMatch {
    * 换人：新球员接替 `pid` 的位置（坐标、速度、朝向、目标、职责都继承），拿到一个新的 pid。
    * 被换下的球员移到 offPlayers。返回新球员。
    */
-  substitute(pid: number, incoming: Pick<PesPlayerInit, 'name' | 'abilities' | 'stamina' | 'ref' | 'num'>): PesPlayer {
+  substitute(pid: number, incoming: Pick<PesPlayerInit, 'name' | 'abilities' | 'stamina' | 'ref' | 'num' | 'familiarity'>): PesPlayer {
     const out = this.players[pid]
     const t = this.teams[out.ti]
     const index = t.players.indexOf(out)
     if (index < 0) throw new Error(`球员 ${pid} 不在场上`)
     const hadInstructionTask = this.tacticalMechanics && !!t.tactics.instructions && this.instructionTaskKey(t, out) !== ''
+    const nextFamiliarity = incoming.familiarity ?? (t.tactics.instructions ? this.teamFamiliarity(t) : out.familiarity)
     const inc: PesPlayer = {
       pid: this.players.length,
       ti: out.ti,
@@ -530,6 +538,7 @@ export class PesMatch {
       runTarget: null,
       distance: 0,
       touches: 0,
+      ...(nextFamiliarity !== undefined ? { familiarity: nextFamiliarity } : {}),
     }
     t.players[index] = inc
     t.offPlayers.push(out)
@@ -816,6 +825,14 @@ export class PesMatch {
   private beginOpenRestart(type: RestartType, team: TeamIndex, taker: number): void {
     if (!this.usesTacticalMechanics) return
     this.openPlay = { phase: 'restartPending', restartType: type, team, taker, candidate: null, controlledFor: 0 }
+    this.lastPoss = null
+    for (const t of this.teams) {
+      if (!t.tactics.instructions) continue
+      t.gainAt = undefined
+      t.lossAt = undefined
+      t.pressEvalAt = undefined
+      t.pressOwnerPid = undefined
+    }
   }
 
   /** 第一脚仍属于重开球；候选队伍随后主动出脚时才确认开放比赛。 */
@@ -853,9 +870,17 @@ export class PesMatch {
     const poss = this.possessionTeam()
     const ti = poss ? this.tiOf(poss) : null
     if (this.metrics) this.metrics.step(this, ti, this.spec.DT)
-    if (!v2) return
-    if (ti === null || ti === this.lastPoss) return
-    if (this.lastPoss !== null) this.teams[this.lastPoss].lossAt = this.time
+    if (!v2 || ti === null) return
+    if (this.lastPoss === null) {
+      this.lastPoss = ti
+      return
+    }
+    if (ti === this.lastPoss) return
+    if (this.tacticalMechanics && this.openPlay.phase !== 'open') {
+      this.lastPoss = ti
+      return
+    }
+    this.teams[this.lastPoss].lossAt = this.time
     poss!.gainAt = this.time
     this.lastPoss = ti
   }
@@ -866,7 +891,7 @@ export class PesMatch {
     return this.time - since <= this.tacticsParams.transitionWindow * (this.spec.HALF * 2) / 900
   }
 
-  /** 球队熟练度：新指令的执行强度按全队均值缩放（个体熟练度用于「执行反了」的抽签）。 */
+  /** 球队熟练度：新指令的执行强度按全队外场均值缩放。 */
   private teamFamiliarity(t: PesTeam): number {
     const outfield = t.players.filter((p) => p.slot !== 0)
     if (!outfield.length) return 1
@@ -874,15 +899,11 @@ export class PesMatch {
   }
 
   /**
-   * 每次决策的指令执行符号：+1 = 按指令，−1 = 执行反了。
-   * 熟练度低 / 指令难度高时更容易反着执行；这是新指令唯一额外抽取随机数的地方。
+   * 决策执行符号（docs/tactical-design-revision.md 5.2）：
+   * 采用连续熟练度缩放，不再在每次决策或每帧随机抽签反转战术方向，保证 RNG 序列稳定。
    */
-  private tacticBias(p: PesPlayer, key: keyof typeof INSTRUCTION_DIFFICULTY): number {
-    if (!this.teams[p.ti].tactics.instructions) return 0
-    const fam = p.familiarity ?? 1
-    if (fam >= 1) return 1
-    const slip = Math.min(1, this.tacticsParams.familiaritySlip * (1 - fam) * INSTRUCTION_DIFFICULTY[key])
-    return this.rng.float() < slip ? -1 : 1
+  private tacticBias(p: PesPlayer, _key: keyof typeof INSTRUCTION_DIFFICULTY): number {
+    return this.teams[p.ti].tactics.instructions ? 1 : 0
   }
 
   /* ---------- 决策 ---------- */
@@ -1094,9 +1115,11 @@ export class PesMatch {
     const t = this.teams[p.ti]
     const dir = t.dir
     const toLine = P.HL - p.pos.x * dir
-    const early = this.tacticalMechanics && this.openPlay.phase === 'open'
-      && t.tactics.instructions?.advanced?.possession?.crossTiming === 'early'
-    const limit = early ? lerp(0.27, 0.35, execution(p.familiarity ?? 1, this.tacticsParams)) : 0.27
+    const v2 = t.tactics.instructions
+    const openTactical = this.tacticalMechanics && this.openPlay.phase === 'open' && !!v2
+    const early = openTactical && v2?.advanced?.possession?.crossTiming === 'early'
+    const exec = execution(p.familiarity ?? 1, this.tacticsParams)
+    const limit = early ? lerp(0.27, 0.35, exec) : 0.27
     if (toLine > limit * P.L || Math.abs(p.pos.y) < P.PEN_W / 2 - 1) return null
     const inBox = (q: PesPlayer): boolean => P.HL - q.pos.x * dir < P.PEN_D + 2 && Math.abs(q.pos.y) < P.PEN_W / 2 + 1
     const mates = t.players.filter((q) => q !== p && q.slot !== 0 && q.stun <= 0 && inBox(q) && !this.isOffside(t, q))
@@ -1106,8 +1129,12 @@ export class PesMatch {
     let mate = mates[0]
     for (const q of mates) if (dist(q.pos, spot) < dist(mate.pos, spot)) mate = q
     const defenders = this.other(t).players.filter((o) => o.slot !== 0 && P.HL - o.pos.x * dir < P.PEN_D + 2 && Math.abs(o.pos.y) < P.PEN_W / 2 + 1).length
-    const base = 0.34 + 0.07 * Math.min(3, mates.length) + 0.12 * press - 0.05 * defenders
-    const bias = early ? 0.12 * execution(p.familiarity ?? 1, this.tacticsParams) : 0
+    const baseConst = openTactical ? 0.42 : 0.34
+    const wingBonus = openTactical && v2?.possession.focus === 'wing'
+      ? 0.05 * execution(p.familiarity ?? 1, this.tacticsParams, INSTRUCTION_DIFFICULTY.focus)
+      : 0
+    const base = baseConst + 0.07 * Math.min(3, mates.length) + 0.12 * press - 0.05 * defenders + wingBonus
+    const bias = early ? 0.12 * exec : 0
     return { score: base + bias, mate, spot }
   }
 
@@ -1362,21 +1389,24 @@ export class PesMatch {
     if (v2) {
       const params = this.tacticsParams
       const K2 = this.spec.K
-      const passing = triOf(v2.possession.passing)
-      const focus = triOf(v2.possession.focus)
+      const fam = this.teamFamiliarity(t)
+      const passing = triOf(v2.possession.passing) * execution(fam, params, INSTRUCTION_DIFFICULTY.passing)
+      const focus = triOf(v2.possession.focus) * execution(fam, params, INSTRUCTION_DIFFICULTY.focus)
       const z = clamp(Math.abs(aim.y) / (this.spec.HW - 2.5), 0, 1)
       let preference = params.wPass * passing * (clamp(d / (40 * K2), 0, 1) - 0.5)
         + params.wFocus * focus * (z - 0.5)
       const gain = v2.transition.onGain
       if (gain !== 'balanced' && this.inWindow(t.gainAt)) {
-        const q = triOf(gain)
+        const q = triOf(gain) * execution(fam, params, INSTRUCTION_DIFFICULTY.onGain)
         let transition = params.wTransition * q * clamp(fwd / (20 * K2), -1, 1)
         // 危险回传保护：纵向回传 > 2K 且线路净空不足 1.5K 的候选不能因为转换指令而加分。
         if (transition > 0 && fwd < -2 * K2 && lane < 1.5 * K2) transition = 0
         preference += transition
       }
-      const eff = execution(this.teamFamiliarity(t), params)
-      s += clamp(preference, -params.clipPreference, params.clipPreference) * eff * (p.bias ?? 1)
+      if (!target && v2.advanced?.possession?.receiving === 'feet' && d < 18 * K2) {
+        preference += 0.03 * execution(mate.familiarity ?? 1, params, INSTRUCTION_DIFFICULTY.receiving)
+      }
+      s += clamp(preference, -params.clipPreference, params.clipPreference) * (p.bias ?? 1)
       if (target) s += Math.min(0.06, 0.04 * execution(mate.familiarity ?? 1, params))
     }
     return s
@@ -1401,9 +1431,10 @@ export class PesMatch {
     const target = { x: clamp(mate.pos.x + dx, -P.HL + 1, P.HL - 1), y: clamp(mate.pos.y + dy, -P.HW + 1, P.HW - 1) }
     const reference = Math.max(0, this.ball.x * t.dir, this.secondLastLx(t, this.other(t)))
     const distance = dist(p.pos, target)
+    const maxSpaceDist = (t.tactics.instructions?.possession.passing === 'direct' ? 40 : 32) * P.K
     if ((target.x - mate.pos.x) * t.dir < P.K) return reject('shortLead')
     if (target.x * t.dir <= reference + 0.5 * P.K) return reject('notBehindLine')
-    if (distance < 3 || distance > 32 * P.K) return reject('distance')
+    if (distance < 3 || distance > maxSpaceDist) return reject('distance')
     if (this.laneClearance(p.pos, target, opps) < 1.6 && distance > 17 * P.K) return reject('loftRequired')
 
     const direction = norm(target.x - p.pos.x, target.y - p.pos.y)
@@ -1454,11 +1485,54 @@ export class PesMatch {
     const ahead = { x: p.pos.x + dir * 5.5, y: p.pos.y }
     const space = this.nearestOpp(ahead, opps)
     const dGoal = dist(p.pos, this.oppGoalOf(t))
-    return 0.32 * clamp01((space - 1.2) / 7)
+    let base = 0.32 * clamp01((space - 1.2) / 7)
       + 0.16 * clamp01(dGoal / (48 * K))
       + 0.14 * p.ab.control
       + 0.16 * clamp01(1 - press * 1.25)
       + 0.03
+    if (t.tactics.instructions) {
+      const rawTempo = this.tacticsParams.tempoValue[t.tactics.instructions.possession.tempo]
+      const effTempo = 0.5 + (rawTempo - 0.5) * execution(p.familiarity ?? 1, this.tacticsParams, INSTRUCTION_DIFFICULTY.tempo)
+      base += (0.5 - effTempo) * 0.07 * clamp01(1 - press)
+    }
+    return base
+  }
+
+  /** 第二上抢者目标（A2）：优先封堵持球人近端最危险的出球线，无合适目标时退到球门侧协防阴影。 */
+  private secondPresserTarget(t: PesTeam, owner: PesPlayer | null, ip: Vec2): Vec2 {
+    const P = this.spec
+    const K = P.K
+    const g = this.goalOf(t)
+    if (owner) {
+      const attTeam = this.teams[owner.ti]
+      let bestOpt: PesPlayer | null = null
+      let bestScore = -1e9
+      for (const opt of attTeam.players) {
+        if (opt === owner || opt.slot === 0 || opt.stun > 0) continue
+        const d = dist(owner.pos, opt.pos)
+        if (d <= 0.5 || d > 14 * K) continue
+        const forward = (opt.pos.x - owner.pos.x) * attTeam.dir
+        const central = 1 - Math.min(1, Math.abs(opt.pos.y) / P.HW)
+        const score = -d * 0.5 + forward * 0.45 + central * 2.5
+        if (score > bestScore) {
+          bestScore = score
+          bestOpt = opt
+        }
+      }
+      if (bestOpt) {
+        const midX = lerp(ip.x, bestOpt.pos.x, 0.42) - t.dir * 1.0 * K
+        const midY = lerp(ip.y, bestOpt.pos.y, 0.42)
+        return {
+          x: clamp(midX, -P.HL + 1.5, P.HL - 1.5),
+          y: clamp(midY, -P.HW + 1.5, P.HW - 1.5),
+        }
+      }
+    }
+    const side = norm(g.x - ip.x, g.y - ip.y)
+    return {
+      x: clamp(ip.x + side.x * 2.8 * K, -P.HL + 1.5, P.HL - 1.5),
+      y: clamp(ip.y + side.y * 2.8 * K, -P.HW + 1.5, P.HW - 1.5),
+    }
   }
 
   /* ---- 无球球员 ---- */
@@ -1494,23 +1568,33 @@ export class PesMatch {
       // 前腰也可前插；最多两人同时冲刺，其他人留作接应层。
       const runners = t.players.filter((q) => q.runTarget && this.time < q.runUntil).length
       const v2 = t.tactics.instructions
+      const receiving = this.tacticalMechanics ? (v2?.advanced?.possession?.receiving ?? 'mixed') : 'mixed'
+      const inCounter = !!v2 && this.inWindow(t.gainAt) && v2.transition.onGain === 'counter'
       // 熟练度同样削弱「得球后前插」的执行强度：fam 低时回到中性概率。
-      const runProb = v2
+      let runProb = v2
         ? lerp(0.12, this.tacticsParams.runnerProb[this.inWindow(t.gainAt) ? v2.transition.onGain : 'balanced'],
-          execution(this.teamFamiliarity(t), this.tacticsParams))
+          execution(this.teamFamiliarity(t), this.tacticsParams, INSTRUCTION_DIFFICULTY.onGain))
         : 0.12
-      const observeRunner = this.tacticalMechanics && v2?.advanced?.possession?.receiving === 'space'
+      if (receiving === 'space' && this.openPlay.phase === 'open') {
+        runProb += 0.04 * execution(p.familiarity ?? 1, this.tacticsParams, INSTRUCTION_DIFFICULTY.receiving)
+      } else if (receiving === 'feet' && !inCounter) {
+        runProb *= 1 - 0.45 * execution(p.familiarity ?? 1, this.tacticsParams, INSTRUCTION_DIFFICULTY.receiving)
+      }
+      const observeRunner = this.tacticalMechanics && receiving === 'space'
         && this.openPlay.phase === 'open' && p.line >= 0.6
-      if (p.line >= 0.6 && this.time > p.runUntil && runners < 2 && b.x * t.dir > -12 * K) {
+      const minRunBallLx = this.tacticalMechanics && (receiving === 'space' || inCounter) ? -26 * K : -12 * K
+      if (p.line >= 0.6 && this.time > p.runUntil && runners < 2 && b.x * t.dir > minRunBallLx) {
         const sbl = this.spaceBehindLine(p, oppTeam)
         if (sbl > 4) {
           const started = this.rng.float() < runProb
           if (observeRunner) this.metrics?.runner(p.ti, started ? 'started' : 'rollMiss')
           if (started) {
             const lineLx = Math.max(0, b.x * t.dir, this.secondLastLx(t, oppTeam))
-            const runLx = this.tacticalMechanics && v2?.advanced?.possession?.receiving === 'space' && this.openPlay.phase === 'open'
-              ? Math.min(lineLx + 4 * K * execution(p.familiarity ?? 1, this.tacticsParams), P.HL - 6 * K)
-              : Math.min(lineLx - 1.5, P.HL - 6 * K)
+            const runLx = this.tacticalMechanics && receiving === 'space' && this.openPlay.phase === 'open'
+              ? Math.min(lineLx + 4 * K * execution(p.familiarity ?? 1, this.tacticsParams, INSTRUCTION_DIFFICULTY.receiving), P.HL - 6 * K)
+              : this.tacticalMechanics
+                ? Math.min(lineLx + (inCounter ? 2.5 : 1.0) * K, P.HL - 6 * K)
+                : Math.min(lineLx - 1.5, P.HL - 6 * K)
             const chanY = clamp(this.homeWorld(p).y + (this.rng.float() - 0.5) * 6, -P.HW + 4, P.HW - 4)
             p.runTarget = { x: runLx * t.dir, y: chanY }
             p.runUntil = this.time + 1.4 + this.rng.float() * 1.2
@@ -1533,9 +1617,12 @@ export class PesMatch {
         if (dBall < 28 * K && p.line > 0.22 && p.line < 0.68) {
           const side = Math.sign(p.hn.y - 0.5) || 1
           // 前腰在球前/肋部接应，中场在球后，后腰保留保护距离。
-          const supportLx = K * (p.line >= 0.6 ? 4 + 3 * t.tactics.direct
+          let supportLx = K * (p.line >= 0.6 ? 4 + 3 * t.tactics.direct
             : p.line > 0.35 ? -(7 + 4 * (1 - t.tactics.direct)) : -15)
-          const focus = t.tactics.instructions ? triOf(t.tactics.instructions.possession.focus) : 0
+          if (receiving === 'feet') {
+            supportLx -= 2.0 * K * execution(p.familiarity ?? 1, this.tacticsParams, INSTRUCTION_DIFFICULTY.receiving) * Math.sign(supportLx || 1)
+          }
+          const focus = v2 ? triOf(v2.possession.focus) * execution(this.teamFamiliarity(t), this.tacticsParams, INSTRUCTION_DIFFICULTY.focus) : 0
           const sup = {
             x: b.x + t.dir * supportLx,
             y: clamp(b.y + t.dir * side * 9 * K * (0.6 + 0.8 * t.tactics.width) * (1 + 0.35 * focus), -P.HW + 4, P.HW - 4),
@@ -1559,6 +1646,12 @@ export class PesMatch {
     if (t.presser === p.pid || t.presser2 === p.pid) {
       const ip = owner ? { x: owner.pos.x + owner.vel.x * 0.55, y: owner.pos.y + owner.vel.y * 0.55 }
         : this.predictBall(0.5)
+      if (this.tacticalMechanics && t.presser2 === p.pid) {
+        p.target = this.secondPresserTarget(t, owner, ip)
+        p.urgency = 0.85
+        p.mode = 'press'
+        return
+      }
       const g = this.goalOf(t)
       const side = norm(g.x - ip.x, g.y - ip.y)
       p.target = { x: ip.x + side.x * 0.4, y: ip.y + side.y * 0.4 }
@@ -1570,8 +1663,12 @@ export class PesMatch {
       const g = this.goalOf(t)
       const ip = owner ? owner.pos : b
       const dirv = norm(g.x - ip.x, g.y - ip.y)
-      p.target = { x: ip.x + dirv.x * 5.5, y: ip.y + dirv.y * 5.5 }
-      p.urgency = 0.50
+      const v2 = t.tactics.instructions
+      const compactScreen = this.tacticalMechanics && !!v2
+        && (v2.defense.intensity === 'low' || v2.defense.line === 'low')
+      const screenDist = compactScreen ? 3.6 : 5.5
+      p.target = { x: ip.x + dirv.x * screenDist, y: ip.y + dirv.y * screenDist }
+      p.urgency = compactScreen ? 0.72 : 0.50
       p.mode = 'cover'
       return
     }
@@ -1581,19 +1678,44 @@ export class PesMatch {
       const dirv = norm(g.x - o.pos.x, g.y - o.pos.y)
       const toBall = norm(b.x - o.pos.x, b.y - o.pos.y)
       const deepThird = Math.abs(o.pos.x) > P.HL - 35 * K
+      const ownThird = o.pos.x * t.dir < -(P.HL - 35 * K)
       const r = deepThird ? 1.35 : 1.8
-      p.target = {
-        x: o.pos.x + (dirv.x * 0.55 + toBall.x * 0.45) * r + o.vel.x * 0.10,
-        y: o.pos.y + (dirv.y * 0.55 + toBall.y * 0.45) * r + o.vel.y * 0.10,
+      const v2 = t.tactics.instructions
+      const lowBlockMark = this.tacticalMechanics && !!v2
+        && (v2.defense.line === 'low' || v2.defense.intensity === 'low')
+      if (lowBlockMark) {
+        const effDef = execution(this.teamFamiliarity(t), this.tacticsParams, INSTRUCTION_DIFFICULTY.line)
+        const gw = ownThird ? lerp(0.55, 0.82, effDef) : 0.55
+        const bw = ownThird ? 1 - gw : 0.45
+        let targetLx = (o.pos.x + (dirv.x * gw + toBall.x * bw) * r + o.vel.x * 0.10) * t.dir
+        const targetY = o.pos.y + (dirv.y * gw + toBall.y * bw) * r + o.vel.y * 0.10
+        if (ownThird) {
+          targetLx = Math.min(targetLx, Math.max(-P.HL + 2, o.pos.x * t.dir - 0.95 * K * effDef))
+        }
+        if (p.line <= 0.35 && b.x * t.dir > -24 * K) {
+          targetLx = Math.max(targetLx, -P.HL + lerp(16, 22, effDef) * K)
+        }
+        p.target = this.defensiveWidthTarget(p, { x: targetLx * t.dir, y: targetY })
+        p.urgency = ownThird ? lerp(0.55, 0.68, effDef) : deepThird ? 0.55 : 0.36
+      } else {
+        p.target = {
+          x: o.pos.x + (dirv.x * 0.55 + toBall.x * 0.45) * r + o.vel.x * 0.10,
+          y: o.pos.y + (dirv.y * 0.55 + toBall.y * 0.45) * r + o.vel.y * 0.10,
+        }
+        p.target = this.defensiveWidthTarget(p, p.target)
+        p.urgency = deepThird ? 0.55 : 0.36
       }
-      p.target = this.defensiveWidthTarget(p, p.target)
-      p.urgency = deepThird ? 0.55 : 0.36
       p.mode = 'mark'
       return
     }
 
     p.target = this.defensiveWidthTarget(p, this.formationTarget(p))
-    p.urgency = 0.24
+    if (this.tacticalMechanics && t.tactics.instructions?.transition.onLoss === 'regroup'
+      && this.inWindow(t.lossAt) && p.pos.x * t.dir > 0) {
+      p.urgency = 0.44
+    } else {
+      p.urgency = 0.24
+    }
     p.mode = 'idle'
   }
 
@@ -1623,7 +1745,16 @@ export class PesMatch {
         const goalDirection = norm(g.x - o.pos.x, g.y - o.pos.y)
         const ballDirection = norm(this.ball.x - o.pos.x, this.ball.y - o.pos.y)
         const r = Math.abs(o.pos.x) > P.HL - 35 * P.K ? 1.35 : 1.8
-        y = o.pos.y + (goalDirection.y * 0.55 + ballDirection.y * 0.45) * r + o.vel.y * 0.10
+        const v2 = t.tactics.instructions
+        const lowBlockMark = !!v2 && (v2.defense.line === 'low' || v2.defense.intensity === 'low')
+        const ownThird = lowBlockMark && o.pos.x * t.dir < -(P.HL - 35 * P.K)
+        if (ownThird) {
+          const effDef = execution(this.teamFamiliarity(t), this.tacticsParams, INSTRUCTION_DIFFICULTY.line)
+          const gw = lerp(0.55, 0.82, effDef)
+          y = o.pos.y + (goalDirection.y * gw + ballDirection.y * (1 - gw)) * r + o.vel.y * 0.10
+        } else {
+          y = o.pos.y + (goalDirection.y * 0.55 + ballDirection.y * 0.45) * r + o.vel.y * 0.10
+        }
       } else y = this.formationTarget(q).y
       if (!Number.isFinite(y)) return raw
       sum += clamp(y, minY, maxY)
@@ -1692,22 +1823,30 @@ export class PesMatch {
     if (v2 && inPoss) {
       const center = this.possessionCenterY(t)
       const sign = triOf(v2.possession.width)
-      ly = center + (ly - center) * (1 + this.tacticsParams.wWidth * sign)
+      const widthEff = execution(this.teamFamiliarity(t), this.tacticsParams, INSTRUCTION_DIFFICULTY.width)
+      ly = center + (ly - center) * (1 + this.tacticsParams.wWidth * sign * widthEff)
     }
 
-    lx += K * (inPoss ? (3 + 8 * tac.line) : -(2 + 6 * (1 - tac.press)))
+    const rawLine = v2 ? this.tacticsParams.lineValue[v2.defense.line] : tac.line
+    const effLine = v2
+      ? 0.5 + (rawLine - 0.5) * (t.lineBias ?? execution(this.teamFamiliarity(t), this.tacticsParams, INSTRUCTION_DIFFICULTY.line))
+      : tac.line
+    lx += K * (inPoss ? (3 + 8 * effLine) : -(2 + 6 * (1 - tac.press)))
 
-    // 新指令的防线纵深：低防线整条后撤、高防线整体前压（后卫最明显，中场次之）。
-    // 首轮只映射旧 line 时实测 DL 只差 2 米，和文档 −3～−10 米的目标差一个量级。
+    // 新指令的防线纵深：低防线整条后撤并收紧中后场纵深、高防线整体前压（后卫最明显，中场次之）。
     if (v2 && !inPoss) {
-      // 防线纵深同样吃熟练度：lineBias 由 updateShape 每帧算一次（含「执行反了」）。
-      const depth = K * (tac.line - 0.5) * 2 * this.tacticsParams.lineDepth * (t.lineBias ?? 1)
-      lx += depth * (p.line <= 0.35 ? 1 : p.line <= 0.55 ? 0.6 : 0.15)
+      const depth = K * (rawLine - 0.5) * 2 * this.tacticsParams.lineDepth * (t.lineBias ?? 1)
+      if (this.tacticalMechanics && depth < 0) {
+        // 低位防守优先压缩中场与后卫线之间的肋部/弧顶空当，避免后卫单独退进禁区把越位线拖深。
+        lx += depth * (p.line <= 0.35 ? 0.72 : p.line <= 0.55 ? 1.05 : 0.55)
+      } else {
+        lx += depth * (p.line <= 0.35 ? 1 : p.line <= 0.55 ? 0.6 : 0.15)
+      }
     }
 
     if (!inPoss) {
       // 防线：最高不能超过这条线；同时不能站在球的前面（球门一侧才是防守位置）
-      const lineX = clamp(K * (-30 + tac.line * 26) + (bxt + P.HL) * 0.16, -40 * K, -5 * K)
+      const lineX = clamp(K * (-30 + effLine * 26) + (bxt + P.HL) * 0.16, -40 * K, -5 * K)
       if (p.line <= 0.35) lx = Math.min(lx, lineX)
       if (p.line <= 0.55) lx = Math.min(lx, bxt - 2.0)
       lx = Math.max(lx, -P.HL + 6 * K)
@@ -1755,6 +1894,12 @@ export class PesMatch {
   private spaceBehindLine(p: PesPlayer, oppTeam: PesTeam): number {
     const deepest = oppTeam.players.filter((o) => o.role !== 'GK')
       .reduce((mn, o) => Math.min(mn, o.pos.x * oppTeam.dir), this.spec.HL)
+    if (this.tacticalMechanics) {
+      // 新战术机制：度量对方最后一名外场后卫身后的真实草皮深度（到对方球门线距离），
+      // 避免进攻者贴越位线站位时把“距后卫前方的距离”误判成没有身后空间。
+      if (p.pos.x * oppTeam.dir < deepest - 2.5 * this.spec.K) return 0
+      return deepest + this.spec.HL - 18 * this.spec.K
+    }
     return p.pos.x * oppTeam.dir - deepest
   }
 
@@ -2228,7 +2373,15 @@ export class PesMatch {
       if (b.meta.flightKind === 'space' && b.meta.intended === best.pid) this.metrics?.spaceReceive(best.ti, b.meta.result === 'ok')
     }
     b.owner = best.pid
-    best.holdUntil = this.time + 0.55 + this.rng.float() * 0.55
+    const bestTeam = this.teams[best.ti]
+    if (bestTeam.tactics.instructions) {
+      const rawHold = 0.55 + this.rng.float() * 0.55
+      const rawTempo = this.tacticsParams.tempoValue[bestTeam.tactics.instructions.possession.tempo]
+      const effTempo = 0.5 + (rawTempo - 0.5) * execution(best.familiarity ?? 1, this.tacticsParams, INSTRUCTION_DIFFICULTY.tempo)
+      best.holdUntil = this.time + rawHold * clamp(1.45 - 0.90 * effTempo, 0.55, 1.35)
+    } else {
+      best.holdUntil = this.time + 0.55 + this.rng.float() * 0.55
+    }
     b.meta = null
     b.z = 0
     b.vx = b.vy = b.vz = 0
@@ -2779,6 +2932,8 @@ export class PesMatch {
       t.presser = -1
       t.presser2 = -1
       t.cover = -1
+      t.pressEvalAt = undefined
+      t.pressOwnerPid = undefined
       t.marks.fill(-1)
       this.refreshChangedInstructionTasks(t, previous)
     }
@@ -2790,9 +2945,10 @@ export class PesMatch {
     for (const t of this.teams) {
       if (!t.tactics.instructions) continue
       const previous = this.instructionTasks(t)
-      if (t.presser === player.pid) t.presser = -1
-      if (t.presser2 === player.pid) t.presser2 = -1
+      if (t.presser === player.pid) { t.presser = -1; t.pressEvalAt = undefined }
+      if (t.presser2 === player.pid) { t.presser2 = -1; t.pressEvalAt = undefined }
       if (t.cover === player.pid) t.cover = -1
+      if (t.pressOwnerPid === player.pid) t.pressOwnerPid = undefined
       if (this.tiOf(t) === player.ti) t.marks[player.slot] = -1
       for (let slot = 0; slot < t.marks.length; slot++) {
         if (t.marks[slot] === player.pid) t.marks[slot] = -1
@@ -2806,11 +2962,17 @@ export class PesMatch {
     for (const t of this.teams) {
       const v2 = t.tactics.instructions
       const previous = v2 && this.tacticalMechanics ? this.instructionTasks(t) : null
+      const prevPresser = t.presser
+      const prevPresser2 = t.presser2 ?? -1
       t.marks.fill(-1)
       t.presser = -1
       t.cover = -1
       if (v2 && this.tacticalMechanics) t.presser2 = -1
       if (b.frozen || this.possessionTeam() === t) {
+        if (v2 && this.tacticalMechanics) {
+          t.pressEvalAt = undefined
+          t.pressOwnerPid = undefined
+        }
         if (previous) this.refreshChangedInstructionTasks(t, previous)
         continue
       }
@@ -2824,7 +2986,7 @@ export class PesMatch {
       const eta = (p: PesPlayer): number => dist(p.pos, ip) / Math.max(2.5, this.maxSpeed(p) * 0.6)
       const sorted = outfield.slice().sort((a, c) => eta(a) - eta(c))
       if (v2) {
-        this.assignPressers(t, v2, outfield, ip)
+        this.assignPressers(t, v2, outfield, ip, prevPresser, prevPresser2)
       } else {
         t.presser = sorted[0].pid
         t.cover = sorted[1] ? sorted[1].pid : -1
@@ -2860,44 +3022,90 @@ export class PesMatch {
   }
 
   /**
-   * 新指令的上抢调度（文档 4.1「上抢调度的首版可执行起点」）：
-   * 逼抢线控制允许区域、频率控制搜索半径与人数；回撤窗口取消常规上抢，反抢窗口加半径并忽略逼抢线。
-   * 只分配任务，不直接提高抢断成功率；实际接触仍走 tryTackles / 结算。
+   * 新指令的上抢调度（文档 4.1 + docs/tactical-design-revision.md 4.3 / 5.2）：
+   * - 连续熟练度缩放，彻底移除每物理帧随机数反转抖动；
+   * - 0.25s 周期保持当前合法上抢人，持球人变化 / 死球 / 人员失效立即重评；
+   * - 紧急上抢不受回撤或逼抢线阻断（禁区/身前 3 米内仍允许 1 名合格防守人上前，计入人数上限）。
    */
-  private assignPressers(t: PesTeam, v2: TacticalInstructionsV2, outfield: PesPlayer[], ip: Vec2): void {
+  private assignPressers(
+    t: PesTeam,
+    v2: TacticalInstructionsV2,
+    outfield: PesPlayer[],
+    ip: Vec2,
+    prevPresser = -1,
+    prevPresser2 = -1,
+  ): void {
     const P = this.spec
+    const K = P.K
     const params = this.tacticsParams
     const b = this.ball
     const ti = this.tiOf(t)
     const fam = this.teamFamiliarity(t)
-    const eff = execution(fam, params)
+    const effEngage = execution(fam, params, INSTRUCTION_DIFFICULTY.engagement)
+    const effIntensity = execution(fam, params, INSTRUCTION_DIFFICULTY.intensity)
+    const effLine = execution(fam, params, INSTRUCTION_DIFFICULTY.line)
+    const effLoss = execution(fam, params, INSTRUCTION_DIFFICULTY.onLoss)
     const u = (b.x * t.dir + P.HL) / P.L
-    const counterpress = v2.transition.onLoss === 'counterpress' && this.inWindow(t.lossAt)
-    const regroup = v2.transition.onLoss === 'regroup' && this.inWindow(t.lossAt)
-    // 熟练度不足时防线类指令也会「执行反了」：低/高互换成对方档位（中档不变），再按执行强度缩到中性附近。
-    // 满熟练度不抽随机数，保证 fam = 1 的行为与校准实验逐位一致。
-    const slip = fam >= 1 ? 0 : slipChance(fam, INSTRUCTION_DIFFICULTY.engagement, params)
-    const invert = fam >= 1 || this.rng.float() >= slip ? 1 : -1
-    const level = <T extends 'low' | 'mid' | 'high'>(value: T): T => (invert > 0 || value === 'mid' ? value : value === 'low' ? 'high' as T : 'low' as T)
-    const engagement = lerp(params.engagement.mid, params.engagement[level(v2.defense.engagement)], eff)
-    const radius = lerp(params.pressRadius.mid, params.pressRadius[level(v2.defense.intensity)], eff)
-    const count = Math.max(1, Math.round(lerp(1, params.pressCount[level(v2.defense.intensity)], eff)))
-    // 防线纵深用同一个执行系数：满熟练度时正好等于指令值，低熟练度时退回中性 / 反向。
-    t.lineBias = t.tactics.line === 0.5 ? 0 : eff * invert
+    const counterpress = v2.transition.onLoss === 'counterpress' && this.inWindow(t.lossAt) && effLoss >= 0.5
+    const regroup = v2.transition.onLoss === 'regroup' && this.inWindow(t.lossAt) && effLoss >= 0.5
+    const engagement = lerp(params.engagement.mid, params.engagement[v2.defense.engagement], effEngage)
+    const radius = lerp(params.pressRadius.mid, params.pressRadius[v2.defense.intensity], effIntensity) * K
+    const rawCount = counterpress ? Math.max(2, params.pressCount[v2.defense.intensity]) : params.pressCount[v2.defense.intensity]
+    const count = Math.max(1, Math.round(lerp(1, rawCount, effIntensity)))
+    const rawLine = params.lineValue[v2.defense.line]
+    t.lineBias = rawLine === 0.5 ? 0 : effLine
     const maxPress = Math.min(count, Math.max(0, outfield.length - params.keepBack))
-    const search = counterpress ? Math.min(radius + params.counterpressBonus, params.counterpressMax) : radius
+    const search = counterpress
+      ? Math.min(radius + params.counterpressBonus * K * effLoss, params.counterpressMax * K)
+      : radius
     const allowed = !regroup && (counterpress || u <= engagement)
+    const emergencyLimit = params.emergencyRadius * K
+
     const near = outfield
       .filter((p) => dist(p.pos, ip) <= search)
       .sort((a, c) => dist(a.pos, ip) - dist(c.pos, ip) || a.pid - c.pid)
-    const picked = allowed ? near.slice(0, maxPress) : []
-    // 紧急上抢：禁区内完全没人上前不现实；任何档位允许一名 3 米内的合格球员，计入人数上限。
-    if (allowed && !picked.length) {
-      const emergency = outfield
-        .filter((p) => dist(p.pos, ip) <= params.emergencyRadius)
-        .sort((a, c) => dist(a.pos, ip) - dist(c.pos, ip) || a.pid - c.pid)[0]
-      if (emergency) picked.push(emergency)
+
+    let picked: PesPlayer[] = []
+    const canKeepSchedule = this.tacticalMechanics
+      && t.pressEvalAt !== undefined
+      && this.time < t.pressEvalAt
+      && t.pressOwnerPid === b.owner
+    if (canKeepSchedule) {
+      const keepLimit = allowed ? search + 2.5 * K : emergencyLimit + 1.0 * K
+      const p1 = prevPresser >= 0 ? outfield.find((p) => p.pid === prevPresser && dist(p.pos, ip) <= keepLimit) : undefined
+      if (p1 && maxPress >= 1) {
+        picked.push(p1)
+        const p2 = allowed && maxPress >= 2 && prevPresser2 >= 0
+          ? outfield.find((p) => p.pid === prevPresser2 && p.pid !== p1.pid && (counterpress || p.stamina >= 0.45) && dist(p.pos, ip) <= search + 3 * K)
+          : undefined
+        if (p2) picked.push(p2)
+      }
     }
+
+    if (!picked.length || (allowed && maxPress >= 2 && picked.length < 2 && near.length >= 2 && !canKeepSchedule)) {
+      if (allowed) {
+        picked = near.slice(0, 1)
+        if (maxPress >= 2) {
+          const second = near.find((p) => p !== picked[0] && (!this.tacticalMechanics || counterpress || p.stamina >= 0.45))
+          if (second) picked.push(second)
+        }
+      } else {
+        picked = []
+      }
+      // 紧急上抢：回撤窗口或逼抢线外，身前 3 米内仍允许 1 名合格防守人上前施压（计入留人上限）。
+      if (!picked.length && maxPress >= 1) {
+        const boxDangerLimit = this.tacticalMechanics && u <= 0.28 ? Math.min(radius, 9 * K) : emergencyLimit
+        const emergency = outfield
+          .filter((p) => dist(p.pos, ip) <= boxDangerLimit)
+          .sort((a, c) => dist(a.pos, ip) - dist(c.pos, ip) || a.pid - c.pid)[0]
+        if (emergency) picked.push(emergency)
+      }
+      if (this.tacticalMechanics) {
+        t.pressEvalAt = this.time + 0.25
+        t.pressOwnerPid = b.owner
+      }
+    }
+
     t.presser = picked[0] ? picked[0].pid : -1
     t.presser2 = picked[1] ? picked[1].pid : -1
     t.cover = near.find((p) => !picked.includes(p))?.pid ?? -1

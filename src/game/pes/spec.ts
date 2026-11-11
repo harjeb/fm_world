@@ -221,8 +221,11 @@ export interface PesTeam {
   /** 最近一次确认得球 / 失球的比赛时刻（新指令的攻防转换窗口）。 */
   gainAt?: number
   lossAt?: number
-  /** 本帧防线指令的执行系数（−1…+1，已含熟练度与「执行反了」），无新指令时 undefined。 */
+  /** 本帧防线指令的执行系数（0…1，按熟练度连续缩放），无新指令时 undefined。 */
   lineBias?: number
+  /** 新指令上抢调度的下次重评时刻与上次锁定的持球人 pid（0.25s 节流，换持球人立即重评）。 */
+  pressEvalAt?: number
+  pressOwnerPid?: number
   /** marks[slot] = 该队员本帧盯防的对方 pid，没有为 -1。每帧重新分配。 */
   marks: number[]
 }

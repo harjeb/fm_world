@@ -66,21 +66,30 @@ export function elevenReinforcements(players: Player[], options: { seed: number;
   return added
 }
 
-/** 不带预设的 11 人制阵容（迁移用：旧的自定义摆位是 7 人制槽位的，不能沿用）。 */
-function freshLineup(roster: Player[], formationId: string, tactics: Lineup['tactics']): Omit<Lineup, 'presets'> {
+/** 不带预设的 11 人制阵容（迁移用：旧的自定义摆位是 7 人制槽位的，不能沿用，但保留战术风格与十二项指令）。 */
+function freshLineup(
+  roster: Player[],
+  formationId: string,
+  tactics: Lineup['tactics'],
+  source?: Pick<Lineup, 'tacticalStyle' | 'tacticalInstructions'>,
+): Omit<Lineup, 'presets'> {
   const id = elevenFormationFor(formationId)
   // 传一个空的“旧阵容”，避免 autoFillLineup 去拿最近校验过的 7 人制阵容里的摆位和预设。
-  const { presets: _presets, ...lineup } = autoFillLineup(roster, id, tactics, { formationId: id })
+  const { presets: _presets, ...lineup } = autoFillLineup(roster, id, tactics, {
+    formationId: id,
+    tacticalStyle: source?.tacticalStyle,
+    tacticalInstructions: source?.tacticalInstructions,
+  })
   return lineup
 }
 
 /** 玩家阵容迁移：换阵型、重排首发，命名预设各自按新阵型重排。 */
 export function elevenLineup(roster: Player[], lineup: Lineup): Lineup {
-  const next: Lineup = freshLineup(roster, lineup.formationId, lineup.tactics)
+  const next: Lineup = freshLineup(roster, lineup.formationId, lineup.tactics, lineup)
   if (lineup.presets?.length) {
     next.presets = lineup.presets.map((preset): TacticPreset => ({
       ...preset,
-      lineup: freshLineup(roster, preset.lineup.formationId, preset.lineup.tactics),
+      lineup: freshLineup(roster, preset.lineup.formationId, preset.lineup.tactics, preset.lineup),
     }))
   }
   return next

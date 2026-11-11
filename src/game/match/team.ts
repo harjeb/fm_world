@@ -6,6 +6,7 @@ import { attrRating } from '../scale.ts'
 import { personKey } from '../injury.ts'
 import { customSpotFor } from '../squad.ts'
 import { FORMATIONS } from '../data/formations.ts'
+import { cloneInstructions } from '../pes/tactics.ts'
 
 export const PITCH_LENGTH = 100
 export const PITCH_WIDTH = 64
@@ -108,6 +109,14 @@ export function buildMatchTeam(input: MatchTeamInput, side: MatchSide): MatchTea
     autoSubs: input.autoSubs ? structuredClone(input.autoSubs) : undefined,
     subsUsed: 0,
     ...(input.chemistry && Object.keys(input.chemistry).length ? { chemistry: { ...input.chemistry } } : {}),
+    ...(input.instructions
+      ? {
+          ...(input.tacticalStyle ? { tacticalStyle: input.tacticalStyle } : {}),
+          baseInstructions: cloneInstructions(input.instructions),
+          instructions: cloneInstructions(input.instructions),
+          familiarity: input.familiarity ?? 1,
+        }
+      : {}),
   }
 }
 

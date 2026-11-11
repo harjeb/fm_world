@@ -691,9 +691,10 @@ export class SettlementKernel {
     return clamp(0.35 + (this.ratings.eff(gk, 'handling') - this.ratings.eff(shooter, 'shooting')) / 150, 0.12, 0.88)
   }
 
-  /** 防守者动手的倾向（盘带犯规和战术犯规共用）：逼抢越凶、角色越爱逼抢越高。 */
+  /** 防守者动手的倾向（盘带犯规和战术犯规共用）：逼抢越凶、角色越爱逼抢越高。新战术指令下保持基准中性，不借上抢频率隐性抬高犯规率。 */
   foulShare(defender: MatchPlayerState, opp: MatchTeamState): number {
-    return clamp(0.16 + ROLES[defender.role].pressBias * 0.05 + PRESS_LEVEL[opp.tactics.press] * 0.02, 0.1, 0.35)
+    const pressLevel = opp.instructions ? PRESS_LEVEL.mid : PRESS_LEVEL[opp.tactics.press]
+    return clamp(0.16 + ROLES[defender.role].pressBias * 0.05 + pressLevel * 0.02, 0.1, 0.35)
   }
 
   /**

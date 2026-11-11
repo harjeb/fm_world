@@ -1,7 +1,7 @@
-import type { Lineup, Player, Position, RoleId, Tactics } from '../../game/types.ts'
+import type { Lineup, Player, Position, RoleId } from '../../game/types.ts'
 import { playerCards } from '../../game/cards.ts'
 import { setLineup } from '../../game/actions.ts'
-import { FORMATIONS, FORMATION_LIST, TACTIC_LABELS, type FormationDef, type FormationSlot } from '../../game/data/formations.ts'
+import { FORMATIONS, FORMATION_LIST, type FormationDef, type FormationSlot } from '../../game/data/formations.ts'
 import { ROLES, ROLES_BY_POSITION, roleFit } from '../../game/data/roles.ts'
 import { PLAYABLE_PROFICIENCY, positionMultiplier } from '../../game/ca.ts'
 import { formOf, recentAnalysis, squadForm, type PlayerForm } from '../../game/form.ts'
@@ -15,6 +15,7 @@ import {
   applyTacticPreset,
   bestRoleForPlayer,
   clearSlotPositions,
+  computeLineupFamiliarity,
   deleteTacticPreset,
   findTacticPreset,
   presetNameError,
@@ -25,9 +26,20 @@ import {
   validateLineup,
   type LineupTarget,
 } from '../../game/squad.ts'
+import {
+  INSTRUCTION_GROUPS,
+  STYLE_LIST_REV3,
+  STYLE_META,
+  STYLES_REV3,
+  getInstructionField,
+  inferStyleForInstructions,
+  instructionsFromLegacyTactics,
+  type InstructionFieldDef,
+  type TacticalInstructionsV2,
+} from '../../game/pes/tactics.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
 import { RATING_STOPS, boardMarkings, boardSpot, boardSpotFromPercent, caHeat, cardSelect, clampSpot, clubLook, fitHeat, formBars, heatLegend, icon, injuryLabel, inkOn, meter, pageHead, panel, pick, posBadge, primaryPosition, tag } from '../components.ts'
-import { esc, pct, playerCA, positionLabel, shortName } from '../format.ts'
+import { esc, lineupStyleLabel, pct, playerCA, positionLabel, shortName } from '../format.ts'
 import { morph } from '../morph.ts'
 import { game, ui } from '../state.ts'
 import { chemistryKey } from '../../game/chemistry.ts'
@@ -165,21 +177,51 @@ function benchCard(index: number, draft: Lineup, formation: FormationDef, select
 
 /* ---------- 战术栏 ---------- */
 
-const PHASES: { title: string; keys: (keyof Tactics)[] }[] = [
-  { title: '持球阶段', keys: ['attack', 'passing', 'tempo'] },
-  { title: '无球阶段', keys: ['line', 'press'] },
-]
-
-function tacticRow(draft: Lineup, key: keyof Tactics): string {
-  return `<div class="tactic-row">
-    <span class="tactic-label">${TACTIC_LABELS[key].label}</span>
-    <div class="seg stretch" role="group" aria-label="${TACTIC_LABELS[key].label}">${Object.entries(TACTIC_LABELS[key].options).map(([value, label]) => `<button class="${draft.tactics[key] === value ? 'active' : ''}" data-action="lineup-tactic" data-tactic="${key}" data-value="${value}">${label}</button>`).join('')}</div>
+function instructionRow(active: TacticalInstructionsV2, field: InstructionFieldDef, disabled: boolean): string {
+  const current = getInstructionField(active, field.id)
+  return `<div class="tactic-row" ${tipAttrs(field.label, field.desc)}>
+    <span class="tactic-label">${esc(field.label)}</span>
+    <div class="seg stretch" role="group" aria-label="${esc(field.label)}">${field.options.map((opt) => `<button class="${current === opt.value ? 'active' : ''}" data-action="lineup-instruction" data-field="${field.id}" data-value="${opt.value}" ${disabled ? 'disabled' : ''}>${esc(opt.label)}</button>`).join('')}</div>
   </div>`
 }
 
-function planColumn(draft: Lineup, formation: FormationDef): string {
-  return `${PHASES.map((phase) => `<section class="tac-phase"><h3>${phase.title}</h3>${phase.keys.map((key) => tacticRow(draft, key)).join('')}</section>`).join('')}
+function planColumn(draft: Lineup, formation: FormationDef, disabled: boolean): string {
+  const active = draft.tacticalInstructions ?? instructionsFromLegacyTactics(draft.tactics)
+  return `${INSTRUCTION_GROUPS.map((group) => `<section class="tac-phase"><h3>${esc(group.title)}</h3>${group.fields.map((field) => instructionRow(active, field, disabled)).join('')}</section>`).join('')}
     <section class="tac-phase"><h3>阵型特点</h3><p class="hint flat">${esc(formation.desc)}</p></section>`
+}
+
+function tacticalStyleBar(draft: Lineup, disabled: boolean): string {
+  const inferred = draft.tacticalInstructions
+    ? inferStyleForInstructions(draft.tacticalInstructions, draft.tacticalStyle)
+    : null
+  const styleId = inferred?.styleId ?? draft.tacticalStyle ?? ''
+  const meta = styleId ? STYLE_META[styleId] : null
+  const styleName = styleId ? STYLES_REV3[styleId].name : ''
+  const statusBadge = inferred
+    ? (inferred.adjusted ? '<span class="tag gold">已调整</span>' : '<span class="tag good">预设模板</span>')
+    : '<span class="tag">基础五项</span>'
+  const resetBtn = inferred?.adjusted
+    ? `<button class="btn small ghost" data-action="lineup-style-reset" ${disabled ? 'disabled' : ''}>恢复模板</button>`
+    : ''
+  const metaHtml = meta
+    ? `<div class="tac-style-meta" ${tipAttrs(styleName, `战术定位：${meta.tagline} 优势：${meta.pros} 代价：${meta.cons}`)}>
+        <span class="tac-style-tagline">${esc(meta.tagline)}</span>
+        <span class="tac-style-tradeoff"><b class="good-text">优</b> ${esc(meta.pros)} · <b class="warn-text">忌</b> ${esc(meta.cons)}</span>
+      </div>`
+    : `<div class="tac-style-meta"><span class="tac-style-tagline muted">选择一套战术风格即可自动展开十二项球队指令，也可直接在左侧逐项微调。</span></div>`
+  return `<div class="tac-style-bar">
+    <div class="tac-style-pick">
+      <label class="tac-style-label" for="lineup-tactical-style">战术风格</label>
+      <select id="lineup-tactical-style" class="compact tac-style-select" data-tactical-style aria-label="战术风格模板" ${disabled ? 'disabled' : ''}>
+        ${!styleId ? '<option value="" selected>— 选择风格模板 —</option>' : ''}
+        ${STYLE_LIST_REV3.map((item) => `<option value="${item.id}" ${styleId === item.id ? 'selected' : ''}>${esc(item.name)}</option>`).join('')}
+      </select>
+      ${statusBadge}
+      ${resetBtn}
+    </div>
+    ${metaHtml}
+  </div>`
 }
 
 function tacticsBar(draft: Lineup, formation: FormationDef): string {
@@ -189,9 +231,11 @@ function tacticsBar(draft: Lineup, formation: FormationDef): string {
     return player && slot ? [{ player, slot, role: starter.role }] : []
   })
   const average = (values: number[]) => (values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0)
+  const familiarity = computeLineupFamiliarity(game.roster, draft, game.economy?.tactics ?? 1) * 100
   return `<header class="tac-bar">
     <div class="seg" role="group" aria-label="阵型">${FORMATION_LIST.map((item) => `<button class="${draft.formationId === item.id ? 'active' : ''}" data-action="lineup-formation" data-formation="${item.id}" title="${esc(item.desc)}">${esc(item.label)}</button>`).join('')}</div>
     <div class="tac-stats">
+      <div class="tac-stat" ${tipAttrs('战术执行度', '由首发位置熟练度、战术意识（决断·配合）和俱乐部战术研究室阶段共同决定。数值越高，高位压迫、就地反抢和防线协同的执行越到位。')}><span>战术执行</span>${meter(familiarity)}</div>
       <div class="tac-stat"><span>位置熟练</span>${meter(average(starters.map(({ player, slot }) => player.positions[slot.position])))}</div>
       <div class="tac-stat"><span>首发体能</span>${meter(average(starters.map(({ player }) => player.condition ?? 100)))}</div>
       <div class="tac-stat"><span>平均有效</span>${fitHeat(average(starters.map(({ player, slot, role }) => effectiveFit(player, role, slot.position))))}</div>
@@ -390,6 +434,7 @@ function presetItem(preset: NonNullable<Lineup['presets']>[number]): string {
   const customCount = Object.keys(preset.lineup.customPositions ?? {}).length
   const detail = [
     formation?.label ?? preset.lineup.formationId,
+    lineupStyleLabel(preset.lineup),
     `${preset.lineup.starters.length} 人首发`,
     `${preset.lineup.bench.length} 人替补`,
     customCount ? `${customCount} 处自定义位置` : '默认位置',
@@ -753,6 +798,8 @@ function lineupFingerprint(lineup: Lineup): string {
     lineup.starters.map((starter) => [starter.slotId, starter.playerId, starter.role]),
     lineup.bench,
     lineup.tactics,
+    lineup.tacticalStyle ?? null,
+    lineup.tacticalInstructions ?? null,
     Object.entries(lineup.customPositions ?? {}).sort(([a], [b]) => a.localeCompare(b)),
     (lineup.presets ?? []).map((preset) => [preset.id, preset.name, preset.createdAt, lineupFingerprint({ ...preset.lineup })]),
   ])
@@ -809,8 +856,9 @@ export function renderLineup(): string {
     <div class="tactics">
       <section class="panel">
         ${tacticsBar(draft, formation)}
+        ${tacticalStyleBar(draft, onlineLock)}
         <div class="tac-body">
-          <aside class="tac-plan">${planColumn(draft, formation)}</aside>
+          <aside class="tac-plan">${planColumn(draft, formation, onlineLock)}</aside>
           <div class="tac-pitch">
             <div class="board">${boardMarkings()}${chemistryLines(draft, formation)}${formation.slots.map((slot) => slotCard(slot, draft, formation, selectedId, look.color)).join('')}</div>
             <p class="hint flat">圆内是有效评分；橙圈表示熟练度低、受伤或停赛。任何人都能踢任何位置，熟练度越低属性折损越多，最多折损 40%。</p>
