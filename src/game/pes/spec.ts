@@ -251,6 +251,9 @@ export interface BallMeta {
   cross?: boolean
   /** 争顶已经结算过 */
   aerialDone?: boolean
+  /** 身后传球的计划目标与类型；实际轨迹可因结算结果偏离。 */
+  plannedTarget?: Vec2
+  flightKind?: 'space'
   /** 门将扑救后抱住（true）还是脱手（false），出脚时已定 */
   hold?: boolean
   /** 射门是头球 */
@@ -363,6 +366,15 @@ export interface PesSetPiece {
   until: number
 }
 
+export interface PesOpenPlayState {
+  phase: 'restartPending' | 'unconfirmed' | 'open'
+  restartType: RestartType | null
+  team: TeamIndex | null
+  taker: number
+  candidate: TeamIndex | null
+  controlledFor: number
+}
+
 export interface PesMatchSnapshot {
   version: 1
   spec: PitchSpec
@@ -381,6 +393,12 @@ export interface PesMatchSnapshot {
   /** 录像：0 = 不录，否则为每秒帧数 */
   recordHz: number
   frameAcc: number
+  /** 新指令比赛的转换、实验参数与开放比赛确认状态。 */
+  tacticsState?: {
+    lastPoss: TeamIndex | null
+    params: import('./tactics.ts').TacticsParams
+    openPlay: PesOpenPlayState
+  }
   /** 结算模型的存档（纯数据）；没接结算为 null */
   contact: unknown
 }

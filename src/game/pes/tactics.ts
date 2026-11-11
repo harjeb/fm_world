@@ -2,7 +2,7 @@
  * 战术风格 / 球队指令的实验模型（docs/fm-tactical-styles-and-instructions.md 3.3 / 4.1、
  * docs/team-instructions-system-design.md 4.1）。
  *
- * 这里只放**首版九项**和它们的参数；高级指令（P2）不在本文件里。
+ * 首版九项保持不变；`advanced` 是显式启用的实验性接空当 / 无球宽度，不会隐式修改旧模板。
  * 旧五字段 `Tactics` / `PesTactics` 的语义完全不动：只有给了 `instructions` 的球队才走新分支，
  * 新分支把旧滑杆固定在 `0.5` 的中性基底上，再加本文件的偏好项，避免同一战术被叠加两次。
  *
@@ -38,6 +38,11 @@ export type TacticalInstructionsV2 = {
     /** 压迫频率：搜索半径与同时上抢人数 */
     intensity: 'low' | 'mid' | 'high'
   }
+  /** 实验性高级指令；缺省为中性，旧九项模板不自动迁移。 */
+  advanced?: {
+    possession?: { receiving?: 'mixed' | 'space' }
+    defense?: { width?: 'narrow' | 'normal' | 'wide' }
+  }
 }
 
 /** 中性（B0）：`空白 / 自定义` 的取值。 */
@@ -54,7 +59,7 @@ export type StyleId =
 export type StyleDef = {
   id: StyleId
   name: string
-  /** 复杂度（文档 1. 各风格的「低 / 平均 / 高 / 极高复杂度」），用于熟练度惩罚。 */
+  /** 复杂度标签（当前用于展示；尚未直接参与执行计算）。 */
   complexity: number
   /** 强度（跑动与执行要求），用于体能 / 熟练度提示，不直接改物理。 */
   intensity: number
@@ -124,6 +129,24 @@ export const STYLES: Record<StyleId, StyleDef> = Object.fromEntries(
 ) as Record<StyleId, StyleDef>
 
 export const styleById = (id: StyleId): StyleDef => STYLES[id]
+
+/** 修订版模板须显式应用；旧模板和已保存的指令不被改写。 */
+export const STYLE_LIST_REV2: readonly StyleDef[] = STYLE_LIST.map((original) => {
+  const instructions = structuredClone(original.instructions)
+  if (original.id === 'verticalTiki' || original.id === 'fluidCounter' || original.id === 'directCounter') {
+    instructions.advanced = { possession: { receiving: 'space' } }
+  }
+  if (original.id === 'fluidCounter' || original.id === 'directCounter' || original.id === 'catenaccio' || original.id === 'parkBus') {
+    instructions.advanced = { ...instructions.advanced, defense: { width: 'narrow' } }
+  }
+  if (original.id === 'parkBus') {
+    instructions.possession.passing = 'mixed'
+    instructions.transition.onGain = 'hold'
+  }
+  return { ...original, instructions }
+})
+export const STYLES_REV2 = Object.fromEntries(STYLE_LIST_REV2.map((item) => [item.id, item])) as Record<StyleId, StyleDef>
+export const styleByRevision = (id: StyleId, revision: 1 | 2): StyleDef => revision === 1 ? STYLES[id] : STYLES_REV2[id]
 
 /** 文档 4.1 的首选参数；实验脚本可以覆盖，验收报告记录实际使用的值。 */
 export type TacticsParams = {
@@ -215,8 +238,8 @@ export const triOf = (value: string): Tri => (TRI_NEGATIVE.has(value) ? -1 : TRI
 /**
  * 执行强度与「执行反了」的概率（战术难度 / 熟练度的核心）。
  * - `fam` 0 = 完全不熟，1 = 完全熟练。
- * - 复杂度和单项难度越高，同样的熟练度下执行越弱、失误越多。
- * - 数值来自 `npm run tactics:experiment -- --familiarity`，见验证报告。
+ * - `execution` 只看熟练度；`slipChance` 另使用单项难度。风格复杂度标签不直接参与计算。
+ * - 参数来自首轮探索，不代表平衡或单调性已验证。
  */
 export function execution(fam: number, params: TacticsParams = DEFAULT_PARAMS): number {
   const f = Math.max(0, Math.min(1, fam))
@@ -248,7 +271,28 @@ export function validateInstructions(value: unknown): TacticalInstructionsV2 {
   const possession = group('possession', ['focus', 'passing', 'tempo', 'width'])
   const transition = group('transition', ['onGain', 'onLoss'])
   const defense = group('defense', ['line', 'engagement', 'intensity'])
-  for (const key of Object.keys(v)) if (!['possession', 'transition', 'defense'].includes(key)) throw new Error(`未知战术指令分组 ${key}`)
+  for (const key of Object.keys(v)) if (!['possession', 'transition', 'defense', 'advanced'].includes(key)) throw new Error(`未知战术指令分组 ${key}`)
+  let advanced: TacticalInstructionsV2['advanced']
+  if ('advanced' in v) {
+    const raw = v.advanced
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('无效战术指令 advanced')
+    for (const key of Object.keys(raw)) if (!['possession', 'defense'].includes(key)) throw new Error(`未知战术指令 advanced.${key}`)
+    advanced = {}
+    if ('possession' in raw) {
+      const part = raw.possession as Record<string, unknown>
+      if (!part || typeof part !== 'object' || Array.isArray(part)) throw new Error('无效战术指令 advanced.possession')
+      for (const key of Object.keys(part)) if (key !== 'receiving') throw new Error(`未知战术指令 advanced.possession.${key}`)
+      advanced.possession = {}
+      if ('receiving' in part) advanced.possession.receiving = pick(part.receiving, 'advanced.possession.receiving', ['mixed', 'space'] as const)
+    }
+    if ('defense' in raw) {
+      const part = raw.defense as Record<string, unknown>
+      if (!part || typeof part !== 'object' || Array.isArray(part)) throw new Error('无效战术指令 advanced.defense')
+      for (const key of Object.keys(part)) if (key !== 'width') throw new Error(`未知战术指令 advanced.defense.${key}`)
+      advanced.defense = {}
+      if ('width' in part) advanced.defense.width = pick(part.width, 'advanced.defense.width', ['narrow', 'normal', 'wide'] as const)
+    }
+  }
   return {
     possession: {
       focus: pick(possession.focus, 'possession.focus', ['middle', 'balanced', 'wing'] as const),
@@ -265,6 +309,7 @@ export function validateInstructions(value: unknown): TacticalInstructionsV2 {
       engagement: pick(defense.engagement, 'defense.engagement', ['low', 'mid', 'high'] as const),
       intensity: pick(defense.intensity, 'defense.intensity', ['low', 'mid', 'high'] as const),
     },
+    ...(advanced ? { advanced } : {}),
   }
 }
 
@@ -278,4 +323,6 @@ export function sameInstructions(a: TacticalInstructionsV2, b: TacticalInstructi
     && a.transition.onGain === b.transition.onGain && a.transition.onLoss === b.transition.onLoss
     && a.defense.line === b.defense.line && a.defense.engagement === b.defense.engagement
     && a.defense.intensity === b.defense.intensity
+    && (a.advanced?.possession?.receiving ?? 'mixed') === (b.advanced?.possession?.receiving ?? 'mixed')
+    && (a.advanced?.defense?.width ?? 'normal') === (b.advanced?.defense?.width ?? 'normal')
 }

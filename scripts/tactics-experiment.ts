@@ -5,11 +5,14 @@
  *   npm run tactics:experiment -- --n 20 --workers 2 加大样本
  *   npm run tactics:experiment -- --individual       单项指令上下档对照
  *   npm run tactics:experiment -- --familiarity      熟练度 1 / 0.7 / 0.4 / 0 的退化曲线
+ *   npm run tactics:experiment -- --matrix --n 6 --squad 67 --exact-mirror --revision 2
+ *   npm run tactics:experiment -- --individual --only passing --n 1 --out /tmp/tactics-smoke.json
  *
  * 口径按 docs/fm-tactical-styles-and-instructions.md 4.2 / 4.5：
  * 固定夹具（baselineTeams(1)，体力 100，无 autoSubs / chemistry）、D = 900、11 人制、越位开、
  * 每种子 4 场（试验 / 对照 × 主客）。埋点见 src/game/pes/metrics.ts，只观察不改行为。
- * 结果写 docs/tactics-experiment-results.json，控制台打印相对文档目标区间的判定。
+ * 历史 baselineTeams(1) 不严格相同；`--exact-mirror` 复制阵容。不同画像默认分别写入 docs，
+ * `--out` 可指定其他结果文件。非线性指标和验收口径仍有差异，只用于探索，不作正式判定。
  */
 import { spawn } from 'node:child_process'
 import crypto from 'node:crypto'
@@ -25,6 +28,7 @@ import {
   DEFAULT_PARAMS,
   NEUTRAL_INSTRUCTIONS,
   STYLE_LIST,
+  STYLE_LIST_REV2,
   cloneInstructions,
   type StyleId,
   type TacticalInstructionsV2,
@@ -32,28 +36,15 @@ import {
 } from '../src/game/pes/tactics.ts'
 import { ALL_ATTRIBUTES, type AttrKey } from '../src/game/types.ts'
 import type { MatchState, MatchTeamInput } from '../src/game/match/types.ts'
+import { defaultOutputPath, keyOf, makeExactMirror, type MatchSpec, type Scenario } from './tactics-experiment-helpers.ts'
 
 const self = fileURLToPath(import.meta.url)
 
 /* ------------------------------ 类型 ------------------------------ */
 
-type Scenario = 'mirror' | 'technical' | 'lowTech' | 'speed'
 const SCENARIOS: Scenario[] = ['mirror', 'technical', 'speed']
 
 type Config = { id: string; instructions: TacticalInstructionsV2; complexity: number }
-
-type MatchSpec = {
-  seed: number
-  scenario: Scenario
-  aConfig: string
-  famA: number
-  /** 对手风格（缺省 = 中性 B0） */
-  bConfig?: string
-  /** 对手熟练度（缺省 = 1） */
-  famB?: number
-  /** A 是否主场（每种子主客各一场） */
-  aHome: boolean
-}
 
 type SideResult = {
   goals: number
@@ -126,6 +117,10 @@ function baseFixture(): { home: MatchTeamInput; away: MatchTeamInput } {
     for (const player of team.bench) player.condition = 100
     if (SQUAD > 0) uniformSquad(team, SQUAD)
   }
+  if (EXACT_MIRROR) {
+    // baselineTeams(1) 会将客队属性四舍五入；严格镜像必须复制球员和槽位，而非仅复制 ID。
+    makeExactMirror(home, away)
+  }
   return { home, away }
 }
 
@@ -159,7 +154,7 @@ function teamFor(scenario: Scenario, side: 'a' | 'b', config: Config, fam: numbe
   if (scenario === 'speed' && side === 'b') {
     shiftAttributes(team, 'speed', 1)
     // 速度型对手固定使用「快速防反」，见文档 4.5 第 3 条。
-    team.instructions = cloneInstructions(STYLE_LIST.find((s) => s.id === 'directCounter')!.instructions)
+    team.instructions = cloneInstructions((REVISION === 2 ? STYLE_LIST_REV2 : STYLE_LIST).find((s) => s.id === 'directCounter')!.instructions)
   }
   return team
 }
@@ -295,16 +290,27 @@ function paramsOption(): Partial<TacticsParams> {
 const PARAMS: Partial<TacticsParams> = paramsOption()
 /** 只跑某几类单项（`--only tempo --only intensity`）。 */
 const ONLY = process.argv.flatMap((arg, index) => (arg === '--only' ? [process.argv[index + 1]] : []))
-const CACHE_VERSION = 4
+const CACHE_VERSION = 5
 /** `--squad <rating>`：双方都用同一套全属性等于该值的球员（0 = 保留基线阵容）。 */
 let SQUAD = option('squad', 0)
+/** `--exact-mirror`：客队复制主队的阵型、槽位和球员，保留独立球队身份。 */
+let EXACT_MIRROR = process.argv.includes('--exact-mirror')
 // 单项配置在模块加载时注册：子进程也要能查到这些 id。
 const selectedSingles = () => individualConfigs().filter((single) => !ONLY.length || ONLY.includes(single.key))
 if (MODE === 'individual') for (const single of selectedSingles()) ALL_CONFIGS[single.id] = single.config
 
 /* ------------------------------ 子进程 ------------------------------ */
 
-type Job = { mode: string; squad: number; specs: MatchSpec[]; params: Partial<TacticsParams>; out: string }
+let REVISION = option('revision', 1)
+if (REVISION !== 1 && REVISION !== 2) throw new Error('--revision 只支持 1 或 2')
+function applyRevision(): void {
+  for (const item of REVISION === 2 ? STYLE_LIST_REV2 : STYLE_LIST) {
+    ALL_CONFIGS[item.id] = configFrom(item.id, item.instructions, item.complexity)
+  }
+}
+applyRevision()
+
+type Job = { mode: string; squad: number; exactMirror: boolean; revision: number; fixtureSha256: string; specs: MatchSpec[]; params: Partial<TacticsParams>; out: string }
 
 const childIndex = process.argv.indexOf('--child')
 if (childIndex >= 0) {
@@ -313,6 +319,10 @@ if (childIndex >= 0) {
   if (job.mode === 'individual') for (const single of selectedSingles()) ALL_CONFIGS[single.id] = single.config
   // 子进程没有 CLI 选项：统一属性必须随 job 一起传，否则会静默跑回基线阵容。
   SQUAD = job.squad
+  EXACT_MIRROR = job.exactMirror
+  REVISION = job.revision
+  applyRevision()
+  if (fixtureHash().sha256 !== job.fixtureSha256) throw new Error('子进程夹具与父进程不一致')
   const rows = job.specs.map((spec) => runMatch(spec, job.params))
   // 写文件而不是 stdout：几千场的结果超过管道缓冲，process.exit 会截断最后一段。
   fs.writeFileSync(job.out, JSON.stringify(rows))
@@ -322,7 +332,7 @@ if (childIndex >= 0) {
 function runJob(specs: MatchSpec[], id: number): Promise<MatchResult[]> {
   const tmp = path.join(os.tmpdir(), `tactics-${process.pid}-${id}.json`)
   const out = path.join(os.tmpdir(), `tactics-${process.pid}-${id}-out.json`)
-  fs.writeFileSync(tmp, JSON.stringify({ mode: MODE, squad: SQUAD, specs, params: PARAMS, out } satisfies Job))
+  fs.writeFileSync(tmp, JSON.stringify({ mode: MODE, squad: SQUAD, exactMirror: EXACT_MIRROR, revision: REVISION, fixtureSha256: fixtureHash().sha256, specs, params: PARAMS, out } satisfies Job))
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [...process.execArgv, self, '--child', tmp], { stdio: ['ignore', 'ignore', 'inherit'] })
     child.on('error', reject)
@@ -343,9 +353,36 @@ function runJob(specs: MatchSpec[], id: number): Promise<MatchResult[]> {
 /* ------------------------------ 调度 ------------------------------ */
 
 const results = new Map<string, MatchResult>()
-const keyOf = (spec: MatchSpec) => `${spec.scenario}|${spec.aConfig}|${spec.famA}|${spec.bConfig ?? 'blank'}|${spec.famB ?? 1}|${spec.seed}|${spec.aHome}`
-const CACHE = path.join(os.tmpdir(), 'fm-tactics-cache.json')
-const paramsKey = JSON.stringify({ version: CACHE_VERSION, squad: SQUAD, params: { ...DEFAULT_PARAMS, ...PARAMS } })
+// 缓存随源码、Node、夹具和参数变化失效；防止改机制后误用历史比赛。
+function sourceHash(): string {
+  const hash = crypto.createHash('sha256')
+  const visit = (name: string): void => {
+    if (fs.statSync(name).isDirectory()) {
+      for (const child of fs.readdirSync(name).sort()) visit(path.join(name, child))
+    } else {
+      hash.update(name).update('\0').update(fs.readFileSync(name)).update('\0')
+    }
+  }
+  for (const name of ['src', 'scripts/tactics-experiment.ts', 'scripts/tactics-experiment-helpers.ts', 'package-lock.json']) {
+    if (fs.existsSync(name)) visit(name)
+  }
+  return hash.digest('hex')
+}
+const runnerHash = sourceHash()
+const paramsKey = JSON.stringify({ version: CACHE_VERSION, node: process.version, runnerHash, fixture: fixtureHash(), squad: SQUAD, exactMirror: EXACT_MIRROR, revision: REVISION, params: { ...DEFAULT_PARAMS, ...PARAMS } })
+const cacheId = crypto.createHash('sha256').update(paramsKey).digest('hex').slice(0, 24)
+const CACHE = path.join(os.tmpdir(), `fm-tactics-cache-${cacheId}.json`)
+
+/** 不同阵容不覆盖对方的结果；--out 可供冒烟测试写入临时目录。 */
+function outputPath(name: string): string {
+  const index = process.argv.indexOf('--out')
+  if (index >= 0) {
+    const target = process.argv[index + 1]
+    if (!target || target.startsWith('--')) throw new Error('--out 需要文件路径')
+    return target
+  }
+  return defaultOutputPath(REVISION === 2 ? `${name}-rev2` : name, SQUAD, EXACT_MIRROR)
+}
 
 function loadCache(): void {
   try {
@@ -468,8 +505,8 @@ function blockOf(home: MatchResult, away: MatchResult, seed: number, scenario: S
 
 function pairBlocks(config: string, scenario: Scenario, seeds: number[], fam = 1): Block[] {
   return seeds.map((seed) => {
-    const home = results.get(`${scenario}|${config}|${fam}|${seed}|true`)
-    const away = results.get(`${scenario}|${config}|${fam}|${seed}|false`)
+    const home = results.get(keyOf({ scenario, aConfig: config, famA: fam, seed, aHome: true }))
+    const away = results.get(keyOf({ scenario, aConfig: config, famA: fam, seed, aHome: false }))
     if (!home || !away) throw new Error(`缺少结果 ${scenario}/${config}/${fam}/${seed}`)
     return blockOf(home, away, seed, scenario)
   })
@@ -477,17 +514,33 @@ function pairBlocks(config: string, scenario: Scenario, seeds: number[], fam = 1
 
 type Effect = { metric: string; value: number; ci: [number, number]; n: number }
 
+function blockDiff(name: string, t: Block, c: Block, kind: 'ratioPct' | 'pp' | 'abs'): number {
+  const key = name as keyof Block
+  const tv = t[key] as number
+  const cv = c[key] as number
+  if (!Number.isFinite(tv) || !Number.isFinite(cv) || (kind === 'ratioPct' && cv === 0)) return Number.NaN
+  return kind === 'ratioPct' ? (tv / cv - 1) * 100 : tv - cv
+}
+
 function effect(name: string, test: Block[], control: Block[], kind: 'ratioPct' | 'pp' | 'abs'): Effect {
-  const diffs: number[] = []
-  for (let i = 0; i < test.length; i++) {
-    const t = test[i]
-    const c = control.find((item) => item.seed === t.seed && item.scenario === t.scenario)!
-    const key = name as keyof Block
-    const tv = t[key] as number
-    const cv = c[key] as number
-    if (!Number.isFinite(tv) || !Number.isFinite(cv)) continue
-    diffs.push(kind === 'ratioPct' ? (tv / cv - 1) * 100 : kind === 'pp' ? tv - cv : tv - cv)
-  }
+  const diffs = test.flatMap((t) => {
+    const c = control.find((item) => item.seed === t.seed && item.scenario === t.scenario)
+    const value = c ? blockDiff(name, t, c, kind) : Number.NaN
+    return Number.isFinite(value) ? [value] : []
+  })
+  return { metric: name, value: mean(diffs), ci: bootstrapCi(diffs), n: diffs.length }
+}
+
+/** 同一比赛种子跨场景作为一个重采样单位；非线性比率仍属探索性近似，不冒充正式验收。 */
+function overallEffect(name: string, test: Block[], control: Block[], scenarios: Scenario[], seeds: number[], kind: 'ratioPct' | 'pp' | 'abs'): Effect {
+  const diffs = seeds.flatMap((seed) => {
+    const values = scenarios.map((scenario) => {
+      const t = test.find((b) => b.seed === seed && b.scenario === scenario)
+      const c = control.find((b) => b.seed === seed && b.scenario === scenario)
+      return t && c ? blockDiff(name, t, c, kind) : Number.NaN
+    })
+    return values.every(Number.isFinite) ? [mean(values)] : []
+  })
   return { metric: name, value: mean(diffs), ci: bootstrapCi(diffs), n: diffs.length }
 }
 
@@ -531,8 +584,12 @@ async function main(): Promise<void> {
   const hash = fixtureHash()
   console.log(`夹具：${hash.bytes} 字节，SHA-256 ${hash.sha256}${SQUAD > 0 ? `（统一属性 ${SQUAD}，与设计文档哈希不同）` : ''}`)
   console.log(`模式 ${MODE}，种子 ${SEEDS}，场景 ${SCENARIOS.join(' / ')}，参数 ${JSON.stringify({ ...DEFAULT_PARAMS, ...PARAMS })}`)
+  console.log(`源码哈希 ${runnerHash}；当前结果仅供探索，不是设计文档 4.5 的正式验收。`)
 
-  const output: { fixture: unknown; mode: string; seeds: number[]; params: unknown; results: Record<string, any> } = { fixture: hash, mode: MODE, seeds, params: { ...DEFAULT_PARAMS, ...PARAMS }, results: {} }
+  const output: { fixture: unknown; mode: string; seeds: number[]; params: unknown; runner: unknown; results: Record<string, any> } = {
+    fixture: hash, mode: MODE, seeds, params: { ...DEFAULT_PARAMS, ...PARAMS },
+    runner: { sourceHash: runnerHash, node: process.version, squad: SQUAD, exactMirror: EXACT_MIRROR, revision: REVISION }, results: {},
+  }
 
   if (MODE === 'styles') {
     const specs: MatchSpec[] = []
@@ -551,17 +608,16 @@ async function main(): Promise<void> {
     for (const id of STYLE_IDS) {
       const target = TARGET[id]
       const rows: Record<string, Effect> = {}
+      const tests: Block[] = []
+      const controls: Block[] = []
       for (const scenario of SCENARIOS) {
         const test = pairBlocks(id, scenario, seeds)
         const control = pairBlocks('blank', scenario, seeds)
+        tests.push(...test)
+        controls.push(...control)
         rows[scenario] = effect(target.metric, test, control, target.kind)
       }
-      const overall: Effect = {
-        metric: target.metric,
-        value: mean(Object.values(rows).map((r) => r.value)),
-        ci: bootstrapCi(Object.values(rows).map((r) => r.value)),
-        n: rows.mirror.n,
-      }
+      const overall = overallEffect(target.metric, tests, controls, SCENARIOS, seeds, target.kind)
       const detail = SCENARIOS.map((scenario) => `${scenario} ${fmt(rows[scenario].value)}`).join(' | ')
       console.log(`${id.padEnd(14)} ${target.metric.padEnd(3)} 总体 ${fmt(overall.value).padStart(7)} [${fmt(overall.ci[0])}, ${fmt(overall.ci[1])}] ${verdict(overall.value, overall.ci, target)}  (${detail})`)
       output.results[id] = { target, overall, byScenario: rows }
@@ -594,7 +650,7 @@ async function main(): Promise<void> {
       }
       output.results[id].outcomes = byScenario
     }
-    fs.writeFileSync(path.join('docs', 'tactics-experiment-results.json'), JSON.stringify(output, null, 2))
+    fs.writeFileSync(outputPath('tactics-experiment-results'), JSON.stringify(output, null, 2))
     return
   }
 
@@ -631,12 +687,12 @@ async function main(): Promise<void> {
       console.log(`${single.id.padEnd(22)} ${String(key).padEnd(7)} ${parts.join(' | ')}`)
       output.results[single.id] = { metric: key, byScenario }
     }
-    fs.writeFileSync(path.join('docs', 'tactics-experiment-individual.json'), JSON.stringify(output, null, 2))
+    fs.writeFileSync(outputPath('tactics-experiment-individual'), JSON.stringify(output, null, 2))
     return
   }
 
   if (MODE === 'matrix') {
-    // 风格对位矩阵：每个有序对（A 攻 / B 守）各跑主客两场，只看 mirror 场景（同一批球员）。
+    // 风格对位矩阵：每组各跑主客两场，只看 mirror 场景；只有 --exact-mirror 才保证双方逐项同阵容。
     const styles = STYLE_IDS
     const specs: MatchSpec[] = []
     // 只跑无序对：同一有序对的「A 主 + A 客」已经包含两个主客场，反向对位就是它的相反数。
@@ -668,8 +724,13 @@ async function main(): Promise<void> {
       const values = blocks.map((item) => item.xgd * sign)
       const value = mean(values)
       const ci = bootstrapCi(values)
-      const wins = mean(blocks.map((item) => (item.gd * sign > 0 ? 1 : item.gd * sign < 0 ? 0 : 0.5)))
-      return { xgd: value, ci, winRate: wins * 100, xgf: mean(blocks.map((i) => (sign > 0 ? i.xgf : i.xga))), xga: mean(blocks.map((i) => (sign > 0 ? i.xga : i.xgf))) }
+      // 胜平负以每场结果为单位；不能用主客净胜球平均值冒充单场胜率。
+      const matchPoints = seeds.flatMap((seed) => [true, false].map((aHome) => {
+        const result = results.get(keyOf({ scenario: 'mirror', aConfig: forward ? a : b, bConfig: forward ? b : a, famA: 1, famB: 1, seed, aHome }))!
+        const gd = (result.a.goals - result.b.goals) * sign
+        return gd > 0 ? 1 : gd < 0 ? 0 : 0.5
+      }))
+      return { xgd: value, ci, matchPointsPct: mean(matchPoints) * 100, xgf: mean(blocks.map((i) => (sign > 0 ? i.xgf : i.xga))), xga: mean(blocks.map((i) => (sign > 0 ? i.xga : i.xgf))) }
     }
 
     const short: Record<string, string> = {
@@ -753,7 +814,7 @@ async function main(): Promise<void> {
       out[`${a}:worst`] = { vs: worst.b, xgd: worst.xgd, ci: worst.ci }
     }
     output.results = out
-    fs.writeFileSync(path.join('docs', 'tactics-experiment-matrix.json'), JSON.stringify(output, null, 2))
+    fs.writeFileSync(outputPath('tactics-experiment-matrix'), JSON.stringify(output, null, 2))
     return
   }
 
@@ -806,7 +867,7 @@ async function main(): Promise<void> {
       out[`${a}|${b}`] = table
     }
     output.results = out
-    fs.writeFileSync(path.join('docs', 'tactics-experiment-matchup.json'), JSON.stringify(output, null, 2))
+    fs.writeFileSync(outputPath('tactics-experiment-matchup'), JSON.stringify(output, null, 2))
     return
   }
 
@@ -833,24 +894,26 @@ async function main(): Promise<void> {
     const line: string[] = []
     const rows: Record<string, unknown> = {}
     for (const fam of famLevels) {
-      const values: number[] = []
+      const scenarios: Scenario[] = ['mirror', 'speed']
+      const tests: Block[] = []
+      const controls: Block[] = []
       const perScenario: Record<string, number> = {}
-      for (const scenario of ['mirror', 'speed'] as Scenario[]) {
+      for (const scenario of scenarios) {
         const test = pairBlocks(id, scenario, seeds, fam)
         const control = pairBlocks('blank', scenario, seeds, 1)
-        const e = effect(target.metric, test, control, target.kind)
-        values.push(e.value)
-        perScenario[scenario] = e.value
+        tests.push(...test)
+        controls.push(...control)
+        perScenario[scenario] = effect(target.metric, test, control, target.kind).value
       }
-      const value = mean(values)
-      rows[String(fam)] = { value, ci: bootstrapCi(values), perScenario }
-      line.push(`fam ${fam.toFixed(1)} ${fmt(value)}`)
+      const overall = overallEffect(target.metric, tests, controls, scenarios, seeds, target.kind)
+      rows[String(fam)] = { value: overall.value, ci: overall.ci, n: overall.n, perScenario }
+      line.push(`fam ${fam.toFixed(1)} ${fmt(overall.value)}`)
     }
     console.log(`${id.padEnd(14)} ${target.metric.padEnd(3)} ${line.join(' | ')}`)
     famOut[id] = rows
   }
   output.results = famOut
-  fs.writeFileSync(path.join('docs', 'tactics-experiment-familiarity.json'), JSON.stringify(output, null, 2))
+  fs.writeFileSync(outputPath('tactics-experiment-familiarity'), JSON.stringify(output, null, 2))
 }
 
 void main()

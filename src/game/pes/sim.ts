@@ -42,6 +42,7 @@ import {
   type PesEventType,
   type PesFrame,
   type PesMatchSnapshot,
+  type PesOpenPlayState,
   type PesPhase,
   type PesPlayer,
   type PesRestart,
@@ -156,7 +157,7 @@ interface FinishView {
 
 type Choice =
   | { type: 'carry' | 'shoot' | 'clear'; score: number }
-  | { type: 'pass'; score: number; mate: PesPlayer }
+  | { type: 'pass'; score: number; mate: PesPlayer; target?: Vec2 }
   | { type: 'cross'; score: number; mate: PesPlayer; spot: Vec2 }
 
 export class PesMatch {
@@ -181,6 +182,10 @@ export class PesMatch {
   tacticsParams: TacticsParams = DEFAULT_PARAMS
   /** 上一帧确认控球的队伍（新指令的攻防转换窗口）。 */
   private lastPoss: TeamIndex | null = null
+  /** 新开实验比赛启用；旧快照缺少 tacticsState 时保留其原行为。 */
+  private tacticalMechanics = false
+  /** 仅新指令使用：区分重开球首脚与稳定开放比赛。 */
+  private openPlay: PesOpenPlayState = { phase: 'restartPending', restartType: 'kickoff', team: null, taker: -1, candidate: null, controlledFor: 0 }
   private metricsClosed = false
   /** 录像帧（输出，不进存档） */
   frames: PesFrame[] = []
@@ -192,6 +197,10 @@ export class PesMatch {
       const snap = structuredClone(source)
       this.spec = snap.spec
       this.rules = snap.rules
+      this.tacticalMechanics = !!snap.tacticsState
+      this.tacticsParams = snap.tacticsState?.params ?? DEFAULT_PARAMS
+      this.lastPoss = snap.tacticsState?.lastPoss ?? null
+      if (snap.tacticsState) this.openPlay = snap.tacticsState.openPlay
       this.setPiece = snap.setPiece
       this.rng = (options.rngFactory ?? ((state: RngState) => PCG32.fromState(state.state, state.inc)))(snap.rng)
       this.time = snap.time
@@ -210,6 +219,7 @@ export class PesMatch {
       return
     }
     this.spec = source.spec ?? makePitch7()
+    this.tacticalMechanics = !!source.home.tactics?.instructions || !!source.away.tactics?.instructions
     this.rules = { ...NATIVE_RULES, ...source.rules }
     this.tacticsParams = { ...DEFAULT_PARAMS, ...source.tacticsParams }
     this.rng = source.rng ?? derivedRng(source.seed ?? 12345, 'pes-match')
@@ -285,6 +295,11 @@ export class PesMatch {
     return this.phase === 'end'
   }
 
+  /** 新指令实验状态需要额外保存；旧 v4 / 旧 P1 快照继续使用原路径。 */
+  get usesTacticalMechanics(): boolean {
+    return this.tacticalMechanics
+  }
+
   step(): void {
     if (this.phase === 'end' || this.phase === 'half') return
     const P = this.spec
@@ -307,6 +322,10 @@ export class PesMatch {
       return
     }
 
+    // 新指令的上抢任务在本帧决策期间也可能因出球或死球失效。
+    const shapeBall = this.usesTacticalMechanics
+      ? { owner: this.ball.owner, frozen: this.ball.frozen, possession: this.possessionTeam() }
+      : null
     this.updateShape()
 
     for (const t of this.teams) {
@@ -325,11 +344,16 @@ export class PesMatch {
     }
 
     this.updateBall(dt)
+    if (shapeBall && (shapeBall.owner !== this.ball.owner || shapeBall.frozen !== this.ball.frozen
+      || shapeBall.possession !== this.possessionTeam())) this.clearInstructionShape()
     for (const t of this.teams) for (const p of t.players) this.move(p, dt)
     this.tryTackles()
     this.resolvePossession()
+    this.updateOpenPlay(dt)
     this.updateTransitions()
     this.checkRules()
+    if (shapeBall && (shapeBall.owner !== this.ball.owner || shapeBall.frozen !== this.ball.frozen
+      || shapeBall.possession !== this.possessionTeam())) this.clearInstructionShape()
     this.collect(dt)
 
     if (this.half === 1 && this.time >= P.HALF) this.onHalfEnd()
@@ -368,6 +392,9 @@ export class PesMatch {
       events: this.events,
       recordHz: this.recordHz,
       frameAcc: this.frameAcc,
+      ...(this.usesTacticalMechanics ? {
+        tacticsState: { lastPoss: this.lastPoss, params: this.tacticsParams, openPlay: this.openPlay },
+      } : {}),
       contact: this.contact ? this.contact.toJSON() : null,
     })
   }
@@ -461,6 +488,8 @@ export class PesMatch {
       b.looseT = 0
     }
     if (this.restart && this.restart.taker === player.pid) this.restart.taker = -1
+    if (this.openPlay.taker === player.pid) this.openPlay.taker = -1
+    this.removeInstructionShapeReferences(player)
   }
 
   /**
@@ -472,6 +501,7 @@ export class PesMatch {
     const t = this.teams[out.ti]
     const index = t.players.indexOf(out)
     if (index < 0) throw new Error(`球员 ${pid} 不在场上`)
+    const hadInstructionTask = this.tacticalMechanics && !!t.tactics.instructions && this.instructionTaskKey(t, out) !== ''
     const inc: PesPlayer = {
       pid: this.players.length,
       ti: out.ti,
@@ -510,7 +540,10 @@ export class PesMatch {
     if (b.meta?.intended === out.pid) b.meta.intended = inc.pid
     if (b.meta?.icpt === out.pid) b.meta.icpt = inc.pid
     if (this.restart && this.restart.taker === out.pid) this.restart.taker = inc.pid
+    if (this.openPlay.taker === out.pid) this.openPlay.taker = inc.pid
     if (this.setPiece?.taker === out.pid) this.setPiece.taker = inc.pid
+    this.removeInstructionShapeReferences(out)
+    if (hadInstructionTask) this.refreshInstructionMovement(inc)
     this.event('sub', out.ti, [inc.pid, out.pid])
     return inc
   }
@@ -572,7 +605,16 @@ export class PesMatch {
     taker.pos.x = -team.dir * 1.1
     taker.pos.y = 0.5
     this.restart = { type: 'kickoff', ti: this.kickoffTi, t: 0, taker: taker.pid, x: 0, y: 0 }
+    this.beginOpenRestart('kickoff', this.tiOf(team), taker.pid)
     this.phase = 'kickoff'
+    // 开球已经重置了全部移动目标，只需清掉新指令球队的旧任务表。
+    if (this.usesTacticalMechanics) for (const t of this.teams) {
+      if (!t.tactics.instructions) continue
+      t.presser = -1
+      t.presser2 = -1
+      t.cover = -1
+      t.marks.fill(-1)
+    }
   }
 
   private updateRestart(dt: number): void {
@@ -705,6 +747,7 @@ export class PesMatch {
    * 结果是 ok 时落点就在禁区里；icpt / miss / out 时球飞向拦截者 / 偏离 / 出界（由调用方改 spot）。
    */
   private launchCross(taker: PesPlayer, spot: Vec2, intended: number, result: 'ok' | 'icpt' | 'miss' | 'out' | null, setResult: boolean, interceptor = -1): void {
+    this.noteOpenKick(taker)
     const t = this.teams[taker.ti]
     const b = this.ball
     const d = Math.hypot(spot.x - taker.pos.x, spot.y - taker.pos.y)
@@ -763,10 +806,46 @@ export class PesMatch {
     b.lastTouch = taker ? taker.pid : -1
     const ti = this.tiOf(team)
     this.restart = { type, ti, t: 0, taker: taker ? taker.pid : -1, x: pos.x, y: pos.y }
+    this.beginOpenRestart(type, ti, taker ? taker.pid : -1)
+    if (this.usesTacticalMechanics) this.clearInstructionShape()
     this.event(type, ti, taker ? [taker.pid] : [])
   }
 
-  /* ---------- 新指令：攻防转换窗口 ---------- */
+  /* ---------- 新指令：开放比赛与攻防转换 ---------- */
+  private beginOpenRestart(type: RestartType, team: TeamIndex, taker: number): void {
+    if (!this.usesTacticalMechanics) return
+    this.openPlay = { phase: 'restartPending', restartType: type, team, taker, candidate: null, controlledFor: 0 }
+  }
+
+  /** 第一脚仍属于重开球；候选队伍随后主动出脚时才确认开放比赛。 */
+  private noteOpenKick(p: PesPlayer): void {
+    if (!this.usesTacticalMechanics) return
+    if (this.openPlay.phase === 'restartPending') {
+      this.openPlay.phase = 'unconfirmed'
+      this.openPlay.candidate = null
+      this.openPlay.controlledFor = 0
+    } else if (this.openPlay.phase === 'unconfirmed' && this.ball.owner === p.pid) {
+      this.openPlay.phase = 'open'
+    }
+  }
+
+  private updateOpenPlay(dt: number): void {
+    if (!this.usesTacticalMechanics || this.ball.frozen || this.ball.owner < 0) return
+    const owner = this.players[this.ball.owner]
+    if (this.openPlay.phase === 'restartPending' && owner.pid !== this.openPlay.taker) {
+      this.openPlay.phase = 'unconfirmed'
+      this.openPlay.candidate = null
+      this.openPlay.controlledFor = 0
+    }
+    if (this.openPlay.phase !== 'unconfirmed') return
+    if (this.openPlay.candidate !== owner.ti) {
+      this.openPlay.candidate = owner.ti
+      this.openPlay.controlledFor = 0
+    }
+    this.openPlay.controlledFor += dt
+    if (this.openPlay.controlledFor >= 0.2) this.openPlay.phase = 'open'
+  }
+
   private updateTransitions(): void {
     const v2 = this.teams[0].tactics.instructions ?? this.teams[1].tactics.instructions
     if (!v2 && !this.metrics) return
@@ -941,10 +1020,21 @@ export class PesMatch {
     const shotScore = dGoal < 32 * K ? this.shootValue(p, press, opps, finish) : 0
 
     if (p.shotCd <= 0 && shotScore > best.score) best = { type: 'shoot', score: shotScore }
-    for (const mate of t.players) {
+    const spaceEnabled = this.tacticalMechanics && t.tactics.instructions?.advanced?.possession?.receiving === 'space' && this.openPlay.phase === 'open'
+    const mates = spaceEnabled ? t.players.slice().sort((a, b) => a.pid - b.pid) : t.players
+    for (const mate of mates) {
       if (mate === p || mate.stun > 0) continue
-      const s = this.passValue(p, mate, press, opps, shotScore, finish)
+      // 同一队友的普通候选和空当候选共用一次噪声，不因候选数增加而抽额外随机数。
+      const noise: { value?: number } | undefined = spaceEnabled ? {} : undefined
+      const s = this.passValue(p, mate, press, opps, shotScore, finish, undefined, noise)
       if (s > best.score) best = { type: 'pass', score: s, mate }
+      if (spaceEnabled && s >= 0) {
+        const target = this.spacePassTarget(p, mate, opps)
+        if (target) {
+          const spaceScore = this.passValue(p, mate, press, opps, shotScore, finish, target, noise)
+          if (spaceScore > best.score) best = { type: 'pass', score: spaceScore, mate, target }
+        }
+      }
     }
     if (p.pos.x * dir < -12 * K && press > 0.55) {
       const s = 0.3 + 0.5 * press
@@ -969,7 +1059,7 @@ export class PesMatch {
     if (this.contact && best.type !== 'carry' && !(this.setPiece && this.setPiece.taker === p.pid) && this.tacticalFoul(p)) return
 
     if (best.type === 'shoot') this.execShot(p, press)
-    else if (best.type === 'pass') this.execPass(p, best.mate, press)
+    else if (best.type === 'pass') this.execPass(p, best.mate, press, best.target)
     else if (best.type === 'cross') this.execCross(p, best.mate, best.spot)
     else if (best.type === 'clear') this.execClear(p)
     else this.execCarry(p)
@@ -1198,19 +1288,20 @@ export class PesMatch {
     return (s * 2.6 + finishBonus) * keeperFactor
   }
 
-  private passValue(p: PesPlayer, mate: PesPlayer, press: number, opps: PesPlayer[], shotScore: number | null = null, finish: FinishView | null = null): number {
+  private passValue(p: PesPlayer, mate: PesPlayer, press: number, opps: PesPlayer[], shotScore: number | null = null, finish: FinishView | null = null, target?: Vec2, sharedNoise?: { value?: number }): number {
     const K = this.spec.K
     const t = this.teams[p.ti]
     const dir = t.dir
-    const d = dist(p.pos, mate.pos)
+    const aim = target ?? mate.pos
+    const d = dist(p.pos, aim)
     if (d < 3.0 || d > 62 * K) return -1
     const view = finish || this.finishingContext(p, opps)
     const ownShot = shotScore == null ? this.shootValue(p, press, opps, view) : shotScore
     // 这是单刀阶段的候选动作约束，不再依赖某个射门分数恰好超过软阈值。
     if (view.clear && !this.isFinishingAssist(p, mate, opps, ownShot)) return -1
-    const lane = this.laneClearance(p.pos, mate.pos, opps)
-    const open = this.nearestOpp(mate.pos, opps)
-    const fwd = dir * (mate.pos.x - p.pos.x)
+    const lane = this.laneClearance(p.pos, aim, opps)
+    const open = this.nearestOpp(aim, opps)
+    const fwd = dir * (aim.x - p.pos.x)
     const isFwd = mate.line > p.line - 0.05
 
     let s = 0.30 * clamp01(fwd / (32 * K))
@@ -1222,7 +1313,7 @@ export class PesMatch {
 
     if (mate.mode === 'run' && lane > 1.8) s += 0.12 + 0.18 * t.tactics.direct
     // 打进禁区 / 身后：给一点冒险奖励，否则永远打不穿低位防守
-    if (dir * mate.pos.x > 20 * K && mate.pos.x * dir > dir * p.pos.x) s += 0.10
+    if (dir * aim.x > 20 * K && aim.x * dir > dir * p.pos.x) s += 0.10
     if (mate.mode === 'run') s += 0.06
     const offside = this.isOffside(t, mate)
     if (offside) s -= 1.2
@@ -1244,7 +1335,9 @@ export class PesMatch {
         if (ownShot > 0.60) s = Math.min(s, ownShot - 0.15)
       }
     }
-    s += (this.rng.float() - 0.5) * 0.09
+    const noise = sharedNoise?.value ?? (this.rng.float() - 0.5) * 0.09
+    if (sharedNoise) sharedNoise.value = noise
+    s += noise
     // 新指令的首版九项：传球 / 方向 / 转换三项合计裁到 ±clip，只修改候选选择，不改传球成功率。
     const v2 = t.tactics.instructions
     if (v2) {
@@ -1252,7 +1345,7 @@ export class PesMatch {
       const K2 = this.spec.K
       const passing = triOf(v2.possession.passing)
       const focus = triOf(v2.possession.focus)
-      const z = clamp(Math.abs(mate.pos.y) / (this.spec.HW - 2.5), 0, 1)
+      const z = clamp(Math.abs(aim.y) / (this.spec.HW - 2.5), 0, 1)
       let preference = params.wPass * passing * (clamp(d / (40 * K2), 0, 1) - 0.5)
         + params.wFocus * focus * (z - 0.5)
       const gain = v2.transition.onGain
@@ -1265,8 +1358,70 @@ export class PesMatch {
       }
       const eff = execution(this.teamFamiliarity(t), params)
       s += clamp(preference, -params.clipPreference, params.clipPreference) * eff * (p.bias ?? 1)
+      if (target) s += Math.min(0.06, 0.04 * execution(mate.familiarity ?? 1, params))
     }
     return s
+  }
+
+  /** 空当候选只做可达性规划；不抽签，也不调用传球结算。调用方之外的防护也在这里复查启用条件。 */
+  private spacePassTarget(p: PesPlayer, mate: PesPlayer, opps: PesPlayer[]): Vec2 | null {
+    const P = this.spec
+    const t = this.teams[p.ti]
+    if (!this.tacticalMechanics || this.openPlay.phase !== 'open') return null
+    if (t.tactics.instructions?.advanced?.possession?.receiving !== 'space') return null
+    if (mate.role === 'GK' || mate.stun > 0 || !mate.runTarget || mate.mode !== 'run'
+      || this.time >= mate.runUntil || mate.vel.x * t.dir < 0.5) return null
+    const lead = clamp(dist(p.pos, mate.pos) / 15, 0.3, 1.2)
+    let dx = mate.vel.x * lead
+    let dy = mate.vel.y * lead
+    const length = Math.hypot(dx, dy)
+    if (length > 6 * P.K) { dx *= 6 * P.K / length; dy *= 6 * P.K / length }
+    const target = { x: clamp(mate.pos.x + dx, -P.HL + 1, P.HL - 1), y: clamp(mate.pos.y + dy, -P.HW + 1, P.HW - 1) }
+    const reference = Math.max(0, this.ball.x * t.dir, this.secondLastLx(t, this.other(t)))
+    const distance = dist(p.pos, target)
+    if ((target.x - mate.pos.x) * t.dir < P.K || target.x * t.dir <= reference + 0.5 * P.K
+      || distance < 3 || distance > 32 * P.K) return null
+    if (this.laneClearance(p.pos, target, opps) < 1.6 && distance > 17 * P.K) return null
+
+    const direction = norm(target.x - p.pos.x, target.y - p.pos.y)
+    const speed = clamp(8 + distance * 0.45, 9, 27)
+    let x = p.pos.x + direction.x * 0.55
+    let y = p.pos.y + direction.y * 0.55
+    let z = 0.05
+    let vz = 0
+    let vx = direction.x * speed
+    let vy = direction.y * speed
+    let arrival = 0
+    for (let elapsed = P.DT; elapsed <= 2.5 + 1e-9; elapsed += P.DT) {
+      if (z > 0.01 || vz > 0.01) {
+        vz -= 9.81 * P.DT
+        z += vz * P.DT
+        if (z <= 0) { z = 0; vz = vz < -1.6 ? -vz * 0.5 : 0; if (vz > 0) { vx *= 0.85; vy *= 0.85 } }
+        const drag = Math.exp(-0.05 * P.DT)
+        vx *= drag
+        vy *= drag
+      } else {
+        const sp = Math.hypot(vx, vy)
+        if (sp > 0.02) {
+          const next = Math.max(0, sp - (0.55 + 0.012 * sp * sp) * P.DT)
+          vx *= next / sp
+          vy *= next / sp
+        } else { vx = 0; vy = 0 }
+      }
+      x += vx * P.DT
+      y += vy * P.DT
+      if (Math.hypot(x - target.x, y - target.y) <= 1) { arrival = elapsed; break }
+    }
+    if (!arrival) return null
+    const tau = Math.max(0, arrival - clamp(mate.decideT, 0, 0.45))
+    const to = norm(target.x - mate.pos.x, target.y - mate.pos.y)
+    const max = 0.88 * this.maxSpeed(mate)
+    const v0 = clamp(mate.vel.x * to.x + mate.vel.y * to.y, 0, max)
+    const acceleration = this.maxAccel(mate)
+    const capTime = (max - v0) / acceleration
+    const reach = tau <= capTime ? v0 * tau + 0.5 * acceleration * tau * tau
+      : v0 * capTime + 0.5 * acceleration * capTime * capTime + max * (tau - capTime)
+    return dist(mate.pos, target) <= reach + 1 ? target : null
   }
 
   private carryValue(p: PesPlayer, press: number, opps: PesPlayer[]): number {
@@ -1325,7 +1480,9 @@ export class PesMatch {
         const sbl = this.spaceBehindLine(p, oppTeam)
         if (sbl > 4 && this.rng.float() < runProb) {
           const lineLx = Math.max(0, b.x * t.dir, this.secondLastLx(t, oppTeam))
-          const runLx = Math.min(lineLx - 1.5, P.HL - 6 * K)
+          const runLx = this.tacticalMechanics && v2?.advanced?.possession?.receiving === 'space' && this.openPlay.phase === 'open'
+            ? Math.min(lineLx + 4 * K * execution(p.familiarity ?? 1, this.tacticsParams), P.HL - 6 * K)
+            : Math.min(lineLx - 1.5, P.HL - 6 * K)
           const chanY = clamp(this.homeWorld(p).y + (this.rng.float() - 0.5) * 6, -P.HW + 4, P.HW - 4)
           p.runTarget = { x: runLx * t.dir, y: chanY }
           p.runUntil = this.time + 1.4 + this.rng.float() * 1.2
@@ -1397,14 +1554,63 @@ export class PesMatch {
         x: o.pos.x + (dirv.x * 0.55 + toBall.x * 0.45) * r + o.vel.x * 0.10,
         y: o.pos.y + (dirv.y * 0.55 + toBall.y * 0.45) * r + o.vel.y * 0.10,
       }
+      p.target = this.defensiveWidthTarget(p, p.target)
       p.urgency = deepThird ? 0.55 : 0.36
       p.mode = 'mark'
       return
     }
 
-    p.target = this.formationTarget(p)
+    p.target = this.defensiveWidthTarget(p, this.formationTarget(p))
     p.urgency = 0.24
     p.mode = 'idle'
+  }
+
+  /** 无球宽度只处理盯人和阵形目标，不移动上抢者、协防者或实际拦截者。 */
+  private defensiveWidthTarget(p: PesPlayer, raw: Vec2): Vec2 {
+    const P = this.spec
+    const t = this.teams[p.ti]
+    const width = t.tactics.instructions?.advanced?.defense?.width
+    if (!this.tacticalMechanics || !width || width === 'normal' || this.ball.frozen) return raw
+    const possession = this.possessionTeam()
+    if (!possession || possession === t) return raw
+    const opponent = this.other(t)
+    const eligible = t.players.filter((q) => q.slot !== 0 && q.stun <= 0 && q.pid !== t.presser
+      && q.pid !== t.presser2 && q.pid !== t.cover
+      && !(this.contact && this.ball.owner < 0 && this.ball.meta?.icpt === q.pid)).sort((a, b) => a.pid - b.pid)
+    if (eligible.length < 2 || !eligible.includes(p)) return raw
+    const minY = -P.HW + 2.5
+    const maxY = P.HW - 2.5
+    let sum = 0
+    for (const q of eligible) {
+      const mark = t.marks[q.slot]
+      const o = mark >= 0 ? opponent.players.find((other) => other.pid === mark) : undefined
+      let y: number
+      if (q === p) y = raw.y
+      else if (o) {
+        const g = this.goalOf(t)
+        const goalDirection = norm(g.x - o.pos.x, g.y - o.pos.y)
+        const ballDirection = norm(this.ball.x - o.pos.x, this.ball.y - o.pos.y)
+        const r = Math.abs(o.pos.x) > P.HL - 35 * P.K ? 1.35 : 1.8
+        y = o.pos.y + (goalDirection.y * 0.55 + ballDirection.y * 0.45) * r + o.vel.y * 0.10
+      } else y = this.formationTarget(q).y
+      if (!Number.isFinite(y)) return raw
+      sum += clamp(y, minY, maxY)
+    }
+    const center = sum / eligible.length
+    const rawY = clamp(raw.y, minY, maxY)
+    const strength = execution(this.teamFamiliarity(t), this.tacticsParams)
+    const scale = 1 + 0.15 * triOf(width) * strength
+    const proposed = center + (rawY - center) * scale
+    let low = Math.max(minY, rawY - 3 * P.K)
+    let high = Math.min(maxY, rawY + 3 * P.K)
+    const marked = t.marks[p.slot]
+    const o = marked >= 0 ? opponent.players.find((other) => other.pid === marked) : undefined
+    if (o) {
+      const maxGap = Math.abs(rawY - o.pos.y) + 1.5 * P.K
+      low = Math.max(low, o.pos.y - maxGap)
+      high = Math.min(high, o.pos.y + maxGap)
+    }
+    return Number.isFinite(proposed) && low <= high ? { x: raw.x, y: clamp(proposed, low, high) } : raw
   }
 
   private decideLoose(p: PesPlayer): void {
@@ -1558,22 +1764,25 @@ export class PesMatch {
   }
 
   /* ---- 执行动作 ---- */
-  private execPass(p: PesPlayer, mate: PesPlayer, press: number): void {
+  private execPass(p: PesPlayer, mate: PesPlayer, press: number, target?: Vec2): void {
+    this.noteOpenKick(p)
     const K = this.spec.K
     const t = this.teams[p.ti]
-    const d = dist(p.pos, mate.pos)
-    this.metrics?.pass(this, p, mate.pos, d)
+    // 空当落点不参与越位判定：冻结出脚瞬间球和接球人的实际位置。
+    const spaceOffside = target ? this.rules.offside && this.isOffside(t, mate) : false
+    const d = dist(p.pos, target ?? mate.pos)
+    this.metrics?.pass(this, p, mate.pos, dist(p.pos, mate.pos))
     const lead = clamp(d / 16, 0.15, 1.7)
     const errAng = (1 - p.ab.passing) * 0.075 * (d / 22) + press * 0.04
     let ang = (this.rng.float() - 0.5) * 2 * errAng
 
-    let tx = mate.pos.x + mate.vel.x * lead * 0.9
-    let ty = mate.pos.y + mate.vel.y * lead * 0.9
+    let tx = target?.x ?? (mate.pos.x + mate.vel.x * lead * 0.9)
+    let ty = target?.y ?? (mate.pos.y + mate.vel.y * lead * 0.9)
     // 接了结算模型：先判成败，再决定球往哪飞（出脚误差只剩演出）
     let verdict: PassVerdict | null = null
     let kind: PassKind = 'short'
     if (this.contact) {
-      kind = this.passKind(p, mate)
+      kind = target ? 'through' : this.passKind(p, mate)
       verdict = this.contact.pass(this, p, mate, { x: tx, y: ty }, kind, false)
       ang *= 0.25
       const aim = this.stagePassAim(p, tx, ty, verdict)
@@ -1590,7 +1799,7 @@ export class PesMatch {
     const dd = Math.hypot(tx - p.pos.x, ty - p.pos.y)
     const speed = clamp(8 + dd * 0.45, 9, 27)
     const u = norm(tx - p.pos.x, ty - p.pos.y)
-    const loft = dd > 32 * K || (this.laneClearance(p.pos, mate.pos, this.other(t).players) < 1.6 && dd > 17 * K)
+    const loft = target ? false : dd > 32 * K || (this.laneClearance(p.pos, mate.pos, this.other(t).players) < 1.6 && dd > 17 * K)
 
     const b = this.ball
     b.owner = -1
@@ -1602,14 +1811,19 @@ export class PesMatch {
     b.vz = loft ? clamp(3.0 + dd * 0.10, 4.0, 9.0) : 0
     b.spin = (this.rng.float() - 0.5) * 2.0
     if (verdict) {
-      let offside = this.rules.offside && this.isOffside(t, mate)
+      let offside = target ? spaceOffside : this.rules.offside && this.isOffside(t, mate)
       if (offside && this.contact!.beatsOffside(this, mate)) offside = false
-      b.meta = { type: 'pass', from: p.pid, intended: mate.pid, offside, result: verdict.result, loft }
+      b.meta = { type: 'pass', from: p.pid, intended: mate.pid, offside, result: verdict.result, loft,
+        ...(target ? { plannedTarget: { ...target }, flightKind: 'space' as const } : {}) }
       if (verdict.interceptor >= 0) b.meta.icpt = verdict.interceptor
       this.event('pass', p.ti, [p.pid, mate.pid], undefined, {
-        kind, result: verdict.result, p: Math.round(verdict.p * 1000) / 1000, ...(verdict.interceptor >= 0 ? { icpt: verdict.interceptor } : {}),
+        kind, result: verdict.result, p: Math.round(verdict.p * 1000) / 1000,
+        ...(target ? { plannedX: target.x, plannedY: target.y } : {}),
+        ...(verdict.interceptor >= 0 ? { icpt: verdict.interceptor } : {}),
       })
-    } else b.meta = { type: 'pass', from: p.pid, intended: mate.pid, offside: this.isOffside(t, mate) }
+    } else b.meta = { type: 'pass', from: p.pid, intended: mate.pid,
+      offside: target ? spaceOffside : this.isOffside(t, mate),
+      ...(target ? { plannedTarget: { ...target }, flightKind: 'space' as const } : {}) }
     b.lastTouch = p.pid
     b.looseT = 0
 
@@ -1712,6 +1926,7 @@ export class PesMatch {
   }
 
   private execShot(p: PesPlayer, press: number, req: ShotRequest = { header: false, penalty: false, freeKick: false }): void {
+    this.noteOpenKick(p)
     if (this.contact) {
       this.execShotSettled(p, req)
       return
@@ -1773,6 +1988,7 @@ export class PesMatch {
   }
 
   private execClear(p: PesPlayer): void {
+    this.noteOpenKick(p)
     const P = this.spec
     const K = P.K
     const t = this.teams[p.ti]
@@ -2449,21 +2665,128 @@ export class PesMatch {
   }
 
   /* ---------- 每帧更新压迫/盯人分配 ---------- */
+  private instructionTaskKey(t: PesTeam, p: PesPlayer): string {
+    if (p.pid === t.presser || p.pid === t.presser2) return 'press'
+    if (p.pid === t.cover) return 'cover'
+    const marked = t.marks[p.slot]
+    return marked !== undefined && marked >= 0 ? `mark:${marked}` : ''
+  }
+
+  private instructionTasks(t: PesTeam): Map<number, string> {
+    return new Map(t.players.map((p) => [p.pid, this.instructionTaskKey(t, p)]))
+  }
+
+  /** 任务变更后只刷新移动目标，不重新决策、不消耗随机数。 */
+  private refreshInstructionMovement(p: PesPlayer): void {
+    const b = this.ball
+    const t = this.teams[p.ti]
+    if (p.slot === 0 || b.owner === p.pid) return
+    if (p.stun > 0) {
+      p.target = { ...p.pos }
+      p.urgency = 0.1
+      p.mode = 'idle'
+      return
+    }
+    if (b.frozen) {
+      if (this.restart?.taker === p.pid) return
+      p.runTarget = null
+      if (this.contact && this.restart?.type === 'penalty') {
+        p.target = this.penaltyPosition(p, this.restart)
+        p.urgency = 0.6
+      } else {
+        const box = this.contact && this.restart ? this.boxPosition(p, this.restart) : null
+        p.target = box ?? this.formationTarget(p)
+        p.urgency = box ? 0.75 : 0.28
+      }
+      p.mode = 'idle'
+      return
+    }
+    if (this.contact && b.owner < 0 && b.meta?.icpt === p.pid) {
+      p.target = this.interceptPoint(p, 1.8)
+      p.urgency = 1
+      p.mode = 'press'
+      return
+    }
+    const possession = this.possessionTeam()
+    if (possession === t) {
+      if (b.owner < 0 && b.meta?.intended === p.pid) {
+        p.target = this.interceptPoint(p, 1.8)
+        p.urgency = 1
+        p.mode = 'support'
+      } else if (p.runTarget && this.time < p.runUntil) {
+        p.target = p.runTarget
+        p.urgency = 1
+        p.mode = 'run'
+      } else {
+        p.target = this.formationTarget(p)
+        p.urgency = 0.34
+        p.mode = 'idle'
+      }
+    } else if (possession) {
+      this.decideOffBall(p)
+    } else {
+      this.decideLoose(p)
+    }
+  }
+
+  private refreshChangedInstructionTasks(t: PesTeam, previous: Map<number, string>): void {
+    for (const p of t.players) {
+      if ((previous.get(p.pid) ?? '') !== this.instructionTaskKey(t, p)) this.refreshInstructionMovement(p)
+    }
+  }
+
+  /** 球权或死球在决策中途变化：丢弃上一步分配，下个物理步再重建。 */
+  private clearInstructionShape(): void {
+    for (const t of this.teams) {
+      if (!t.tactics.instructions) continue
+      const previous = this.instructionTasks(t)
+      t.presser = -1
+      t.presser2 = -1
+      t.cover = -1
+      t.marks.fill(-1)
+      this.refreshChangedInstructionTasks(t, previous)
+    }
+  }
+
+  /** 离场球员不能继续作为上抢者或盯人目标；换人后的新球员由下一步重新分配。 */
+  private removeInstructionShapeReferences(player: PesPlayer): void {
+    if (!this.tacticalMechanics) return
+    for (const t of this.teams) {
+      if (!t.tactics.instructions) continue
+      const previous = this.instructionTasks(t)
+      if (t.presser === player.pid) t.presser = -1
+      if (t.presser2 === player.pid) t.presser2 = -1
+      if (t.cover === player.pid) t.cover = -1
+      if (this.tiOf(t) === player.ti) t.marks[player.slot] = -1
+      for (let slot = 0; slot < t.marks.length; slot++) {
+        if (t.marks[slot] === player.pid) t.marks[slot] = -1
+      }
+      this.refreshChangedInstructionTasks(t, previous)
+    }
+  }
+
   private updateShape(): void {
     const b = this.ball
     for (const t of this.teams) {
+      const v2 = t.tactics.instructions
+      const previous = v2 && this.tacticalMechanics ? this.instructionTasks(t) : null
       t.marks.fill(-1)
       t.presser = -1
       t.cover = -1
-      if (b.frozen) continue
-      if (this.possessionTeam() === t) continue
+      if (v2 && this.tacticalMechanics) t.presser2 = -1
+      if (b.frozen || this.possessionTeam() === t) {
+        if (previous) this.refreshChangedInstructionTasks(t, previous)
+        continue
+      }
 
       const outfield = t.players.filter((p) => p.role !== 'GK' && p.stun <= 0)
-      if (!outfield.length) continue
+      if (!outfield.length) {
+        if (previous) this.refreshChangedInstructionTasks(t, previous)
+        continue
+      }
       const ip = b.owner >= 0 ? { x: b.x + b.vx * 0.2, y: b.y + b.vy * 0.2 } : this.predictBall(0.4)
       const eta = (p: PesPlayer): number => dist(p.pos, ip) / Math.max(2.5, this.maxSpeed(p) * 0.6)
       const sorted = outfield.slice().sort((a, c) => eta(a) - eta(c))
-      const v2 = t.tactics.instructions
       if (v2) {
         this.assignPressers(t, v2, outfield, ip)
       } else {
@@ -2477,6 +2800,7 @@ export class PesMatch {
       const threats = opps.slice().sort((a, c) =>
         (dist(a.pos, goal) - a.ab.positioning * 2.5) - (dist(c.pos, goal) - c.ab.positioning * 2.5))
       const used = new Set<number>([t.presser, t.cover])
+      if (v2 && this.tacticalMechanics && t.presser2 !== undefined) used.add(t.presser2)
       for (const o of threats) {
         if (o.pid === b.owner) continue
         let best: PesPlayer | null = null
@@ -2494,6 +2818,7 @@ export class PesMatch {
           used.add(best.pid)
         }
       }
+      if (previous) this.refreshChangedInstructionTasks(t, previous)
     }
   }
 

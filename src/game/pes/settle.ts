@@ -74,6 +74,8 @@ interface Extra {
   lastPass: { passer: number; t: number } | null
   /** 最近一脚射门的细节（进球战报用） */
   lastShot: { pid: number; t: number; xg: number; /** 这脚射门已经写进文字直播 */ logged: boolean; meta: Record<string, number | string | boolean> } | null
+  /** 新战术实验快照保存已触发的单场一次体力技能，旧快照保持原结构。 */
+  secondWindUsed?: number[]
   /** 每个 pid 上场 / 离场的模拟时刻（算出场分钟；没有 left 表示踢到终场） */
   joined: Record<number, number>
   left: Record<number, number>
@@ -145,12 +147,14 @@ export class PesSettlement implements ContactModel {
   /** 游戏球员 id → pid（只含场上的人） */
   private pidById = new Map<string, number>()
   private secondWindUsed = new Set<number>()
+  private saveTacticalState = false
 
   constructor(source: PesSettlementInit | PesSettlementJSON) {
     if ('game' in source) {
       const copy = structuredClone(source)
       this.game = copy.game
       this.extra = copy.extra
+      this.secondWindUsed = new Set(copy.extra.secondWindUsed ?? [])
     } else {
       this.game = createGameState(source)
       this.extra = { knockout: source.knockout, offside: source.offside, tuning: { ...DEFAULT_TUNING, ...source.tuning }, lastPass: null, lastShot: null, joined: {}, left: {} }
@@ -171,7 +175,8 @@ export class PesSettlement implements ContactModel {
   }
 
   toJSON(): PesSettlementJSON {
-    return structuredClone({ game: this.game, extra: this.extra })
+    const extra = this.saveTacticalState ? { ...this.extra, secondWindUsed: [...this.secondWindUsed].sort((a, b) => a - b) } : this.extra
+    return structuredClone({ game: this.game, extra })
   }
 
   /** 内核（给点球大战等游戏层逻辑用）。 */
@@ -180,6 +185,7 @@ export class PesSettlement implements ContactModel {
   }
 
   attach(m: PesMatch): void {
+    this.saveTacticalState = m.usesTacticalMechanics
     const byId = new Map<string, MatchPlayerState>()
     for (const team of this.game.teams) for (const player of [...team.players, ...team.bench]) byId.set(player.id, player)
     this.mp = []
