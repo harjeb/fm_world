@@ -61,6 +61,7 @@ import { applyPeakBreakthrough } from '../game/peak-milestones.ts'
 import { ensureCards, playerCards } from '../game/cards.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeStarTraits } from '../game/names.ts'
 import { catchUpSeason, lineupLockState, settleGameConditions, skipToPostseasonEnd } from '../game/season.ts'
+import { gameDateOf } from '../game/calendar.ts'
 import { fetchFriendlyTeam, isOnlineMode } from '../online.ts'
 import { advanceLeagueRealtime, leagueDisplayClock, setLeagueClock } from '../game/realtime.ts'
 import { displayClock } from '../game/match/time.ts'
@@ -1697,8 +1698,9 @@ document.addEventListener('click', async (event) => {
         break
       }
       const next = startNextSeasonAction(game)
+      const date = gameDateOf(game.world?.calendarStartAt ?? game.createdAt, Date.now()).label
       ui.notice = next.ok
-        ? `已跳至新赛季：第 ${game.season.index} 赛季开始（前进 ${Math.round(jump.gameDays * 10) / 10} 个游戏日）。`
+        ? `已跳至新赛季：第 ${game.season.index} 赛季开始（日历已进入 ${date}）。`
         : next.error ?? '休整已结束，可以开始下一赛季'
       persist()
       render()
@@ -1712,7 +1714,8 @@ document.addEventListener('click', async (event) => {
         } catch (error) { ui.notice = error instanceof Error ? error.message : '全服赛季尚未结束' }
       } else {
         const result = startNextSeasonAction(game)
-        ui.notice = result.ok ? '新赛季已开始；升级附加赛、升降级、年龄与合同已结算。' : result.error ?? '无法开始下一赛季'
+        const date = gameDateOf(game.world?.calendarStartAt ?? game.createdAt, Date.now()).label
+        ui.notice = result.ok ? `新赛季已开始（日历已进入 ${date}）；升级附加赛、升降级、年龄与合同已结算。` : result.error ?? '无法开始下一赛季'
         if (result.ok) persist()
       }
       render()

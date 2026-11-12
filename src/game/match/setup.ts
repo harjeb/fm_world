@@ -8,6 +8,7 @@ import { MatchEngine, normalizePossession } from './engine.ts'
 import { PesEngine, type GameEngine } from '../pes/engine.ts'
 import { cloneInstructions, instructionsFromLegacyTactics, legacyTacticsFromInstructions } from '../pes/tactics.ts'
 import { aiNeedsRotation, aiRotatedLineup, autoFillLineup, computeLineupFamiliarity, validateLineup } from '../squad.ts'
+import { applyAITacticsToLineup, defaultAIAutoSubs, defaultAITacticsStage } from '../ai-tactics.ts'
 import { prepareMatchInjuries } from '../injury.ts'
 import { LOGIC_MATCH_SECONDS } from './time.ts'
 import { matchPerformanceOf } from '../economy.ts'
@@ -79,13 +80,38 @@ export function aiMatchLineup(ai: AITeam, suspended?: Set<string>, rotate = fals
   return intact ? ai.lineup : autoFillLineup(players, ai.formationId, ai.tactics)
 }
 
-/** 电脑球队的比赛阵容输入（见 aiMatchLineup）。 */
-export function teamInputFromAI(ai: AITeam, suspended?: Set<string>, options: { rotate?: boolean; tacticsStage?: number; injured?: ReadonlySet<string> } = {}): MatchTeamInput {
+/** 电脑球队（或锁定比赛阵容）的比赛输入（见 aiMatchLineup）。 */
+export function teamInputFromAI(
+  ai: AITeam,
+  suspended?: Set<string>,
+  options: {
+    rotate?: boolean
+    tacticsStage?: number
+    injured?: ReadonlySet<string>
+    aiCoach?: boolean
+    preserveLineupTactics?: boolean
+  } = {},
+): MatchTeamInput {
+  const aiCoach = options.aiCoach ?? true
   const players = suspended?.size ? ai.players.filter((player) => !suspended.has(player.id)) : ai.players
-  const lineup = aiMatchLineup(ai, suspended, options.rotate, options.injured)
+  const baseLineup = aiMatchLineup(ai, suspended, options.rotate, options.injured)
+  let effectiveLineup = baseLineup
+  if (aiCoach && !options.preserveLineupTactics && (baseLineup !== ai.lineup || !baseLineup.tacticalInstructions)) {
+    effectiveLineup = baseLineup === ai.lineup ? structuredClone(baseLineup) : baseLineup
+    applyAITacticsToLineup(effectiveLineup, {
+      players,
+      clubStyle: ai.style,
+      seedTactics: ai.tactics,
+      strength: ai.strength,
+      tier: ai.tier,
+    })
+  }
+  const tacticsStage = options.tacticsStage ?? (aiCoach ? defaultAITacticsStage({ ...ai, players, lineup: effectiveLineup }) : 1)
   return {
-    ...teamInputFromLineup(players, lineup, { id: ai.id, name: ai.name, color: ai.color, accent: ai.accent }, { tacticsStage: options.tacticsStage }),
-    autoSubs: { timed: [], staminaBelow: null, onInjury: true },
+    ...teamInputFromLineup(players, effectiveLineup, { id: ai.id, name: ai.name, color: ai.color, accent: ai.accent }, { tacticsStage }),
+    ...(aiCoach
+      ? { aiCoach: true, autoSubs: defaultAIAutoSubs() }
+      : { autoSubs: { timed: [], staminaBelow: null, onInjury: true } }),
   }
 }
 
@@ -247,8 +273,9 @@ export function buildMatchEngineForGame(game: GameState, context: MatchContext, 
     { tacticsStage: game.economy?.tactics ?? 1 },
   )
   if (game.autoSubs) playerInput.autoSubs = structuredClone(game.autoSubs)
-  // 对手是电脑球队：体能低于 80 的先休息。
-  const aiInput = teamInputFromAI(ai, suspended, { rotate: true })
+  // 对手是电脑球队：体能低于 80 的先休息，并按俱乐部战术室阶段（或阵容强度估算）计算战术熟练度。
+  const aiClubTactics = game.aiClubs?.[ai.id]?.economy.tactics
+  const aiInput = teamInputFromAI(ai, suspended, { rotate: true, tacticsStage: aiClubTactics })
   withChemistry(playerInput, game.chemistry, now, game.season.gameDayMs)
   withChemistry(aiInput, game.chemistry, now, game.season.gameDayMs)
   if (rulesVersion === undefined) {

@@ -146,9 +146,9 @@ export function pesDisplayEngine(): PesEngine | null {
   return pv.sim
 }
 
-/** 教练的手动指令数；自动换人是比赛里按时间触发的，画面引擎自己会走到同一刻，不算。 */
+/** 教练的手动指令数；自动换人、比赛计划阶段与 AI 教练调整都由比赛时钟/比分确定性触发，画面引擎自己会走到同一刻，不算。 */
 function commandCount(engine: PesEngine): number {
-  return engine.state.instructions.filter((item) => !(item.kind === 'sub' && item.autoReason)).length
+  return engine.state.instructions.filter((item) => !item.autoReason).length
 }
 
 /**

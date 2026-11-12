@@ -2,6 +2,7 @@ import type { AITeam, AITeamDef, FormationId, Player, Position, Tactics } from '
 import { PLAYER_SEEDS, createPlayerFromSeed } from './players.ts'
 import { createRandomPlayer, randomSquadPositionTemplate } from './random-players.ts'
 import { autoFillLineup, validateLineup } from '../squad.ts'
+import { applyAITacticsToLineup } from '../ai-tactics.ts'
 import { caOf } from '../ca.ts'
 import { derivedRng } from '../rng.ts'
 
@@ -143,12 +144,20 @@ export function buildLeague(seed: number, clubName = '青训联队'): LeagueSetu
       const def = makeDefWithId(team.def, team.def.id)
       const players = squads.get(def.id) ?? []
       const stars = builtStars.get(def.id) ?? []
-      const lineup = autoFillLineup(players, formationOf(def), tacticsOf(def))
+      const seedTactics = tacticsOf(def)
+      const lineup = autoFillLineup(players, formationOf(def), seedTactics)
+      applyAITacticsToLineup(lineup, {
+        players,
+        clubStyle: def.style,
+        seedTactics,
+        strength: def.strength,
+        tier: 'champions',
+      })
       const check = validateLineup(players, lineup)
       if (!check.valid) throw new Error(`AI 队伍 ${def.name} 阵容不合法：${check.errors.join('；')}`)
       return {
         ...def,
-        tactics: tacticsOf(def),
+        tactics: seedTactics,
         playerNames: stars.map((star) => star.name),
         lineup,
         players,

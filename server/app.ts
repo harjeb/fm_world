@@ -7,7 +7,7 @@ import { createInitialGame, GAME_VERSION, upgradeLegacySignatures } from '../src
 import { addTrainedCard, ensureCards, equipCard, playerCards } from '../src/game/cards.ts'
 import { ensurePve } from '../src/game/pve.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
-import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, wageForPlayer, worldForClub, worldSlots, worldWageBill } from '../src/game/world.ts'
+import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, wageForPlayer, worldForClub, worldSlots, worldWageBill } from '../src/game/world.ts'
 import { lineupLockState } from '../src/game/season.ts'
 import type { AIClubState, AITeam, Player, WorldState } from '../src/game/types.ts'
 import { caOf } from '../src/game/ca.ts'
@@ -188,6 +188,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   {
     const at = now()
     migrateWorldSchedule(sharedWorld.world, at)
+    ensureWorldCalendar(sharedWorld.world)
     for (const account of db.accounts) if (account.game && migrateGameSchedule(account.game, at)) persistAccount(account)
   }
   // 7 人制 → 11 人制：先迁移每个账号（玩家球队补随机球员、换阵型），有教练的球队名单直接用账号里的新名单，
@@ -321,7 +322,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const state = (book[club.id] ??= createAIClub(club, splitSeed(sharedWorld.seed, `ai-club-${club.id}`)))
       const team = sharedWorld.teams?.[club.id]
       const before = `${state.economy.balance}|${state.trained}|${state.upgrades}`
-      advanceAIClub(state, club, team, rounds, splitSeed(sharedWorld.seed, `ai-advance-${club.id}-${round}`))
+      advanceAIClub(state, club, team, rounds, splitSeed(sharedWorld.seed, `ai-advance-${club.id}-${round}`), true, sharedWorld.world.seasonIndex)
       if (`${state.economy.balance}|${state.trained}|${state.upgrades}` !== before) changed = true
     }
     // 转会窗口里 AI 之间按需互相挖人（同级或更低级别），每轮全服最多 3 笔。
@@ -474,7 +475,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       injuries,
       suspended: Object.entries(bans).filter(([, ban]) => ban.matches > 0).map(([id]) => id),
       medical: game ? economyOf(game).medical : sharedWorld.aiClubs?.[clubId]?.economy.medical ?? 1,
-      tacticsStage: game ? economyOf(game).tactics : sharedWorld.aiClubs?.[clubId]?.economy.tactics ?? 1,
+      tacticsStage: game ? economyOf(game).tactics : sharedWorld.aiClubs?.[clubId]?.economy.tactics,
       // 锁定时还欠薪：这场只发挥一半。
       ...(game && matchPerformanceOf(game) < 1 ? { performance: matchPerformanceOf(game) } : {}),
       // 没有教练的电脑球队：开球时体能低于 80 的先休息；超过 3 天未上线的玩家球队则进入 aiTakeover 自动轮换。
@@ -1201,7 +1202,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       target.energy = Math.max(0, (target.energy ?? 100) - TRAINING_ENERGY_COST)
       const economy = economyOf(game)
       const seed = splitSeed(sharedWorld.seed, `ai-takeover-train-${account.id}-${game.season.index}-${game.season.round}-${target.id}`)
-      const session = simulateAITrainingSession(target, seed, economy)
+      const session = simulateAITrainingSession(target, seed, economy, game.season.index)
       const gk = target.positions.GK > 0
       if (caOf(session.candidate.attrs, gk) > caOf(target.attrs, gk) + 0.5) {
         const card = addTrainedCard(game, session)
@@ -1382,6 +1383,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       }
       sharedWorld.startedAt = next.seasonStartedAt
       sharedWorld.aiRound = 0
+      const offseasonDelta = Math.max(0, (old.calendarStartAt ?? old.seasonStartedAt) - (next.calendarStartAt ?? next.seasonStartedAt))
+      healInjuriesByMs(sharedWorld.matchBook!.injuries, offseasonDelta, now())
       sharedWorld.matchBook!.suspensions = {}
       sharedWorld.matchBook!.yellowCounts = {}
       // 电脑球队也过了一个赛季：清掉已经并进名单的签入，账本和设施继续滚。

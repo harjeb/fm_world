@@ -274,7 +274,7 @@ export type AIAdvanceResult = { trained: number; upgrades: number }
  * `applyToTeam = false` 时只练卡片，不动当季名单（服务器用：名册改动要等赛季滚动再统一生效，
  * 否则每个 tick 都会改动全服名册、把每个教练的存档版本推高）。
  */
-export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | 'tier'>, team: AITeam | undefined, rounds: number, seed: number, applyToTeam = true): AIAdvanceResult {
+export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | 'tier'>, team: AITeam | undefined, rounds: number, seed: number, applyToTeam = true, seasonIndex = 1): AIAdvanceResult {
   if (rounds <= 0) return { trained: 0, upgrades: 0 }
   const profile = TIER_PROFILE[club.tier] ?? TIER_PROFILE.division2
   // 收入：和玩家同一套公式（基本收入 + 球迷 + 设施），按轮结算。
@@ -298,8 +298,8 @@ export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | '
     // 没有当季名单（其他分区）就不练：账本里的卡等下赛季随名单重建，免得把 GK 属性练到场上球员身上。
     if (!base) break
     const card = cardOf(state, slot, base)
-    // 真实培养：从原始属性开始跑完 30 个时段和事件，产出这一轮的候选属性。
-    const trainedPlayer = simulateAITrainingRound(base, splitSeed(seed, `program-${state.trained}-${slot}`), state.economy)
+    // 真实培养：从原始属性开始跑完当季培养时段（30 / 40 / 44）和事件，产出这一轮的候选属性。
+    const trainedPlayer = simulateAITrainingRound(base, splitSeed(seed, `program-${state.trained}-${slot}`), state.economy, seasonIndex)
     state.trained += 1
     trained += 1
     const rating = playerCa(trainedPlayer)
@@ -369,7 +369,7 @@ export function advanceAIClubs(game: { world?: WorldState; aiTeams?: AITeam[]; a
     const own = teams.get(club.id)
     // 其他分区没有存档名单：用种子复原的名单当培养对象，只练账本里的卡，不动任何名单。
     const team = own ?? (ownerless ??= cachedOwnerlessTeams(game.world, game.seed, game.aiClubs))[club.id]
-    advanceAIClub(state, club, team, rounds, splitSeed(game.seed, `ai-advance-${club.id}-${game.season?.round ?? 1}-${rounds}`), !!own)
+    advanceAIClub(state, club, team, rounds, splitSeed(game.seed, `ai-advance-${club.id}-${game.season?.round ?? 1}-${rounds}`), !!own, game.world.seasonIndex)
   }
   return true
 }

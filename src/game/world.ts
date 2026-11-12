@@ -19,12 +19,13 @@ import { LEGACY_SQUAD_SIZE, buildNameBook, createRandomPlayer, randomSquadPositi
 import { DIVISION_IDS, WORLD_CLUB_DEFS, conferenceLabel, conferenceOfDivision, divisionIdForTier, type WorldClubDef } from './data/world-clubs.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION } from './names.ts'
 import { FULL_SQUAD, MIN_SQUAD, autoFillLineup, validateLineup } from './squad.ts'
+import { applyAITacticsToLineup } from './ai-tactics.ts'
 import { equipAICards, mergeSignings, seedAIClubs } from './ai-club.ts'
 import { caOf } from './ca.ts'
 import { derivedRng, splitSeed, hashString } from './rng.ts'
 import { simulateAIvsAIState } from './match/setup.ts'
 import { economyOf, payWageBill } from './economy.ts'
-import { AVERAGE_ROUND_GAME_DAYS, GAME_DAY_MS, KICKOFF_SCHEDULE, gameDayOfRound, kickoffAtForRound, latestKickoffAt, roundsKickedOff, seasonEndAt, seasonGameDays } from './calendar.ts'
+import { AVERAGE_ROUND_GAME_DAYS, GAME_DAY_MS, KICKOFF_SCHEDULE, calendarStartForSeason, gameDayOfRound, kickoffAtForRound, latestKickoffAt, roundsKickedOff, seasonEndAt } from './calendar.ts'
 
 export const WORLD_ROUNDS = 38
 const START_YEAR = 2026
@@ -338,6 +339,15 @@ function teamFromClub(world: WorldState, club: WorldClub, seed: number, playerTe
   const squad = ai ? mergeSignings(ai, players) : players
   if (ai) equipAICards(ai, squad)
   const lineup = autoFillLineup(squad, club.formationId, club.tactics)
+  if (!club.isPlayer) {
+    applyAITacticsToLineup(lineup, {
+      players: squad,
+      clubStyle: club.style,
+      seedTactics: club.tactics,
+      strength: club.strength,
+      tier: club.tier,
+    })
+  }
   const check = validateLineup(squad, lineup)
   if (!check.valid) throw new Error(`球队 ${club.name} 阵容不合法：${check.errors.join('；')}`)
   return { ...club, players: squad, lineup, playerNames: stars.map((star) => star.name) }
@@ -1231,6 +1241,16 @@ export function worldWageBill(game: GameState): number {
 import { archivePastCups } from './pve-season.ts'
 import { ensurePve } from './pve.ts'
 
+/** 换季跳过休赛期游戏日时，按跳过的毫秒数推进伤病恢复（不改动默契时钟，避免跨赛季清零）。 */
+export function healInjuriesByMs(injuries: GameState['injuries'], deltaMs: number, now: number): void {
+  if (!injuries || !(deltaMs > 0)) return
+  for (const [key, until] of Object.entries(injuries)) {
+    if (!Number.isFinite(until)) continue
+    if (until - deltaMs <= now) delete injuries[key]
+    else injuries[key] = until - deltaMs
+  }
+}
+
 export function advanceWorldSeason(game: GameState, now = Date.now(), protectedClubs: ReadonlySet<string> = new Set(), fillMarket = true): { ok: boolean; error?: string } {
   if (!game.world) return { ok: false, error: '世界数据不存在' }
   if (game.activeMatch || !game.season.finished) return { ok: false, error: '赛季尚未结束或比赛进行中' }
@@ -1246,10 +1266,15 @@ export function advanceWorldSeason(game: GameState, now = Date.now(), protectedC
   // 自由市场保持至少 250 人；不足时从储备补入。
   while (fillMarket && game.freeStars.length < 250 && (game.reserveStars?.length ?? 0) > 0) game.freeStars.push(game.reserveStars!.shift()!)
   const world = game.world
-  // 赛季按日历排期开始，而不是等到有人点“下一赛季”：赛后那 12 个游戏日照样留给附加赛。新赛季接在上赛季结束处。
+  // 赛季按日历排期开始，而不是等到有人点“下一赛季”：赛后那 12 个游戏日照样留给附加赛。新赛季接在上赛季结束处，游戏内日期直接跳到下一年 11/01。
   const scheduledStart = seasonEndAt(world.seasonStartedAt, world.clockShift)
+  const previousCalendarStart = world.calendarStartAt ?? world.seasonStartedAt
   world.seasonIndex++
   world.seasonStartedAt = Math.min(now, scheduledStart) > 0 ? scheduledStart : now
+  const nextCalendarStart = calendarStartForSeason(world.seasonStartedAt, world.seasonIndex)
+  const offseasonDelta = Math.max(0, previousCalendarStart - nextCalendarStart)
+  world.calendarStartAt = Math.min(previousCalendarStart, nextCalendarStart)
+  healInjuriesByMs(game.injuries, offseasonDelta, now)
   world.lastPromotionPlayoff = world.promotionPlayoff
   world.promotionPlayoff = undefined
   let playerDivision = divisionIdForTier(clubById(world, 'player').tier, clubById(world, 'player').conference)
@@ -1285,6 +1310,9 @@ export function advanceSharedAccountSeason(game: GameState, oldWorld: WorldState
   game.lineup = personal.lineup
   game.freeStars.push(...personal.freeStars)
   expireContracts(game)
+  const previousCalendarStart = oldWorld.calendarStartAt ?? oldWorld.seasonStartedAt
+  const nextCalendarStart = nextWorld.calendarStartAt ?? nextWorld.seasonStartedAt
+  healInjuriesByMs(game.injuries, Math.max(0, previousCalendarStart - nextCalendarStart), nextWorld.seasonStartedAt)
   game.world = worldForClub(nextWorld, clubId)
   game.season = game.world.divisions.find((division) => division.clubIds?.includes('player'))!
   game.aiTeams = (game.season.clubIds ?? []).filter((id) => id !== 'player').map((id) => structuredClone(teams[id]))
@@ -1294,13 +1322,16 @@ export function advanceSharedAccountSeason(game: GameState, oldWorld: WorldState
   archivePastCups(game)
 }
 
-/** 旧世界没有 calendarStartAt：按当前赛季开始时间反推游戏第一天，日期不会从今天重新算。 */
+/** 旧世界没有 calendarStartAt 或换季未跳年份：按当前赛季开始时间反推游戏第一天，保证第 N 赛季从当年 11/01 起算。 */
 export function ensureWorldCalendar(world: WorldState): boolean {
-  if (Number.isFinite(world.calendarStartAt) && (world.calendarStartAt ?? 0) > 0) return false
   const index = Math.max(1, world.seasonIndex)
   const start = world.seasonStartedAt || Date.now()
-  world.calendarStartAt = start - (index - 1) * seasonGameDays(start, world.clockShift) * GAME_DAY_MS
-  return true
+  const expected = calendarStartForSeason(start, index)
+  if (!Number.isFinite(world.calendarStartAt) || (world.calendarStartAt ?? 0) <= 0 || world.calendarStartAt! > expected) {
+    world.calendarStartAt = expected
+    return true
+  }
+  return false
 }
 
 export function worldDivisionLabel(_world: WorldState, divisionId: string): string {

@@ -5,7 +5,9 @@ import { inheritanceChances, validateInheritance } from '../../game/inheritance.
 import { canLearnSkill, skillCategory } from '../../game/data/skills.ts'
 import { autoPresetLabel, autoTrainingConfig, autoTrainingPresetsFor, autoTrainingRunnable, previewTraining, resolveAutoPresetId } from '../../game/actions.ts'
 import { displayCA, initialDisplayCA, mainAttrsFor } from '../../game/rating.ts'
-import { branchProbability, eventChance, eventGrowthScale, failureChance, planTraining, REST_PARTNER_RECOVERY, trainingActionsTotal, TRAINING_ACTION_INFO, TRAINING_ENERGY_COST, weekOfAction, type TrainingRequest } from '../../game/training.ts'
+import { caCeilingOf } from '../../game/ca.ts'
+import { cupCeilingBonus, effectiveClubCeilings, effectiveTrainingCeilings } from '../../game/cup-rewards.ts'
+import { branchProbability, eventChance, eventGrowthScale, failureChance, planTraining, REST_PARTNER_RECOVERY, trainingActionsForSeason, trainingActionsTotal, trainingDaysForSeason, TRAINING_ACTION_INFO, TRAINING_ENERGY_COST, weekOfAction, type TrainingRequest } from '../../game/training.ts'
 import { partnerAssignment, trainingDate, trainingOptions, type TrainingActivityId } from '../../game/training-calendar.ts'
 import { baseBuild, playerCards } from '../../game/cards.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
@@ -331,10 +333,17 @@ function renderTrainingStart(player: Player): string {
   const energy = player.energy ?? 100
   const enough = energy >= TRAINING_ENERGY_COST
   const base = { ...baseBuild(player) }
+  const gk = player.positions.GK > 0
+  const ceilingCa = caCeilingOf(effectiveClubCeilings(player, cupCeilingBonus(game)), gk)
+  const seasonIndex = Math.max(game.season?.index ?? 1, game.world?.seasonIndex ?? 1)
+  const days = trainingDaysForSeason(seasonIndex)
+  const slots = trainingActionsForSeason(seasonIndex)
+  const daysHint = seasonIndex >= 3 ? '含第2季+5天、第3季+2天' : seasonIndex === 2 ? '含第2季+5天（第3季再+2天）' : '第2季+5天 · 第3季再+2天'
   return `<div class="grid two">
     ${panel(esc(player.name), `
       <div class="tile-grid">
-        ${tile('当前 CA', playerCA(player).toFixed(1), `原始 ${initialDisplayCA(player).toFixed(1)}`)}
+        ${tile('当前 CA', playerCA(player).toFixed(1), `原始 ${initialDisplayCA(player).toFixed(0)} · 上限 ${ceilingCa.toFixed(0)}`)}
+        ${tile('本轮时长', `${days} 天 · ${slots} 时段`, daysHint)}
         ${tile('精力', String(Math.round(energy)), `开始消耗 ${TRAINING_ENERGY_COST}`)}
       </div>
       <div class="btn-row">
@@ -405,7 +414,7 @@ function trainingHeader(current: Player, session: TrainingSession, cand: Player)
     </div>
     <div class="train-stats">
       <div class="stat-box"><span>当前 CA</span><b>${playerCA(current).toFixed(1)}</b></div>
-      <div class="stat-box"><span>培养中 CA</span><b>${playerCA(cand).toFixed(1)}</b><small class="${playerCA(cand) >= playerCA(current) ? 'up' : 'down'}">${caDelta(current, cand)}</small></div>
+      <div class="stat-box"><span>培养中 CA</span><b>${playerCA(cand).toFixed(1)}</b><small class="${playerCA(cand) >= playerCA(current) ? 'up' : 'down'}">${caDelta(current, cand)} · 上限 ${Math.round(caCeilingOf(effectiveTrainingCeilings(session), current.positions.GK > 0))}</small></div>
       <div class="stat-box"><span>训练体力</span>${meter(stamina)}</div>
       ${(session.cupCeilingBonus ?? 0) > 0 ? `<div class="stat-box"><span>奖杯上限</span><b>+${session.cupCeilingBonus}</b></div>` : ''}
       <div class="stat-box"><span>剩余精力</span>${meter(current.energy ?? 100)}</div>
@@ -415,7 +424,7 @@ function trainingHeader(current: Player, session: TrainingSession, cand: Player)
   </section>`
 }
 
-/** 15 天日历：一周 7 列，每天上午/下午两格；已完成格显示实际项目与品质。 */
+/** 培养日历（15 / 20 / 22 天）：一周 7 列，每天上午/下午两格；已完成格显示实际项目与品质。 */
 function trainingCalendar(session: TrainingSession): string {
   const total = trainingActionsTotal(session)
   const actionLog = new Map<number, TrainingLogEntry>()

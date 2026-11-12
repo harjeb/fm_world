@@ -126,10 +126,10 @@ describe('expanded training courses', () => {
     const a = trainingEventChoice(game, id, 'passing')
     game.training[id] = legacy
     const b = trainingEventChoice(game, id, 'passing')
-    expect(a.gains!.passing).toBeCloseTo(60 + 7)
-    expect(b.gains!.passing).toBeCloseTo(30 + 7)
-    expect(a.gains!.firstTouch).toBeCloseTo(2 + 7 * 20 / 1500)
-    expect(b.gains!.firstTouch).toBeCloseTo(1 + 7 * 20 / 1500)
+    expect(a.gains!.passing).toBeCloseTo(60 + 14)
+    expect(b.gains!.passing).toBeCloseTo(30 + 14)
+    expect(a.gains!.firstTouch).toBeCloseTo(2 + 14 * 20 / 1500)
+    expect(b.gains!.firstTouch).toBeCloseTo(1 + 14 * 20 / 1500)
     expect(displayEventHint('传球 +2，第一脚触球 +1', false, 2)).toBe('传球 +60，第一脚触球 +2')
   })
 
@@ -301,7 +301,7 @@ describe('expanded training courses', () => {
       delete sessions[0].facilityLevels
       const withoutFacility = preview(game, players[0].id, drill).plan!
       expect(withFacility.quality).toEqual(withoutFacility.quality)
-      expect(withFacility.gains.speed! - withoutFacility.gains.speed!).toBeCloseTo(17)
+      expect(withFacility.gains.speed! - withoutFacility.gains.speed!).toBeCloseTo(34)
       sessions[0].facilityLevels = { stadium: 5, academy: 5, medical: 15, shop: 5, sponsor: 5, psychology: 5, tactics: 5 }
     }
   })

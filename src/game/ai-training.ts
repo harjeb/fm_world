@@ -1,5 +1,5 @@
 import type { AIClubState, AttrKey, EventDef, EventOption, Player, TrainingSession } from './types.ts'
-import { branchProbability, createTrainingSession, failureChance, performTrainingAction, resolveTrainingEvent, trainingActionsTotal, trainingFatigueCost } from './training.ts'
+import { branchProbability, createTrainingSession, failureChance, performTrainingAction, resolveTrainingEvent, trainingActionsForSeason, trainingActionsTotal, trainingFatigueCost } from './training.ts'
 import { trainingOptions, type TrainingActivity } from './training-calendar.ts'
 import { eventById } from './data/events.ts'
 import { keyAttrsOf } from './data/key-attrs.ts'
@@ -80,7 +80,7 @@ function chooseEvent(session: TrainingSession, event: EventDef, weights: Map<Att
  * AI 没有陪练/导师，选项目按“招牌属性优先、其余主属性兜底”的自动策略，
  * 事件按期望成长选；体力进入失败率区间时自动休息。最终仍受球员自己的 PA 上限约束。
  */
-export function simulateAITrainingSession(base: Player, seed: number, economy: FacilityStages): TrainingSession {
+export function simulateAITrainingSession(base: Player, seed: number, economy: FacilityStages, seasonIndex = 1): TrainingSession {
   const session = createTrainingSession(untrainedPlayer(base), seed, {
     stadium: economy.stadium,
     academy: economy.academy,
@@ -89,7 +89,7 @@ export function simulateAITrainingSession(base: Player, seed: number, economy: F
     sponsor: economy.sponsor,
     psychology: economy.psychology,
     tactics: economy.tactics,
-  })
+  }, 1, undefined, trainingActionsForSeason(seasonIndex))
   const weights = weightsFor(base)
   for (let step = 0; step < 200 && !session.completed; step++) {
     if (session.pendingEventId) {
@@ -108,8 +108,8 @@ export function simulateAITrainingSession(base: Player, seed: number, economy: F
   return session
 }
 
-export function simulateAITrainingRound(base: Player, seed: number, economy: FacilityStages): Player {
-  return simulateAITrainingSession(base, seed, economy).candidate
+export function simulateAITrainingRound(base: Player, seed: number, economy: FacilityStages, seasonIndex = 1): Player {
+  return simulateAITrainingSession(base, seed, economy, seasonIndex).candidate
 }
 
 export function aiTrainingGain(base: Player, trained: Player): number {

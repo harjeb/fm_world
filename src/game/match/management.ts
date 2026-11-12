@@ -10,7 +10,7 @@ import type {
   Tactics,
 } from '../types.ts'
 import { POSITIONS } from '../types.ts'
-import { caOf, isGoalkeeper } from '../ca.ts'
+import { matchPlayerCa } from '../ai-tactics.ts'
 import { FORMATIONS } from '../data/formations.ts'
 import type { MatchPlayerState, MatchTeamState } from './types.ts'
 import { MATCH_DISPLAY_SECONDS } from './time.ts'
@@ -280,7 +280,7 @@ function pickBestBench(
       const diff = b.stamina / Math.max(1, b.maxStamina) - a.stamina / Math.max(1, a.maxStamina)
       if (Math.abs(diff) > 1e-6) return diff
     } else if (preferBy === 'ca') {
-      const diff = caOf(b.attrs, isGoalkeeper(b)) - caOf(a.attrs, isGoalkeeper(a))
+      const diff = matchPlayerCa(b) - matchPlayerCa(a)
       if (Math.abs(diff) > 1e-6) return diff
     }
     return b.positions[out.position] - a.positions[out.position]

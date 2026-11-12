@@ -1,4 +1,5 @@
-import type { AttrKey, MatchRecord, MatchMode, Player, Position, SkillId, Tactics, TraitId, TrainingLogEntry } from '../game/types.ts'
+import type { AITeam, AttrKey, FormationId, MatchMentality, MatchRecord, MatchMode, Player, Position, SkillId, Tactics, TraitId, TrainingLogEntry } from '../game/types.ts'
+import { deriveAITacticalProfile } from '../game/ai-tactics.ts'
 import { ATTR_META } from '../game/data/attributes.ts'
 import { ALL_ATTRIBUTES } from '../game/types.ts'
 import { SKILLS } from '../game/data/skills.ts'
@@ -158,6 +159,47 @@ export function teamTacticSummary(team: {
   const info = inferStyleForInstructions(base, team.tacticalStyle)
   const styleLabel = `${STYLES_REV3[info.styleId].name}${info.adjusted ? '·已调整' : ''}`
   return `${styleLabel}${planPart}（${tacticText(team.tactics)}）`
+}
+
+/** 赛中场上球员栏顶部显示的紧凑阵型+战术风格+临场心态摘要。 */
+export function teamStatusTacticBadge(team: {
+  formationId: FormationId
+  tactics: Tactics
+  mentality?: MatchMentality
+  tacticalStyle?: StyleId
+  baseInstructions?: TacticalInstructionsV2
+  instructions?: TacticalInstructionsV2
+}): string {
+  const stylePart = team.instructions
+    ? STYLES_REV3[inferStyleForInstructions(team.baseInstructions ?? team.instructions, team.tacticalStyle).styleId].name
+    : tacticText(team.tactics)
+  const mentalityPart =
+    team.mentality === 'attack'
+      ? ' · 全体进攻'
+      : team.mentality === 'defend'
+        ? ' · 全体防守'
+        : ''
+  return `${team.formationId} · ${stylePart}${mentalityPart}`
+}
+
+/** 挑战/世界列表里展示 AI 球队的战术风格与五项倾向（兼容冻结 PvE 球队实时推导）。 */
+export function aiTeamTacticLabel(team: Pick<AITeam, 'formationId' | 'tactics' | 'players' | 'style' | 'strength' | 'tier'> & { lineup?: AITeam['lineup'] }): string {
+  if (team.lineup?.tacticalInstructions) {
+    const info = inferStyleForInstructions(team.lineup.tacticalInstructions, team.lineup.tacticalStyle)
+    return `${STYLES_REV3[info.styleId].name}（${tacticText(team.lineup.tactics)}）`
+  }
+  if (team.lineup && team.players.length > 0) {
+    const profile = deriveAITacticalProfile({
+      players: team.players,
+      lineup: team.lineup,
+      clubStyle: team.style,
+      seedTactics: team.tactics,
+      strength: team.strength,
+      tier: team.tier,
+    })
+    return `${STYLES_REV3[profile.tacticalStyle].name}（${tacticText(profile.tactics)}）`
+  }
+  return tacticText(team.tactics)
 }
 
 export function clockText(seconds: number): string {

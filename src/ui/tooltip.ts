@@ -88,9 +88,11 @@ export function installTooltips(): void {
   document.addEventListener('focusout', (event) => {
     if (tipTarget(event.target)) hide()
   })
-  // 触屏没有悬停：点一下显示，再点一下或点别处收起；这次点击不触发行上的动作。
+  // 触屏没有悬停：点一下显示，再点一下或点别处收起；这次点击不触发行上的动作（但不能拦截按钮、表单等具体操作）。
   document.addEventListener('click', (event) => {
     if (lastPointer !== 'touch') return
+    const target = event.target as HTMLElement | null
+    if (target?.closest('button, [data-action], input, select, textarea, a')) return
     const el = tipTarget(event.target)
     if (!el) {
       hide()

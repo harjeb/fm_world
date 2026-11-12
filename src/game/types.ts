@@ -806,7 +806,8 @@ export type MatchRecord = {
 export type MatchInstruction = {
   step: number
   kind: 'sub' | 'tactic'
-  autoReason?: 'injury' | 'timed' | 'stamina'
+  autoReason?: 'injury' | 'timed' | 'stamina' | 'tactical' | 'plan' | 'ai'
+  side?: 'home' | 'away'
   outId?: string
   inId?: string
   role?: RoleId

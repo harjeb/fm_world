@@ -23,6 +23,7 @@ import { AVERAGE_ROUND_GAME_DAYS } from '../src/game/calendar.ts'
 import { cachedOwnerlessTeams, createWorldGame } from '../src/game/world.ts'
 import { simulateAITrainingRound } from '../src/game/ai-training.ts'
 import { initialDisplayCA } from '../src/game/rating.ts'
+import { caCeilingOf } from '../src/game/ca.ts'
 import { refreshAILineup } from '../src/game/squad.ts'
 
 const game = () => createWorldGame(2024)
@@ -122,7 +123,7 @@ describe('电脑球队的经营节奏', () => {
     expect(counted.division1).toBeLessThan(counted.champions)
   })
 
-  it('每次训练是一整轮（30 时段）只练一个人；卡只套自己的槽位，只受个人 PA 上限约束', () => {
+  it('每次训练是一整轮（按当季时段）只练一个人；卡只套自己的槽位，只受个人属性上限约束', () => {
     for (const tier of ['division2', 'champions'] as const) {
       const base = game()
       const team = base.aiTeams[0]
@@ -134,9 +135,9 @@ describe('电脑球队的经营节奏', () => {
       team.players.forEach((player, slot) => {
         const delta = playerCa(player) - before[slot]
         expect(delta, `${tier} slot ${slot}`).toBeGreaterThanOrEqual(-0.5)
-        // 每个被练到的人一次约 +80～230 CA（和玩家自动一轮同量级）；
-        // 6 轮下来会顶到 PA，取整可能超出不到 5 点。
-        if (Number.isFinite(player.pa)) expect(playerCa(player), `${tier} slot ${slot}`).toBeLessThanOrEqual(player.pa! + 5)
+        // 每个被练到的人与玩家同一套个人属性上限（ceilings）约束。
+        const ceilingCa = caCeilingOf(player.ceilings, player.positions.GK > 0)
+        expect(playerCa(player), `${tier} slot ${slot}`).toBeLessThanOrEqual(ceilingCa + 5)
         // 装上的卡就是这个槽位自己的卡。
         const card = ai.cards[String(slot)]
         expect(Math.abs(playerCa(player) - card.rating), `${tier} slot ${slot}`).toBeLessThan(1)

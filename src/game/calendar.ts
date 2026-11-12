@@ -3,8 +3,9 @@
  *
  * 每天北京时间（UTC+8）12:00 和 20:00 各踢一轮，相邻两轮隔 8 / 16 小时；
  * 第 n 轮 = 赛季开始那一刻（含）之后的第 n 个开赛时间点。
- * 38 轮之后的下一个开赛时刻进入赛后休整，休整 12 个游戏日（现实 3 天）后下一赛季开始。
- * 游戏日始终是现实 6 小时（日期、伤病、精力按游戏日走）。
+ * 38 轮之后的下一个开赛时刻进入赛后休整，休整 12 个游戏日（现实 3 天）后下一赛季开始；
+ * 换季进入新赛季时，游戏内日期直接跳到新一年的 11/01（第 N 赛季从 (2026 + N - 1)/11/01 起算）。
+ * 游戏日始终是现实 6 小时（赛季内日期、伤病、精力按游戏日走）。
  *
  * `shift`（毫秒）：单机“跳至比赛日”会把存档时钟往前拨，存档时钟 = 现实时间 + shift，
  * 开赛时间点按存档时钟的 12:00 / 20:00 算。联机和没跳过时间的单机存档都是 0。
@@ -24,8 +25,10 @@ export const SEASON_ROUNDS = 38
 /** 平均一轮多少个游戏日（一天两轮 → 2）；AI 培养按轮折算训练天数时用。 */
 export const AVERAGE_ROUND_GAME_DAYS = 2
 
-/** 游戏日历的第一天：2026/11/01（UTC）。 */
-export const CALENDAR_START = Date.UTC(2026, 10, 1)
+/** 游戏日历的第一天：2026/11/01（UTC）；换季时跳到下一年的 11/01。 */
+export const CALENDAR_START_YEAR = 2026
+export const CALENDAR_START_MONTH_INDEX = 10
+export const CALENDAR_START = Date.UTC(CALENDAR_START_YEAR, CALENDAR_START_MONTH_INDEX, 1)
 /** 赛后休整（升级附加赛和友谊赛）占 12 个游戏日。 */
 export const POSTSEASON_GAME_DAYS = 12
 
@@ -110,6 +113,18 @@ export function seasonGameDays(seasonStartedAt: number, shift = 0): number {
 /** 日历上的一天（用于日期显示）；游戏日只有 6 小时现实时间，日期仍然一天一天走。 */
 export const CALENDAR_DAY_MS = 24 * 60 * 60 * 1000
 
+/** 第 seasonIndex 赛季（1 起）开赛那天对应的游戏日编号：第 1 赛季 = 0（2026/11/01），第 2 赛季 = 365（2027/11/01），依此类推。 */
+export function seasonCalendarStartDay(seasonIndex: number): number {
+  const year = CALENDAR_START_YEAR + Math.max(0, Math.floor(seasonIndex) - 1)
+  const seasonDate = Date.UTC(year, CALENDAR_START_MONTH_INDEX, 1)
+  return Math.max(0, Math.round((seasonDate - CALENDAR_START) / CALENDAR_DAY_MS))
+}
+
+/** 给定第 seasonIndex 赛季开赛的真实时间戳，反推对应的日历锚点 calendarStartAt，使开赛时刻落在当年 11/01。 */
+export function calendarStartForSeason(seasonStartedAt: number, seasonIndex: number): number {
+  return seasonStartedAt - seasonCalendarStartDay(seasonIndex) * GAME_DAY_MS
+}
+
 /** 从游戏第一天起算的第几个游戏日（0 起）。 */
 export function gameDayIndex(calendarStartAt: number, now: number): number {
   return Math.max(0, Math.floor((now - calendarStartAt) / GAME_DAY_MS))
@@ -118,7 +133,7 @@ export function gameDayIndex(calendarStartAt: number, now: number): number {
 export type GameDate = { year: number; month: number; day: number; label: string; gameDay: number }
 
 /** 游戏内日期：从 2026/11/01 起，每个真实 6 小时过一天。 */
-export function gameDateOf(calendarStartAt: number, now: number): GameDate {
+export function gameDateOf(calendarStartAt: number, now = Date.now()): GameDate {
   const gameDay = gameDayIndex(calendarStartAt, now)
   const date = new Date(CALENDAR_START + gameDay * CALENDAR_DAY_MS)
   const year = date.getUTCFullYear()

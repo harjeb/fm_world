@@ -50,10 +50,11 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   ] },
 ]
 
-/** 游戏内日期：从 2026/11/01 起，每个真实 6 小时过一天。 */
+/** 游戏内日期：每个赛季从当年 11/01 起算，每个真实 6 小时过一天。 */
 function dateLabel(): string {
   const start = game.world?.calendarStartAt ?? game.createdAt
-  return gameDateOf(start, Date.now()).label
+  const now = isOnlineMode() ? serverNow() : Date.now()
+  return gameDateOf(start, now).label
 }
 
 function divisionText(): string {

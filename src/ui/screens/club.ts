@@ -4,6 +4,7 @@ import { PLAYER_TEAM_ID } from '../../game/season.ts'
 import { worldTierLabel } from '../../game/world.ts'
 import { isOnlineMode } from '../../online.ts'
 import { BASE_ROUND_INCOME, economyOf, FACILITIES, facilityLevel, facilityRoundIncome, facilityStageChance, facilityStageInLevel, facilityUpgradeCost, GOAL_INCOME_BONUS, LEAGUE_WIN_BONUS, MAX_FACILITY_LEVEL, MAX_FACILITY_STAGE, projectedRoundIncome, STAGES_PER_LEVEL, type FacilityId } from '../../game/economy.ts'
+import { CATEGORY_BONUS_PER_LEVEL, STADIUM_BONUS_PER_LEVEL } from '../../game/training.ts'
 import { bestMarketValue, transferWindowOpen } from '../../game/market.ts'
 import { caHeat, icon, pageHead, panel, posBadge, primaryPosition, tag, tile } from '../components.ts'
 import { esc, playerCA } from '../format.ts'
@@ -11,11 +12,11 @@ import type { IconName } from '../icons.ts'
 import { game, ui, type ClubTab } from '../state.ts'
 
 const FACILITY_INFO: Record<FacilityId, { label: string; icon: IconName; effect: string }> = {
-  stadium: { label: '球场', icon: 'stadium', effect: '所有属性成长 +2 / 等级' },
-  academy: { label: '青训设施', icon: 'cap', effect: '技术属性成长 +5 / 等级' },
-  medical: { label: '医疗设施', icon: 'cross', effect: '身体属性成长 +5 / 等级；另缩短新伤恢复' },
-  psychology: { label: '心理辅导室', icon: 'psychology', effect: '决断、团队合作、镇定成长 +5 / 等级' },
-  tactics: { label: '战术研究室', icon: 'tactics', effect: '视野、预判、无球跑动、防守站位成长 +5 / 等级' },
+  stadium: { label: '球场', icon: 'stadium', effect: `所有属性成长 +${STADIUM_BONUS_PER_LEVEL} / 等级` },
+  academy: { label: '青训设施', icon: 'cap', effect: `技术属性成长 +${CATEGORY_BONUS_PER_LEVEL} / 等级` },
+  medical: { label: '医疗设施', icon: 'cross', effect: `身体属性成长 +${CATEGORY_BONUS_PER_LEVEL} / 等级；另缩短新伤恢复` },
+  psychology: { label: '心理辅导室', icon: 'psychology', effect: `决断、团队合作、镇定成长 +${CATEGORY_BONUS_PER_LEVEL} / 等级` },
+  tactics: { label: '战术研究室', icon: 'tactics', effect: `视野、预判、无球跑动、防守站位成长 +${CATEGORY_BONUS_PER_LEVEL} / 等级` },
   shop: { label: '球迷商店', icon: 'bag', effect: '只提高每轮余额收入，不加属性' },
   sponsor: { label: '赞助商', icon: 'badge', effect: '只提高每轮余额收入，不加属性' },
 }
@@ -179,9 +180,9 @@ function facilitiesTab(): string {
       <li>${icon('bag', 13)}球迷商店和赞助商只提高每轮余额收入，不再提供属性成长；它们原来的培养加成由心理辅导室和战术研究室接管。</li>
       <li>${icon('up', 13)}每次培养或事件里，设施加成分两段独立判定：每个等级的第 ${STAGES_PER_LEVEL} 阶段必定触发，等级内其余阶段从该等级的下限线性上升（1 级 20%–100%、2 级 50%–100%、3 级 70%–100%、4 级 80%–100%、5 级 85%–100%）。升级不会让期望成长倒退。</li>
       <li>${icon('cap', 13)}设施提供额外成长，每项主属性各有自己的上限（由球员画像决定，通常不到 1500）。</li>
-      <li>${icon('cross', 13)}每次行动或事件中，仅对基础成长为正的属性加成；例如医疗 3 级为每项符合条件的身体主属性额外 +15，球场另计。</li>
+      <li>${icon('cross', 13)}每次行动或事件中，仅对基础成长为正的属性加成；例如医疗 3 级为每项符合条件的身体主属性额外 +${3 * CATEGORY_BONUS_PER_LEVEL}，球场另计。</li>
       <li>${icon('info', 13)}休息和位置训练不提供额外属性成长；属性达到上限后不再增长。</li>
-      <li>${icon('clock', 13)}设施等级在开始培养时锁定，升级从下一次培养生效；旧培养若无设施快照则没有建筑加成。</li>
+      <li>${icon('clock', 13)}第 1 赛季单轮培养 15 天（30 时段），第 2 赛季延长 5 天至 20 天（40 时段），第 3 赛季起再延长 2 天至 22 天（44 时段）；设施等级在开始培养时锁定，升级从下一次培养生效。</li>
     </ul>`)}
   </div>`
 }

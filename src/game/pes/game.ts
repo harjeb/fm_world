@@ -9,6 +9,7 @@
 import { ROLES } from '../data/roles.ts'
 import { MAX_SUBS, customSpotFor } from '../squad.ts'
 import { MATCH_MENTALITY_LABELS, MATCH_TACTICS, executeTeamAutoSubs, validateLiveAutoSubPlan } from '../match/management.ts'
+import { evaluateAICoachTactics, executeAICoachSubs } from '../ai-tactics.ts'
 import { inBox, progressOf, wideZone } from '../match/pitch.ts'
 import { opponentSide, PITCH_LENGTH, PITCH_WIDTH } from '../match/team.ts'
 import { LOGIC_MATCH_SECONDS } from '../match/time.ts'
@@ -312,7 +313,7 @@ export class PesGame {
     return this.state.teams[side === 'home' ? 0 : 1].bench.filter((player) => !player.cameOff && !player.onPitch)
   }
 
-  substitute(outId: string, inId: string, side: MatchSide = 'home', autoReason?: 'injury' | 'timed' | 'stamina', at?: number): { ok: boolean; error?: string } {
+  substitute(outId: string, inId: string, side: MatchSide = 'home', autoReason?: 'injury' | 'timed' | 'stamina' | 'tactical', at?: number): { ok: boolean; error?: string } {
     const g = this.state
     if (g.finished) return { ok: false, error: '比赛已经结束' }
     const team = g.teams[side === 'home' ? 0 : 1]
@@ -343,7 +344,7 @@ export class PesGame {
     team.bench = team.bench.filter((player) => player.id !== inId)
     team.bench.push(outgoing)
     team.subsUsed++
-    g.instructions.push({ step: g.step, kind: 'sub', outId, inId, ...(autoReason ? { autoReason } : {}) })
+    g.instructions.push({ step: g.step, kind: 'sub', side, outId, inId, ...(autoReason ? { autoReason } : {}) })
     this.settlement.unbind(out)
     this.settlement.bind(outPid, outgoing)
     const physical = this.match.substitute(outPid, {
@@ -358,7 +359,7 @@ export class PesGame {
     this.settlement.markLeft(outPid, this.match.time)
     this.settlement.markJoined(physical.pid, this.match.time)
     refreshMotionAbilities(this.match, this.settlement)
-    const reason = autoReason ? `自动换人（${{ injury: '受伤', timed: '定时', stamina: '体力' }[autoReason]}）` : '换人'
+    const reason = autoReason ? `自动换人（${{ injury: '受伤', timed: '定时', stamina: '体力', tactical: '战术' }[autoReason]}）` : '换人'
     this.settlement.note('sub', side, `${reason}：${incoming.name} 换下 ${out.name}。`, { playerId: incoming.id }, at ?? this.match.time)
     return { ok: true }
   }
@@ -400,64 +401,112 @@ export class PesGame {
     return { ok: true }
   }
 
-  /** 按比赛计划与实时分钟/净胜球（含杯赛两回合总比分）自动切换战术阶段。 */
+  /** 按比赛计划或 AI 主教练临场判断，随实时分钟/净胜球自动切换战术阶段。 */
   private applyMatchPlans(isKickoff: boolean): boolean {
     const g = this.state
     const minute = g.durationSeconds > 0 ? (this.match.time / g.durationSeconds) * 90 : 0
     let changed = false
     for (let idx = 0; idx < g.teams.length; idx++) {
       const team = g.teams[idx]
-      if (!team.matchPlan || team.matchPlan === 'standard') continue
       const myScore = team.side === 'home' ? g.score.home : g.score.away
       const oppScore = team.side === 'home' ? g.score.away : g.score.home
       const scoreDiff = myScore - oppScore
-      const offsetDiff = g.shootoutOffset
-        ? (team.side === 'home' ? g.shootoutOffset.home - g.shootoutOffset.away : g.shootoutOffset.away - g.shootoutOffset.home)
-        : 0
-      const base = team.baseInstructions ?? instructionsFromLegacyTactics(team.baseTactics ?? team.tactics)
-      team.baseInstructions = base
-      const phase = evaluateMatchPlan(
-        team.matchPlan,
-        base,
-        { minute, scoreDiff, effectiveDiff: scoreDiff + offsetDiff, knockout: this.settlement.knockout },
-        team.baseTactics,
-      )
-      if (!phase || phase.phaseId === team.activePlanPhase) continue
-      team.activePlanPhase = phase.phaseId
-      team.instructions = phase.instructions
-      team.tactics = { ...phase.tactics }
-      this.match.teams[idx].tactics = tacticsOf(team.tactics, team.instructions, {
-        aggression: phase.aggression,
-        staminaMul: phase.staminaMul,
-      })
-      changed = true
-      if (!isKickoff || phase.phaseId !== 'base') {
-        g.instructions.push({ step: g.step, kind: 'tactic', mentality: team.mentality ?? 'balanced', tactics: { ...team.tactics } })
-        this.settlement.note('tactic', team.side, phase.announcement, {}, this.match.time)
+      if (team.matchPlan && team.matchPlan !== 'standard') {
+        const offsetDiff = g.shootoutOffset
+          ? (team.side === 'home' ? g.shootoutOffset.home - g.shootoutOffset.away : g.shootoutOffset.away - g.shootoutOffset.home)
+          : 0
+        const base = team.baseInstructions ?? instructionsFromLegacyTactics(team.baseTactics ?? team.tactics)
+        team.baseInstructions = base
+        const phase = evaluateMatchPlan(
+          team.matchPlan,
+          base,
+          { minute, scoreDiff, effectiveDiff: scoreDiff + offsetDiff, knockout: this.settlement.knockout },
+          team.baseTactics,
+        )
+        if (!phase || phase.phaseId === team.activePlanPhase) continue
+        team.activePlanPhase = phase.phaseId
+        team.instructions = phase.instructions
+        team.tactics = { ...phase.tactics }
+        this.match.teams[idx].tactics = tacticsOf(team.tactics, team.instructions, {
+          aggression: phase.aggression,
+          staminaMul: phase.staminaMul,
+        })
+        changed = true
+        if (!isKickoff || phase.phaseId !== 'base') {
+          g.instructions.push({
+            step: g.step,
+            kind: 'tactic',
+            autoReason: 'plan',
+            side: team.side,
+            mentality: team.mentality ?? 'balanced',
+            tactics: { ...team.tactics },
+          })
+          this.settlement.note('tactic', team.side, phase.announcement, {}, this.match.time)
+        }
+        continue
+      }
+      if (team.aiCoach) {
+        const base = team.baseInstructions ?? instructionsFromLegacyTactics(team.baseTactics ?? team.tactics)
+        team.baseInstructions = base
+        const aiPhase = evaluateAICoachTactics(team, g.teams[1 - idx], { minute, scoreDiff }, isKickoff)
+        if (!aiPhase) continue
+        team.aiCoachPhase = aiPhase.phaseId
+        team.mentality = aiPhase.mentality
+        team.instructions = aiPhase.instructions
+        team.tactics = { ...aiPhase.tactics }
+        this.match.teams[idx].tactics = tacticsOf(team.tactics, team.instructions, {
+          aggression: aiPhase.aggression,
+          staminaMul: aiPhase.staminaMul,
+        })
+        changed = true
+        if (aiPhase.announcement) {
+          g.instructions.push({
+            step: g.step,
+            kind: 'tactic',
+            autoReason: 'ai',
+            side: team.side,
+            mentality: aiPhase.mentality,
+            tactics: { ...team.tactics },
+          })
+          this.settlement.note('tactic', team.side, aiPhase.announcement, {}, this.match.time)
+        }
       }
     }
     return changed
   }
 
-  /** 自动换人计划（受伤 / 定时 / 条件 / 体力），每个模拟秒检查一次。 */
+  /** 自动换人计划（受伤 / 定时 / 条件 / 体力）与 AI 分波次智能换人，每个模拟秒检查一次。 */
   private applyAutoSubs(): void {
     const g = this.state
     for (const team of g.teams) {
-      if (!team.autoSubs) continue
+      if (!team.autoSubs && !team.aiCoach) continue
       this.syncStamina(team)
       const myScore = team.side === 'home' ? g.score.home : g.score.away
       const oppScore = team.side === 'home' ? g.score.away : g.score.home
-      const offsetDiff = g.shootoutOffset
-        ? (team.side === 'home' ? g.shootoutOffset.home - g.shootoutOffset.away : g.shootoutOffset.away - g.shootoutOffset.home)
-        : 0
-      executeTeamAutoSubs({
-        team,
-        clockSeconds: this.match.time,
-        durationSeconds: g.durationSeconds,
-        scoreDiff: myScore - oppScore + offsetDiff,
-        availableBench: () => this.availableBench(team.side),
-        substitute: (outId, inId, reason) => this.substitute(outId, inId, team.side, reason).ok,
-      })
+      const scoreDiff = myScore - oppScore
+      if (team.autoSubs) {
+        const offsetDiff = g.shootoutOffset
+          ? (team.side === 'home' ? g.shootoutOffset.home - g.shootoutOffset.away : g.shootoutOffset.away - g.shootoutOffset.home)
+          : 0
+        executeTeamAutoSubs({
+          team,
+          clockSeconds: this.match.time,
+          durationSeconds: g.durationSeconds,
+          scoreDiff: scoreDiff + offsetDiff,
+          availableBench: () => this.availableBench(team.side),
+          substitute: (outId, inId, reason) => this.substitute(outId, inId, team.side, reason).ok,
+        })
+      }
+      if (team.aiCoach) {
+        executeAICoachSubs({
+          team,
+          clockSeconds: this.match.time,
+          durationSeconds: g.durationSeconds,
+          scoreDiff,
+          availableBench: () => this.availableBench(team.side),
+          substitute: (outId, inId, reason) => this.substitute(outId, inId, team.side, reason).ok,
+        })
+      }
     }
   }
 

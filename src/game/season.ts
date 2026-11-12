@@ -11,7 +11,7 @@ import { expireOffers, runLocalTransfers } from './transfers.ts'
 import { refreshLocalFreeMarket } from './free-market.ts'
 import { awardSeasonPrize } from './economy.ts'
 import { squadLimitError } from './market.ts'
-import { AVERAGE_ROUND_GAME_DAYS, GAME_DAY_MS, KICKOFF_SCHEDULE, latestKickoffAt, elapsedGameDays, gameDayOfRound, kickoffAtForRound, seasonEndAt, roundsKickedOff, roundGapGameDays } from './calendar.ts'
+import { AVERAGE_ROUND_GAME_DAYS, GAME_DAY_MS, KICKOFF_SCHEDULE, calendarStartForSeason, latestKickoffAt, elapsedGameDays, gameDayOfRound, kickoffAtForRound, seasonEndAt, roundsKickedOff, roundGapGameDays } from './calendar.ts'
 import { recordMatchInjuries } from './injury.ts'
 import { applyPveResult, ensurePve } from './pve.ts'
 import { awardRoundIncome, economyOf } from './economy.ts'
@@ -88,9 +88,16 @@ export function startNextSeason(game: GameState, now = Date.now()): { ok: boolea
     }
   }
   const index = season.index + 1
-  // 老的单联赛存档：新赛季从（存档时钟）最近一个开赛时间点开始，跳过的时间继续算数。
-  const next = createSeason(splitSeed(game.seed, `season-${index}`), game.aiTeams, game.clubName, latestKickoffAt(now, season.clockShift), season.clockShift)
+  // 老的单联赛存档：新赛季从（存档时钟）最近一个开赛时间点开始，跳过的时间继续算数；时间正常向后走时游戏日历跳到下一年 11/01。
+  const nextStartedAt = latestKickoffAt(now, season.clockShift)
+  const next = createSeason(splitSeed(game.seed, `season-${index}`), game.aiTeams, game.clubName, nextStartedAt, season.clockShift)
   next.index = index
+  if (nextStartedAt >= season.startedAt) {
+    const nextCreatedAt = calendarStartForSeason(nextStartedAt, index)
+    const offseasonDelta = Math.max(0, game.createdAt - nextCreatedAt)
+    game.createdAt = Math.min(game.createdAt, nextCreatedAt)
+    shiftInjuries(game, offseasonDelta, now)
+  }
   const economy = economyOf(game)
   awardRoundIncome(game, season.round)
   if (market) settleMarket(game, season.round)

@@ -28,8 +28,26 @@ import { partnerAssignment, trainingDate, trainingLowMood, trainingOptions, type
 import { ROLES } from './data/roles.ts'
 import { mainAttrsFor } from './scale.ts'
 
-export const ACTIONS_PER_ROUTE = 30
+export const BASE_TRAINING_DAYS = 15
+export const SEASON2_BONUS_DAYS = 5
+export const SEASON3_BONUS_DAYS = 2
+export const ACTIONS_PER_ROUTE = BASE_TRAINING_DAYS * 2
 export const ACTIONS_PER_WEEK = 3
+
+/** 建筑每等级提供的主属性成长加成（球场作用于全属性，分项建筑作用于对应属性）。 */
+export const STADIUM_BONUS_PER_LEVEL = 4
+export const CATEGORY_BONUS_PER_LEVEL = 10
+
+/** 按赛季返回单轮培养天数：第 1 赛季 15 天，第 2 赛季 +5 天（20 天），第 3 赛季起再 +2 天（22 天）。 */
+export function trainingDaysForSeason(seasonIndex = 1): number {
+  const s = Number.isFinite(seasonIndex) ? Math.max(1, Math.floor(seasonIndex)) : 1
+  return BASE_TRAINING_DAYS + (s >= 2 ? SEASON2_BONUS_DAYS : 0) + (s >= 3 ? SEASON3_BONUS_DAYS : 0)
+}
+
+/** 按赛季返回单轮培养总时段数（每天上/下午 2 个时段：30 / 40 / 44）。 */
+export function trainingActionsForSeason(seasonIndex = 1): number {
+  return trainingDaysForSeason(seasonIndex) * 2
+}
 
 export function trainingActionsTotal(session: TrainingSession): number {
   return session.actionsTotal ?? 18
@@ -125,11 +143,13 @@ function sessionWeek(session: TrainingSession, action: number): number {
 /** 没有显式快照时的默认阶段：1 级满阶段，保留旧课程测试的满额加成。 */
 const DEFAULT_STAGE = STAGES_PER_LEVEL
 
-export function createTrainingSession(player: Player, seed: number, snapshot: TrainingSession['facilityLevels'] | number = { stadium: DEFAULT_STAGE, academy: DEFAULT_STAGE, medical: DEFAULT_STAGE, shop: DEFAULT_STAGE, sponsor: DEFAULT_STAGE, psychology: DEFAULT_STAGE, tactics: DEFAULT_STAGE }, stadiumLevel = 1, books?: TrainingSession['books']): TrainingSession {
+export function createTrainingSession(player: Player, seed: number, snapshot: TrainingSession['facilityLevels'] | number = { stadium: DEFAULT_STAGE, academy: DEFAULT_STAGE, medical: DEFAULT_STAGE, shop: DEFAULT_STAGE, sponsor: DEFAULT_STAGE, psychology: DEFAULT_STAGE, tactics: DEFAULT_STAGE }, stadiumLevel = 1, books?: TrainingSession['books'], actionsTotal = ACTIONS_PER_ROUTE): TrainingSession {
   // 旧的三参数写法传的是等级，换算成阶段后与新的存档格式一致。
   const levels = typeof snapshot === 'number'
     ? { stadium: stadiumLevel * STAGES_PER_LEVEL, academy: snapshot * STAGES_PER_LEVEL, medical: DEFAULT_STAGE, shop: DEFAULT_STAGE, sponsor: DEFAULT_STAGE, psychology: DEFAULT_STAGE, tactics: DEFAULT_STAGE }
     : snapshot!
+  const totalSlots = Number.isFinite(actionsTotal) && actionsTotal > 0 ? Math.round(actionsTotal) : ACTIONS_PER_ROUTE
+  const totalDays = Math.round(totalSlots / 2)
   const candidate: Player = {
     ...player,
     attrs: { ...player.attrs },
@@ -156,7 +176,7 @@ export function createTrainingSession(player: Player, seed: number, snapshot: Tr
     academyLevel: levels.academy,
     stadiumLevel: levels.stadium,
     baseVersion: player.version,
-    actionsTotal: ACTIONS_PER_ROUTE,
+    actionsTotal: totalSlots,
     action: 0,
     fatigue: 0,
     energy: Math.max(0, Math.min(100, player.energy ?? 100)),
@@ -176,7 +196,7 @@ export function createTrainingSession(player: Player, seed: number, snapshot: Tr
         week: 1,
         kind: 'system',
         title: '开始新一轮培养',
-        text: '从原始属性开始培养。本轮 15 天，每天上午和下午各练一次；每周一上午交流赛，周五上午队内比赛、下午恢复。结束后产出一张新卡进入库存，和之前的卡互不影响。基础上限 1500，奖励/技能可把上限推到 2000。',
+        text: `从原始属性开始培养。本轮 ${totalDays} 天，每天上午和下午各练一次；每周一上午交流赛，周五上午队内比赛、下午恢复。结束后产出一张新卡进入库存，和之前的卡互不影响。基础上限 1500，奖励/技能可把上限推到 2000。`,
       },
     ],
     completed: false,
@@ -237,9 +257,9 @@ export function facilityGrowthBonus(session: TrainingSession, key: AttrKey, roll
   const categoryStage = levels[category]
   // 旧课程快照里可能没有新增设施：那种情况只算球场。
   if (stadiumStage === undefined) return 0
-  const stadium = roll('stadium', 'stadium') < facilityStageChance(stadiumStage) ? 2 * facilityLevel(stadiumStage) : 0
+  const stadium = roll('stadium', 'stadium') < facilityStageChance(stadiumStage) ? STADIUM_BONUS_PER_LEVEL * facilityLevel(stadiumStage) : 0
   if (categoryStage === undefined) return stadium
-  const bonus = roll(category, 'category') < facilityStageChance(categoryStage) ? 5 * facilityLevel(categoryStage) : 0
+  const bonus = roll(category, 'category') < facilityStageChance(categoryStage) ? CATEGORY_BONUS_PER_LEVEL * facilityLevel(categoryStage) : 0
   return stadium + bonus
 }
 

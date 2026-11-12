@@ -79,6 +79,10 @@ export type MatchTeamState = {
   matchPlan?: import('../pes/match-plan.ts').MatchPlanId
   /** 当前已触发的比赛计划阶段 ID。 */
   activePlanPhase?: string
+  /** 是否启用 AI 主教练临场战术调度与智能换人。 */
+  aiCoach?: boolean
+  /** AI 主教练当前生效的临场战术阶段 ID。 */
+  aiCoachPhase?: string
   /** 赛前战术指令基线（供临场心态叠加与回切恢复使用）。 */
   baseInstructions?: import('../pes/tactics.ts').TacticalInstructionsV2
   /** 当前生效的战术指令。 */
@@ -288,6 +292,8 @@ export type MatchTeamInput = {
   instructions?: import('../pes/tactics.ts').TacticalInstructionsV2
   /** 全队战术熟练度 0–1（缺省 1）。只在新指令下生效。 */
   familiarity?: number
+  /** 是否启用 AI 主教练临场战术调度与智能换人。 */
+  aiCoach?: boolean
   autoSubs?: AutoSubPlan
   chemistry?: Record<string, number>
   starters: { player: Player; role: RoleId; slotId: string }[]

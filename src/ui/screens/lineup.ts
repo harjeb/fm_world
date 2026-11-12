@@ -181,8 +181,8 @@ function benchCard(index: number, draft: Lineup, formation: FormationDef, select
 
 function instructionRow(active: TacticalInstructionsV2, field: InstructionFieldDef, disabled: boolean): string {
   const current = getInstructionField(active, field.id)
-  return `<div class="tactic-row" ${tipAttrs(field.label, field.desc)}>
-    <span class="tactic-label">${esc(field.label)}</span>
+  return `<div class="tactic-row">
+    <span class="tactic-label has-tip" ${tipAttrs(field.label, field.desc)}>${esc(field.label)}</span>
     <div class="seg stretch" role="group" aria-label="${esc(field.label)}">${field.options.map((opt) => `<button class="${current === opt.value ? 'active' : ''}" data-action="lineup-instruction" data-field="${field.id}" data-value="${opt.value}" ${disabled ? 'disabled' : ''}>${esc(opt.label)}</button>`).join('')}</div>
   </div>`
 }

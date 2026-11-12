@@ -786,8 +786,9 @@ h3:first-child { margin-top: 0; }
 .live-panel .commentary-log { max-height: calc(100vh - 110px); }
 .status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .status-team { min-width: 0; }
-.status-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 12px; }
+.status-head { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; font-size: 12px; }
 .status-head b { font-weight: 600; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.status-sub { font-size: 11px; color: var(--muted); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .status-table td { height: 24px; padding: 1px 4px; }
 .status-table .pos { width: 28px; height: 16px; line-height: 16px; font-size: 10.5px; }
 .status-table .meter-cell { min-width: 68px; width: 44%; }
@@ -996,7 +997,8 @@ circle.pm-5 { fill: var(--h6); }
 .tac-phase h3, .tac-bench h3, .tac-notes h3 { margin: 0 0 6px; color: var(--text); font-size: 12px; font-weight: 600; }
 .tac-phase h3 small, .tac-bench h3 small, .tac-notes h3 small { margin-left: 4px; color: var(--text-3); font-size: 11px; font-weight: 400; }
 .tac-phase .seg button { height: 23px; padding: 0 4px; font-size: 11px; }
-.tac-phase .tactic-row { margin-bottom: 5px; gap: 2px; cursor: help; }
+.tac-phase .tactic-row { margin-bottom: 5px; gap: 2px; }
+.tac-phase .tactic-label { cursor: help; width: fit-content; }
 .tac-phase .tactic-row:last-child { margin-bottom: 0; }
 .hint.flat { margin-top: 0; }
 .tac-pitch { display: grid; gap: 6px; min-width: 0; align-content: start; }

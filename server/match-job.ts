@@ -73,7 +73,13 @@ export function computeMatchJob(job: MatchJob): MatchJobResult {
     const factor = locked.performance ?? 1
     const squad = factor < 1 ? { ...locked.team, players: playersAtPerformance(locked.team.players, factor) } : locked.team
     const injured = new Set(Object.entries(locked.injuries).filter(([, until]) => until > job.kickoffAt).map(([id]) => id))
-    const team = teamInputFromAI(squad, new Set(locked.suspended), { rotate: !!(locked.ai || locked.aiTakeover), tacticsStage: locked.tacticsStage, injured })
+    const team = teamInputFromAI(squad, new Set(locked.suspended), {
+      rotate: !!(locked.ai || locked.aiTakeover),
+      tacticsStage: locked.tacticsStage,
+      injured,
+      aiCoach: !!(locked.ai || locked.aiTakeover),
+      preserveLineupTactics: !!locked.aiTakeover,
+    })
     if (locked.chemistry) team.chemistry = { ...locked.chemistry }
     if (locked.autoSubs) team.autoSubs = structuredClone(locked.autoSubs)
     return team

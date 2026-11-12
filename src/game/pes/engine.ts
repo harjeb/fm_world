@@ -104,7 +104,7 @@ export class PesEngine {
     return this.game.setAutoSubs(plan, side, eventClock)
   }
 
-  substitute(outId: string, inId: string, side: MatchSide = 'home', eventClock?: number, autoReason?: 'injury' | 'timed' | 'stamina'): { ok: boolean; error?: string } {
+  substitute(outId: string, inId: string, side: MatchSide = 'home', eventClock?: number, autoReason?: 'injury' | 'timed' | 'stamina' | 'tactical'): { ok: boolean; error?: string } {
     return this.game.substitute(outId, inId, side, autoReason, eventClock)
   }
 

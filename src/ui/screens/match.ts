@@ -11,7 +11,7 @@ import { MAX_SUBS } from '../../game/squad.ts'
 import { isOnlineMode } from '../../online.ts'
 import { renderAutoSubEditor } from '../auto-sub-editor.ts'
 import { clubLook, compareRow, crest, distinctKit, emptyState, icon, meter, panel, posBadge, primaryPosition } from '../components.ts'
-import { clockText, esc, positionLabel, teamTacticSummary } from '../format.ts'
+import { clockText, esc, positionLabel, teamStatusTacticBadge, teamTacticSummary } from '../format.ts'
 import { matchPlanLabel, matchPlanPhaseName } from '../../game/pes/match-plan.ts'
 import { game, ui } from '../state.ts'
 import { renderCommentary, renderEvent } from './review.ts'
@@ -55,7 +55,7 @@ function playerStatusTable(team: MatchTeamState, title: string, color: string): 
     ].join('')
     return `<tr data-key="${esc(player.id)}"><td>${posBadge(player.position)}</td><td class="name-cell"><span class="name-plain">${esc(player.name)}</span>${marks}</td><td class="meter-cell">${meter(staminaOf(player))}</td></tr>`
   }).join('')
-  return `<div class="status-team"><div class="status-head"><i class="swatch" style="background:${esc(color)}"></i><b>${esc(title)}</b><span class="muted small">换人 ${team.subsUsed} / ${MAX_SUBS}</span></div><table class="dt plain status-table"><tbody>${rows}</tbody></table></div>`
+  return `<div class="status-team"><div class="status-head"><i class="swatch" style="background:${esc(color)}"></i><b>${esc(title)}</b><span class="muted small">换人 ${team.subsUsed} / ${MAX_SUBS}</span></div><div class="status-sub">${esc(teamStatusTacticBadge(team))}</div><table class="dt plain status-table"><tbody>${rows}</tbody></table></div>`
 }
 
 function coachPanel(engine: GameEngine): string {

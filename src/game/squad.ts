@@ -1,4 +1,5 @@
-import type { FormationId, Lineup, Player, Position, RoleId, Tactics, TacticPreset } from './types.ts'
+import type { FormationId, Lineup, Player, Position, RoleId, Tactics, TacticPreset, TierId } from './types.ts'
+import { applyAITacticsToLineup } from './ai-tactics.ts'
 import { FORMATIONS, type FormationSlot } from './data/formations.ts'
 import { ROLES, ROLES_BY_POSITION, roleFit, rolesForSlot } from './data/roles.ts'
 import { PLAYABLE_PROFICIENCY, caOf, positionMultiplier } from './ca.ts'
@@ -314,16 +315,18 @@ function preservedExtras(
 type LineupLike = Pick<Lineup, 'formationId' | 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions' | 'matchPlan'>
 
 /**
- * 最近一次被校验过的玩家阵容里的“额外东西”。
- * world.ts 在换赛季/转会时会直接调 autoFillLineup(roster, formationId, tactics) 并且把结果写回存档，
- * 这个兜底路径不传旧阵容；用首发球员对象全部对得上作为“这是同一支玩家队”的凭据，
- * 电脑球队的名单不可能同时包含玩家 7 名首发，不会串数据。
+ * 最近一次被校验过的阵容里的“额外东西”（自定义摆位、预设、战术风格与指令、比赛计划）。
+ * 用 WeakMap 按首发球员对象索引，确保校验大量 AI 球队阵容时绝不会冲掉玩家球队的记忆快照，
+ * 也不会跨队串数据（要求当时记录的全部首发球员仍在当前 roster 中）。
  */
-let rememberedSource: (LineupLike & { players: Player[] }) | null = null
+const rememberedByStarter = new WeakMap<Player, LineupLike & { players: Player[] }>()
 
 function rememberedExtras(roster: Player[]): LineupLike | undefined {
-  if (!rememberedSource) return undefined
-  return rememberedSource.players.every((player) => roster.includes(player)) ? rememberedSource : undefined
+  for (const player of roster) {
+    const entry = rememberedByStarter.get(player)
+    if (entry && entry.players.length > 0 && entry.players.every((p) => roster.includes(p))) return entry
+  }
+  return undefined
 }
 
 /* ---------- 自由摆位 ---------- */
@@ -351,8 +354,9 @@ export function rememberLineupPositions(roster: Player[], lineup: Lineup): void 
     else customSpotByPlayer.delete(player)
   }
   if (lineup.customPositions || lineup.presets?.length || lineup.tacticalStyle || lineup.tacticalInstructions || lineup.matchPlan) {
-    rememberedSource = {
-      players: lineup.starters.flatMap((starter) => playerById(roster, starter.playerId) ?? []),
+    const players = lineup.starters.flatMap((starter) => playerById(roster, starter.playerId) ?? [])
+    const entry: LineupLike & { players: Player[] } = {
+      players,
       formationId: lineup.formationId,
       customPositions: lineup.customPositions ? structuredClone(lineup.customPositions) : undefined,
       tacticalStyle: lineup.tacticalStyle,
@@ -360,6 +364,7 @@ export function rememberLineupPositions(roster: Player[], lineup: Lineup): void 
       matchPlan: lineup.matchPlan,
       presets: lineup.presets ? structuredClone(lineup.presets) : undefined,
     }
+    for (const player of players) rememberedByStarter.set(player, entry)
   }
 }
 
@@ -688,8 +693,25 @@ export function repairLineup(roster: Player[], lineup: Lineup): { lineup: Lineup
  * 放人规则把他算成“冷板凳”（球星身价只加 5%），原来的首发反而成了“主力”。
  * 返回阵容有没有变化。
  */
-export function refreshAILineup(team: { players: Player[]; lineup: Lineup; formationId: FormationId; tactics: Tactics }): boolean {
-  const next = autoFillLineup(team.players, team.lineup?.formationId ?? team.formationId, team.lineup?.tactics ?? team.tactics, team.lineup)
+export type RefreshableAITeam = {
+  players: Player[]
+  lineup: Lineup
+  formationId: FormationId
+  tactics: Tactics
+  style?: string
+  strength?: number
+  tier?: TierId
+}
+
+export function refreshAILineup(team: RefreshableAITeam): boolean {
+  const next = autoFillLineup(team.players, team.lineup?.formationId ?? team.formationId, team.tactics, team.lineup)
+  applyAITacticsToLineup(next, {
+    players: team.players,
+    clubStyle: team.style,
+    seedTactics: team.tactics,
+    strength: team.strength,
+    tier: team.tier,
+  })
   if (!validateLineup(team.players, next).valid) return false
   const changed = JSON.stringify(next) !== JSON.stringify(team.lineup)
   team.lineup = next
@@ -765,7 +787,7 @@ export function aiRotatedLineup(players: Player[], formationId: FormationId, tac
 }
 
 /** 一批电脑球队都重排一次（读旧存档时用：修掉之前买进来却没进首发的球员）。返回有没有哪支队变了。 */
-export function refreshAILineups(teams: readonly { players: Player[]; lineup: Lineup; formationId: FormationId; tactics: Tactics }[]): boolean {
+export function refreshAILineups(teams: readonly RefreshableAITeam[]): boolean {
   let changed = false
   for (const team of teams) if (team?.players?.length && team.lineup && refreshAILineup(team)) changed = true
   return changed

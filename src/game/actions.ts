@@ -3,7 +3,7 @@ import type { GameEngine } from './pes/engine.ts'
 import { restoreEngine } from './pes/engine.ts'
 import { MatchEngine as Engine } from './match/engine.ts'
 import type { MatchState } from './match/types.ts'
-import { branchProbability, createTrainingSession, FAILURE_STAMINA, failureChance, partnersAt, plainChance, planTraining, performTrainingAction, trainingActionsTotal, trainingFatigueCost, resolveTrainingEvent, confirmCandidate, discardCandidate, keepCandidate, TRAINING_ENERGY_COST, type PerformResult, type ResolveResult, type TrainingRequest, type TrainingPlan } from './training.ts'
+import { branchProbability, createTrainingSession, FAILURE_STAMINA, failureChance, partnersAt, plainChance, planTraining, performTrainingAction, trainingActionsForSeason, trainingActionsTotal, trainingFatigueCost, resolveTrainingEvent, confirmCandidate, discardCandidate, keepCandidate, TRAINING_ENERGY_COST, type PerformResult, type ResolveResult, type TrainingRequest, type TrainingPlan } from './training.ts'
 import { addTrainedCard, closeFinishedTraining, deleteCard, equipCard, untrainedPlayer, type CardOutcome } from './cards.ts'
 import { newTrainingSeed, saveGame } from './state.ts'
 import { nextSeasonCountdown } from './season.ts'
@@ -57,8 +57,9 @@ export function startTraining(game: GameState, playerId: string, seed?: number, 
   if (books.length > 4) return { ok: false, error: '一轮培养最多带 4 本技能书' }
   const unusable = books.find((book) => !canUseBookOnPlayer(player, book).ok)
   if (unusable) return { ok: false, error: `这本书当前不能使用：${canUseBookOnPlayer(player, unusable).reason ?? '位置或技能槽不匹配'}` }
-  // 每轮都从原始属性开始，和他现在装备哪张卡无关。
-  const session = createTrainingSession(untrainedPlayer(player), seed ?? newTrainingSeed(game, playerId), { stadium: economy.stadium, academy: economy.academy, medical: economy.medical, shop: economy.shop, sponsor: economy.sponsor, psychology: economy.psychology, tactics: economy.tactics }, 1, books)
+  // 每轮都从原始属性开始，和他现在装备哪张卡无关；第 2 赛季 +5 天（40 时段），第 3 赛季起再 +2 天（44 时段）。
+  const seasonIndex = Math.max(game.season?.index ?? 1, game.world?.seasonIndex ?? 1)
+  const session = createTrainingSession(untrainedPlayer(player), seed ?? newTrainingSeed(game, playerId), { stadium: economy.stadium, academy: economy.academy, medical: economy.medical, shop: economy.shop, sponsor: economy.sponsor, psychology: economy.psychology, tactics: economy.tactics }, 1, books, trainingActionsForSeason(seasonIndex))
   session.scheduleSeed = splitSeed(game.seed, 'training-calendar')
   session.cupCeilingBonus = cupCeilingBonus(game)
   session.matchRole = game.lineup.starters.find(starter => starter.playerId === playerId)?.role
@@ -678,8 +679,8 @@ export function autoTrainingStep(game: GameState, playerId: string): AutoTrainin
   return { ok: true, completed: result.completed, kind: 'action', label: request.kind === 'drill' ? `专项训练 · ${attrLabel(request.attr)}` : '休息' }
 }
 
-/** 连续自动培养，直到本轮结束或用完步数（默认 60 步，足够跑完一整轮加事件）。 */
-export function runAutoTraining(game: GameState, playerId: string, maxSteps = 60): AutoTrainingRunResult {
+/** 连续自动培养，直到本轮结束或用完步数（默认 90 步，足够跑完第 3 赛季 44 时段加事件）。 */
+export function runAutoTraining(game: GameState, playerId: string, maxSteps = 90): AutoTrainingRunResult {
   let steps = 0
   for (let guard = 0; guard < maxSteps; guard++) {
     const step = autoTrainingStep(game, playerId)
