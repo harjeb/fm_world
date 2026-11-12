@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
+import { readStoredAccounts, writeStoredAccounts } from './account-storage-helpers.ts'
 import { personKey } from '../src/game/injury.ts'
 import { seasonEndAt, seasonStartForRound } from '../src/game/calendar.ts'
 import { FORMATIONS } from '../src/game/data/formations.ts'
@@ -136,14 +137,13 @@ describe('联机服务器 / 账号 / SSE', () => {
     const { app, base, dir } = await start()
     const account = await register(base, 'legacy_cards')
     app.close()
-    const file = path.join(dir, 'accounts.json')
-    const db = JSON.parse(fs.readFileSync(file, 'utf8'))
+    const db = readStoredAccounts(dir)
     const oldGame = db.accounts[0].game
     delete oldGame.cards
     const trained = oldGame.roster[0]
     trained.version = 2
     trained.attrs.passing += 50
-    fs.writeFileSync(file, JSON.stringify(db))
+    writeStoredAccounts(dir, db)
     const restarted = createAppServer({ dataDir: dir, staticDir: path.resolve('dist'), tickMs: 0 })
     servers.push(restarted)
     await new Promise<void>((resolve) => restarted.server.listen(0, '127.0.0.1', resolve))
@@ -162,19 +162,18 @@ describe('联机服务器 / 账号 / SSE', () => {
     const { app, base, dir } = await start()
     const account = await register(base, 'legacy_migration')
     app.close()
-    const file = path.join(dir, 'accounts.json')
-    const db = JSON.parse(fs.readFileSync(file, 'utf8'))
+    const db = readStoredAccounts(dir)
     const oldGame = db.accounts[0].game
     delete oldGame.economy
     // 二级开局没有球星：把一名储备球星放进阵容，当作玩家后来签下的人。
-    const star = oldGame.reserveStars.shift()
+    const star = oldGame.reserveStars!.shift()!
     oldGame.roster.push(star)
-    const signature = star.signatureSkill
+    const signature = star.signatureSkill!
     delete star.signatureSkill
     delete star.skillTiers
     star.skills = []
     oldGame.season.startedAt = seasonStartForRound(Date.now(), 2)
-    fs.writeFileSync(file, JSON.stringify(db))
+    writeStoredAccounts(dir, db)
     const restarted = createAppServer({ dataDir: dir, staticDir: path.resolve('dist'), tickMs: 0 })
     servers.push(restarted)
     await new Promise<void>((resolve) => restarted.server.listen(0, '127.0.0.1', resolve))
@@ -190,8 +189,9 @@ describe('联机服务器 / 账号 / SSE', () => {
     expect(economy.stageVersion).toBe(3)
     const expectedBalance = economy.balance
     expect(result.game.roster.find((player: any) => player.id === star.id)).toMatchObject({ signatureSkill: signature, skillTiers: { [signature]: 'rainbow' } })
-    const stored = JSON.parse(fs.readFileSync(file, 'utf8'))
-    expect(stored.accounts[0].game.economy.balance).toBe(expectedBalance)
+    await restarted.flush()
+    const stored = readStoredAccounts(dir)
+    expect(stored.accounts[0].game.economy!.balance).toBe(expectedBalance)
   })
 
   it('错误密码被拒绝，过期 revision 返回 409', async () => {
@@ -356,7 +356,7 @@ describe('联机服务器 / 账号 / SSE', () => {
     const until = Date.now() + 3000
     let disk: Record<string, any> = {}
     while (Date.now() < until) {
-      disk = JSON.parse(fs.readFileSync(path.join(dir, 'accounts.json'), 'utf8'))
+      disk = readStoredAccounts(dir)
       if (disk.accounts[0].game.activeMatch?.elapsedSeconds === 20) break
       await new Promise((resolve) => setTimeout(resolve, 30))
     }

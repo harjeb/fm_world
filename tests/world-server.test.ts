@@ -10,6 +10,7 @@ import { drainServerQueue, fastMatchResult } from './queued-server-helpers.ts'
 const HOUR = 60 * 60 * 1000
 
 const servers: AppServer[] = []
+const dirs: string[] = []
 const contexts = new Map<string, { app: AppServer; dir: string; now: () => number }>()
 async function flush(base: string) {
   const context = contexts.get(base)!
@@ -18,10 +19,12 @@ async function flush(base: string) {
 afterEach(() => {
   while (servers.length) servers.pop()!.close()
   contexts.clear()
+  while (dirs.length) fs.rmSync(dirs.pop()!, { recursive: true, force: true })
 })
 
 async function start(clock?: () => number, dir?: string) {
   const dataDir = dir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'fm-world-server-'))
+  if (!dirs.includes(dataDir)) dirs.push(dataDir)
   const app = createAppServer({ dataDir, staticDir: path.resolve('dist'), tickMs: 0, matchQueue: { intervalMs: 0, compute: fastMatchResult }, ...(clock ? { now: clock } : {}) })
   servers.push(app)
   await new Promise<void>((resolve) => app.server.listen(0, '127.0.0.1', resolve))

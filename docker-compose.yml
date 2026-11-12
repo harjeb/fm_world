@@ -6,6 +6,8 @@ services:
     image: fm-world:latest
     container_name: fm_world
     restart: unless-stopped
+    # 请求排空最长 30 秒，之后还要给 SQLite 最终 flush 留时间。
+    stop_grace_period: 1m
     environment:
       PORT: "8787"
       FM_DATA_DIR: /app/data

@@ -82,12 +82,17 @@ describe('自由市场每日补充', () => {
   })
 })
 
-const servers: AppServer[] = []
-afterEach(() => { while (servers.length) servers.pop()!.close() })
+const servers: AppServer[] = [], dirs: string[] = []
+afterEach(() => {
+  while (servers.length) servers.pop()!.close()
+  while (dirs.length) fs.rmSync(dirs.pop()!, { recursive: true, force: true })
+})
 
 describe('联机：全服自由市场每天补到 200 人', () => {
   it('市场接口能看到 200 人，其中有便宜的随机球员', async () => {
-    const app = createAppServer({ dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'fm-free-market-')), staticDir: path.resolve('dist'), tickMs: 0 })
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-free-market-'))
+    dirs.push(dataDir)
+    const app = createAppServer({ dataDir, staticDir: path.resolve('dist'), tickMs: 0 })
     servers.push(app)
     await new Promise<void>((resolve) => app.server.listen(0, '127.0.0.1', resolve))
     const base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`

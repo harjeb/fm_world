@@ -6,11 +6,16 @@ import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
 import { agentHandoffText } from '../src/ui/agent-handoff.ts'
 
-const servers: AppServer[] = []
-afterEach(() => { while (servers.length) servers.pop()!.close() })
+const servers: AppServer[] = [], dirs: string[] = []
+afterEach(() => {
+  while (servers.length) servers.pop()!.close()
+  while (dirs.length) fs.rmSync(dirs.pop()!, { recursive: true, force: true })
+})
 
 async function setup() {
-  const app = createAppServer({ dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'fm-agent-parity-')), staticDir: path.resolve('dist'), tickMs: 0 })
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-agent-parity-'))
+  dirs.push(dataDir)
+  const app = createAppServer({ dataDir, staticDir: path.resolve('dist'), tickMs: 0 })
   servers.push(app)
   await new Promise<void>((resolve) => app.server.listen(0, '127.0.0.1', resolve))
   const base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`

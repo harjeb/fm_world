@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
+import { readStoredAccounts, writeStoredAccounts } from './account-storage-helpers.ts'
 import { AUCTION_DURATION_MS, AUCTION_EXTEND_MS, AUCTION_RAISE_FEE_MIN, absorbFreeAgents, auctionRaiseFee, committedFunds, leadingBid, minimumBid, placeBid, settleAuctions, type FreeMarket } from '../src/game/auction.ts'
 import { economyOf } from '../src/game/economy.ts'
 import { SQUAD_LIMIT, playerMarketValue, releasePlayer, squadLimitError } from '../src/game/market.ts'
@@ -415,11 +416,10 @@ describe('全服自由市场', () => {
     const { pool } = await getMarket(first.base)
     servers.splice(0).forEach((server) => server.close())
     // 模拟老存档：账号里有一份自由球员，其中一人已经买进阵容。
-    const dbPath = path.join(first.dir, 'accounts.json')
-    const db = JSON.parse(fs.readFileSync(dbPath, 'utf8')) as { accounts: { game: GameState }[] }
+    const db = readStoredAccounts(first.dir)
     db.accounts[0].game.freeStars = structuredClone(pool.slice(1))
     db.accounts[0].game.roster.push(structuredClone(pool[0]))
-    fs.writeFileSync(dbPath, JSON.stringify(db))
+    writeStoredAccounts(first.dir, db)
     const second = await start(() => clock, first.dir)
     const market = await getMarket(second.base)
     expect(market.pool.some((item) => item.id === pool[0].id)).toBe(false)

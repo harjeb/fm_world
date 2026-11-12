@@ -41,11 +41,21 @@
 
 ## 快速开始
 
+需要 Node.js **22.13 或更新版本**（使用内置 `node:sqlite`，无需额外安装数据库服务）。
+
 ```bash
 npm install
 npm run build
 npm run server   # 打开 http://localhost:8787
 ```
+
+## 联机数据存储
+
+- 账号、密码哈希、Agent 令牌、游戏存档和登录会话存放在 `data/accounts.sqlite`，保存只更新发生变化的账号。
+- 普通保存按约 1 秒的固定窗口合并，由后台线程写入 SQLite；内存中的最新状态立即可读。正常停止（`SIGINT` / `SIGTERM`）前会强制 flush。异常断电或 `kill -9` 仍可能丢失尚未落盘的短窗口内修改。
+- 首次启动会在一个事务中导入旧 `accounts.json` / `sessions.json`，保留原文件且不再写入；之后以 SQLite 为准，不会重复导入。迁移失败会报错停止，不能把损坏存档当成新账号库。
+- 共享世界仍存放在 `data/world.json`，比赛任务在 `data/match-jobs/`。本次不改变共享数据副本或 SSE 协议。
+- 备份时先正常停服，再备份整个 `data/` 目录。不要在运行中只复制 `.sqlite`：WAL 模式下还可能有 `accounts.sqlite-wal` / `accounts.sqlite-shm`。
 
 ## 免责声明
 

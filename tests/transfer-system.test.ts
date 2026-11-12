@@ -329,12 +329,17 @@ describe('出场记录', () => {
   }, 300_000)
 })
 
-const servers: AppServer[] = []
-afterEach(() => { while (servers.length) servers.pop()!.close() })
+const servers: AppServer[] = [], dirs: string[] = []
+afterEach(() => {
+  while (servers.length) servers.pop()!.close()
+  while (dirs.length) fs.rmSync(dirs.pop()!, { recursive: true, force: true })
+})
 
 describe('联机：向 AI 球队买人走服务器', () => {
   it('转会接口成交后共享名册同步；普通保存不能直接把 AI 球员加进阵容', async () => {
-    const app = createAppServer({ dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'fm-transfer-')), staticDir: path.resolve('dist'), tickMs: 0 })
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-transfer-'))
+    dirs.push(dataDir)
+    const app = createAppServer({ dataDir, staticDir: path.resolve('dist'), tickMs: 0 })
     servers.push(app)
     await new Promise<void>((resolve) => app.server.listen(0, '127.0.0.1', resolve))
     const base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`

@@ -1,6 +1,9 @@
 import { defineConfig, mergeConfig } from 'vitest/config'
 import viteConfig from './vite.config.ts'
 
+// 测试产生的大量临时数据库和模拟文件直接落盘到 /var/tmp，避免受限于 971MB tmpfs 内存盘
+process.env.TMPDIR = process.env.TMPDIR || '/var/tmp'
+
 /**
  * 测试配置。构建用的 vite.config.ts 不动，这里只补测试需要的部分。
  *

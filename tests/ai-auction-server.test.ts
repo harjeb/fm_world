@@ -13,14 +13,18 @@ async function agentState(base: string, auth: Record<string, string>): Promise<u
   const token = await (await fetch(`${base}/api/agent/token`, { method: 'POST', headers: auth })).json() as { token: string }
   return (await fetch(`${base}/api/agent/state`, { headers: { Authorization: `Bearer ${token.token}` } })).json()
 }
+const dirs: string[] = []
 afterEach(() => {
   while (servers.length) servers.pop()!.close()
+  while (dirs.length) fs.rmSync(dirs.pop()!, { recursive: true, force: true })
 })
 
 /** 电脑球队也要在自由市场上跟玩家抢人，而且是在服务器那边自动出手，单机联机都成立。 */
 describe('服务器上的电脑球队竞拍', () => {
   it('玩家出价后，电脑球队会按自己的上限跟价', async () => {
-    const app = createAppServer({ dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'fm-ai-auction-')), staticDir: path.resolve('dist'), tickMs: 20 })
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-ai-auction-'))
+    dirs.push(dataDir)
+    const app = createAppServer({ dataDir, staticDir: path.resolve('dist'), tickMs: 20 })
     servers.push(app)
     await new Promise<void>((resolve) => app.server.listen(0, '127.0.0.1', resolve))
     const base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`
@@ -56,7 +60,9 @@ describe('服务器上的电脑球队竞拍', () => {
   }, 20_000)
 
   it('玩家出价被电脑球队顶掉后，钱仍然在玩家账上', async () => {
-    const app = createAppServer({ dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'fm-ai-auction-')), staticDir: path.resolve('dist'), tickMs: 0 })
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-ai-auction-'))
+    dirs.push(dataDir)
+    const app = createAppServer({ dataDir, staticDir: path.resolve('dist'), tickMs: 0 })
     servers.push(app)
     await new Promise<void>((resolve) => app.server.listen(0, '127.0.0.1', resolve))
     const base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
+import { caOf } from '../src/game/ca.ts'
+import type { Player } from '../src/game/types.ts'
 import { createTrainingSession, planTraining } from '../src/game/training.ts'
 import { displayEventHint, trainingLogText } from '../src/ui/format.ts'
-import { attrMax, attrRating, displayAttr, displayGain, displayMainAttr, displayHiddenAttr, displayCA, displayPA, scaleAuthoredGains } from '../src/game/rating.ts'
+import { attrMax, attrRating, displayAttr, displayGain, displayMainAttr, displayHiddenAttr, displayCA, displayPA, initialDisplayCA, scaleAuthoredGains } from '../src/game/rating.ts'
 
 describe('属性显示尺度', () => {
   it('属性和成长显示原始值，比赛评分保持 0–100', () => {
@@ -19,6 +21,22 @@ describe('属性显示尺度', () => {
     expect(attrRating('passing', 750, false)).toBe(50)
     expect(attrRating('firstTouch', 10, false)).toBe(50)
     expect(scaleAuthoredGains({ passing: 2, firstTouch: 1 }, false)).toEqual({ passing: 30, firstTouch: 1 })
+  })
+
+  it.each([false, true])('原始 CA 使用原始位置，装备卡改变门将熟练度也不影响（门将：%s）', (gk) => {
+    const player = createInitialGame(2024).roster.find((item) => (item.basePositions.GK > 0) === gk)!
+    const original = caOf(player.baseAttrs, gk)
+    player.positions.GK = gk ? 0 : 100
+    player.attrs.passing = 1400
+    expect(initialDisplayCA(player)).toBe(original)
+  })
+
+  it('原始 CA 兼容没有原始属性 / 位置字段的旧球员', () => {
+    const player = createInitialGame(2024).roster[0]
+    const expected = caOf(player.attrs, player.positions.GK > 0)
+    delete (player as Partial<Player>).baseAttrs
+    delete (player as Partial<Player>).basePositions
+    expect(initialDisplayCA(player)).toBe(expected)
   })
 
   it('事件提示保留原始值', () => {

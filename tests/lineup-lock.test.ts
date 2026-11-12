@@ -11,8 +11,11 @@ import { kickoffAtForRound, seasonStartForRound } from '../src/game/calendar.ts'
 import type { GameState } from '../src/game/types.ts'
 import { drainServerQueue, fastMatchResult } from './queued-server-helpers.ts'
 
-const servers: AppServer[] = []
-afterEach(() => { while (servers.length) servers.pop()!.close() })
+const servers: AppServer[] = [], dirs: string[] = []
+afterEach(() => {
+  while (servers.length) servers.pop()!.close()
+  while (dirs.length) fs.rmSync(dirs.pop()!, { recursive: true, force: true })
+})
 
 const minute = 60_000
 
@@ -50,6 +53,7 @@ describe('开赛前 30 分钟锁阵容', () => {
   it('服务端拒绝锁定期间的阵容修改，解锁后恢复；Agent 也一样', async () => {
     let clock = 1_000_000_000
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-lineup-lock-'))
+    dirs.push(dataDir)
     const app = createAppServer({
       dataDir,
       matchQueue: { intervalMs: 0, compute: fastMatchResult },

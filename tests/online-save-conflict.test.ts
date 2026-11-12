@@ -6,14 +6,19 @@ import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
 import type { GameState } from '../src/game/types.ts'
 
-const servers: AppServer[] = []
-afterEach(() => { while (servers.length) servers.pop()!.close() })
+const servers: AppServer[] = [], dirs: string[] = []
+afterEach(() => {
+  while (servers.length) servers.pop()!.close()
+  while (dirs.length) fs.rmSync(dirs.pop()!, { recursive: true, force: true })
+})
 
 describe('联机保存冲突', () => {
   it('服务器自己推进（AI/自动结算）后，玩家基于旧版本保存仍然成功；另一台设备真正覆盖才 409', async () => {
     let clock = 1_000_000
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-conflict-'))
+    dirs.push(dataDir)
     const app = createAppServer({
-      dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'fm-conflict-')),
+      dataDir,
       staticDir: path.resolve('dist'),
       tickMs: 0,
       now: () => clock,

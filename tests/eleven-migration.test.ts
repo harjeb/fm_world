@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
+import { readStoredAccounts, writeStoredAccounts } from './account-storage-helpers.ts'
 import { FORMATIONS, FORMATION_LIST, isLegacyFormation } from '../src/game/data/formations.ts'
 import { ELEVEN_SQUAD_SIZE, needsElevenUpgrade, upgradeElevenASide } from '../src/game/eleven.ts'
 import { autoFillLineup, BENCH_SIZE, STARTERS, validateLineup } from '../src/game/squad.ts'
@@ -128,8 +129,11 @@ describe('7 人制存档迁移到 11 人制', () => {
   })
 })
 
-const servers: AppServer[] = []
-afterEach(() => { while (servers.length) servers.pop()!.close() })
+const servers: AppServer[] = [], dirs: string[] = []
+afterEach(() => {
+  while (servers.length) servers.pop()!.close()
+  while (dirs.length) fs.rmSync(dirs.pop()!, { recursive: true, force: true })
+})
 
 async function start(dataDir: string) {
   const app = createAppServer({ dataDir, staticDir: path.resolve('dist'), tickMs: 0 })
@@ -141,14 +145,14 @@ async function start(dataDir: string) {
 describe('服务器启动时迁移共享世界和账号', () => {
   it('旧的 7 人制账号和共享 AI 名单都补到 25 人、换成 11 人制阵型', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-eleven-'))
+    dirs.push(dataDir)
     const first = await start(dataDir)
     const registered = await (await fetch(`${first.base}/api/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'legacy', password: 'secret123' }) })).json() as { token: string }
     servers.pop()!.close()
 
     // 把落盘的数据改回 7 人制
-    const dbFile = path.join(dataDir, 'accounts.json')
     const worldFile = path.join(dataDir, 'world.json')
-    const db = JSON.parse(fs.readFileSync(dbFile, 'utf8')) as { accounts: { game: GameState }[] }
+    const db = readStoredAccounts(dataDir)
     const world = JSON.parse(fs.readFileSync(worldFile, 'utf8')) as { world: GameState['world']; teams: Record<string, AITeam>; owners: Record<string, string> }
     const account = db.accounts[0]
     account.game.roster = account.game.roster.slice(0, 18)
@@ -161,7 +165,7 @@ describe('服务器启动时迁移共享世界和账号', () => {
       const players = id === ownClub ? account.game.roster : team.players.slice(0, 18)
       world.teams[id] = { ...team, players, formationId: legacyOf(team.formationId), lineup: id === ownClub ? account.game.lineup : legacyLineup(players, legacyOf(team.formationId), team.tactics) }
     }
-    fs.writeFileSync(dbFile, JSON.stringify(db))
+    writeStoredAccounts(dataDir, db)
     fs.writeFileSync(worldFile, JSON.stringify(world))
 
     const second = await start(dataDir)

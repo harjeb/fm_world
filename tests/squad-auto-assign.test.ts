@@ -25,8 +25,8 @@ function context(overrides: Partial<Record<string, { condition?: number; minutes
   }
 }
 
-const assign = (mode: AutoAssignMode, roster: Player[], formationId: Lineup['formationId'], tactics: Lineup['tactics'], ctx: AutoAssignContext) =>
-  autoAssignLineup(roster, formationId, tactics, undefined, mode, ctx)
+const assign = (mode: AutoAssignMode, roster: Player[], formationId: Lineup['formationId'], tactics: Lineup['tactics'], ctx: AutoAssignContext, previous?: Lineup) =>
+  autoAssignLineup(roster, formationId, tactics, previous, mode, ctx)
 
 const ids = (lineup: Lineup) => lineup.starters.map((starter) => starter.playerId)
 
@@ -58,24 +58,19 @@ describe('战术页自动分配', () => {
   it('部分轮换：把体力最差的约一半主力换成体力更好的替补', () => {
     const { roster, formationId, tactics } = setup()
     const base = assign('best', roster, formationId, tactics, context())
-    // 主力体力从 20 到 80 参差不齐，替补都是满体力
-    const conditions = Object.fromEntries(ids(base).map((id, index) => [id, { condition: 20 + index * 10 }]))
+    // 主力体力从 20 到 80 参差不齐，替补都是满体力；以当前阵容为基准，而不是再次按 CA 重排。
+    const conditions = Object.fromEntries(ids(base).map((id, index) => [id, { condition: 20 + index * 6 }]))
     const ctx = context(conditions)
-    // 对照组：同一个体能条件下的最强阵容，部分轮换就是在它的基础上换人
-    const best = assign('best', roster, formationId, tactics, ctx)
-    const half = assign('half', roster, formationId, tactics, ctx)
+    const half = assign('half', roster, formationId, tactics, ctx, base)
     expect(validateLineup(roster, half).valid).toBe(true)
-    const out = ids(best).filter((id) => !ids(half).includes(id))
-    const incoming = ids(half).filter((id) => !ids(best).includes(id))
-    expect(out.length).toBeGreaterThanOrEqual(2)
-    expect(out.length).toBeLessThanOrEqual(Math.round(ids(best).length / 2))
-    expect(incoming.length).toBe(out.length)
-    // 换下去的都在体力最差的那一半里（没有可踢该位置且更新鲜的替补时就不换），换上来的体力都比换下的好
-    const half8 = [...ids(best)].sort((a, b) => ctx.condition(roster.find((p) => p.id === a)!) - ctx.condition(roster.find((p) => p.id === b)!)).slice(0, Math.round(ids(best).length / 2))
-    for (const id of out) expect(half8).toContain(id)
-    const highestOut = Math.max(...out.map((id) => ctx.condition(roster.find((p) => p.id === id)!)))
-    for (const id of incoming) expect(ctx.condition(roster.find((p) => p.id === id)!)).toBeGreaterThan(Math.min(...out.map((o) => ctx.condition(roster.find((p) => p.id === o)!))))
-    expect(highestOut).toBeLessThan(100)
+    const changed = half.starters.filter((starter) => starter.playerId !== base.starters.find((item) => item.slotId === starter.slotId)!.playerId)
+    expect(changed.length).toBeGreaterThanOrEqual(2)
+    expect(changed.length).toBeLessThanOrEqual(Math.round(ids(base).length / 2))
+    for (const starter of changed) {
+      const outgoing = roster.find((player) => player.id === base.starters.find((item) => item.slotId === starter.slotId)!.playerId)!
+      const incoming = roster.find((player) => player.id === starter.playerId)!
+      expect(ctx.condition(incoming)).toBeGreaterThan(ctx.condition(outgoing))
+    }
   })
 
   it('部分轮换：替补没有更新鲜的人时就不换', () => {
@@ -86,25 +81,23 @@ describe('战术页自动分配', () => {
     expect(ids(half)).toEqual(ids(best))
   })
 
-  it('全部轮换：每个位置换上本赛季上场最少的人', () => {
+  it('全部轮换：体能优先，不能让低出场时间的疲劳主力挤掉满体力替补', () => {
     const { roster, formationId, tactics } = setup()
     const best = assign('best', roster, formationId, tactics, context())
-    // 最强阵容的人都已经踢了 900 分钟，其他人几乎没上场
-    const played = Object.fromEntries(ids(best).map((id) => [id, { minutes: 900 }]))
-    const spare = roster.filter((player) => !ids(best).includes(player.id))
-    spare.forEach((player, index) => { played[player.id] = { minutes: index * 10 } as { minutes: number } })
+    const played = Object.fromEntries(roster.map((player) => [player.id, ids(best).includes(player.id)
+      ? { condition: 30, minutes: 0 }
+      : { condition: 100, minutes: 900 }]))
     const ctx = context(played)
     const full = assign('full', roster, formationId, tactics, ctx)
     expect(validateLineup(roster, full).valid).toBe(true)
-    const averageMinutes = (lineup: Lineup) => ids(lineup).reduce((sum, id) => sum + ctx.minutes(roster.find((p) => p.id === id)!), 0) / ids(lineup).length
-    expect(averageMinutes(full)).toBeLessThan(averageMinutes(best) / 2)
+    const averageCondition = (lineup: Lineup) => ids(lineup).reduce((sum, id) => sum + ctx.condition(roster.find((p) => p.id === id)!), 0) / ids(lineup).length
+    expect(averageCondition(full)).toBeGreaterThan(averageCondition(best))
     const fresh = ids(full).filter((id) => !ids(best).includes(id)).length
-    expect(fresh).toBeGreaterThanOrEqual(ids(full).length - 2)
-    // 门将位上的是上场最少的那名门将
-    const keepers = roster.filter((player) => player.positions.GK > 0)
-    if (keepers.length > 1) {
-      const least = [...keepers].sort((a, b) => ctx.minutes(a) - ctx.minutes(b))[0]
-      expect(full.starters.find((starter) => starter.slotId === 'gk')?.playerId).toBe(least.id)
+    expect(fresh).toBeGreaterThanOrEqual(2)
+    const restedKeeper = roster.find((player) => player.positions.GK >= 80 && ctx.condition(player) === 100)
+    if (restedKeeper) {
+      const chosen = roster.find((player) => player.id === full.starters.find((starter) => starter.slotId === 'gk')?.playerId)!
+      expect(ctx.condition(chosen)).toBe(100)
     }
   })
 
@@ -127,7 +120,7 @@ describe('战术页自动分配', () => {
     expect(fallback.starters.find((starter) => starter.slotId === 'st')?.playerId).toBe(a.id)
   })
 
-  it('停赛的人不会被排进首发，带伤的会被降级', () => {
+  it('停赛的人不会被排进首发，带伤的人不能进入首发或替补', () => {
     const { roster, formationId, tactics } = setup()
     const best = assign('best', roster, formationId, tactics, context())
     const banned = new Set(ids(best).slice(1, 3))
@@ -137,7 +130,7 @@ describe('战术页自动分配', () => {
     }
     const injured = ids(best)[1]
     const lineup = assign('best', roster, formationId, tactics, context({}, { injured: (player) => player.id === injured }))
-    // 带伤的人得分 ×0.7，不一定被换掉，但至少不会比原来更靠前：阵容仍然合法
+    expect([...ids(lineup), ...lineup.bench]).not.toContain(injured)
     expect(validateLineup(roster, lineup).valid).toBe(true)
   })
 })

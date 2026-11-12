@@ -23,11 +23,16 @@ describe('俱乐部名字规则', () => {
   })
 })
 
-const servers: AppServer[] = []
-afterEach(() => { while (servers.length) servers.pop()!.close() })
+const servers: AppServer[] = [], dirs: string[] = []
+afterEach(() => {
+  while (servers.length) servers.pop()!.close()
+  while (dirs.length) fs.rmSync(dirs.pop()!, { recursive: true, force: true })
+})
 
 async function start() {
-  const app = createAppServer({ dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'fm-rename-')), staticDir: path.resolve('dist'), tickMs: 0 })
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-rename-'))
+  dirs.push(dataDir)
+  const app = createAppServer({ dataDir, staticDir: path.resolve('dist'), tickMs: 0 })
   servers.push(app)
   await new Promise<void>((resolve) => app.server.listen(0, '127.0.0.1', resolve))
   return `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`

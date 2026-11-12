@@ -39,9 +39,11 @@ export interface SettlementTuning {
   duelFoulRate: number
   /** 战术犯规：出球前被贴身防守时的犯规概率折扣 */
   tacticalFoulRate: number
+  /** 抢断 / 犯规接触后的伤病概率折扣，独立于对抗和犯规频率。 */
+  injuryRate: number
 }
 
-export const DEFAULT_TUNING: SettlementTuning = { duelRate: 0.35, duelFoulRate: 0.18, tacticalFoulRate: 0.2 }
+export const DEFAULT_TUNING: SettlementTuning = { duelRate: 0.35, duelFoulRate: 0.18, tacticalFoulRate: 0.2, injuryRate: 0.25 }
 const sideOf = (ti: TeamIndex | number): MatchSide => (ti === 0 ? 'home' : 'away')
 
 export const emptyTeamStats = (): MatchTeamStats => ({
@@ -155,6 +157,8 @@ export class PesSettlement implements ContactModel {
       this.game = copy.game
       this.extra = copy.extra
       this.secondWindUsed = new Set(copy.extra.secondWindUsed ?? [])
+      // 旧的进行中比赛没有伤病折扣，续跑仍用原概率；新比赛才采用新的校准值。
+      this.extra.tuning.injuryRate ??= 1
     } else {
       this.game = createGameState(source)
       this.extra = { knockout: source.knockout, offside: source.offside, tuning: { ...DEFAULT_TUNING, ...source.tuning }, lastPass: null, lastShot: null, joined: {}, left: {} }
@@ -439,12 +443,12 @@ export class PesSettlement implements ContactModel {
     return { card: null, second: false }
   }
 
-  /** 身体接触后受伤（现有 `maybeInjure` 的概率部分）。 */
+  /** 身体接触后受伤：在体能、体质、技能和特性结算后，单独折算 2D 接触频率；不改变伤期。 */
   private injury(player: MatchPlayerState, pid: number): { pid: number; days: number } {
     if (this.game.noInjuries || player.injured) return { pid: -1, days: 0 }
     const { risk } = this.kernel.injuryOdds(player)
     const rng = derivedRng(this.game.seed, 'injury', this.game.step, player.id)
-    if (!rng.chance(risk)) return { pid: -1, days: 0 }
+    if (!rng.chance(risk * this.extra.tuning.injuryRate)) return { pid: -1, days: 0 }
     return { pid, days: this.kernel.recoveryDays(rng, player) }
   }
 

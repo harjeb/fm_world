@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.4.3",
   "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "description": "FM 世界 — 阵容培养与七人制足球比赛原型",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -36,6 +39,7 @@
     "pes:diff": "tsx scripts/pes-diff.ts",
     "pes:freerun": "tsx scripts/pes-freerun.ts",
     "pes:game": "tsx scripts/pes-game.ts",
+    "pes:injuries": "tsx scripts/pes-injuries.ts",
     "typecheck": "tsc --noEmit",
     "build:site": "vite build",
     "build:safe": "bash scripts/build-safe.sh",

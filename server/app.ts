@@ -50,28 +50,7 @@ import { TRAINING_ENERGY_COST } from '../src/game/training.ts'
 export const AI_TAKEOVER_INACTIVE_MS = 3 * 24 * 60 * 60_000
 const ONLINE_PERSIST_INTERVAL_MS = 5 * 60_000
 
-type Account = {
-  id: string
-  username: string
-  salt: string
-  passwordHash: string
-  agentToken?: string
-  game: GameState
-  revision: number
-  lastUserRevision?: number
-  /** 已合并进本账号的公开比赛；和账号一起原子保存，重启不重复发钱/记战报。 */
-  appliedMatchIds?: string[]
-  /** 上一次给这个账号发 AI 报价的“赛季:轮次”，每轮最多发一次。 */
-  offerKey?: string
-  /** 玩家（或绑定 Agent）最近一次真实在线的时间戳；区别于后台结算写入的 updatedAt。 */
-  lastOnlineAt?: number
-  /** AI 接管期间最近一次按轮打理的“赛季:轮次”。 */
-  aiTakeoverKey?: string
-  createdAt: number
-  updatedAt: number
-}
-
-type Db = { accounts: Account[] }
+import { AccountStore, type Account } from './account-store.ts'
 
 type SharedWorld = {
   seed: number
@@ -118,18 +97,18 @@ export type AppServerOptions = {
   registerLimitPerHour?: number
 }
 
-type SessionMap = Record<string, string>
-
 export type AppServer = {
   server: http.Server
   close: () => void
+  /** 停止接收新请求，等待在途请求完成后 flush（进程退出时使用）。 */
+  shutdown: () => Promise<void>
+  /** 等待账号和会话落盘（正常请求由后台合并保存）。 */
+  flush: () => Promise<void>
   accountCount: () => number
   /** 运维 / 测试驱动一次后台队列，仍受服务器时间和统一公布规则约束。 */
   runMatchQueue: () => Promise<void>
 }
 
-const SESSION_FILE = 'sessions.json'
-const DB_FILE = 'accounts.json'
 const WORLD_FILE = 'world.json'
 
 export function createAppServer(options: AppServerOptions = {}): AppServer {
@@ -145,10 +124,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   if (registrationMode === 'invite' && !inviteCode) throw new Error('registration=invite 需要配置 inviteCode')
   fs.mkdirSync(dataDir, { recursive: true })
 
-  const dbPath = path.join(dataDir, DB_FILE)
-  const sessionPath = path.join(dataDir, SESSION_FILE)
+  const accountStore = new AccountStore(dataDir)
+  const db = { accounts: accountStore.accounts }
+  const persistAccount = (account: Account) => accountStore.save(account)
   const worldPath = path.join(dataDir, WORLD_FILE)
-  const db: Db = readJson<Db>(dbPath, { accounts: [] })
   const loadedWorld = readJson<Partial<SharedWorld> | null>(worldPath, null)
   const sharedWorld: SharedWorld = {
     seed: loadedWorld?.seed ?? crypto.randomInt(1, 0x7fffffff),
@@ -198,16 +177,14 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   // 一天一轮 → 一天两轮（北京时间 12:00、20:00）：共享世界和每个账号的赛季一起挪，当前该踢的轮次不变。
   {
     const at = now()
-    let moved = migrateWorldSchedule(sharedWorld.world, at)
-    for (const account of db.accounts) if (account.game && migrateGameSchedule(account.game, at)) moved = true
-    if (moved) writeJson(dbPath, db)
+    migrateWorldSchedule(sharedWorld.world, at)
+    for (const account of db.accounts) if (account.game && migrateGameSchedule(account.game, at)) persistAccount(account)
   }
   // 7 人制 → 11 人制：先迁移每个账号（玩家球队补随机球员、换阵型），有教练的球队名单直接用账号里的新名单，
   // 其余 AI 球队各自补人、换阵型，世界里各队的阵型也一起换。迁移过一次之后这里什么都不做。
   {
-    let accountsMigrated = false
     for (const account of db.accounts) {
-      if (account.game && upgradeElevenASide(account.game)) accountsMigrated = true
+      if (account.game && upgradeElevenASide(account.game)) persistAccount(account)
     }
     for (const club of sharedWorld.world.clubs) {
       if (isLegacyFormation(club.formationId)) club.formationId = elevenFormationFor(club.formationId)
@@ -220,7 +197,6 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         ? { ...team, formationId: owner.game.lineup.formationId, players: structuredClone(owner.game.roster), lineup: structuredClone(owner.game.lineup) }
         : elevenAITeam(team, sharedWorld.seed)
     }
-    if (accountsMigrated) writeJson(dbPath, db)
   }
   // 以前 AI 买进来的球员没排进首发（只修“不合法”的阵容），一直坐在名单外：无主的 AI 球队按名单重排一次。
   // 有教练的球队阵容是教练自己排的，不动。
@@ -236,10 +212,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   }
   writeJson(worldPath, sharedWorld)
   const persistWorld = () => writeJson(worldPath, sharedWorld)
-  const persistDb = () => writeJson(dbPath, db)
-  const sessions: SessionMap = readJson<SessionMap>(sessionPath, {})
-  const persistSessions = () => writeJson(sessionPath, sessions)
+  const sessions = accountStore.sessions
   const clients = new Map<string, Set<ServerResponse>>()
+  const eventClientIds = new Map<ServerResponse, string>()
   const registerAttempts = new Map<string, number[]>()
   let closed = false
 
@@ -259,7 +234,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const wasTakeover = prev !== undefined && t - prev > AI_TAKEOVER_INACTIVE_MS
     account.lastOnlineAt = t
     if (!closed && (forcePersist || prev === undefined || wasTakeover || t - prev >= ONLINE_PERSIST_INTERVAL_MS)) {
-      persistDb()
+      persistAccount(account)
     }
   }
   function cupOpeningTeams(): AITeam[] {
@@ -685,10 +660,13 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const baseCa = baseAttrs ? displayCA(caOf(baseAttrs, positions.GK > 0)) : undefined
     return { id, name, enName, country, era, age, foot, height, positions, attrs: visible, traitId, skills, skillTiers, ca: displayCA(caOf(attrs, positions.GK > 0)), baseCa }
   }
-  for (const account of db.accounts) account.lastUserRevision ??= account.revision
-  // 清理旧版新账号准备期并补齐真实在线时间戳；正式开球时间不因注册或登录而变化。
-  let removedPreparation = false
+  // 清理旧版新账号准备期并补齐真实在线时间戳。
   for (const account of db.accounts) {
+    let removedPreparation = false
+    if (account.lastUserRevision === undefined) {
+      account.lastUserRevision = account.revision
+      removedPreparation = true
+    }
     if (account.lastOnlineAt === undefined) {
       account.lastOnlineAt = account.updatedAt || account.createdAt || now()
       removedPreparation = true
@@ -702,8 +680,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       delete (account.game.settings as { autoSettle?: unknown }).autoSettle
       removedPreparation = true
     }
+    if (removedPreparation) persistAccount(account)
   }
-  if (removedPreparation) persistDb()
 
   /** 全服广播用的竞拍信息：不含账号 ID 以外的隐私，也不带完整球员池，池子变了客户端按 version 重新拉。 */
   const marketPayload = () => ({ type: 'market', auctions: market.auctions, log: market.log, version: market.version, serverTime: now() })
@@ -775,17 +753,22 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       winner.revision++
       winner.lastUserRevision = winner.revision
       winner.updatedAt = now()
+      persistAccount(winner)
       broadcast(winner)
     }
-    persistDb()
     persistMarket()
     broadcastMarket()
   }
 
   /** 老化由各账号自己算，市场里的球员不归任何账号的世界管，否则会被算退役、生出下一代。 */
-  function forgetMarketAges(account: Account): void {
+  function forgetMarketAges(account: Account): boolean {
     const ages = account.game?.world?.starAges
-    if (ages) for (const player of market.pool) delete ages[player.id]
+    let changed = false
+    if (ages) for (const player of market.pool) if (player.id in ages) {
+      delete ages[player.id]
+      changed = true
+    }
+    return changed
   }
 
   /* 老账号各有一份自由球员：并进全服市场；已经被人签走的从池子里拿掉。 */
@@ -795,11 +778,13 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     let changed = market.pool.length !== before
     if (changed) market.version += 1
     for (const account of db.accounts) {
-      if (account.game?.freeStars?.length && absorbFreeAgents(market, account.game, (id) => onSomeRoster(id))) changed = true
-      forgetMarketAges(account)
+      if (account.game?.freeStars?.length && absorbFreeAgents(market, account.game, (id) => onSomeRoster(id))) {
+        changed = true
+        persistAccount(account)
+      }
+      if (forgetMarketAges(account)) persistAccount(account)
     }
     if (changed) {
-      persistDb()
       persistMarket()
     }
   }
@@ -820,7 +805,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         account.revision++
         account.lastUserRevision = account.revision
         account.updatedAt = now()
-        persistDb()
+        persistAccount(account)
         broadcast(account)
       }
       persistMarket()
@@ -892,7 +877,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     account.revision++
     account.lastUserRevision = account.revision
     account.updatedAt = now()
-    persistDb()
+    persistAccount(account)
     broadcast(account)
     return { ok: true, name }
   }
@@ -949,7 +934,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       account.revision++
       account.lastUserRevision = account.revision
       account.updatedAt = now()
-      persistDb()
+      persistAccount(account)
       broadcast(account)
     }
     return { status: result.ok ? 200 : 400, payload: { ...result } }
@@ -968,7 +953,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       account.revision++
       account.lastUserRevision = account.revision
       account.updatedAt = now()
-      persistDb()
+      persistAccount(account)
       broadcast(account)
     }
     return { status: result.ok ? 200 : 400, payload: { ...result } }
@@ -1075,7 +1060,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   function broadcast(account: Account, source?: string): void {
     const group = clients.get(account.id)
     if (!group) return
-    for (const res of group) sendState(res, account, source)
+    for (const res of group) {
+      // 保存方本地已经是最新状态；回推 2–3MB 的完整存档只会让页面卡住。
+      if (source && eventClientIds.get(res) === source) continue
+      sendState(res, account, source)
+    }
   }
 
   /**
@@ -1190,7 +1179,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       // lastUserRevision 只记录“玩家自己保存”的版本；AI / 共享世界 / 自动结算的改动不算，
       // 否则这些服务端变化会把玩家的下一次保存判成冲突。
       account.updatedAt = now()
-      persistDb()
+      persistAccount(account)
       broadcast(account)
       return true
     } catch (error) {
@@ -1317,8 +1306,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       // 电脑球队也过了一个赛季：清掉已经并进名单的签入，账本和设施继续滚。
       for (const state of Object.values(sharedWorld.aiClubs ?? {})) state.signings = []
       persistWorld()
-      persistDb()
-      for (const { account } of drafts) broadcast(account)
+      for (const { account } of drafts) {
+        persistAccount(account)
+        broadcast(account)
+      }
       lastRollAt = now()
       return { ok: true }
     } catch (error) {
@@ -1449,6 +1440,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     try {
+      if (closed) return json(res, 503, { error: '服务器正在停止，请稍后重试' })
       const url = new URL(req.url ?? '/', 'http://localhost')
       if (url.pathname.startsWith('/api/')) {
         await handleApi(req, res, url)
@@ -1615,9 +1607,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       account.appliedMatchIds = inheritedMatchIds(account.game, club.id)
       db.accounts.push(account)
       const token = createSession(account.id)
-      persistDb()
-      persistSessions()
+      persistAccount(account)
       advanceAccount(account)
+      await accountStore.flush()
       json(res, 201, { token, user: publicAccount(account), revision: account.revision, serverTime: now(), game: publicGame(account) })
       return
     }
@@ -1630,8 +1622,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (!account || hashPassword(password, account.salt) !== account.passwordHash) return json(res, 401, { error: '用户名或密码错误' })
       touchAccountOnline(account, true)
       const token = createSession(account.id)
-      persistSessions()
       advanceAccount(account)
+      await accountStore.flush()
       json(res, 200, { token, user: publicAccount(account), revision: account.revision, serverTime: now(), game: publicGame(account) })
       return
     }
@@ -1650,8 +1642,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       touchAccountOnline(account)
       if (!account.agentToken) {
         account.agentToken = createAgentToken()
-        persistDb()
+        persistAccount(account)
       }
+      await accountStore.flush()
       json(res, 200, { token: account.agentToken })
       return
     }
@@ -1661,7 +1654,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (!account) return json(res, 401, { error: '请先登录' })
       touchAccountOnline(account)
       delete account.agentToken
-      persistDb()
+      persistAccount(account)
+      await accountStore.flush()
       json(res, 200, { ok: true })
       return
     }
@@ -1735,7 +1729,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
           const leagueOnly = agentAccount.game.activeMatch?.context.isLeague && ['start_league', 'set_match_tactics', 'set_match_auto_subs', 'substitute'].includes(String(body.action))
           if (!leagueOnly) agentAccount.lastUserRevision = agentAccount.revision
           agentAccount.updatedAt = now()
-          persistDb()
+          persistAccount(agentAccount)
           broadcast(agentAccount)
         }
         absorbInto(agentAccount)
@@ -1812,8 +1806,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const token = tokenFromRequest(req)
       if (token) {
         delete sessions[token]
-        persistSessions()
+        accountStore.setSession(token, null)
       }
+      await accountStore.flush()
       json(res, 200, { ok: true })
       return
     }
@@ -1860,7 +1855,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (outcome.ok) {
         account.revision++
         account.updatedAt = now()
-        persistDb()
+        persistAccount(account)
         broadcast(account, String(req.headers['x-fm-client'] ?? '').slice(0, 128))
       }
       json(res, outcome.ok ? 200 : 400, { ...outcome, revision: account.revision, game: publicGame(account) })
@@ -1986,21 +1981,21 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       account.revision++
       account.lastUserRevision = account.revision
       account.updatedAt = now()
-      persistDb()
+      persistAccount(account)
       broadcast(account, String(req.headers['x-fm-client'] ?? '').slice(0, 128))
       json(res, 200, { ok: true, revision: account.revision, updatedAt: account.updatedAt })
       return
     }
 
     if (url.pathname === '/api/events' && req.method === 'GET') {
-      openEvents(req, res, account)
+      openEvents(req, res, account, url)
       return
     }
 
     json(res, 404, { error: '接口不存在' })
   }
 
-  function openEvents(req: IncomingMessage, res: ServerResponse, account: Account): void {
+  function openEvents(req: IncomingMessage, res: ServerResponse, account: Account, url: URL): void {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
@@ -2014,6 +2009,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       clients.set(account.id, group)
     }
     group.add(res)
+    eventClientIds.set(res, url.searchParams.get('client') ?? '')
     sendState(res, account)
     res.write(`data: ${JSON.stringify(marketPayload())}\n\n`)
     const heartbeat = setInterval(() => {
@@ -2023,6 +2019,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const cleanup = () => {
       clearInterval(heartbeat)
       group!.delete(res)
+      eventClientIds.delete(res)
       if (group!.size === 0) {
         clients.delete(account.id)
         touchAccountOnline(account, true)
@@ -2035,6 +2032,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   function createSession(accountId: string): string {
     const token = crypto.randomBytes(32).toString('hex')
     sessions[token] = accountId
+    accountStore.setSession(token, accountId)
     return token
   }
 
@@ -2105,18 +2103,32 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   advanceAllMatches()
   autoRollSharedSeason()
   autoPlayoff()
+  accountStore.flushSync()
+
+  let stopped: Promise<void> | null = null
+  function stopServer(): Promise<void> {
+    if (stopped) return stopped
+    closed = true
+    if (timer) clearInterval(timer)
+    if (matchTimer) clearInterval(matchTimer)
+    if (jobTimer) clearInterval(jobTimer)
+    matchQueue.close()
+    for (const group of clients.values()) for (const res of group) res.end()
+    clients.clear()
+    stopped = new Promise<void>((resolve) => server.close(() => resolve()))
+    return stopped
+  }
 
   return {
     server,
+    flush: () => accountStore.flush(),
+    shutdown: async () => {
+      await stopServer()
+      accountStore.close()
+    },
     close: () => {
-      closed = true
-      if (timer) clearInterval(timer)
-      if (matchTimer) clearInterval(matchTimer)
-      if (jobTimer) clearInterval(jobTimer)
-      matchQueue.close()
-      for (const group of clients.values()) for (const res of group) res.end()
-      clients.clear()
-      server.close()
+      void stopServer()
+      accountStore.close()
     },
     accountCount: () => db.accounts.length,
     runMatchQueue,
@@ -2137,7 +2149,8 @@ function readJson<T>(file: string, fallback: T): T {
 
 function writeJson(file: string, value: unknown): void {
   const tmp = `${file}.tmp`
-  fs.writeFileSync(tmp, JSON.stringify(value, null, 2))
+  // 存档已经是几十 MB：缩进会让每次保存多写一倍以上，并长时间占用事件循环。
+  fs.writeFileSync(tmp, JSON.stringify(value))
   fs.renameSync(tmp, file)
 }
 

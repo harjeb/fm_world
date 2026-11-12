@@ -35,7 +35,7 @@ import { displayClock } from '../src/game/match/time.ts'
 import { leagueDisplayClock } from '../src/game/realtime.ts'
 import { injuryUntil } from '../src/game/injury.ts'
 import { buildReview } from '../src/game/review.ts'
-import { cardsOf, playerCards } from '../src/game/cards.ts'
+import { cardsOf, playerCards, untrainedPlayer } from '../src/game/cards.ts'
 import { traitEffectText } from '../src/game/data/skill-effects.ts'
 import { traitNameOf } from '../src/game/data/star-traits.ts'
 import {
@@ -372,13 +372,13 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
     market: {
       transferWindowOpen: transferWindowOpen(game),
       /** 和转会页“从 AI 球队买人”同一份列表；用 preview_signing / sign_club_player 谈判。 */
-      // 本联赛 AI 球队的全部球员：俱乐部态度（主力/轮换/冷板凳、最近出场、要价；非卖品 asking 为 null）。
+      // 交易只转移原始球员，列表不展示对方装备卡的 CA / 属性 / 技能；非卖品 asking 为 null。
       clubOffers: aiTransferOffers(game, options.isManaged).map(({ team, player, asking, terms }) => ({
-        teamId: team.id, teamName: team.name, player: playerView(player, game, now), asking,
+        teamId: team.id, teamName: team.name, player: playerView(untrainedPlayer(player), game, now), asking,
         status: terms.status, ageBand: terms.ageBand, minutesShare: Math.round(terms.minutesShare * 100) / 100, requiredPremium: terms.requiredPremium,
       })),
-      freeAgents: game.freeStars.map((player) => ({ player: playerView(player, game, now), price: bestMarketValue(game, player) })),
-      listings: (game.market?.listings ?? []).map(({ player, price }) => ({ player: playerView(player, game, now), price })),
+      freeAgents: game.freeStars.map((player) => ({ player: playerView(untrainedPlayer(player), game, now), price: bestMarketValue(game, player) })),
+      listings: (game.market?.listings ?? []).map(({ player, price }) => ({ player: playerView(untrainedPlayer(player), game, now), price })),
     },
     // AI 俱乐部发来的报价：pending 的要在 expiresAt 前用 respond_offer 回复，过期算拒绝；高价（≥ 身价 1.3 倍）被拒绝球员会不满。
     transferOffers: (game.transferOffers ?? []).map((offer) => ({ ...offer, high: offer.amount >= offer.value * 1.3 })),

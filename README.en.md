@@ -41,6 +41,8 @@ An 11-a-side football management game you play in the browser: take over a club,
 
 ## Quick start
 
+Requires Node.js **22.13 or newer** (uses built-in `node:sqlite`; no database service to install).
+
 ```bash
 npm install
 npm run build
@@ -48,6 +50,14 @@ npm run server   # then open http://localhost:8787
 ```
 
 The game's interface is in Chinese.
+
+## Online storage
+
+- Accounts, password hashes, Agent tokens, game saves and login sessions live in `data/accounts.sqlite`. Only changed accounts are updated.
+- Ordinary saves are coalesced in an approximately one-second window and written by a background worker. Normal shutdown (`SIGINT` / `SIGTERM`) flushes pending changes; power loss or `kill -9` can still lose changes in that short window.
+- On first startup, legacy `accounts.json` / `sessions.json` are imported together in a transaction and retained unchanged. SQLite is authoritative afterward; legacy files are not re-imported. Invalid legacy data stops startup rather than silently creating an empty account store.
+- The shared world remains in `data/world.json`, with match jobs in `data/match-jobs/`. Shared-data deduplication and the SSE protocol are unchanged.
+- Stop the server normally before backing up the whole `data/` directory. Do not copy only the `.sqlite` file while running: WAL mode may also use `accounts.sqlite-wal` / `accounts.sqlite-shm`.
 
 ## Disclaimer
 
