@@ -118,6 +118,9 @@ export type UIState = {
   matchAutoSubsSyncDefault: boolean
   /** 版本更新说明弹窗是否打开。 */
   changelogOpen: boolean
+  /** 全服聊天侧边抽屉是否打开。 */
+  chatOpen: boolean
+  chatError: string
   completing: boolean
   accountOpen: boolean
   /** 注册表单预选的球队；注册成功后不允许更换。 */
@@ -223,6 +226,8 @@ export const ui: UIState = {
   matchAutoSubsDraft: null,
   matchAutoSubsSyncDefault: false,
   changelogOpen: false,
+  chatOpen: false,
+  chatError: '',
   completing: false,
   accountOpen: false,
   registrationClubId: '',

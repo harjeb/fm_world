@@ -72,7 +72,7 @@ import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPla
 import { minimumBid } from '../game/auction.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
 import { clubNameError, normalizeClubName } from '../game/club-name.ts'
-import { bidOnline, buyFromAIClubOnline, renameClubOnline, respondOfferOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, refreshPublicWorld, refreshRegistrationClubs, registerOnline, revokeAgentTokenOnline, serverNow, setRemoteGameHandler, subscribeMarket, subscribeOnline } from '../online.ts'
+import { bidOnline, buyFromAIClubOnline, chatState, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, refreshChatOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline } from '../online.ts'
 import { agentHandoffText } from './agent-handoff.ts'
 import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
 import { UNHAPPY_GAME_DAYS } from '../game/transfer-rules.ts'
@@ -89,6 +89,7 @@ import { renderChallenge } from './screens/challenge.ts'
 import type { CupId } from '../game/data/cup-config.ts'
 import { loadPveContent } from '../game/pve-content.ts'
 import { renderClub } from './screens/club.ts'
+import { renderChatDrawer } from './screens/chat.ts'
 import { renderTransfer } from './screens/transfer.ts'
 import { renderHome } from './screens/home.ts'
 import { renderInventory } from './screens/inventory.ts'
@@ -296,6 +297,7 @@ function render(): void {
       </div>
     </div>
     ${renderBootGate()}
+    ${renderChatDrawer()}
     ${renderDetailOverlay()}
     ${renderNegotiationOverlay()}
     ${renderClubOverlay()}
@@ -518,10 +520,54 @@ function renderBootGate(): string {
   </div>`
 }
 
+function scrollChatToBottom(force = false): void {
+  const el = document.getElementById('chat-messages')
+  if (!el) return
+  const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 72
+  if (force || nearBottom) el.scrollTop = el.scrollHeight
+}
+
+async function submitChat(): Promise<void> {
+  if (!isOnlineMode()) {
+    ui.chatError = '请先登录联机账号后再发送消息。'
+    render()
+    return
+  }
+  const input = document.getElementById('chat-input') as HTMLInputElement | null
+  const text = input?.value.trim() ?? ''
+  if (!text) return
+  ui.chatError = ''
+  render()
+  try {
+    await sendChatOnline(text)
+    const after = document.getElementById('chat-input') as HTMLInputElement | null
+    if (after) after.value = ''
+    markChatSeen()
+    render()
+    scrollChatToBottom(true)
+    ;(document.getElementById('chat-input') as HTMLInputElement | null)?.focus()
+  } catch (error) {
+    ui.chatError = error instanceof Error ? error.message : '发送失败'
+    render()
+    ;(document.getElementById('chat-input') as HTMLInputElement | null)?.focus()
+  }
+}
+
 function bootOnline(): void {
   setRemoteGameHandler((next) => applyOnlineGame(next))
   subscribeOnline(() => render())
   subscribeMarket((previous, previousLog) => announceMarket(previous, previousLog))
+  subscribeChat((event) => {
+    if (ui.chatOpen) {
+      const box = document.getElementById('chat-messages')
+      const stick = !box || box.scrollHeight - box.scrollTop - box.clientHeight < 72 || event.added?.accountId === onlineState.user?.id
+      markChatSeen()
+      render()
+      if (stick) scrollChatToBottom(true)
+    } else {
+      render()
+    }
+  })
   void loadPublicConfig().then(() => render())
 }
 
@@ -925,10 +971,10 @@ document.addEventListener('click', async (event) => {
     render()
     return
   }
-  // 任何界面的球队名都能点开名单：世界页就地展开，其它界面用弹层。
+  // 任何界面的球队名都能点开名单：世界页（非弹层/聊天抽屉内）就地展开，其它情况用弹层。
   const clubOpen = target.closest<HTMLElement>('[data-club-open]')
   if (clubOpen?.dataset.clubOpen) {
-    if (ui.screen === 'world') {
+    if (ui.screen === 'world' && !clubOpen.closest('.chat-drawer')) {
       ui.worldClubId = clubOpen.dataset.clubOpen
       ui.worldPlayerId = null
       ui.clubViewId = null
@@ -937,6 +983,7 @@ document.addEventListener('click', async (event) => {
     } else {
       ui.clubViewId = clubOpen.dataset.clubOpen
       ui.clubViewPlayerId = null
+      if (isOnlineMode() && !publicWorld) void refreshPublicWorld().then(() => render())
       render()
     }
     return
@@ -1967,6 +2014,36 @@ document.addEventListener('click', async (event) => {
       ui.reviewId = null
       render()
       break
+    case 'chat-toggle':
+      ui.chatOpen = !ui.chatOpen
+      ui.chatError = ''
+      if (ui.chatOpen) {
+        markChatSeen()
+        if (isOnlineMode() && !chatState.messages.length) void refreshChatOnline()
+      }
+      render()
+      if (ui.chatOpen) {
+        scrollChatToBottom(true)
+        if (!window.matchMedia?.('(pointer: coarse)').matches) {
+          ;(document.getElementById('chat-input') as HTMLInputElement | null)?.focus()
+        }
+      }
+      break
+    case 'chat-close':
+      ui.chatOpen = false
+      ui.chatError = ''
+      render()
+      break
+    case 'chat-send':
+      void submitChat()
+      break
+    case 'chat-login':
+      ui.chatOpen = false
+      ui.chatError = ''
+      ui.accountOpen = true
+      ui.authMode = 'login'
+      render()
+      break
     case 'go-home':
       go('home')
       break
@@ -2232,9 +2309,16 @@ document.addEventListener('keydown', (event) => {
       else ui.autoStrategyOpen = false
     }
     else if (ui.accountOpen) ui.accountOpen = false
+    else if (ui.clubViewId) { ui.clubViewId = null; ui.clubViewPlayerId = null }
     else if (ui.detailPlayerId) ui.detailPlayerId = null
+    else if (ui.chatOpen) { ui.chatOpen = false; ui.chatError = '' }
     else return
     render()
+    return
+  }
+  if (event.key === 'Enter' && !event.isComposing && target.id === 'chat-input') {
+    event.preventDefault()
+    void submitChat()
     return
   }
   if (event.key === 'Enter' && target.id === 'club-search') {

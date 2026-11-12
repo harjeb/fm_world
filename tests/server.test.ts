@@ -229,9 +229,11 @@ describe('联机服务器 / 账号 / SSE', () => {
     const first = await readSse(reader)
     expect(first.data.revision).toBe(account.revision)
     expect(first.data.game.clubName).toBe(account.game.clubName)
-    // 连上之后紧跟一条全服市场消息。
+    // 连上之后紧跟全服市场与全服聊天初始快照。
     const market = await readSse(reader, first.rest)
     expect(market.data.type).toBe('market')
+    const chat = await readSse(reader, market.rest)
+    expect(chat.data.type).toBe('chat')
 
     account.game.lineup.tactics.tempo = 'slow'
     await fetch(`${base}/api/game`, {
@@ -239,7 +241,7 @@ describe('联机服务器 / 账号 / SSE', () => {
       headers: { Authorization: `Bearer ${account.token}`, 'Content-Type': 'application/json', 'X-FM-Client': 'test-tab' },
       body: JSON.stringify({ game: account.game, baseRevision: account.revision }),
     })
-    const second = await readSse(reader, market.rest)
+    const second = await readSse(reader, chat.rest)
     expect(second.data.revision).toBe(account.revision + 1)
     expect(second.data.source).toBe('test-tab')
     expect(second.data.game.lineup.tactics.tempo).toBe('slow')

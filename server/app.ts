@@ -45,6 +45,15 @@ import { isMatchPlanId, matchPlanConditionFactor } from '../src/game/pes/match-p
 import { simulateAITrainingSession } from '../src/game/ai-training.ts'
 import { settleSquadEnergy } from '../src/game/energy.ts'
 import { TRAINING_ENERGY_COST } from '../src/game/training.ts'
+import {
+  CHAT_COOLDOWN_MS,
+  CHAT_HISTORY_LIMIT,
+  isValidChatMessage,
+  sanitizeChatColor,
+  validateChatText,
+  type ChatMessage,
+  type ChatSseMessage,
+} from '../src/game/chat.ts'
 
 /** 玩家超过 3 天未上线（现实 72 小时）后，球队临时进入 AI 接管状态；重新上线即刻解除。 */
 export const AI_TAKEOVER_INACTIVE_MS = 3 * 24 * 60 * 60_000
@@ -110,6 +119,7 @@ export type AppServer = {
 }
 
 const WORLD_FILE = 'world.json'
+const CHAT_FILE = 'chat.json'
 
 export function createAppServer(options: AppServerOptions = {}): AppServer {
   const dataDir = path.resolve(options.dataDir ?? 'data')
@@ -212,6 +222,14 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   }
   writeJson(worldPath, sharedWorld)
   const persistWorld = () => writeJson(worldPath, sharedWorld)
+  const chatPath = path.join(dataDir, CHAT_FILE)
+  const loadedChat = readJson<unknown>(chatPath, [])
+  const chatMessages: ChatMessage[] = Array.isArray(loadedChat)
+    ? loadedChat.filter(isValidChatMessage).slice(-CHAT_HISTORY_LIMIT)
+    : []
+  const persistChat = () => writeJson(chatPath, chatMessages)
+  const chatLastSentAt = new Map<string, number>()
+  let chatSeq = 0
   const sessions = accountStore.sessions
   const clients = new Map<string, Set<ServerResponse>>()
   const eventClientIds = new Map<ServerResponse, string>()
@@ -856,6 +874,58 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     return { team: clone }
   }
 
+  const chatSnapshotPayload = (): ChatSseMessage => ({
+    type: 'chat',
+    mode: 'snapshot',
+    messages: chatMessages,
+    serverTime: now(),
+  })
+
+  function broadcastChatSnapshot(): void {
+    const payload = `data: ${JSON.stringify(chatSnapshotPayload())}\n\n`
+    for (const group of clients.values()) for (const res of group) res.write(payload)
+  }
+
+  function broadcastChatAppend(message: ChatMessage): void {
+    const event: ChatSseMessage = { type: 'chat', mode: 'append', message, serverTime: now() }
+    const payload = `data: ${JSON.stringify(event)}\n\n`
+    for (const group of clients.values()) for (const res of group) res.write(payload)
+  }
+
+  /** 发送全服聊天消息：校验字数与冷却，仅保留最新 50 条并实时推送。 */
+  function postChat(account: Account, rawText: unknown): { ok: true; message: ChatMessage } | { ok: false; error: string; status: number } {
+    const valid = validateChatText(rawText)
+    if (!valid.ok) return { ok: false, error: valid.error, status: 400 }
+    const t = now()
+    const prev = chatLastSentAt.get(account.id)
+    if (prev !== undefined && t - prev < CHAT_COOLDOWN_MS) {
+      return { ok: false, error: '发言太快了，请稍等片刻', status: 429 }
+    }
+    chatLastSentAt.set(account.id, t)
+    const clubId = ownedClubId(account) ?? ''
+    const worldClub = clubId ? sharedWorld.world.clubs.find((item) => item.id === clubId) : undefined
+    const playerClub = account.game?.world?.clubs.find((item) => item.id === 'player')
+    const clubName = account.game?.clubName || worldClub?.name || account.username
+    const clubColor = sanitizeChatColor(worldClub?.color ?? playerClub?.color)
+    const message: ChatMessage = {
+      id: `${t.toString(36)}-${(++chatSeq).toString(36)}-${crypto.randomBytes(3).toString('hex')}`,
+      accountId: account.id,
+      username: account.username,
+      clubId,
+      clubName,
+      clubColor,
+      text: valid.text,
+      at: t,
+    }
+    chatMessages.push(message)
+    if (chatMessages.length > CHAT_HISTORY_LIMIT) {
+      chatMessages.splice(0, chatMessages.length - CHAT_HISTORY_LIMIT)
+    }
+    persistChat()
+    broadcastChatAppend(message)
+    return { ok: true, message }
+  }
+
   /** 联机改俱乐部名字：最多 8 个字，不能和全服任何其他球队（AI 球队或别的教练的球队）重名。 */
   function renameClub(account: Account, rawName: unknown): { ok: true; name: string } | { ok: false; error: string; status: number } {
     const clubId = ownedClubId(account)
@@ -871,6 +941,17 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const error = clubNameError(name, taken)
     if (error) return { ok: false, error, status: 400 }
     account.game.clubName = name
+    let chatRenamed = false
+    for (const item of chatMessages) {
+      if (item.accountId === account.id && item.clubName !== name) {
+        item.clubName = name
+        chatRenamed = true
+      }
+    }
+    if (chatRenamed) {
+      persistChat()
+      broadcastChatSnapshot()
+    }
     publishClub(account)
     pullSharedWorld(account)
     persistWorld()
@@ -1523,6 +1604,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return
     }
 
+    if (url.pathname === '/api/chat' && req.method === 'GET') {
+      json(res, 200, { messages: chatMessages, serverTime: now() })
+      return
+    }
+
     if (url.pathname === '/api/public-config' && req.method === 'GET') {
       /* 只暴露注册模式与 sitekey，邀请码与 secret 永不下发。 */
       json(res, 200, { registration: registrationMode, turnstileSiteKey, accounts: db.accounts.length, slots: slotInfo() })
@@ -1697,6 +1783,15 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         /** 全服信息：世界页、球队详情里能看到的所有球队名单、积分榜与赛程。 */
         if (body.action === 'get_world') {
           json(res, 200, { ok: true, result: worldSnapshot(agentAccount), revision: agentAccount.revision, game: agentState() })
+          return
+        }
+        if (body.action === 'get_chat') {
+          json(res, 200, { ok: true, result: { messages: chatMessages }, revision: agentAccount.revision, game: agentState() })
+          return
+        }
+        if (body.action === 'send_chat') {
+          const sent = postChat(agentAccount, body.text)
+          json(res, sent.ok ? 200 : sent.status, { ...sent, ...(sent.ok ? { result: { message: sent.message, messages: chatMessages } } : {}), revision: agentAccount.revision, game: agentState() })
           return
         }
         if (body.action === 'sign_club_player' || body.action === 'respond_offer') {
@@ -1987,6 +2082,14 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return
     }
 
+    if (url.pathname === '/api/chat' && req.method === 'POST') {
+      const body = await readJsonBody(req)
+      const sent = postChat(account, body.text)
+      if (!sent.ok) return json(res, sent.status, { error: sent.error })
+      json(res, 200, { ok: true, message: sent.message, messages: chatMessages, serverTime: now() })
+      return
+    }
+
     if (url.pathname === '/api/events' && req.method === 'GET') {
       openEvents(req, res, account, url)
       return
@@ -2012,6 +2115,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     eventClientIds.set(res, url.searchParams.get('client') ?? '')
     sendState(res, account)
     res.write(`data: ${JSON.stringify(marketPayload())}\n\n`)
+    res.write(`data: ${JSON.stringify(chatSnapshotPayload())}\n\n`)
     const heartbeat = setInterval(() => {
       touchAccountOnline(account)
       res.write(': ping\n\n')

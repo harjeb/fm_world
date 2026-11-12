@@ -1,4 +1,5 @@
 import type { Auction, AuctionResult } from './game/auction.ts'
+import { CHAT_HISTORY_LIMIT, appendChatMessage, isValidChatMessage, type ChatMessage, type ChatSseMessage } from './game/chat.ts'
 import type { AITeam, Attributes, FacilityId, GameState, Player, SeasonTableRow, Fixture, TierId, ConferenceId } from './game/types.ts'
 import { setRemoteSaver, saveGame } from './game/state.ts'
 import { dueRound } from './game/season.ts'
@@ -81,6 +82,41 @@ export function subscribeMarket(listener: (previous: Auction[], previousLog: Auc
 /** 倒计时按服务器时间算，本机时钟不准也不会提前或拖后。 */
 export function serverNow(): number {
   return Date.now() + marketState.serverOffset
+}
+
+const CHAT_SEEN_KEY = 'fm-chat-seen-at'
+
+export const chatState = {
+  messages: [] as ChatMessage[],
+  unread: 0,
+  sending: false,
+}
+
+export type ChatUpdateEvent = { kind: 'snapshot' | 'append'; added?: ChatMessage }
+
+const chatListeners = new Set<(event: ChatUpdateEvent) => void>()
+
+export function subscribeChat(listener: (event: ChatUpdateEvent) => void): () => void {
+  chatListeners.add(listener)
+  return () => chatListeners.delete(listener)
+}
+
+function readChatSeenAt(): number {
+  if (typeof localStorage === 'undefined') return 0
+  const raw = Number(localStorage.getItem(CHAT_SEEN_KEY) ?? 0)
+  return Number.isFinite(raw) && raw > 0 ? raw : 0
+}
+
+function writeChatSeenAt(at: number): void {
+  if (typeof localStorage !== 'undefined' && Number.isFinite(at) && at > 0) {
+    localStorage.setItem(CHAT_SEEN_KEY, String(Math.floor(at)))
+  }
+}
+
+export function markChatSeen(): void {
+  chatState.unread = 0
+  const latest = Math.max(readChatSeenAt(), chatState.messages.at(-1)?.at ?? 0, serverNow())
+  writeChatSeenAt(latest)
 }
 
 export type RegistrationMode = 'open' | 'invite' | 'closed'
@@ -214,6 +250,7 @@ export async function logoutOnline(): Promise<void> {
   onlineState.revision = 0
   onlineState.error = ''
   Object.assign(marketState, { pool: [], auctions: [], log: [], version: 0 })
+  Object.assign(chatState, { messages: [], unread: 0, sending: false })
   ++publicWorldRequest
   publicWorld = null
   notify()
@@ -275,9 +312,13 @@ function connectEvents(): void {
   }
   eventSource.onmessage = (event) => {
     try {
-      const parsed = JSON.parse(event.data) as StateResponse | MarketMessage
+      const parsed = JSON.parse(event.data) as StateResponse | MarketMessage | ChatSseMessage
       if (parsed.type === 'market') {
         applyMarket(parsed as MarketMessage)
+        return
+      }
+      if (parsed.type === 'chat') {
+        applyChat(parsed as ChatSseMessage)
         return
       }
       const data = parsed as StateResponse
@@ -319,6 +360,72 @@ async function refreshMarketPool(): Promise<void> {
     notify()
   } catch {
     // 下一条市场消息还会再试。
+  }
+}
+
+function applyChat(data: ChatSseMessage): void {
+  syncServerClock(data.serverTime)
+  if (data.mode === 'snapshot') {
+    chatState.messages = Array.isArray(data.messages)
+      ? data.messages.filter(isValidChatMessage).slice(-CHAT_HISTORY_LIMIT)
+      : []
+    const seenAt = readChatSeenAt()
+    if (seenAt <= 0) {
+      writeChatSeenAt(Math.max(chatState.messages.at(-1)?.at ?? 0, serverNow()))
+      chatState.unread = 0
+    } else {
+      const me = onlineState.user?.id
+      chatState.unread = Math.min(
+        CHAT_HISTORY_LIMIT,
+        chatState.messages.filter((item) => item.at > seenAt && item.accountId !== me).length,
+      )
+    }
+    for (const listener of chatListeners) listener({ kind: 'snapshot' })
+    notify()
+    return
+  }
+  if (data.mode === 'append' && isValidChatMessage(data.message)) {
+    const alreadyHad = chatState.messages.some((item) => item.id === data.message.id)
+    chatState.messages = appendChatMessage(chatState.messages, data.message, CHAT_HISTORY_LIMIT)
+    if (!alreadyHad) {
+      if (data.message.accountId !== onlineState.user?.id) {
+        chatState.unread = Math.min(CHAT_HISTORY_LIMIT, chatState.unread + 1)
+      }
+      for (const listener of chatListeners) listener({ kind: 'append', added: data.message })
+    }
+    notify()
+  }
+}
+
+export async function refreshChatOnline(): Promise<void> {
+  if (onlineState.status !== 'online') return
+  try {
+    const data = await requestJson<{ messages: ChatMessage[]; serverTime?: number }>('/api/chat')
+    applyChat({ type: 'chat', mode: 'snapshot', messages: data.messages, serverTime: data.serverTime ?? serverNow() })
+  } catch {
+    // 网络暂时中断时保留本地消息列表。
+  }
+}
+
+export async function sendChatOnline(text: string): Promise<ChatMessage> {
+  chatState.sending = true
+  notify()
+  try {
+    const data = await requestJson<{ ok: boolean; message: ChatMessage; serverTime?: number }>('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    })
+    const alreadyHad = chatState.messages.some((item) => item.id === data.message.id)
+    chatState.messages = appendChatMessage(chatState.messages, data.message, CHAT_HISTORY_LIMIT)
+    markChatSeen()
+    if (!alreadyHad) {
+      for (const listener of chatListeners) listener({ kind: 'append', added: data.message })
+    }
+    return data.message
+  } finally {
+    chatState.sending = false
+    notify()
   }
 }
 

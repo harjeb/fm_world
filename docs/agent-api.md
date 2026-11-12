@@ -195,6 +195,8 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 ### 全服世界
 
 - `get_world` — 读取全服快照，和世界页 / 球队详情一致：`ownClubId`、`clubs[]`（`id`、`name`、`tier`、`conference`、`managed` 是否有教练执教、`rating` RANK、`players` 公开名单、电脑球队的 `facilities`）以及 `divisions[]`（各分区 `round`、`table`、`fixtures`）。只读。
+- `get_chat` — 读取全服聊天记录（最多返回最新的 50 条消息，含发送教练 `username`、所属俱乐部 `clubId` / `clubName`、消息 `text` 与时间戳 `at`）。只读。
+- `send_chat` — `text`：在全服聊天频道发送一条消息（单条最多 200 字，自动折叠换行，含发言间隔限制）。
 - `rename_club` — `name`：联机时修改俱乐部名字。最多 8 个字（按字符算），去掉首尾空格；不能和全服任何其他球队重名（AI 球队或其他教练的球队，比较时忽略大小写和空格）；比赛进行中不能改。改名后全服看到的都是新名字。普通存档保存不能修改俱乐部名字。
 球队只能在注册时选择，注册完成后不能换队，Agent 也不能例外。注册前可用 `GET /api/registration/clubs` 预览空缺二级球队的公开名单，在 `POST /api/register` 中传入 `clubId` 确认；旧的 `choose_club` 操作与 `/api/world/choose-club` 接口均返回错误。注册只继承球队已经存在的全服战绩及已锁定比赛，不重算历史，不增加注册准备期，正式开球时间始终固定为北京时间 12:00 / 20:00。
 

@@ -4,7 +4,7 @@ import { PLAYER_TEAM_ID, inPostseason, matchdayCountdown, nextMatchCountdown, ne
 import { gameDateOf } from '../../game/calendar.ts'
 import { APP_VERSION } from '../../game/changelog.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
-import { isOnlineMode, marketState, onlineKickoffPending, onlineState, serverNow } from '../../online.ts'
+import { chatState, isOnlineMode, marketState, onlineKickoffPending, onlineState, serverNow } from '../../online.ts'
 import { clubLook, crest } from '../components.ts'
 import { countdownText, esc } from '../format.ts'
 import { leadingBid } from '../../game/auction.ts'
@@ -117,6 +117,13 @@ function auctionChip(): string {
   return `<button class="btn ghost auction-chip" data-action="open-auctions" title="全服自由球员竞拍">${icon('coin', 15)}<span>竞拍 ${marketState.auctions.length}</span><span class="countdown" data-countdown-end="${soonest}">${countdownText(soonest - serverNow())}</span></button>`
 }
 
+/** 全服聊天入口：未读消息数在顶栏提示。 */
+function chatChip(): string {
+  const unread = isOnlineMode() && !ui.chatOpen ? chatState.unread : 0
+  const badge = unread > 0 ? `<span class="chat-unread">${unread > 99 ? '99+' : unread}</span>` : ''
+  return `<button class="btn ghost top-chat ${ui.chatOpen ? 'active' : ''}" data-action="chat-toggle" title="全服聊天（保留最新 50 条）">${icon('chat', 15)}<span class="optional">聊天</span>${badge}</button>`
+}
+
 export function renderTopbar(): string {
   const economy = economyOf(game)
   const online = onlineState.status === 'online'
@@ -137,6 +144,7 @@ export function renderTopbar(): string {
     <div class="top-actions">
       <div class="top-controls">
         ${auctionChip()}
+        ${chatChip()}
         <button class="btn ghost top-version" data-action="changelog-open" title="查看版本更新说明">${icon('info', 15)}<span>${esc(APP_VERSION)}</span><span class="optional">更新说明</span></button>
         <button class="btn ghost top-account" data-action="account-open">${icon('user', 15)}<span class="account-name">${account}</span>${sync ? `<span class="sync-state ${onlineState.connected ? 'ok' : 'muted'}">${sync}</span>` : ''}</button>
         <button class="btn ghost" data-action="new-game" title="开始新游戏">${icon('newgame', 15)}<span class="optional">新游戏</span></button>
