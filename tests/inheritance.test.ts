@@ -60,4 +60,38 @@ describe('skill inheritance', () => {
       expect(received.has('rainbow')).toBe(tier === 'rainbow')
     }
   })
+
+  it('allows replacing an existing skill of the same category when slots are full, preserving old skill on failure', () => {
+    // 跨类别替换（用主技能去顶辅助技能）应被拒绝
+    const { session: badSession, mentor: badMentor } = setup(1)
+    badSession.candidate.skills = ['safe_pass', 'one_touch', 'box_hunter', 'long_shot', 'injury_prevention']
+    expect(validateInheritance(badSession, badMentor, 'through_ball', 'injury_prevention')).toBeTruthy()
+    expect(validateInheritance(badSession, badMentor, 'through_ball', 'one_touch')).toBeNull()
+
+    let sawSuccess = false
+    let sawFailure = false
+    for (let seed = 1; seed <= 50 && (!sawSuccess || !sawFailure); seed++) {
+      const { session, mentor } = setup(seed)
+      mentor.skillTiers = { through_ball: 'gold' }
+      session.candidate.skills = ['safe_pass', 'one_touch', 'box_hunter', 'long_shot']
+      session.candidate.skillTiers = { safe_pass: 'gold', one_touch: 'silver', box_hunter: 'silver', long_shot: 'silver' }
+      const outcome = mentorSkill(session, mentor, 'through_ball', 'one_touch')
+      expect(outcome.ok).toBe(true)
+      if (!outcome.ok) continue
+      if (outcome.success) {
+        sawSuccess = true
+        expect(outcome.replaced).toBe('one_touch')
+        expect(session.candidate.skills).toEqual(['safe_pass', 'through_ball', 'box_hunter', 'long_shot'])
+        expect(session.candidate.skillTiers.one_touch).toBeUndefined()
+        expect(session.candidate.skillTiers.through_ball).toBe(outcome.tier)
+      } else {
+        sawFailure = true
+        expect(outcome.replaced).toBeUndefined()
+        expect(session.candidate.skills).toEqual(['safe_pass', 'one_touch', 'box_hunter', 'long_shot'])
+        expect(session.candidate.skillTiers.one_touch).toBe('silver')
+      }
+    }
+    expect(sawSuccess).toBe(true)
+    expect(sawFailure).toBe(true)
+  })
 })

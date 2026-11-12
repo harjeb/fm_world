@@ -1,10 +1,12 @@
 import { PLAYER_TEAM_ID, currentRoundFixtures, inPostseason, matchdayCountdown, nextMatchCountdown, nextSeasonCountdown, playerFixture, teamName } from '../../game/season.ts'
+import { computeTeamRankTrend } from '../../game/standings-history.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
 import { clubRatings } from '../../game/club-rating.ts'
 import { leaderPanels } from '../leaderboard.ts'
+import { renderRankTrendChart } from '../rank-chart.ts'
 import { gameDateOf } from '../../game/calendar.ts'
 import { isOnlineMode, onlineKickoffPending, serverNow } from '../../online.ts'
-import { clubName, emptyState, fixtureRow, icon, leagueTable, pageHead, panel, teamForm, resultPill, type FormResult } from '../components.ts'
+import { clubLook, clubName, crest, emptyState, fixtureRow, icon, leagueTable, pageHead, panel, teamForm, resultPill, tag, type FormResult } from '../components.ts'
 import { esc } from '../format.ts'
 import { game, ui } from '../state.ts'
 
@@ -39,6 +41,41 @@ function myFixtures(): string {
       <td class="num">${result || '<span class="muted small">未赛</span>'}</td>
     </tr>`
   }).join('')}</tbody></table></div>`
+}
+
+function myRankTrendPanel(divisionLabel: string): string {
+  const season = game.season
+  const names = new Map<string, string>([
+    [PLAYER_TEAM_ID, game.clubName],
+    ...game.aiTeams.map((team) => [team.id, team.name] as [string, string]),
+  ])
+  if (game.world) {
+    for (const club of game.world.clubs) {
+      if (!names.has(club.id)) names.set(club.id, club.id === PLAYER_TEAM_ID ? game.clubName : club.name)
+    }
+  }
+  const teamIds = season.table.length > 0
+    ? season.table.map((row) => row.teamId)
+    : [PLAYER_TEAM_ID, ...game.aiTeams.map((team) => team.id)]
+  const trend = computeTeamRankTrend({
+    teamId: PLAYER_TEAM_ID,
+    teamIds,
+    fixtures: season.fixtures,
+    names,
+  })
+  const look = clubLook(PLAYER_TEAM_ID)
+  return panel(
+    '本赛季排名变化',
+    renderRankTrendChart(trend, {
+      tier: season.tier,
+      color: look.color,
+      isPlayer: true,
+      clubNames: names,
+    }),
+    {
+      aside: `${crest(look, 16)}<span>${esc(game.clubName)}</span>${tag(esc(divisionLabel))}`,
+    },
+  )
 }
 
 export function renderSeason(): string {
@@ -83,6 +120,7 @@ export function renderSeason(): string {
         ${panel('我的赛程', myFixtures(), { flush: true, aside: `<span class="muted small">近况 ${teamForm(PLAYER_TEAM_ID, season.fixtures).length} 场</span>` })}
       </div>
     </div>
+    ${myRankTrendPanel(division)}
     <div class="grid season-bottom">
       ${leaderPanels(season, { limit: 8 })}
     </div>

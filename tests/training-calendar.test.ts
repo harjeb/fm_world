@@ -38,10 +38,10 @@ describe('calendar training', () => {
       if (d.day === 1 && n % 2) expect(options.map(o => o.id)).toEqual(['exchange'])
       else if (d.day === 5) expect(options.map(o => o.id)).toEqual([n % 2 ? 'match' : 'rest'])
       else {
-        expect(options.length).toBeGreaterThanOrEqual(5)
-        expect(options.length).toBeLessThanOrEqual(6)
+        expect(options).toHaveLength(8)
         expect(new Set(options.map(o => o.id)).size).toBe(options.length)
         expect(options.map(o => o.id)).toEqual(expect.arrayContaining(['mentor', 'rest']))
+        expect(options.filter(o => !!o.gains).length).toBeGreaterThanOrEqual(5)
       }
     }
     expect(trainingDate(11).dayLabel).toBe('周六')
@@ -49,21 +49,29 @@ describe('calendar training', () => {
     expect(trainingDate(15)).toEqual({ week: 2, day: 1, dayLabel: '周一', slot: '上午' })
   })
 
-  it('uses a common game seed and stable daily choices across players and copies', () => {
+  it('uses a common game seed across players and refreshes choices between morning and afternoon', () => {
     const { game, ids } = setup(2)
     const [a, b] = ids.map(id => game.training[id])
     expect(a.scheduleVersion).toBe(1)
     expect(a.actionsTotal).toBe(30)
     expect(a.scheduleSeed).toBe(splitSeed(game.seed, 'training-calendar'))
     expect(b.scheduleSeed).toBe(a.scheduleSeed)
+    let refreshedCount = 0
     for (let day = 2; day <= 14; day++) {
       a.action = b.action = (day - 1) * 2
       const morning = trainingOptions(a)
       expect(trainingOptions(b)).toEqual(morning)
       expect(trainingOptions(structuredClone(a))).toEqual(morning)
       a.action++
-      if (![1, 5].includes(trainingDate(a.action + 1).day)) expect(trainingOptions(a)).toEqual(morning)
+      b.action++
+      const afternoon = trainingOptions(a)
+      expect(trainingOptions(b)).toEqual(afternoon)
+      expect(trainingOptions(structuredClone(a))).toEqual(afternoon)
+      if (![1, 5].includes(trainingDate(a.action + 1).day) && afternoon.map(o => o.id).join(',') !== morning.map(o => o.id).join(',')) {
+        refreshedCount++
+      }
     }
+    expect(refreshedCount).toBeGreaterThan(0)
   })
 
   it('completes a real 30-slot course, retaining exchange records across serialization', () => {
@@ -289,5 +297,46 @@ describe('calendar training', () => {
       expect(s.completed).toBe(n === total)
     }
     expect(game.candidates[ids[0]]).toBeTruthy()
+  })
+
+  it('位置学习、伤病预防、伤病韧性与技能传承在学满后不再出现在候选课程中', () => {
+    const { game, ids } = setup()
+    const s = game.training[ids[0]]
+    s.candidate.skills = ['injury_prevention']
+    for (let seed = 1; seed <= 30; seed++) {
+      s.scheduleSeed = seed
+      for (const action of [1, 2, 3, 4, 5, 6, 7]) {
+        s.action = action
+        const optIds = trainingOptions(s).map(o => o.id)
+        expect(optIds).not.toContain('prevention')
+      }
+    }
+
+    s.candidate.skills = ['injury_prevention', 'injury_resilience']
+    for (let seed = 1; seed <= 30; seed++) {
+      s.scheduleSeed = seed
+      s.action = 2
+      const optIds = trainingOptions(s).map(o => o.id)
+      expect(optIds).not.toContain('prevention')
+      expect(optIds).not.toContain('resilience')
+    }
+
+    s.candidate.positions = { GK: 0, CB: 100, W: 100, CM: 100, ST: 100 }
+    for (let seed = 1; seed <= 40; seed++) {
+      s.scheduleSeed = seed
+      s.action = 2
+      expect(trainingOptions(s).map(o => o.id)).not.toContain('position')
+    }
+
+    // 4 个主技能槽 + 2 个辅助技能槽全部满员时，技能传承仍然保留（允许顶掉已有技能）
+    s.candidate.skills = ['through_ball', 'long_shot', 'safe_pass', 'one_touch', 'injury_prevention', 'injury_resilience']
+    let inheritSeen = false
+    for (let seed = 1; seed <= 40; seed++) {
+      s.scheduleSeed = seed
+      s.action = 2
+      const optIds = trainingOptions(s).map(o => o.id)
+      if (optIds.includes('inherit')) inheritSeen = true
+    }
+    expect(inheritSeen).toBe(true)
   })
 })

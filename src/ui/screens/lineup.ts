@@ -6,7 +6,7 @@ import { ROLES, ROLES_BY_POSITION, roleFit } from '../../game/data/roles.ts'
 import { PLAYABLE_PROFICIENCY, positionMultiplier } from '../../game/ca.ts'
 import { formOf, recentAnalysis, squadForm, type PlayerForm } from '../../game/form.ts'
 import { injuryUntil } from '../../game/injury.ts'
-import { autoSubDisplaySeconds, emptyAutoSubs, validateAutoSubPlan } from '../../game/match/management.ts'
+import { emptyAutoSubs, validateAutoSubPlan } from '../../game/match/management.ts'
 import { LINEUP_LOCK_MS, PLAYER_TEAM_ID, lineupLockState, matchdayCountdown, playerFixture, teamName } from '../../game/season.ts'
 import { isOnlineMode } from '../../online.ts'
 import {
@@ -37,10 +37,12 @@ import {
   type InstructionFieldDef,
   type TacticalInstructionsV2,
 } from '../../game/pes/tactics.ts'
+import { MATCH_PLANS, MATCH_PLAN_GROUPS, isMatchPlanId, type MatchPlanId } from '../../game/pes/match-plan.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
 import { RATING_STOPS, boardMarkings, boardSpot, boardSpotFromPercent, caHeat, cardSelect, clampSpot, clubLook, fitHeat, formBars, heatLegend, icon, injuryLabel, inkOn, meter, pageHead, panel, pick, posBadge, primaryPosition, tag } from '../components.ts'
 import { esc, lineupStyleLabel, pct, playerCA, positionLabel, shortName } from '../format.ts'
 import { morph } from '../morph.ts'
+import { renderAutoSubEditor } from '../auto-sub-editor.ts'
 import { game, ui } from '../state.ts'
 import { chemistryKey } from '../../game/chemistry.ts'
 import { selectChemistryLinks } from '../chemistry-links.ts'
@@ -224,6 +226,44 @@ function tacticalStyleBar(draft: Lineup, disabled: boolean): string {
   </div>`
 }
 
+function matchPlanBar(draft: Lineup, disabled: boolean): string {
+  const planId: MatchPlanId = draft.matchPlan && isMatchPlanId(draft.matchPlan) ? draft.matchPlan : 'standard'
+  const plan = MATCH_PLANS[planId]
+  const categoryTone = plan.category === '进攻'
+    ? 'warn'
+    : plan.category === '防守'
+      ? 'good'
+      : plan.category === '局势' || plan.category === '赛程/挑战'
+        ? 'gold'
+        : ''
+  const categoryBadge = `<span class="tag ${categoryTone}">${esc(plan.category)}</span>`
+  const condDelta = Math.round((plan.conditionFactor - 1) * 100)
+  const staminaBadge = condDelta > 0
+    ? `<span class="tag warn">联赛体能 +${condDelta}%</span>`
+    : condDelta < 0
+      ? `<span class="tag good">联赛省体 ${Math.abs(condDelta)}%</span>`
+      : '<span class="tag">体能标准</span>'
+  const resetBtn = planId !== 'standard'
+    ? `<button class="btn small ghost" data-action="lineup-plan-reset" ${disabled ? 'disabled' : ''}>恢复常规</button>`
+    : ''
+  const tipBody = `定位：${plan.tagline} 触发机制：${plan.triggerSummary} 赛季影响：${plan.seasonEffect} 挑战影响：${plan.challengeEffect} 优势：${plan.pros} 风险：${plan.cons}`
+  return `<div class="tac-style-bar tac-plan-bar">
+    <div class="tac-style-pick">
+      <label class="tac-style-label" for="lineup-match-plan">下场计划</label>
+      <select id="lineup-match-plan" class="compact tac-style-select" data-match-plan aria-label="下场比赛计划" ${disabled ? 'disabled' : ''}>
+        ${MATCH_PLAN_GROUPS.map((group) => `<optgroup label="${esc(group.category)}">${group.plans.map((item) => `<option value="${item.id}" ${planId === item.id ? 'selected' : ''}>${esc(item.name)}</option>`).join('')}</optgroup>`).join('')}
+      </select>
+      ${categoryBadge}
+      ${staminaBadge}
+      ${resetBtn}
+    </div>
+    <div class="tac-style-meta" ${tipAttrs(`比赛计划 · ${plan.name}`, tipBody)}>
+      <span class="tac-style-tagline">${esc(plan.tagline)} <span class="muted">（${esc(plan.triggerSummary)}）</span></span>
+      <span class="tac-style-tradeoff"><b class="good-text">赛季</b> ${esc(plan.seasonEffect)} · <b class="plan-chal-text">挑战</b> ${esc(plan.challengeEffect)} · <b class="good-text">优</b> ${esc(plan.pros)} · <b class="warn-text">忌</b> ${esc(plan.cons)}</span>
+    </div>
+  </div>`
+}
+
 function tacticsBar(draft: Lineup, formation: FormationDef): string {
   const starters = draft.starters.flatMap((starter) => {
     const player = playerOf(starter.playerId)
@@ -252,9 +292,22 @@ function coachCheck(draft: Lineup): string {
   const autoErrors = validateAutoSubPlan(game.roster, draft, autoSubs)
   const injured = game.roster.filter((player) => (draft.starters.some((starter) => starter.playerId === player.id) || draft.bench.includes(player.id)) && injuryUntil(game, player))
   const suspensions = Object.entries(game.suspensions ?? {})
+  const planId = draft.matchPlan && isMatchPlanId(draft.matchPlan) ? draft.matchPlan : 'standard'
+  const plan = MATCH_PLANS[planId]
+  const starterConds = draft.starters.flatMap((s) => {
+    const p = playerOf(s.playerId)
+    return p ? [p.condition ?? 100] : []
+  })
+  const avgCond = starterConds.length ? starterConds.reduce((sum, v) => sum + v, 0) / starterConds.length : 100
+  const planLine = planId === 'standard'
+    ? ''
+    : plan.conditionFactor >= 1.12 && avgCond < 78
+      ? `<li class="check-line warn">${icon('alert', 14)}<span>下场计划「${esc(plan.name)}」高耗能，当前首发平均体能 ${Math.round(avgCond)}%，联赛出战需提防末段崩盘（挑战赛满体能不受影响）。</span></li>`
+      : `<li class="check-line good">${icon('check', 14)}<span>下场计划「${esc(plan.name)}」已部署：将同步作用于赛季联赛与挑战赛。</span></li>`
   const line = (tone: string, iconName: 'alert' | 'check' | 'cross' | 'flag', text: string) => `<li class="check-line ${tone}">${icon(iconName, 14)}<span>${esc(text)}</span></li>`
   return `<ul class="check-list">
     ${check.valid ? line('good', 'check', '阵容合法，可以开始比赛。') : check.errors.map((error) => line('bad', 'alert', error)).join('')}
+    ${planLine}
     ${autoErrors.map((error) => line('bad', 'alert', error)).join('')}
     ${check.warnings.map((warning) => line('warn', 'alert', warning)).join('')}
     ${injured.map((player) => line('warn', 'cross', `${player.name}：${injuryLabel(player)}`)).join('')}
@@ -402,23 +455,39 @@ function pickingBanner(selectedId: string | null, formation: FormationDef): stri
 
 /* ---------- 自动换人 ---------- */
 
-function autoSubPanel(draft: Lineup): string {
+function autoSubPanel(draft: Lineup, onlineLock = false): string {
   const autoSubs = ui.autoSubsDraft ?? emptyAutoSubs()
-  const timed = autoSubs.timed.map((rule, index) => `<div class="auto-sub-row">
-      <label>分钟 <input aria-label="定时换人时间（分钟）" type="number" min="0.1" max="89.9" step="0.1" data-auto-sub-time="${index}" value="${Math.round((autoSubDisplaySeconds(rule) / 60) * 10) / 10}"></label>
-      <select aria-label="定时换下球员" data-auto-sub-out="${index}"><option value="">— 换下首发 —</option>${draft.starters.map((starter) => { const player = playerOf(starter.playerId); return player ? `<option value="${esc(player.id)}" ${rule.outId === player.id ? 'selected' : ''}>${esc(player.name)}</option>` : '' }).join('')}</select>
-      <span class="auto-sub-arrow">${icon('swap', 14)}</span>
-      <select aria-label="定时换上球员" data-auto-sub-in="${index}"><option value="">— 换上替补 —</option>${draft.bench.map((id) => { const player = playerOf(id); return player ? `<option value="${esc(player.id)}" ${rule.inId === player.id ? 'selected' : ''}>${esc(player.name)}</option>` : '' }).join('')}</select>
-      <button class="btn small ghost" data-action="auto-sub-remove" data-index="${index}" aria-label="删除这条规则">${icon('close', 13)}</button>
-    </div>`).join('')
-  return panel('赛前自动换人', `
-    <div class="auto-sub-rules">
-      <label class="field-inline" for="auto-sub-stamina"><span>体力低于</span><select id="auto-sub-stamina" class="compact"><option value="">关闭</option>${Array.from({ length: 99 }, (_, i) => i + 1).map((value) => `<option value="${value}" ${autoSubs.staminaBelow === value ? 'selected' : ''}>${value}%</option>`).join('')}</select></label>
-      <label class="field-inline check-field" for="auto-sub-injury"><input type="checkbox" id="auto-sub-injury" ${autoSubs.onInjury ? 'checked' : ''}><span>受伤后自动换人</span></label>
-    </div>
-    ${timed}
-    <p class="hint">修改后请保存阵容，从下一场生效。手动与自动共用 ${MAX_SUBS} 次；按受伤、定时、体力顺序处理。受伤和体力换人只会选学过该位置的替补，体力换人还要求替补体力不低于阈值，避免连续换下新上场的球员；没有合适替补时不会换人。定时换人可以换上任何人，在到时后的下一个比赛事件边界执行。红牌停赛 2 场，累计 3 张黄牌停赛 1 场。伤病跟着球员走，换卡不变；恢复前带伤比赛能力下降 30%，不影响精力和培养。</p>
-  `, { aside: `<button class="btn small" data-action="auto-sub-add" ${autoSubs.timed.length >= MAX_SUBS ? 'disabled' : ''}>${icon('plus', 13)}定时换人</button>` })
+  const formation = FORMATIONS[draft.formationId]
+  const starters = draft.starters.flatMap((starter) => {
+    const player = playerOf(starter.playerId)
+    if (!player) return []
+    const slot = formation?.slots.find((item) => item.id === starter.slotId)
+    return [{
+      slotId: starter.slotId,
+      slotLabel: slot?.label ?? positionLabel(slot?.position ?? primaryPosition(player)),
+      playerId: player.id,
+      name: player.name,
+      position: slot?.position ?? primaryPosition(player),
+      staminaPct: Math.round(player.condition ?? 100),
+    }]
+  })
+  const bench = draft.bench.flatMap((id) => {
+    const player = playerOf(id)
+    if (!player) return []
+    const pos = primaryPosition(player)
+    return [{
+      playerId: player.id,
+      name: player.name,
+      position: pos,
+      proficiency: Math.round(player.positions[pos] ?? 0),
+      staminaPct: Math.round(player.condition ?? 100),
+    }]
+  })
+  const ruleCount = autoSubs.timed.length + (autoSubs.conditionRules?.length ?? 0)
+  return panel('自动换人设置', `
+    ${renderAutoSubEditor({ scope: 'lineup', plan: autoSubs, formationId: draft.formationId, starters, bench, disabled: onlineLock })}
+    <p class="hint">修改后请点击顶部「保存阵容」生效；比赛进行中也可在「教练调整」里随时修改本场设置。手动与自动共用 ${MAX_SUBS} 次换人名额，按受伤、定时、条件规则、全局体力顺序处理。受伤与体力规则只挑学过该位置且未受伤的替补，体力触发还要求替补体力不低于阈值，避免刚换上又立即被换下。红牌停赛 2 场，累计 3 张黄牌停赛 1 场。伤病跟着球员走，换卡不变；恢复前带伤比赛能力下降 30%，不影响精力和培养。</p>
+  `, { aside: `<span class="muted small">${ruleCount ? `已配 ${ruleCount} 条规则` : '支持按位置/体力智能换人'}</span>` })
 }
 
 /* ---------- 战术预设 ---------- */
@@ -800,6 +869,7 @@ function lineupFingerprint(lineup: Lineup): string {
     lineup.tactics,
     lineup.tacticalStyle ?? null,
     lineup.tacticalInstructions ?? null,
+    lineup.matchPlan && lineup.matchPlan !== 'standard' ? lineup.matchPlan : null,
     Object.entries(lineup.customPositions ?? {}).sort(([a], [b]) => a.localeCompare(b)),
     (lineup.presets ?? []).map((preset) => [preset.id, preset.name, preset.createdAt, lineupFingerprint({ ...preset.lineup })]),
   ])
@@ -857,6 +927,7 @@ export function renderLineup(): string {
       <section class="panel">
         ${tacticsBar(draft, formation)}
         ${tacticalStyleBar(draft, onlineLock)}
+        ${matchPlanBar(draft, onlineLock)}
         <div class="tac-body">
           <aside class="tac-plan">${planColumn(draft, formation, onlineLock)}</aside>
           <div class="tac-pitch">
@@ -879,7 +950,7 @@ export function renderLineup(): string {
       <div class="tac-side">
         ${presetsPanel(draft)}
         ${panel('球员', `${pickingBanner(selectedId, formation)}${squadTable(draft, formation, selectedId)}`, { flush: true, aside: heatLegend('表现分', RATING_STOPS) })}
-        ${autoSubPanel(draft)}
+        ${autoSubPanel(draft, onlineLock)}
       </div>
     </div>
   `

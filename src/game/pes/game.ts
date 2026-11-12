@@ -8,17 +8,18 @@
  */
 import { ROLES } from '../data/roles.ts'
 import { MAX_SUBS, customSpotFor } from '../squad.ts'
-import { MATCH_MENTALITY_LABELS, MATCH_TACTICS, autoSubDisplaySeconds } from '../match/management.ts'
+import { MATCH_MENTALITY_LABELS, MATCH_TACTICS, executeTeamAutoSubs, validateLiveAutoSubPlan } from '../match/management.ts'
 import { inBox, progressOf, wideZone } from '../match/pitch.ts'
 import { opponentSide, PITCH_LENGTH, PITCH_WIDTH } from '../match/team.ts'
 import { LOGIC_MATCH_SECONDS } from '../match/time.ts'
 import { needsShootout } from '../match/knockout.ts'
-import type { MatchMentality, Tactics } from '../types.ts'
+import type { AutoSubPlan, MatchMentality, Tactics } from '../types.ts'
 import type { MatchPlayerState, MatchSide, MatchState, MatchTeamInput, MatchTeamState } from '../match/types.ts'
 import { MotionRatings } from './ability.ts'
 import { formationRows } from './formation.ts'
 import { PesSettlement, type PesSettlementJSON } from './settle.ts'
-import { DEFAULT_PARAMS, applyMentalityOverlay, cloneInstructions, legacyTacticsFromInstructions } from './tactics.ts'
+import { evaluateMatchPlan } from './match-plan.ts'
+import { DEFAULT_PARAMS, applyMentalityOverlay, cloneInstructions, instructionsFromLegacyTactics, legacyTacticsFromInstructions } from './tactics.ts'
 import type { TacticalInstructionsV2, TacticsParams } from './tactics.ts'
 import { PesMatch, type PesTeamInit } from './sim.ts'
 import { GAME_RULES, makeGamePitch, type PesEvent, type PesMatchSnapshot, type PesRules, type PesTactics, type PitchSpec } from './spec.ts'
@@ -63,13 +64,18 @@ class MotionSettlement extends PesSettlement {
  * 方向、宽度、逼抢线、频率、攻防转换由新指令独立驱动，避免同一战术叠加两遍（文档 4.1）。
  * 旧配置（没有 instructions）继续走原来的映射，v4 行为不变。
  */
-export function tacticsOf(tactics: Tactics, instructions?: TacticalInstructionsV2): PesTactics {
+export function tacticsOf(
+  tactics: Tactics,
+  instructions?: TacticalInstructionsV2,
+  overrides?: { aggression?: number; staminaMul?: number },
+): PesTactics {
   if (instructions) {
     return {
       width: 0.5,
       direct: 0.5,
       press: 0.5,
-      aggression: 0.5,
+      aggression: overrides?.aggression ?? 0.5,
+      ...(overrides?.staminaMul !== undefined ? { staminaMul: overrides.staminaMul } : {}),
       tempo: DEFAULT_PARAMS.tempoValue[instructions.possession.tempo],
       line: DEFAULT_PARAMS.lineValue[instructions.defense.line],
       instructions,
@@ -82,7 +88,8 @@ export function tacticsOf(tactics: Tactics, instructions?: TacticalInstructionsV
     tempo: { slow: 0.25, normal: 0.5, fast: 0.8 }[tactics.tempo],
     line: { low: 0.2, mid: 0.5, high: 0.8 }[tactics.line],
     press,
-    aggression: 0.35 + 0.3 * press,
+    aggression: overrides?.aggression ?? (0.35 + 0.3 * press),
+    ...(overrides?.staminaMul !== undefined ? { staminaMul: overrides.staminaMul } : {}),
   }
 }
 
@@ -121,7 +128,7 @@ function pesTeam(input: MatchTeamInput, team: MatchTeamState, ratings: MotionRat
   }
   const rows = formationRows(input.formationId, custom)
   return {
-    tactics: tacticsOf(input.tactics, input.instructions),
+    tactics: tacticsOf(team.tactics, team.instructions),
     players: rows.map((row) => {
       const player = team.players.find((item) => item.slotId === row.slotId)
       if (!player) throw new Error(`阵容缺少位置 ${row.slotId}`)
@@ -135,7 +142,7 @@ function pesTeam(input: MatchTeamInput, team: MatchTeamState, ratings: MotionRat
         num: player.number,
         stamina: player.stamina / Math.max(1, player.maxStamina),
         ref: player.id,
-        familiarity: input.familiarity ?? 1,
+        familiarity: team.familiarity ?? input.familiarity ?? 1,
       }
     }),
   }
@@ -181,6 +188,7 @@ export class PesGame {
     refreshMotionAbilities(this.match, this.settlement)
     this.settlement.markStarters(this.match)
     this.settlement.note('kickoff', 'none', `${game.teams[0].name} 对 ${game.teams[1].name}，比赛开始。`, {}, 0)
+    if (this.applyMatchPlans(true)) refreshMotionAbilities(this.match, this.settlement)
   }
 
   static restore(snapshot: PesMatchSnapshot): PesGame {
@@ -214,6 +222,7 @@ export class PesGame {
     if (Math.floor(m.time) !== second) {
       this.applyAutoSubs()
       this.syncLive()
+      this.applyMatchPlans(false)
       refreshMotionAbilities(m, this.settlement)
     }
     if (m.finished) this.afterRegulation()
@@ -380,40 +389,75 @@ export class PesGame {
     return { ok: true }
   }
 
-  /** 自动换人计划（受伤 / 定时 / 体力），每个模拟秒检查一次。移植自现有引擎的 `applyAutoSubs`。 */
+  setAutoSubs(plan: AutoSubPlan, side: MatchSide = 'home', at?: number): { ok: boolean; error?: string } {
+    const g = this.state
+    if (g.finished) return { ok: false, error: '比赛已经结束' }
+    const team = g.teams[side === 'home' ? 0 : 1]
+    const errors = validateLiveAutoSubPlan(team, plan)
+    if (errors.length) return { ok: false, error: errors[0] }
+    team.autoSubs = structuredClone(plan)
+    this.settlement.note('tactic', side, '教练更新了比赛自动换人设置。', {}, at ?? this.match.time)
+    return { ok: true }
+  }
+
+  /** 按比赛计划与实时分钟/净胜球（含杯赛两回合总比分）自动切换战术阶段。 */
+  private applyMatchPlans(isKickoff: boolean): boolean {
+    const g = this.state
+    const minute = g.durationSeconds > 0 ? (this.match.time / g.durationSeconds) * 90 : 0
+    let changed = false
+    for (let idx = 0; idx < g.teams.length; idx++) {
+      const team = g.teams[idx]
+      if (!team.matchPlan || team.matchPlan === 'standard') continue
+      const myScore = team.side === 'home' ? g.score.home : g.score.away
+      const oppScore = team.side === 'home' ? g.score.away : g.score.home
+      const scoreDiff = myScore - oppScore
+      const offsetDiff = g.shootoutOffset
+        ? (team.side === 'home' ? g.shootoutOffset.home - g.shootoutOffset.away : g.shootoutOffset.away - g.shootoutOffset.home)
+        : 0
+      const base = team.baseInstructions ?? instructionsFromLegacyTactics(team.baseTactics ?? team.tactics)
+      team.baseInstructions = base
+      const phase = evaluateMatchPlan(
+        team.matchPlan,
+        base,
+        { minute, scoreDiff, effectiveDiff: scoreDiff + offsetDiff, knockout: this.settlement.knockout },
+        team.baseTactics,
+      )
+      if (!phase || phase.phaseId === team.activePlanPhase) continue
+      team.activePlanPhase = phase.phaseId
+      team.instructions = phase.instructions
+      team.tactics = { ...phase.tactics }
+      this.match.teams[idx].tactics = tacticsOf(team.tactics, team.instructions, {
+        aggression: phase.aggression,
+        staminaMul: phase.staminaMul,
+      })
+      changed = true
+      if (!isKickoff || phase.phaseId !== 'base') {
+        g.instructions.push({ step: g.step, kind: 'tactic', mentality: team.mentality ?? 'balanced', tactics: { ...team.tactics } })
+        this.settlement.note('tactic', team.side, phase.announcement, {}, this.match.time)
+      }
+    }
+    return changed
+  }
+
+  /** 自动换人计划（受伤 / 定时 / 条件 / 体力），每个模拟秒检查一次。 */
   private applyAutoSubs(): void {
     const g = this.state
     for (const team of g.teams) {
-      const plan = team.autoSubs
-      if (!plan) continue
-      const replace = (out: MatchPlayerState, reason: 'injury' | 'stamina'): boolean => {
-        const incoming = this.availableBench(team.side).filter((p) => !p.injured && p.positions[out.position] > 0
-          && (reason !== 'stamina' || p.stamina / Math.max(1, p.maxStamina) * 100 >= plan.staminaBelow!))
-          .sort((a, b) => b.positions[out.position] - a.positions[out.position])[0]
-        return !!incoming && this.substitute(out.id, incoming.id, team.side, reason).ok
-      }
+      if (!team.autoSubs) continue
       this.syncStamina(team)
-      if (plan.onInjury) {
-        for (const out of team.players.filter((p) => p.onPitch && p.injured).sort((a, b) => a.stamina / a.maxStamina - b.stamina / b.maxStamina)) {
-          if (team.subsUsed >= MAX_SUBS) break
-          replace(out, 'injury')
-        }
-      }
-      plan.timed = plan.timed.filter((rule) => {
-        const displayAt = autoSubDisplaySeconds(rule)
-        const atLogic = g.durationSeconds > 0 ? (displayAt / 5400) * g.durationSeconds : 0
-        if (atLogic > this.match.time) return true
-        const out = team.players.find((p) => p.sourceId === rule.outId && p.onPitch)
-        const incoming = team.bench.find((p) => p.sourceId === rule.inId && !p.cameOff && !p.onPitch)
-        if (!out || !incoming || incoming.injured || team.subsUsed >= MAX_SUBS) return false
-        return !this.substitute(out.id, incoming.id, team.side, 'timed').ok
+      const myScore = team.side === 'home' ? g.score.home : g.score.away
+      const oppScore = team.side === 'home' ? g.score.away : g.score.home
+      const offsetDiff = g.shootoutOffset
+        ? (team.side === 'home' ? g.shootoutOffset.home - g.shootoutOffset.away : g.shootoutOffset.away - g.shootoutOffset.home)
+        : 0
+      executeTeamAutoSubs({
+        team,
+        clockSeconds: this.match.time,
+        durationSeconds: g.durationSeconds,
+        scoreDiff: myScore - oppScore + offsetDiff,
+        availableBench: () => this.availableBench(team.side),
+        substitute: (outId, inId, reason) => this.substitute(outId, inId, team.side, reason).ok,
       })
-      if (plan.staminaBelow !== null) {
-        for (const out of team.players.filter((p) => p.onPitch && p.stamina / p.maxStamina * 100 < plan.staminaBelow!).sort((a, b) => a.stamina / a.maxStamina - b.stamina / b.maxStamina)) {
-          if (team.subsUsed >= MAX_SUBS) break
-          replace(out, 'stamina')
-        }
-      }
     }
   }
 

@@ -15,6 +15,7 @@ import { CA_STOPS, attrHeadCell, attributeRadar, attrHeat, caHeat, cardName, car
 import { attrLabel, esc, playerCA, trainingLogText } from '../format.ts'
 import { game, ui } from '../state.ts'
 import { careerStats, fixtureTotals, isOwnPlayer, seasonStats } from '../../game/player-stats.ts'
+import { APP_VERSION, CHANGELOG_RELEASES } from '../../game/changelog.ts'
 import { chemistryPartners } from '../chemistry.ts'
 
 function cardRows(player: Player): string {
@@ -363,3 +364,48 @@ export function renderNegotiationOverlay(): string {
 }
 
 const CONFERENCE_LABELS: Record<string, string> = { north: '北区', south: '南区' }
+
+export function renderChangelogOverlay(): string {
+  if (!ui.changelogOpen) return ''
+  const [latest, ...older] = CHANGELOG_RELEASES
+  if (!latest) return ''
+  return `
+    <div class="overlay" data-action="changelog-close">
+      <div class="modal changelog-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="版本更新说明">
+        <button class="modal-close" data-action="changelog-close" aria-label="关闭">${icon('close', 16)}</button>
+        <div class="changelog-head">
+          <div class="kicker">版本更新说明 · ${esc(APP_VERSION)}</div>
+          <span class="tag good">${esc(latest.version)} · ${esc(latest.date)}</span>
+        </div>
+        <h1>${esc(latest.headline)}</h1>
+        <p class="hint changelog-summary">${esc(latest.summary)}</p>
+        <div class="changelog-list">
+          ${latest.items
+            .map(
+              (item) => `<div class="changelog-card">
+                <div class="changelog-card-head">${tag(item.badge, item.tone ?? '')}<b>${esc(item.title)}</b></div>
+                <p>${esc(item.desc)}</p>
+              </div>`,
+            )
+            .join('')}
+        </div>
+        ${older.length
+          ? `<details class="changelog-history">
+              <summary>往期版本记录（${older.map((r) => esc(r.version)).join(' / ')}）</summary>
+              ${older
+                .map(
+                  (rel) => `<div class="changelog-old-block">
+                    <div class="changelog-old-head"><b>${esc(rel.version)} · ${esc(rel.headline)}</b><span class="muted small">${esc(rel.date)}</span></div>
+                    <ul>${rel.items.map((it) => `<li><b>${esc(it.title)}：</b>${esc(it.desc)}</li>`).join('')}</ul>
+                  </div>`,
+                )
+                .join('')}
+            </details>`
+          : ''}
+        <div class="btn-row modal-actions">
+          <span class="muted small">随时可点击右上角「${esc(APP_VERSION)} 更新说明」再次查看</span>
+          <button class="btn primary" data-action="changelog-close">${icon('check', 14)}我知道了</button>
+        </div>
+      </div>
+    </div>`
+}

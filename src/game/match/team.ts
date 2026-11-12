@@ -6,7 +6,7 @@ import { attrRating } from '../scale.ts'
 import { personKey } from '../injury.ts'
 import { customSpotFor } from '../squad.ts'
 import { FORMATIONS } from '../data/formations.ts'
-import { cloneInstructions } from '../pes/tactics.ts'
+import { cloneInstructions, instructionsFromLegacyTactics } from '../pes/tactics.ts'
 
 export const PITCH_LENGTH = 100
 export const PITCH_WIDTH = 64
@@ -96,6 +96,8 @@ export function buildMatchTeam(input: MatchTeamInput, side: MatchSide): MatchTea
     mp.stats.staminaLeft = Math.round((mp.stamina / Math.max(1, mp.maxStamina)) * 100)
     return mp
   })
+  const activePlan = input.matchPlan && input.matchPlan !== 'standard' ? input.matchPlan : undefined
+  const effectiveInstructions = input.instructions ?? (activePlan ? instructionsFromLegacyTactics(input.tactics) : undefined)
   return {
     side,
     id: input.id,
@@ -104,16 +106,17 @@ export function buildMatchTeam(input: MatchTeamInput, side: MatchSide): MatchTea
     accent: input.accent,
     formationId: input.formationId,
     tactics: { ...input.tactics },
+    ...(activePlan ? { baseTactics: { ...input.tactics }, matchPlan: activePlan } : {}),
     players,
     bench,
     autoSubs: input.autoSubs ? structuredClone(input.autoSubs) : undefined,
     subsUsed: 0,
     ...(input.chemistry && Object.keys(input.chemistry).length ? { chemistry: { ...input.chemistry } } : {}),
-    ...(input.instructions
+    ...(effectiveInstructions
       ? {
           ...(input.tacticalStyle ? { tacticalStyle: input.tacticalStyle } : {}),
-          baseInstructions: cloneInstructions(input.instructions),
-          instructions: cloneInstructions(input.instructions),
+          baseInstructions: cloneInstructions(effectiveInstructions),
+          instructions: cloneInstructions(effectiveInstructions),
           familiarity: input.familiarity ?? 1,
         }
       : {}),

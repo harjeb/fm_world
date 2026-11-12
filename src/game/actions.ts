@@ -1,9 +1,9 @@
-import { ALL_ATTRIBUTES, type AITeam, type AttrKey, type Attributes, type AutoSubPlan, type EventDef, type EventEffect, type EventOption, type GameState, type Lineup, type MatchMentality, type MatchRecord, type Player, type Position, type TrainingAutoConfig, type TrainingExchange, type TrainingSession } from './types.ts'
+import { ALL_ATTRIBUTES, type AITeam, type AttrKey, type Attributes, type AutoSubPlan, type AutoTrainingPresetId, type EventDef, type EventEffect, type EventOption, type GameState, type Lineup, type MatchMentality, type MatchRecord, type Player, type Position, type TrainingAutoConfig, type TrainingExchange, type TrainingSession } from './types.ts'
 import type { GameEngine } from './pes/engine.ts'
 import { restoreEngine } from './pes/engine.ts'
 import { MatchEngine as Engine } from './match/engine.ts'
 import type { MatchState } from './match/types.ts'
-import { branchProbability, createTrainingSession, partnersAt, planTraining, performTrainingAction, trainingActionsTotal, resolveTrainingEvent, confirmCandidate, discardCandidate, keepCandidate, TRAINING_ENERGY_COST, type PerformResult, type ResolveResult, type TrainingRequest, type TrainingPlan } from './training.ts'
+import { branchProbability, createTrainingSession, FAILURE_STAMINA, failureChance, partnersAt, plainChance, planTraining, performTrainingAction, trainingActionsTotal, trainingFatigueCost, resolveTrainingEvent, confirmCandidate, discardCandidate, keepCandidate, TRAINING_ENERGY_COST, type PerformResult, type ResolveResult, type TrainingRequest, type TrainingPlan } from './training.ts'
 import { addTrainedCard, closeFinishedTraining, deleteCard, equipCard, untrainedPlayer, type CardOutcome } from './cards.ts'
 import { newTrainingSeed, saveGame } from './state.ts'
 import { nextSeasonCountdown } from './season.ts'
@@ -22,7 +22,7 @@ import type { CupId } from './data/cup-config.ts'
 import { emptyAutoSubs, validateAutoSubPlan } from './match/management.ts'
 import { injuryUntil, recordMatchInjuries } from './injury.ts'
 import { economyOf } from './economy.ts'
-import { partnerAssignment, trainingDate, trainingOptions, type TrainingActivity } from './training-calendar.ts'
+import { isCooperativeActivity, partnerAssignment, trainingDate, trainingOptions, type TrainingActivity } from './training-calendar.ts'
 import { recordTrainingChemistry } from './chemistry.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 import { teamInputFromAI, teamInputFromLineup, withChemistry } from './match/setup.ts'
@@ -31,7 +31,7 @@ import { eventById } from './data/events.ts'
 import { attrLabel } from './data/attributes.ts'
 import { keyAttrsOf } from './data/key-attrs.ts'
 import { isGoalkeeper } from './ca.ts'
-import { canUseBookOnPlayer } from './legend-learning.ts'
+import { bookLearnChance, canUseBookOnPlayer, eventForSession } from './legend-learning.ts'
 import { cupCeilingBonus, effectiveTrainingCeilings } from './cup-rewards.ts'
 import { MAIN_ATTR_HARD_MAX, mainAttrsFor } from './rating.ts'
 import { settleEnergy } from './energy.ts'
@@ -284,7 +284,7 @@ export function trainingAction(game: GameState, playerId: string, request: Train
   const prepared = prepareTraining(game, playerId, request)
   if (prepared.error || !prepared.ids) return { ok: false, error: prepared.error, completed: prepared.completed ?? false }
   const cooperative = request.kind === 'match' || request.kind === 'combo' || request.kind === 'drill' ||
-    request.kind === 'activity' && ['passing', 'tactics', 'defending', 'corners', 'match', 'exchange', 'gk_crosses', 'gk_distribution', 'gk_positioning'].includes(request.activityId)
+    (request.kind === 'activity' && isCooperativeActivity(request.activityId))
   const trainingPairs: [string, string][] = []
   if (cooperative) {
     for (let i = 0; i < prepared.ids.length; i++) for (let j = i + 1; j < prepared.ids.length; j++) trainingPairs.push([prepared.ids[i], prepared.ids[j]])
@@ -384,7 +384,14 @@ export function autoTrainingConfig(game: GameState, playerId?: string): Training
     if (!ALL_ATTRIBUTES.includes(key) || typeof value !== 'number' || !Number.isFinite(value)) continue
     targets[key] = Math.round(Math.max(0, Math.min(MAIN_ATTR_HARD_MAX, value)))
   }
-  return { enabled: existing?.enabled !== false, autopilot: own?.autopilot === true, mode: existing?.mode === 'targets' || existing?.mode === 'max' ? existing.mode : 'priority', priority, targets }
+  return {
+    enabled: existing?.enabled !== false,
+    autopilot: own?.autopilot === true,
+    ...(existing?.preset ? { preset: existing.preset } : {}),
+    mode: existing?.mode === 'targets' || existing?.mode === 'max' ? existing.mode : 'priority',
+    priority,
+    targets,
+  }
 }
 
 /** 这名球员的默认优先级：2 个主要属性在前，其余主属性按固定顺序接在后面。 */
@@ -392,6 +399,77 @@ export function defaultAutoPriority(player: Player): AttrKey[] {
   const priority: AttrKey[] = [...keyAttrsOf(player)]
   for (const key of mainAttrsFor(isGoalkeeper(player))) if (!priority.includes(key)) priority.push(key)
   return priority
+}
+
+export type AutoPresetOption = {
+  id: Exclude<AutoTrainingPresetId, 'custom'>
+  label: string
+  tag?: string
+  summary: string
+  mode: TrainingAutoConfig['mode']
+  priority: AttrKey[]
+}
+
+/** 一级简洁菜单针对该球员（外场或门将）提供的快捷培养方案。 */
+export function autoTrainingPresetsFor(player: Player): AutoPresetOption[] {
+  const keys = keyAttrsOf(player)
+  const keyText = keys.map(attrLabel).join(' · ')
+  const def = defaultAutoPriority(player)
+  if (isGoalkeeper(player)) {
+    return [
+      { id: 'signature', label: '招牌特长', tag: '推荐', summary: `优先拉满核心：${keyText}`, mode: 'priority', priority: def },
+      { id: 'max', label: '综合收益', summary: '每回合选总成长最高项，兼顾招牌属性', mode: 'max', priority: def },
+      { id: 'gk_stopper', label: '门线神扑', summary: '主攻扑救反应、一对一与手控球', mode: 'priority', priority: ['reflexes', 'oneOnOne', 'handling', 'composure', 'rushing', 'passing'] },
+      { id: 'gk_sweeper', label: '出击清道夫', summary: '主攻出击拦截、传球发动与扑救反应', mode: 'priority', priority: ['rushing', 'passing', 'reflexes', 'oneOnOne', 'composure', 'handling'] },
+      { id: 'gk_wall', label: '稳健控场', summary: '主攻手控稳健、门前镇定与扑救反应', mode: 'priority', priority: ['handling', 'composure', 'reflexes', 'passing', 'oneOnOne', 'rushing'] },
+    ]
+  }
+  return [
+    { id: 'signature', label: '招牌特长', tag: '推荐', summary: `优先拉满核心：${keyText}`, mode: 'priority', priority: def },
+    { id: 'max', label: '综合收益', summary: '每回合选总成长最高项，兼顾招牌属性', mode: 'max', priority: def },
+    { id: 'finisher', label: '锋线终结', summary: '主攻射术、爆发启动与冲刺速度', mode: 'priority', priority: ['shooting', 'acceleration', 'speed', 'dribbling', 'strength', 'passing', 'tackling'] },
+    { id: 'playmaker', label: '组织传控', summary: '主攻传球调度、盘带控球与爆发', mode: 'priority', priority: ['passing', 'dribbling', 'acceleration', 'shooting', 'speed', 'tackling', 'strength'] },
+    { id: 'winger', label: '边路爆破', summary: '主攻冲刺速度、爆发变向与盘带突破', mode: 'priority', priority: ['speed', 'acceleration', 'dribbling', 'passing', 'shooting', 'strength', 'tackling'] },
+    { id: 'defender', label: '防守铁闸', summary: '主攻抢断拦截、身体对抗与回追速度', mode: 'priority', priority: ['tackling', 'strength', 'speed', 'acceleration', 'passing', 'dribbling', 'shooting'] },
+  ]
+}
+
+/** 根据当前自动配置推断匹配的一级预设 ID；若为最低目标或手动调过顺序则返回 custom。 */
+export function resolveAutoPresetId(player: Player, config: TrainingAutoConfig): AutoTrainingPresetId {
+  if (config.mode === 'targets') return 'custom'
+  if (config.preset === 'custom') return 'custom'
+  const presets = autoTrainingPresetsFor(player)
+  const mains = mainAttrsFor(isGoalkeeper(player))
+  const currentOrder = config.priority.filter((key) => mains.includes(key))
+  const sameOrder = (a: AttrKey[], b: AttrKey[]) => a.length === b.length && a.every((key, i) => key === b[i])
+  if (config.preset) {
+    const chosen = presets.find((item) => item.id === config.preset)
+    if (chosen && chosen.mode === config.mode && (chosen.mode === 'max' || sameOrder(chosen.priority, currentOrder))) {
+      return chosen.id
+    }
+  }
+  if (config.mode === 'max') return 'max'
+  const matched = presets.find((item) => item.mode === 'priority' && sameOrder(item.priority, currentOrder))
+  return matched ? matched.id : 'custom'
+}
+
+export function autoPresetLabel(player: Player, config: TrainingAutoConfig): string {
+  const id = resolveAutoPresetId(player, config)
+  if (id === 'custom') return config.mode === 'targets' ? '目标补齐' : '自定义顺序'
+  return autoTrainingPresetsFor(player).find((item) => item.id === id)?.label ?? '招牌特长'
+}
+
+/** 选用一级菜单的快捷预设：写回对应模式与属性优先级。 */
+export function applyAutoTrainingPreset(game: GameState, playerId: string, presetId: Exclude<AutoTrainingPresetId, 'custom'>): TrainingAutoConfig | null {
+  const player = game.roster.find((item) => item.id === playerId)
+  if (!player) return null
+  const preset = autoTrainingPresetsFor(player).find((item) => item.id === presetId)
+  if (!preset) return null
+  return setAutoTrainingConfig(game, playerId, {
+    preset: preset.id,
+    mode: preset.mode,
+    priority: [...preset.priority],
+  })
 }
 
 /** 改某名球员的自动培养设置（策略或开关），只动他自己的那份；保存由界面负责。 */
@@ -441,7 +519,7 @@ function autoTrainingWeights(session: TrainingSession, config: TrainingAutoConfi
       .sort((a, b) => b.weight - a.weight || order.indexOf(a.key) - order.indexOf(b.key))
   }
   return order
-    .map((key, index) => ({ key, weight: order.length - index }))
+    .map((key, index) => ({ key, weight: (order.length - index) ** 2 }))
     .filter((item) => below(item.key))
 }
 
@@ -450,13 +528,14 @@ function autoActivityGains(activity: TrainingActivity, gk: boolean): Partial<Rec
   return (gk ? activity.goalkeeperGains ?? activity.gains : activity.gains) ?? {}
 }
 
-/** 在当前时段允许的项目里挑一个对目标属性收益最大的；都不涨属性时返回 null。 */
+/** 在当前时段可执行且扣得起体力的项目里，挑一个对目标属性收益最大的；都不涨属性时返回 null。 */
 function autoBestActivity(session: TrainingSession, weights: AutoWeight[]): TrainingActivity | null {
   if (weights.length === 0) return null
   const gk = isGoalkeeper(session.candidate)
   let best: TrainingActivity | null = null
   let bestScore = 0
   for (const activity of trainingOptions(session)) {
+    if (activity.cost !== undefined && session.fatigue + trainingFatigueCost(session, activity.cost) > 100) continue
     const gains = autoActivityGains(activity, gk)
     let score = 0
     for (const item of weights) {
@@ -471,34 +550,72 @@ function autoBestActivity(session: TrainingSession, weights: AutoWeight[]): Trai
   return best
 }
 
-/** 没有值得练的项目时：体力吃紧先恢复，否则找导师推进事件。 */
+/**
+ * 自动培养是否应当在本时段主动休息（按失败率与后续赛程智能控体）：
+ * 1. 最后一个时段（剩余 ≤ 1）只要还能扣得起训练体力就不休息，避免白白浪费最后一次成长；
+ * 2. 当前体力 ≤ 30（`failureChance(stamina) > 0`，此时出现 5%–50% 失败率且失去大成功/完美成功）立即休息；
+ * 3. 下一个时段若是强制比赛日（周一上午交流赛 / 周五上午队内比赛，无恢复选项），且本时段训练会把体力压进 ≤ 30 的失败区间，则提前休息保证比赛品质；
+ * 4. 体力逼近 30（31–36）且当前「恢复」站了 ≥ 2 名陪练（+46~+54 体力）而目标课无陪练时，顺势提前恢复。
+ */
+export function shouldAutoRest(session: TrainingSession, options: TrainingActivity[], bestActivity: TrainingActivity | null): boolean {
+  const rest = options.find((item) => item.id === 'rest' && !item.noRecovery)
+  if (!rest) return false
+  const remaining = trainingActionsTotal(session) - session.action
+  const stamina = 100 - session.fatigue
+  if (!bestActivity) return session.fatigue >= 35
+  if (remaining <= 1) return false
+  if (failureChance(stamina) > 0) return true
+  const nextAction = session.action + 2
+  if (nextAction <= trainingActionsTotal(session)) {
+    const nextDate = trainingDate(nextAction)
+    const mandatoryMatchNext = (nextDate.day === 1 && nextDate.slot === '上午') || (nextDate.day === 5 && nextDate.slot === '上午')
+    if (mandatoryMatchNext) {
+      const cost = trainingFatigueCost(session, bestActivity.cost ?? 0)
+      if (failureChance(stamina - cost) > 0 && stamina <= FAILURE_STAMINA + 16) return true
+    }
+  }
+  if (stamina <= FAILURE_STAMINA + 6 && plainChance(stamina) >= 0.15 && session.partnerIds?.length) {
+    const partners = partnerAssignment(session)
+    if ((partners.rest?.length ?? 0) >= 2 && (partners[bestActivity.id]?.length ?? 0) === 0) return true
+  }
+  return false
+}
+
+/** 没有值得练的项目时：体力进入失败区间或偏低先恢复，否则找导师推进事件。 */
 function autoFallbackActivity(session: TrainingSession, options: TrainingActivity[]): TrainingActivity | undefined {
-  const rest = options.find((item) => item.id === 'rest')
+  const rest = options.find((item) => item.id === 'rest' && !item.noRecovery)
   const mentor = options.find((item) => item.id === 'mentor')
-  if (session.fatigue >= 60 && rest) return rest
+  if ((failureChance(100 - session.fatigue) > 0 || session.fatigue >= 45) && rest) return rest
   return mentor ?? rest ?? options[0]
 }
 
-/** 事件自动选项：按目标属性收益（分支取期望值）排序，拿不到收益就选第一个。 */
+/** 事件自动选项：支持技能书事件，按目标属性期望收益排序；低体力时兼顾疲劳增减。 */
 function autoEventOption(session: TrainingSession, event: EventDef, weights: AutoWeight[]): EventOption {
   const weightOf = new Map(weights.map((item) => [item.key, item.weight]))
+  const lowStamina = 100 - session.fatigue <= FAILURE_STAMINA + 8
   const score = (effect: EventEffect | undefined): number => {
     let total = 0
     for (const [key, gain] of Object.entries(effect?.attrs ?? {}) as [AttrKey, number][]) {
       const weight = weightOf.get(key) ?? 0
       if (gain > 0 && weight > 0) total += gain * weight
     }
+    if (lowStamina && effect?.fatigue) total -= effect.fatigue * 0.15
     return total
   }
   let best = event.options[0]
-  let bestScore = -1
+  let bestScore = -Infinity
   for (const option of event.options) {
-    const value = option.branch
+    const value = option.book
       ? (() => {
-          const p = branchProbability(session, option.branch!.check, option.branch!.p)
-          return p * score(option.branch!.success) + (1 - p) * score(option.branch!.failure)
+          const p = bookLearnChance(session.candidate, option.book)
+          return p > 0 ? 500 * p : -1
         })()
-      : score(option.effect)
+      : option.branch
+        ? (() => {
+            const p = branchProbability(session, option.branch!.check, option.branch!.p)
+            return p * score(option.branch!.success) + (1 - p) * score(option.branch!.failure)
+          })()
+        : score(option.effect)
     if (value > bestScore + 1e-9) {
       best = option
       bestScore = value
@@ -509,7 +626,7 @@ function autoEventOption(session: TrainingSession, event: EventDef, weights: Aut
 
 /**
  * 自动培养一步：没有进行中的培养就先开始一轮；有待处理事件就按目标收益选一个；
- * 否则按配置挑出当前最值得练的项目并执行（日历课程只在当天的候选项目里选）。
+ * 否则结合当前失败率与剩余回合判断休息或挑选收益最高的项目执行。
  */
 export function autoTrainingStep(game: GameState, playerId: string): AutoTrainingStepResult {
   const player = game.roster.find((item) => item.id === playerId)
@@ -524,34 +641,38 @@ export function autoTrainingStep(game: GameState, playerId: string): AutoTrainin
   }
   const config = autoTrainingConfig(game, playerId)
   const weights = autoTrainingWeights(session, config)
-  // 先处理事件：最后一个时段触发的事件会挡住培养完成。
+  // 先处理事件（含传奇技能书事件）：最后一个时段触发的事件会挡住培养完成。
   if (session.pendingEventId) {
-    const event = eventById(session.pendingEventId)
+    const event = eventForSession(session, session.pendingEventId) ?? eventById(session.pendingEventId)
     if (!event) return { ok: false, error: '未知的事件配置', completed: false, kind: 'event' }
     const option = autoEventOption(session, event, weights)
     const result = trainingEventChoice(game, playerId, option.id)
     if (!result.ok) return { ok: false, error: result.error ?? '事件结算失败', completed: false, kind: 'event' }
     return { ok: true, completed: result.completed, kind: 'event', label: `${event.title} · ${option.label}` }
   }
-  if (session.action >= trainingActionsTotal(session)) return { ok: true, completed: true, kind: 'done', label: '本轮培养已完成' }
+  const totalActions = trainingActionsTotal(session)
+  if (session.action >= totalActions) return { ok: true, completed: true, kind: 'done', label: '本轮培养已完成' }
   const options = session.scheduleVersion === 1 ? trainingOptions(session) : []
   if (options.length > 0) {
-    let activity: TrainingActivity | null | undefined = autoBestActivity(session, weights)
-    // 体力不够或当天没有能练目标属性的项目时，退到休息/导师。
-    if (!activity || session.fatigue + (activity.cost ?? 0) > 100) activity = autoFallbackActivity(session, options)
+    const best = autoBestActivity(session, weights)
+    let activity: TrainingActivity | undefined = shouldAutoRest(session, options, best)
+      ? options.find((item) => item.id === 'rest' && !item.noRecovery)
+      : (best ?? autoFallbackActivity(session, options))
+    if (!activity) activity = autoFallbackActivity(session, options)
     if (!activity) return { ok: false, error: '当前时段没有可执行的训练项目', completed: false, kind: 'action' }
-    if (activity.cost !== undefined && session.fatigue + activity.cost > 100) {
-      const rest = options.find((item) => item.id === 'rest')
-      if (rest) activity = rest
+    if (activity.cost !== undefined && session.fatigue + trainingFatigueCost(session, activity.cost) > 100) {
+      activity = options.find((item) => item.id === 'rest') ?? options.find((item) => item.id === 'mentor') ?? activity
     }
     const result = trainingAction(game, playerId, { kind: 'activity', activityId: activity.id })
     if (!result.ok) return { ok: false, error: result.error ?? '自动训练失败', completed: false, kind: 'action' }
     return { ok: true, completed: result.completed, kind: 'action', label: activity.label }
   }
-  // 旧课程（没有日历项目）：直接练主属性，体力不够先休息。
-  // 专项训练只能练主属性，自动选择模式下的隐藏属性要跳过。
+  // 旧课程（没有日历项目）：直接练主属性；出现失败率（体力 ≤ 30 且非最后一回合）或体力不足时先休息。
   const top = weights.find((item) => mainAttrsFor(isGoalkeeper(player)).includes(item.key))
-  const request: TrainingRequest = session.fatigue + 12 > 100 ? { kind: 'rest' } : top ? { kind: 'drill', attr: top.key } : { kind: 'rest' }
+  const remaining = totalActions - session.action
+  const drillCost = trainingFatigueCost(session, 12)
+  const needRest = session.fatigue + drillCost > 100 || (remaining > 1 && failureChance(100 - session.fatigue) > 0)
+  const request: TrainingRequest = needRest || !top ? { kind: 'rest' } : { kind: 'drill', attr: top.key }
   const result = trainingAction(game, playerId, request)
   if (!result.ok) return { ok: false, error: result.error ?? '自动训练失败', completed: false, kind: 'action' }
   return { ok: true, completed: result.completed, kind: 'action', label: request.kind === 'drill' ? `专项训练 · ${attrLabel(request.attr)}` : '休息' }
@@ -842,6 +963,23 @@ export function changeMatchTactics(game: GameState, engine: GameEngine, mentalit
   const eventClock = active?.context.isLeague && active ? leagueMatchClockAt(active, active.elapsedSeconds ?? 0) : undefined
   const result = engine.setTactics(mentality, active?.context.homeAway, eventClock)
   if (result.ok) syncActiveEngine(game, engine)
+  return result
+}
+
+export function changeMatchAutoSubs(
+  game: GameState,
+  engine: GameEngine,
+  plan: AutoSubPlan,
+  syncDefault = false,
+): { ok: boolean; error?: string } {
+  const active = game.activeMatch
+  const eventClock = active?.context.isLeague && active ? leagueMatchClockAt(active, active.elapsedSeconds ?? 0) : undefined
+  const result = engine.setAutoSubs(plan, active?.context.homeAway, eventClock)
+  if (!result.ok) return result
+  if (syncDefault && validateAutoSubPlan(game.roster, game.lineup, plan).length === 0) {
+    game.autoSubs = structuredClone(plan)
+  }
+  syncActiveEngine(game, engine)
   return result
 }
 

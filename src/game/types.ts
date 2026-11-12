@@ -394,7 +394,31 @@ export type Tactics = {
 }
 
 export type MatchMentality = 'attack' | 'balanced' | 'defend'
-export type AutoSubPlan = { timed: { atMinute?: number; /** 旧档字段：按旧 10 分钟比赛秒数解释，新计划使用 atMinute。 */ atSeconds?: number; outId: string; inId: string }[]; staminaBelow: number | null; onInjury: boolean }
+export type AutoSubScoreState = 'any' | 'leading' | 'drawing' | 'trailing' | 'not_leading'
+export type AutoSubPreferBy = 'proficiency' | 'stamina' | 'ca'
+export type AutoSubConditionRule = {
+  /** 目标范围：任意位置 / 指定大位置（GK·CB·W·CM·ST） / 指定阵型槽位 / 指定球员 */
+  targetKind: 'any' | 'position' | 'slot' | 'player'
+  targetValue?: string
+  staminaBelow: number
+  minMinute?: number
+  scoreState?: AutoSubScoreState
+  /** 为空或省略时自动挑选同位置最佳可用替补；填替补球员 ID 时定向换上该替补 */
+  inId?: string
+}
+export type AutoSubPlan = {
+  timed: { atMinute?: number; /** 旧档字段：按旧 10 分钟比赛秒数解释，新计划使用 atMinute。 */ atSeconds?: number; outId: string; inId: string }[]
+  staminaBelow: number | null
+  /** 全局体力换人生效位置（缺省代表全部 5 个位置，兼容旧存档）。 */
+  staminaPositions?: Position[]
+  /** 全局体力换人最早生效分钟（0–89.9，缺省 0）。 */
+  staminaMinMinute?: number
+  /** 自动挑选替补时的排序偏好（缺省 'proficiency'）。 */
+  preferBy?: AutoSubPreferBy
+  /** 按体力 + 指定位置/槽位/球员/比分触发的智能换人规则（最多 5 条）。 */
+  conditionRules?: AutoSubConditionRule[]
+  onInjury: boolean
+}
 
 export type Starter = {
   slotId: string
@@ -411,6 +435,8 @@ export type Lineup = {
   tacticalStyle?: import('./pes/tactics.ts').StyleId
   /** 赛前十二项战术指令；缺省时沿用旧五项战术映射。 */
   tacticalInstructions?: import('./pes/tactics.ts').TacticalInstructionsV2
+  /** 下场比赛计划（如全力争胜、龟缩防守等）；缺省或 standard 为常规部署。 */
+  matchPlan?: import('./pes/match-plan.ts').MatchPlanId
   /** 玩家自己摆的位置（0–1 归一化坐标），key 是 starter.slotId。没摆过的位置用阵型默认值。 */
   customPositions?: Record<string, { x: number; y: number }>
   /** 玩家命名保存的战术配置。 */
@@ -1167,11 +1193,25 @@ export type ReviewRecommendation = {
   tone: 'good' | 'warn' | 'bad'
 }
 
-/** 自动培养：按属性优先级练，或者把主属性练到最低目标。 */
+export type AutoTrainingPresetId =
+  | 'signature'
+  | 'max'
+  | 'finisher'
+  | 'playmaker'
+  | 'winger'
+  | 'defender'
+  | 'gk_stopper'
+  | 'gk_sweeper'
+  | 'gk_wall'
+  | 'custom'
+
+/** 自动培养：按预设流派、属性优先级练，或者把主属性练到最低目标。 */
 export type TrainingAutoConfig = {
   enabled: boolean
   /** “自动培养”开关：打开后，这名球员正在进行的培养会自动往后走。默认关。 */
   autopilot?: boolean
+  /** 一级菜单选中的快捷预设；二级细调手动调整后记为 custom。 */
+  preset?: AutoTrainingPresetId
   /** priority：按优先级练满；targets：补到最低目标；max：每次都选属性总成长最多的那一项。 */
   mode: 'priority' | 'targets' | 'max'
   /** 属性优先级，靠前的先练。 */

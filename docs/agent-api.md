@@ -35,7 +35,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 - `auto_lineup` — 自动按阵型选人。
   - `formationId?`: `"4-4-2" | "4-3-3" | "4-2-3-1" | "3-5-2" | "5-3-2" | "4-1-4-1" | "3-4-3" | "4-1-2-1-2"`
-- `set_lineup` — 提交完整阵容（支持 11 套战术风格模板与十二项战术指令）。
+- `set_lineup` — 提交完整阵容（支持 11 套战术风格模板、十二项战术指令与 14 套下场比赛计划）。
   ```json
   {
     "action": "set_lineup",
@@ -44,6 +44,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
       "starters": [{ "slotId": "gk", "playerId": "...", "role": "gk_line" }],
       "bench": ["playerId1", "playerId2", "playerId3"],
       "tacticalStyle": "highPress",
+      "matchPlan": "allOutWin",
       "tacticalInstructions": {
         "possession": { "focus": "balanced", "passing": "mixed", "tempo": "fast", "width": "normal" },
         "transition": { "onGain": "counter", "onLoss": "counterpress" },
@@ -56,20 +57,32 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
     }
   }
   ```
-  `slotId` 与可选职责见 `state.formations`、`state.roles`；全部可用战术风格模板（`blank / control / highPress / tikiTaka / verticalTiki / wingPlay / longBall / fluidCounter / directCounter / catenaccio / parkBus`）及展开指令见 `state.tacticalStyles`，当前阵容的战术执行度（0.50–1.00）见 `state.lineupAnalysis.tacticalFamiliarity`。仅传 `tacticalStyle` 时自动展开该风格模板指令；同时传 `tacticalInstructions` 时可逐项微调（`tactics` 五字段会自动同步）；旧调用只传 `tactics` 仍兼容。首发必须 11 人（占满阵型的 11 个位置）、1 名门将，替补最多 7 人。边路位置（`W`）同时包括边后卫、边前卫和边锋，站得靠后的是边后卫（默认职责 `w_back`）。也可在顶层同时传 `autoSubs`，以便一次保存新阵容和匹配的新换人计划。已有定时计划若与新阵容冲突，须修改或清除计划后才能保存。
+  `slotId` 与可选职责见 `state.formations`、`state.roles`；全部可用战术风格模板（`blank / control / highPress / tikiTaka / verticalTiki / wingPlay / longBall / fluidCounter / directCounter / catenaccio / parkBus`）及展开指令见 `state.tacticalStyles`，全部可用下场比赛计划（`standard / allOutWin / parkTheBus / fastStart / protectLead / lateSiege / counterTrap / highPressBlitz / wingBombard / controlTempo / conserveStamina / underdogGrind / twoGoalCushion / cupHoldout`）见 `state.matchPlans`，当前阵容的战术执行度（0.50–1.00）见 `state.lineupAnalysis.tacticalFamiliarity`。仅传 `tacticalStyle` 时自动展开该风格模板指令；同时传 `tacticalInstructions` 时可逐项微调（`tactics` 五字段会自动同步）；传 `matchPlan`（或传 `"standard"` / `null` 恢复常规部署）时会在赛季联赛与挑战赛中按分钟和比分自动触发阶段变阵并影响联赛赛后体能消耗；旧调用只传 `tactics` 仍兼容。首发必须 11 人（占满阵型的 11 个位置）、1 名门将，替补最多 7 人。边路位置（`W`）同时包括边后卫、边前卫和边锋，站得靠后的是边后卫（默认职责 `w_back`）。也可在顶层同时传 `autoSubs`，以便一次保存新阵容和匹配的新换人计划。已有定时计划若与新阵容冲突，须修改或清除计划后才能保存。
 
-- `set_auto_subs` — 设置下一场比赛使用的自动换人计划，例如：
+- `set_auto_subs` — 设置下一场比赛使用的自动换人计划，支持全局体力筛选位置、最早分钟、替补挑选策略及按位置/槽位/球员/比分触发的条件换人，例如：
   ```json
   {
     "action": "set_auto_subs",
     "plan": {
       "timed": [{ "atMinute": 30, "outId": "首发球员ID", "inId": "替补球员ID" }],
-      "staminaBelow": 35,
+      "staminaBelow": 60,
+      "staminaPositions": ["W", "CM", "ST"],
+      "staminaMinMinute": 55,
+      "preferBy": "proficiency",
+      "conditionRules": [
+        {
+          "targetKind": "position",
+          "targetValue": "ST",
+          "staminaBelow": 70,
+          "minMinute": 60,
+          "scoreState": "trailing"
+        }
+      ],
       "onInjury": true
     }
   }
   ```
-  `timed` 最多 5 条，`atMinute` 为比赛显示分钟（大于 0、小于 90），指定的首发和替补须属于当前阵容，不能重复使用同一人。旧存档的 `atSeconds` 仍按旧 10 分钟比赛尺度兼容读取，新调用请使用 `atMinute`。到时后在下一个比赛事件边界执行；在此之前被换下或替补已不可用则该计划失效。`staminaBelow` 为 1–99 的百分比，严格低于时启用，`null` 为关闭。伤病和体力规则面向全队，自动挑选能胜任该位置、没有受伤的可用替补；定时换人也不会换上伤员。体力换人只选择体力不低于阈值的替补，避免刚换上又立即换下；没有合适替补则不换。按伤病、定时、体力顺序处理，自动与手动共用 5 次。设置仅影响下一场，`state.autoSubs` 是下场计划、`activeMatch.autoSubs` 是本场剩余计划。旧档默认关闭。
+  `timed` 最多 5 条，`atMinute` 为比赛显示分钟（大于 0、小于 90），指定的首发和替补须属于当前阵容，不能重复使用同一人。旧存档的 `atSeconds` 仍按旧 10 分钟比赛尺度兼容读取，新调用请使用 `atMinute`。`staminaBelow` 为 1–99 的百分比，严格低于时启用，`null` 为关闭；可选 `staminaPositions`（`GK / CB / W / CM / ST` 子集）限制全局体力换人只替换指定位置（例如不换门将和中卫），可选 `staminaMinMinute`（0–89）限制最早触发分钟，可选 `preferBy`（`"proficiency"` 位置熟练优先 / `"stamina"` 充沛体力优先 / `"ca"` 综合能力优先）。可选 `conditionRules`（最多 5 条）按 `targetKind`（`"any" | "position" | "slot" | "player"`）、`targetValue`、`staminaBelow`、可选 `minMinute`、可选 `scoreState`（`"any" | "leading" | "drawing" | "trailing" | "not_leading"`）以及可选指定替补 `inId` 触发。按伤病、定时、条件规则、全局体力顺序处理，自动与手动共用 5 次。设置仅影响下一场，`state.autoSubs` 是下场计划、`activeMatch.autoSubs` 是本场剩余计划。旧档默认关闭。
 
 ### 培养
 
@@ -162,6 +175,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 - `advance_match` — 仅限友谊赛：按步推进（默认 1 步），终场时自动结算。联赛调用会报错。新引擎（`rulesVersion = 4`）一步约等于 1 个模拟秒（整场 900 步）；旧存档里进行中的 v3 比赛一步是一个动作。
   - `steps?`
 - `set_match_tactics` — 用于进行中的友谊赛或升级前仍在进行的旧版联赛；新的联机队列比赛不能在锁定后修改。比赛中选择战术心态：`{ "action": "set_match_tactics", "mentality": "attack" }`（全体进攻）、`"balanced"`（均衡）或 `"defend"`（全体防守）。赛中不接受任意五维战术对象；赛前仍可设置完整战术。全体进攻使用直传、快速、高防线、高压；均衡使用均衡方向、混合传球、正常节奏、中防线和中等逼抢；全体防守使用短传、慢节奏、低防线、低压，场上非门将球员的整体站位也会相应前压或后撤。均衡是固定预设，并非恢复自定义的赛前战术。`activeMatch.mentality` 为当前心态，`null` 表示还在使用赛前战术。
+- `set_match_auto_subs` — 在进行中的比赛里实时更新本场自动换人设置（`plan` 结构同 `set_auto_subs`，校验对象为当前场上球员与可用替补席；可选 `syncDefault: true` 同步更新 `state.autoSubs`）。
 - `substitute` — 进行中的友谊赛（以及升级前仍在进行的旧版联赛）手动换人，与自动换人共用 5 次；新的联机队列比赛请在锁定前设置自动换人。
   - `outId`、`inId`：`get_match` 返回的带主客前缀的比赛球员 ID。
 - `coach_pause` — 仅限友谊赛：使用一次教练暂停，返回当前比赛。联赛不可暂停。

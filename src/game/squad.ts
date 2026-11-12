@@ -11,6 +11,7 @@ import {
   sameInstructions,
   tryValidateInstructions,
 } from './pes/tactics.ts'
+import { isMatchPlanId } from './pes/match-plan.ts'
 
 /** 11 人制：首发人数（每个阵型都是 11 个槽位）。 */
 export const STARTERS = 11
@@ -303,21 +304,22 @@ function rotateTiredStarters(
 function preservedExtras(
   previous: LineupLike | undefined,
   formationId: FormationId,
-): Pick<Lineup, 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions'> {
+): Pick<Lineup, 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions' | 'matchPlan'> {
   if (!previous) return {}
-  const extras: Pick<Lineup, 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions'> = {}
+  const extras: Pick<Lineup, 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions' | 'matchPlan'> = {}
   if (previous.customPositions && previous.formationId === formationId) {
     const spots = Object.fromEntries(Object.entries(previous.customPositions).map(([slotId, spot]) => [slotId, { ...spot }]))
     if (Object.keys(spots).length) extras.customPositions = spots
   }
   if (previous.tacticalStyle) extras.tacticalStyle = previous.tacticalStyle
   if (previous.tacticalInstructions) extras.tacticalInstructions = cloneInstructions(previous.tacticalInstructions)
+  if (previous.matchPlan) extras.matchPlan = previous.matchPlan
   if (previous.presets?.length) extras.presets = structuredClone(previous.presets)
   return extras
 }
 
 /** preservedExtras 只需要这几项，所以完整阵容和“记下的快照”都能传进来。 */
-type LineupLike = Pick<Lineup, 'formationId' | 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions'>
+type LineupLike = Pick<Lineup, 'formationId' | 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions' | 'matchPlan'>
 
 /**
  * 最近一次被校验过的玩家阵容里的“额外东西”。
@@ -356,13 +358,14 @@ export function rememberLineupPositions(roster: Player[], lineup: Lineup): void 
     if (spot && Number.isFinite(spot.x) && Number.isFinite(spot.y)) customSpotByPlayer.set(player, { x: spot.x, y: spot.y })
     else customSpotByPlayer.delete(player)
   }
-  if (lineup.customPositions || lineup.presets?.length || lineup.tacticalStyle || lineup.tacticalInstructions) {
+  if (lineup.customPositions || lineup.presets?.length || lineup.tacticalStyle || lineup.tacticalInstructions || lineup.matchPlan) {
     rememberedSource = {
       players: lineup.starters.flatMap((starter) => playerById(roster, starter.playerId) ?? []),
       formationId: lineup.formationId,
       customPositions: lineup.customPositions ? structuredClone(lineup.customPositions) : undefined,
       tacticalStyle: lineup.tacticalStyle,
       tacticalInstructions: lineup.tacticalInstructions ? cloneInstructions(lineup.tacticalInstructions) : undefined,
+      matchPlan: lineup.matchPlan,
       presets: lineup.presets ? structuredClone(lineup.presets) : undefined,
     }
   }
@@ -542,17 +545,22 @@ export function validateLineup(roster: Player[], lineup: Lineup): LineupValidati
     const instCheck = tryValidateInstructions(lineup.tacticalInstructions)
     if (!instCheck.ok) errors.push(instCheck.error)
   }
+  if (lineup.matchPlan !== undefined && !isMatchPlanId(lineup.matchPlan)) {
+    errors.push(`未知比赛计划：${String(lineup.matchPlan)}`)
+  }
   if (lineup.bench.length < BENCH_SIZE) warnings.push(`替补不足 ${BENCH_SIZE} 人，比赛中换人选择会受限`)
   return { valid: errors.length === 0, errors, warnings }
 }
 
 /**
  * 计算当前首发的战术执行熟练度（0.50–1.00）：
- * - 未启用十二项指令或全部处于中性档（空白模板）时为 1.0；
- * - 启用战术指令时，由首发位置熟练度（权重最高）、战术意识（决断 + 团队配合）与战术研究室阶段（1–25）共同决定。
+ * - 未启用十二项指令或全部处于中性档（空白模板）且未启用特殊比赛计划时为 1.0；
+ * - 启用战术指令或比赛计划时，由首发位置熟练度（权重最高）、战术意识（决断 + 团队配合）与战术研究室阶段（1–25）共同决定。
  */
 export function computeLineupFamiliarity(roster: Player[], lineup: Lineup, tacticsStage = 1): number {
-  if (!lineup.tacticalInstructions || sameInstructions(lineup.tacticalInstructions, NEUTRAL_INSTRUCTIONS)) return 1
+  const neutralInst = !lineup.tacticalInstructions || sameInstructions(lineup.tacticalInstructions, NEUTRAL_INSTRUCTIONS)
+  const neutralPlan = !lineup.matchPlan || lineup.matchPlan === 'standard'
+  if (neutralInst && neutralPlan) return 1
   const formation = FORMATIONS[lineup.formationId]
   if (!formation) return 0.75
   const totalSlots = Math.max(1, formation.slots.length)
@@ -703,31 +711,33 @@ export const AI_REST_BELOW = 80
 
 const restedEnough = (player: Player): boolean => (player.condition ?? 100) >= AI_REST_BELOW
 
-/** 这套首发里有没有该休息的人（或不在名单上的人）。 */
-export function aiNeedsRotation(players: Player[], lineup: Lineup): boolean {
+/** 这套首发里有没有该休息的人、受伤的人（或不在名单上的人）。 */
+export function aiNeedsRotation(players: Player[], lineup: Lineup, injured?: ReadonlySet<string>): boolean {
   const byId = new Map(players.map((player) => [player.id, player]))
   return lineup.starters.some((starter) => {
     const player = byId.get(starter.playerId)
-    return !player || !restedEnough(player)
+    return !player || !restedEnough(player) || !!injured?.has(player.id)
   })
 }
 
 /**
- * 电脑球队这场比赛的阵容：体能低于 80 的先休息。每个位置按顺序找人：
- * 体能够的、会踢这个位置的 → 体能不够但会踢这个位置的 → 体能够的任何人 → 剩下的任何人，
+ * 电脑球队这场比赛的阵容：体能低于 80 或受伤的先休息。每个位置按顺序找人：
+ * 健康且体能够、会踢这个位置的 → 健康且会踢这个位置的 → 健康且体能够的任何人 → 健康的任何人 → 带伤替补兜底，
  * 同一档里和自动填充一样按职责适配 × 位置熟练度挑最强的。所以门将累了也不会让后卫去守门，
- * 实在没人可换时累的人照样上。替补也先用体能够的。只用于这一场，不改存档里的阵容。
+ * 实在没人可换时累的人照样上。替补也先用健康且体能够的。只用于这一场，不改存档里的阵容。
  */
-export function aiRotatedLineup(players: Player[], formationId: FormationId, tactics?: Tactics, previous?: LineupLike): Lineup {
+export function aiRotatedLineup(players: Player[], formationId: FormationId, tactics?: Tactics, previous?: LineupLike, injured?: ReadonlySet<string>): Lineup {
   const formation = FORMATIONS[formationId]
   const used = new Set<string>()
   const starters = [] as Lineup['starters']
   const orderedSlots = [...formation.slots].sort((a, b) => (a.position === 'GK' ? -1 : b.position === 'GK' ? 1 : 0))
   for (const slot of orderedSlots) {
     const free = players.filter((player) => !used.has(player.id))
+    const healthy = injured?.size ? free.filter((player) => !injured.has(player.id)) : free
+    const freshHealthy = healthy.filter(restedEnough)
     const fresh = free.filter(restedEnough)
     const learned = (list: Player[]) => list.filter((player) => player.positions[slot.position] >= PLAYABLE_PROFICIENCY)
-    const pool = [learned(fresh), learned(free), fresh, free].find((list) => list.length) ?? []
+    const pool = [learned(freshHealthy), learned(healthy), freshHealthy, healthy, learned(fresh), learned(free), fresh, free].find((list) => list.length) ?? []
     let bestPlayer: Player | null = null
     let bestRole: RoleId = slot.defaultRole
     let bestScore = -Infinity
@@ -748,11 +758,15 @@ export function aiRotatedLineup(players: Player[], formationId: FormationId, tac
     }
   }
   const remaining = players.filter((player) => !used.has(player.id))
-  const freshBench = remaining.filter(restedEnough)
+  const healthyRemaining = injured?.size ? remaining.filter((player) => !injured.has(player.id)) : remaining
+  const freshBench = healthyRemaining.filter(restedEnough)
+  const benchPool = freshBench.length >= BENCH_SIZE
+    ? freshBench
+    : [...freshBench, ...healthyRemaining.filter((player) => !restedEnough(player)), ...(injured?.size ? remaining.filter((player) => injured.has(player.id)) : [])]
   return {
     formationId,
     starters,
-    bench: buildBench(freshBench.length >= BENCH_SIZE ? freshBench : [...freshBench, ...remaining.filter((player) => !restedEnough(player))]),
+    bench: buildBench(benchPool),
     tactics: tactics ?? { ...formation.defaultTactics },
     ...preservedExtras(previous, formationId),
   }

@@ -55,6 +55,8 @@ export interface PesTactics {
   /** 0 短传 ~ 1 直塞 */
   direct: number
   aggression: number
+  /** 比赛计划阶段场内跑动体能消耗倍率（缺省 1）。 */
+  staminaMul?: number
   /**
    * 首版九项指令（docs/fm-tactical-styles-and-instructions.md 3.3）。
    * 给了它才走新分支：旧滑杆固定在中性基底，方向 / 宽度 / 逼抢线 / 频率 / 转换各自由指令驱动。

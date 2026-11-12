@@ -24,12 +24,13 @@ const FALLBACK_COLOR = '#34d399'
 export type ClubLook = { id: string; name: string; enName?: string; color: string }
 
 export function clubLook(id: string): ClubLook {
+  const onlineClub = id !== PLAYER_TEAM_ID && isOnlineMode() ? publicWorld?.clubs.find((item) => item.id === id) : undefined
   const club = game.world?.clubs.find((item) => item.id === id) ?? game.aiTeams.find((item) => item.id === id)
   return {
     id,
-    name: id === PLAYER_TEAM_ID ? game.clubName : club?.name ?? teamName(game, id),
+    name: id === PLAYER_TEAM_ID ? game.clubName : onlineClub?.name ?? club?.name ?? teamName(game, id),
     enName: club?.enName,
-    color: club?.color ?? FALLBACK_COLOR,
+    color: onlineClub?.color ?? club?.color ?? FALLBACK_COLOR,
   }
 }
 
@@ -107,9 +108,18 @@ export function isHumanClub(id: string): boolean {
   return isOnlineMode() && !!publicWorld?.clubs.find((club) => club.id === id)?.managed
 }
 
-/** 真实玩家执教的球队名右边的绿色人物图标；电脑球队返回空。已知有教练（公开名单的 managed）可以直接传 managed。 */
-export function humanMark(id: string, managed = false): string {
-  return managed || isHumanClub(id) ? `<span class="human-mark" title="真实玩家执教" aria-label="真实玩家执教">${icon('user', 12)}</span>` : ''
+/** 联机时这支玩家球队是否因超过 3 天未上线正由 AI 临时接管（自己的球队当前在线查看，不显示接管）。 */
+export function isAITakeoverClub(id: string): boolean {
+  if (id === PLAYER_TEAM_ID) return false
+  return isOnlineMode() && !!publicWorld?.clubs.find((club) => club.id === id)?.aiTakeover
+}
+
+/** 真实玩家执教的球队名右边的人物图标：正常在线绿色，超过 3 天未上线（AI 接管）黄色；电脑球队返回空。 */
+export function humanMark(id: string, managed = false, aiTakeover = false): string {
+  if (!managed && !isHumanClub(id)) return ''
+  const takeover = id !== PLAYER_TEAM_ID && (aiTakeover || isAITakeoverClub(id))
+  const label = takeover ? '超过 3 天未上线 · AI 接管中' : '真实玩家执教'
+  return `<span class="human-mark${takeover ? ' ai-takeover' : ''}" title="${label}" aria-label="${label}">${icon('user', 12)}</span>`
 }
 
 /** 球队名：任何界面都能点开这支球队的球员名单。 */
@@ -395,14 +405,30 @@ export function leagueTable(rows: SeasonTableRow[], options: { tier?: TierId; fi
   return `<div class="table-scroll"><table class="dt league"><thead><tr>${head.replace('<th class="num">分</th>', `${ratingHead}<th class="num">分</th>`)}</tr></thead><tbody>${body}</tbody></table></div>${options.compact ? '' : zoneLegend(options.tier)}`
 }
 
-export function fixtureRow(fixture: Fixture, options: { pending?: string } = {}): string {
+export function fixtureRow(fixture: Fixture, options: { pending?: string; highlightTeamId?: string | null; showRound?: boolean } = {}): string {
   const score = fixture.played && fixture.score
     ? `${fixture.score.home} : ${fixture.score.away}`
     : options.pending ?? 'vs'
   const shootout = fixture.shootout ? `<small>点球 ${fixture.shootout.home}:${fixture.shootout.away}</small>` : ''
-  return `<div class="fx ${fixture.isPlayer ? 'me' : ''}">
+  const highlighted = options.highlightTeamId
+    ? (fixture.homeId === options.highlightTeamId || fixture.awayId === options.highlightTeamId)
+    : fixture.isPlayer
+  let scoreTip = ''
+  if (fixture.played && (fixture.scorers?.length || fixture.assisters?.length)) {
+    const lines: string[] = []
+    if (fixture.scorers?.length) {
+      lines.push(`进球：${fixture.scorers.map((s) => `${s.name}${s.goals > 1 ? ` ×${s.goals}` : ''}`).join('、')}`)
+    }
+    if (fixture.assisters?.length) {
+      lines.push(`助攻：${fixture.assisters.map((a) => `${a.name}${a.assists > 1 ? ` ×${a.assists}` : ''}`).join('、')}`)
+    }
+    scoreTip = ` ${tipAttrs(`第 ${fixture.round} 轮 · ${clubLook(fixture.homeId).name} ${score} ${clubLook(fixture.awayId).name}`, lines.join('\n'))}`
+  }
+  const roundPrefix = options.showRound ? `<span class="fx-round dim">R${fixture.round}</span>` : ''
+  return `<div class="fx${options.showRound ? ' with-round' : ''} ${highlighted ? 'me' : ''}">
+    ${roundPrefix}
     <span class="fx-team home">${clubName(fixture.homeId)}</span>
-    <span class="fx-score ${fixture.played ? 'played' : ''}">${score}${shootout}</span>
+    <span class="fx-score ${fixture.played ? 'played' : ''}${scoreTip ? ' has-tip' : ''}"${scoreTip}>${score}${shootout}</span>
     <span class="fx-team away">${clubName(fixture.awayId)}</span>
   </div>`
 }

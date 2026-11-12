@@ -1,14 +1,18 @@
 import type { Player } from '../../game/types.ts'
 import { restoreActiveEngine } from '../../game/actions.ts'
+import { FORMATIONS } from '../../game/data/formations.ts'
 import type { GameEngine } from '../../game/pes/engine.ts'
-import { MATCH_MENTALITY_LABELS } from '../../game/match/management.ts'
+import { emptyAutoSubs, MATCH_MENTALITY_LABELS } from '../../game/match/management.ts'
 import { displayClock, MATCH_DISPLAY_SECONDS } from '../../game/match/time.ts'
 import type { MatchPlayerState, MatchTeamState } from '../../game/match/types.ts'
 import { leagueDisplayClock } from '../../game/realtime.ts'
-import { PLAYER_TEAM_ID } from '../../game/season.ts'
+import { lineupLockState, PLAYER_TEAM_ID } from '../../game/season.ts'
 import { MAX_SUBS } from '../../game/squad.ts'
+import { isOnlineMode } from '../../online.ts'
+import { renderAutoSubEditor } from '../auto-sub-editor.ts'
 import { clubLook, compareRow, crest, distinctKit, emptyState, icon, meter, panel, posBadge, primaryPosition } from '../components.ts'
 import { clockText, esc, positionLabel, teamTacticSummary } from '../format.ts'
+import { matchPlanLabel, matchPlanPhaseName } from '../../game/pes/match-plan.ts'
 import { game, ui } from '../state.ts'
 import { renderCommentary, renderEvent } from './review.ts'
 import { isPesEngine, pesViewEngine } from '../pes-pitch.ts'
@@ -59,6 +63,29 @@ function coachPanel(engine: GameEngine): string {
   const team = engine.getTeam(side)
   const players = team.players.filter((player) => player.onPitch)
   const bench = engine.availableBench(side)
+  const autoSubsDraft = ui.matchAutoSubsDraft ?? (ui.matchAutoSubsDraft = structuredClone(team.autoSubs ?? emptyAutoSubs()))
+  const slots = FORMATIONS[team.formationId]?.slots ?? []
+  const editorStarters = players.map((player) => ({
+    slotId: player.slotId,
+    slotLabel: slots.find((s) => s.id === player.slotId)?.label ?? positionLabel(player.position),
+    playerId: player.sourceId,
+    name: player.name,
+    position: player.position,
+    staminaPct: Math.round(staminaOf(player)),
+    injured: player.injured,
+  }))
+  const editorBench = bench.map((player) => {
+    const pos = primaryPosition({ positions: player.positions } as Player)
+    return {
+      playerId: player.sourceId,
+      name: player.name,
+      position: pos,
+      proficiency: Math.round(player.positions[pos] ?? 0),
+      staminaPct: Math.round(staminaOf(player)),
+      injured: player.injured,
+    }
+  })
+  const canSyncDefault = !isOnlineMode() || !lineupLockState(game).locked
   return panel('教练调整', `<div class="coach-grid">
       <div class="coach-block">
         <h3>战术心态</h3>
@@ -67,11 +94,19 @@ function coachPanel(engine: GameEngine): string {
         <button class="btn primary small" data-action="match-tactics-apply">应用战术</button>
       </div>
       <div class="coach-block">
-        <h3>换人</h3>
+        <h3>立即换人</h3>
         <div class="form-row"><label for="match-out">换下</label><select id="match-out" data-keep-value>${players.map((player) => `<option value="${esc(player.id)}">${esc(player.name)} · ${positionLabel(player.position)} · 体力 ${Math.round(staminaOf(player))}%${player.injured ? ' · 受伤' : ''}</option>`).join('')}</select></div>
-        <div class="form-row"><label for="match-in">换上</label><select id="match-in" data-keep-value>${bench.length === 0 ? '<option value="">没有可用替补</option>' : bench.map((player) => { const pos = primaryPosition({ positions: player.positions } as Player); return `<option value="${esc(player.id)}">${esc(player.name)} · ${positionLabel(pos)} 熟练 ${Math.round(player.positions[pos])}${player.injured ? ' · 受伤' : ''}</option>` }).join('')}</select></div>
+        <div class="form-row"><label for="match-in">换上</label><select id="match-in" data-keep-value>${bench.length === 0 ? '<option value="">没有可用替补</option>' : bench.map((player) => { const pos = primaryPosition({ positions: player.positions } as Player); return `<option value="${esc(player.id)}">${esc(player.name)} · ${positionLabel(pos)} 熟练 ${Math.round(player.positions[pos])} · 体力 ${Math.round(staminaOf(player))}%${player.injured ? ' · 受伤' : ''}</option>` }).join('')}</select></div>
         <button class="btn primary small" data-action="match-sub" ${bench.length === 0 ? 'disabled' : ''}>确认换人</button>
         <p class="hint">${game.activeMatch?.context.isLeague ? '联赛继续进行，调整立即生效' : `打开面板不消耗暂停；同一次暂停里第一次调整才用掉 1 次（还剩 ${game.activeMatch?.coachPausesLeft ?? 0} 次）`}；被换下球员不能再次上场。</p>
+      </div>
+      <div class="coach-block coach-block-wide">
+        <h3>自动换人设置（本场实时生效）</h3>
+        ${renderAutoSubEditor({ scope: 'match', plan: autoSubsDraft, formationId: team.formationId, starters: editorStarters, bench: editorBench })}
+        <div class="coach-autosub-actions">
+          ${canSyncDefault ? `<label class="field-inline check-field" for="match-autosubs-sync"><input type="checkbox" id="match-autosubs-sync" ${ui.matchAutoSubsSyncDefault ? 'checked' : ''}><span>同步保存为后续比赛默认设置（当规则与首发名单兼容时）</span></label>` : ''}
+          <button class="btn primary small" data-action="match-autosubs-apply">${icon('check', 13)}应用自动换人</button>
+        </div>
       </div>
     </div>`, { className: 'coach-panel', aside: `<span class="muted small">换人 ${team.subsUsed} / ${MAX_SUBS} 次（含自动）</span>` })
 }
@@ -109,6 +144,9 @@ export function renderMatch(): string {
       </div>
       <div class="match-controls">
         <div class="seg" role="group" aria-label="球场视图"><button class="${ui.pitchView === 'match' ? 'active' : ''}" data-pitch-view="match">比赛</button><button class="${ui.pitchView === 'tracking' ? 'active' : ''}" data-pitch-view="tracking">战术轨迹</button></div>
+        ${mine.matchPlan && mine.matchPlan !== 'standard'
+          ? `<span class="tag gold">计划：${esc(matchPlanLabel(mine.matchPlan))}${matchPlanPhaseName(mine.activePlanPhase) ? ` · ${esc(matchPlanPhaseName(mine.activePlanPhase))}` : ''}</span>`
+          : ''}
         ${active.preplayed
           ? '<span class="muted small">联赛直播：阵容已在开赛前 30 分钟锁定，按现实时间回放整场（约 10 分钟），不可暂停、加速或跳过；结束后才公布比分和战报。</span>'
           : active.context.isLeague

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
-import { autoTrainingConfig, defaultAutoPriority, autoTrainingRunnable, autoTrainingStep, runAutoTraining, setAutoTrainingConfig, startTraining } from '../src/game/actions.ts'
+import { applyAutoTrainingPreset, autoPresetLabel, autoTrainingConfig, autoTrainingPresetsFor, defaultAutoPriority, autoTrainingRunnable, autoTrainingStep, resolveAutoPresetId, runAutoTraining, setAutoTrainingConfig, startTraining } from '../src/game/actions.ts'
 import { trainingOptions } from '../src/game/training-calendar.ts'
 import type { AttrKey } from '../src/game/types.ts'
 import { mainAttrsFor } from '../src/game/scale.ts'
@@ -177,11 +177,20 @@ describe('自动培养', () => {
   })
 
   it('低目标模式先补差距最大的主属性', () => {
-    // seed 1 的周一下午同时提供扑救反应和手抛球／开大脚，便于比较差距。
     const { game, keeper } = setup(1)
     expect(startTraining(game, keeper.id, 3).ok).toBe(true)
     const session = game.training[keeper.id]
-    session.action = 1
+    // 找到同时提供扑救反应与传球类课程的常规时段，便于对照差距。
+    let slot = 1
+    for (let a = 1; a < 30; a++) {
+      session.action = a
+      const ids = trainingOptions(session).map((item) => item.id)
+      if (ids.includes('gk_saves') && ids.includes('gk_distribution')) {
+        slot = a
+        break
+      }
+    }
+    session.action = slot
     const ids = trainingOptions(session).map((item) => item.id)
     expect(ids).toContain('gk_saves')
     expect(ids).toContain('gk_distribution')
@@ -199,7 +208,7 @@ describe('自动培养', () => {
     const second = setup(1)
     expect(startTraining(second.game, second.keeper.id, 3).ok).toBe(true)
     const other = second.game.training[second.keeper.id]
-    other.action = 1
+    other.action = slot
     const otherAttrs = other.candidate.attrs
     second.game.trainingAuto = {
       enabled: true,
@@ -215,7 +224,16 @@ describe('自动培养', () => {
     const { game, keeper } = setup(1)
     expect(startTraining(game, keeper.id, 5).ok).toBe(true)
     const session = game.training[keeper.id]
-    session.action = 1
+    let slot = 1
+    for (let a = 1; a < 30; a++) {
+      session.action = a
+      const ids = trainingOptions(session).map((item) => item.id)
+      if (ids.includes('gk_saves') && ids.includes('gk_distribution')) {
+        slot = a
+        break
+      }
+    }
+    session.action = slot
     const ceilings = session.candidate.ceilings
     const attrs = session.candidate.attrs
     // 让传球和反应都有成长空间，再交换优先级。
@@ -229,13 +247,29 @@ describe('自动培养', () => {
     const second = setup(1)
     expect(startTraining(second.game, second.keeper.id, 5).ok).toBe(true)
     const other = second.game.training[second.keeper.id]
-    other.action = 1
+    other.action = slot
     const otherCeilings = other.candidate.ceilings
     other.candidate.attrs.passing = Math.min(other.candidate.attrs.passing, otherCeilings.passing - 60)
     other.candidate.attrs.reflexes = Math.min(other.candidate.attrs.reflexes, otherCeilings.reflexes - 60)
     second.game.trainingAuto = { enabled: true, mode: 'priority', priority: ['reflexes', 'passing', 'handling', 'rushing', 'oneOnOne', 'composure'], targets: {} }
     expect(autoTrainingStep(second.game, second.keeper.id).ok).toBe(true)
     expect((other.log.at(-1)?.gains ?? {}).reflexes ?? 0).toBeGreaterThan(0)
+  })
+
+  it('一级简洁预设按外场与门将分别提供快捷方案，细调后自动识别为自定义', () => {
+    const { game, field, keeper } = setup(19)
+    expect(autoTrainingPresetsFor(field).map((item) => item.id)).toEqual(['signature', 'max', 'finisher', 'playmaker', 'winger', 'defender'])
+    expect(autoTrainingPresetsFor(keeper).map((item) => item.id)).toEqual(['signature', 'max', 'gk_stopper', 'gk_sweeper', 'gk_wall'])
+    expect(resolveAutoPresetId(field, autoTrainingConfig(game, field.id))).toBe('signature')
+
+    const applied = applyAutoTrainingPreset(game, field.id, 'winger')!
+    expect(applied.priority.slice(0, 3)).toEqual(['speed', 'acceleration', 'dribbling'])
+    expect(resolveAutoPresetId(field, autoTrainingConfig(game, field.id))).toBe('winger')
+    expect(autoPresetLabel(field, autoTrainingConfig(game, field.id))).toBe('边路爆破')
+
+    setAutoTrainingConfig(game, field.id, { mode: 'targets', preset: 'custom', targets: { speed: 1200 } })
+    expect(resolveAutoPresetId(field, autoTrainingConfig(game, field.id))).toBe('custom')
+    expect(autoPresetLabel(field, autoTrainingConfig(game, field.id))).toBe('目标补齐')
   })
 
   it('体力不足时先休息', () => {
@@ -250,6 +284,57 @@ describe('自动培养', () => {
     expect(step.kind).toBe('action')
     expect(step.label).toContain('恢复')
     expect(session.fatigue).toBeLessThan(95)
+  })
+
+  it('根据失败率自动控体：体力 ≤ 30 时主动恢复，强制比赛日前提前恢复，最后一回合仍可冲刺且全程不会练到 1 体力', () => {
+    const { game, field } = setup(15)
+    expect(startTraining(game, field.id, 21).ok).toBe(true)
+    const session = game.training[field.id]
+    session.flags = EVENTS.map((event) => event.id)
+    session.lastEventAction = Object.fromEntries(EVENTS.map((event) => [event.id, 1000]))
+    session.eventCounts = Object.fromEntries(EVENTS.map((event) => [event.id, 1000]))
+
+    // 1. 常规时段体力 28（疲劳 72，已出现失败率且无暴击）：即使还能扣得起训练消耗，也应立即恢复
+    session.action = 2
+    session.fatigue = 72
+    const restStep = autoTrainingStep(game, field.id)
+    expect(restStep.ok).toBe(true)
+    expect(restStep.label).toBe('恢复')
+    expect(session.fatigue).toBeLessThanOrEqual(42)
+
+    // 2. 周四下午（action = 7，下一格是周五上午队内比赛）：体力 38 时若强练会带着 ≤30 体力进队内比赛，应提前恢复
+    session.action = 7
+    session.fatigue = 62
+    const preMatchStep = autoTrainingStep(game, field.id)
+    expect(preMatchStep.ok).toBe(true)
+    expect(preMatchStep.label).toBe('恢复')
+
+    // 3. 最后一个时段（action = 29，第 30 格）：体力 22 仍扣得起训练消耗时，不再白白浪费在恢复上
+    session.action = 29
+    session.fatigue = 78
+    const finalStep = autoTrainingStep(game, field.id)
+    expect(finalStep.ok).toBe(true)
+    expect(finalStep.label).not.toBe('恢复')
+    expect(finalStep.completed).toBe(true)
+
+    // 4. 连续跑多轮真实自动培养，确认不会出现 1 体力硬练的情况
+    for (let seed = 1; seed <= 6; seed++) {
+      const g = createInitialGame(300 + seed)
+      const p = g.roster.find((item) => item.positions.GK <= 0)!
+      expect(startTraining(g, p.id, seed).ok).toBe(true)
+      const s = g.training[p.id]
+      for (let guard = 0; guard < 70 && !s.completed; guard++) {
+        const staminaBefore = 100 - s.fatigue
+        const step = autoTrainingStep(g, p.id)
+        expect(step.ok, step.error).toBe(true)
+        if (step.kind === 'action' && staminaBefore <= 30 && s.action < 30) {
+          // 非强制比赛日且非最后一格，体力 ≤ 30 时只允许恢复或固定赛程项目
+          expect(['恢复', '休整', '交流赛', '队内比赛']).toContain(step.label)
+        }
+        expect(100 - s.fatigue).toBeGreaterThan(5)
+      }
+      expect(s.completed).toBe(true)
+    }
   })
 
   it('有事件时自动选对目标属性收益最大的选项，没有收益就选第一个', () => {

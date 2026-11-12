@@ -6,7 +6,7 @@ import type { MatchTeamInput } from './types.ts'
 import { FORMATIONS } from '../data/formations.ts'
 import { MatchEngine, normalizePossession } from './engine.ts'
 import { PesEngine, type GameEngine } from '../pes/engine.ts'
-import { cloneInstructions, legacyTacticsFromInstructions } from '../pes/tactics.ts'
+import { cloneInstructions, instructionsFromLegacyTactics, legacyTacticsFromInstructions } from '../pes/tactics.ts'
 import { aiNeedsRotation, aiRotatedLineup, autoFillLineup, computeLineupFamiliarity, validateLineup } from '../squad.ts'
 import { prepareMatchInjuries } from '../injury.ts'
 import { LOGIC_MATCH_SECONDS } from './time.ts'
@@ -40,12 +40,18 @@ export function teamInputFromLineup(
     if (!player) throw new Error('替补球员不存在')
     return player
   })
-  const instructions = lineup.tacticalInstructions ? cloneInstructions(lineup.tacticalInstructions) : undefined
+  const activePlan = lineup.matchPlan && lineup.matchPlan !== 'standard' ? lineup.matchPlan : undefined
+  const instructions = lineup.tacticalInstructions
+    ? cloneInstructions(lineup.tacticalInstructions)
+    : activePlan
+      ? instructionsFromLegacyTactics(lineup.tactics)
+      : undefined
   const tactics = instructions ? legacyTacticsFromInstructions(instructions) : { ...lineup.tactics }
   return {
     ...identity,
     formationId: lineup.formationId,
     tactics,
+    ...(activePlan ? { matchPlan: activePlan } : {}),
     ...(instructions
       ? {
           ...(lineup.tacticalStyle ? { tacticalStyle: lineup.tacticalStyle } : {}),
@@ -59,24 +65,24 @@ export function teamInputFromLineup(
 }
 
 /**
- * 电脑球队这一场的首发和替补。rotate：体能低于 80 的先休息（联赛用；有教练的球队按教练自己排的阵容，不传）。
+ * 电脑球队（或 AI 接管球队）这一场的首发和替补。rotate：体能低于 80 或受伤的先休息（联赛用；在线教练自己排的阵容不传）。
  * 轮换只影响这一场，存档里的阵容不变。停赛的人先剔除；剔除后阵容不完整时也按轮换重排
  * （不能退回“只看实力”的自动填充，否则体能低的人会被排进首发）。
  */
-export function aiMatchLineup(ai: AITeam, suspended?: Set<string>, rotate = false): Lineup {
+export function aiMatchLineup(ai: AITeam, suspended?: Set<string>, rotate = false, injured?: ReadonlySet<string>): Lineup {
   const players = suspended?.size ? ai.players.filter((player) => !suspended.has(player.id)) : ai.players
   const tactics = ai.lineup?.tactics ?? ai.tactics
   const intact = players.length === ai.players.length || validateLineup(players, ai.lineup).valid
-  if (rotate && (!intact || aiNeedsRotation(players, ai.lineup))) {
-    return aiRotatedLineup(players, ai.lineup?.formationId ?? ai.formationId, tactics, ai.lineup)
+  if (rotate && (!intact || aiNeedsRotation(players, ai.lineup, injured))) {
+    return aiRotatedLineup(players, ai.lineup?.formationId ?? ai.formationId, tactics, ai.lineup, injured)
   }
   return intact ? ai.lineup : autoFillLineup(players, ai.formationId, ai.tactics)
 }
 
 /** 电脑球队的比赛阵容输入（见 aiMatchLineup）。 */
-export function teamInputFromAI(ai: AITeam, suspended?: Set<string>, options: { rotate?: boolean; tacticsStage?: number } = {}): MatchTeamInput {
+export function teamInputFromAI(ai: AITeam, suspended?: Set<string>, options: { rotate?: boolean; tacticsStage?: number; injured?: ReadonlySet<string> } = {}): MatchTeamInput {
   const players = suspended?.size ? ai.players.filter((player) => !suspended.has(player.id)) : ai.players
-  const lineup = aiMatchLineup(ai, suspended, options.rotate)
+  const lineup = aiMatchLineup(ai, suspended, options.rotate, options.injured)
   return {
     ...teamInputFromLineup(players, lineup, { id: ai.id, name: ai.name, color: ai.color, accent: ai.accent }, { tacticsStage: options.tacticsStage }),
     autoSubs: { timed: [], staminaBelow: null, onInjury: true },

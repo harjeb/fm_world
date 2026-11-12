@@ -2,9 +2,10 @@ import type { Player, Position, SkillId, TrainingLogEntry, TrainingSession } fro
 import { eventById, ROUTE_LABELS } from '../../game/data/events.ts'
 import { POSITION_LABELS } from '../../game/data/attributes.ts'
 import { inheritanceChances, validateInheritance } from '../../game/inheritance.ts'
-import { autoTrainingConfig, previewTraining } from '../../game/actions.ts'
+import { canLearnSkill, skillCategory } from '../../game/data/skills.ts'
+import { autoPresetLabel, autoTrainingConfig, autoTrainingPresetsFor, autoTrainingRunnable, previewTraining, resolveAutoPresetId } from '../../game/actions.ts'
 import { displayCA, initialDisplayCA, mainAttrsFor } from '../../game/rating.ts'
-import { branchProbability, eventChance, eventGrowthScale, planTraining, REST_PARTNER_RECOVERY, trainingActionsTotal, TRAINING_ACTION_INFO, TRAINING_ENERGY_COST, weekOfAction, type TrainingRequest } from '../../game/training.ts'
+import { branchProbability, eventChance, eventGrowthScale, failureChance, planTraining, REST_PARTNER_RECOVERY, trainingActionsTotal, TRAINING_ACTION_INFO, TRAINING_ENERGY_COST, weekOfAction, type TrainingRequest } from '../../game/training.ts'
 import { partnerAssignment, trainingDate, trainingOptions, type TrainingActivityId } from '../../game/training-calendar.ts'
 import { baseBuild, playerCards } from '../../game/cards.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
@@ -24,6 +25,26 @@ export function eligibleTrainingTeammates(session: TrainingSession): Player[] {
   })
 }
 
+const TIER_ORDER: Record<'silver' | 'gold' | 'rainbow', number> = { silver: 0, gold: 1, rainbow: 2 }
+
+/** 当目标技能类别槽位已满时，解析（并默认按银→金→彩挑选）要顶掉的已有同类别技能。 */
+function resolveReplaceSkill(session: TrainingSession | undefined, targetSkill: SkillId | null): SkillId | undefined {
+  if (!session || !targetSkill) return undefined
+  if (session.candidate.skills.includes(targetSkill)) return undefined
+  if (canLearnSkill(session.candidate.skills, targetSkill)) return undefined
+  const category = skillCategory(targetSkill)
+  const replaceable = session.candidate.skills.filter((s) => skillCategory(s) === category)
+  if (replaceable.length === 0) return undefined
+  if (ui.trainingReplaceSkill && replaceable.includes(ui.trainingReplaceSkill)) {
+    return ui.trainingReplaceSkill
+  }
+  const bestDefault = [...replaceable].sort(
+    (a, b) => TIER_ORDER[getSkillTier(session.candidate, a)] - TIER_ORDER[getSkillTier(session.candidate, b)],
+  )[0]
+  ui.trainingReplaceSkill = bestDefault
+  return bestDefault
+}
+
 export function buildTrainingRequest(): TrainingRequest {
   const session = ui.trainingPlayerId ? game.training[ui.trainingPlayerId] : undefined
   const eligible = session ? new Set(eligibleTrainingTeammates(session).map((player) => player.id)) : new Set<string>()
@@ -34,7 +55,15 @@ export function buildTrainingRequest(): TrainingRequest {
     const activity = options.find((option) => option.id === ui.trainingActivity) ?? options[0]
     if (activity) {
       ui.trainingActivity = activity.id as TrainingActivityId
-      return { kind: 'activity', activityId: ui.trainingActivity, ...(activity.group ? { teammateIds } : {}), ...(activity.parameters === 'position' ? { position: ui.trainingPosition } : {}), ...(activity.parameters === 'inherit' ? { mentorId: ui.trainingMentorId, skill: ui.trainingSkill ?? 'injury_prevention' } : {}) }
+      const skill = ui.trainingSkill ?? 'injury_prevention'
+      const replaceSkill = activity.parameters === 'inherit' ? resolveReplaceSkill(session, skill) : undefined
+      return {
+        kind: 'activity',
+        activityId: ui.trainingActivity,
+        ...(activity.group ? { teammateIds } : {}),
+        ...(activity.parameters === 'position' ? { position: ui.trainingPosition } : {}),
+        ...(activity.parameters === 'inherit' ? { mentorId: ui.trainingMentorId, skill, ...(replaceSkill ? { replaceSkill } : {}) } : {}),
+      }
     }
   }
   if (ui.trainingKind === 'drill') return { kind: 'drill', attr: ui.trainingAttr, teammateIds }
@@ -43,7 +72,11 @@ export function buildTrainingRequest(): TrainingRequest {
   if (ui.trainingKind === 'position') return { kind: 'position', position: ui.trainingPosition }
   if (ui.trainingKind === 'rest') return { kind: 'rest' }
   if (ui.trainingKind === 'protection') return { kind: 'protection', focus: ui.trainingProtection }
-  if (ui.trainingKind === 'inherit') return { kind: 'inherit', mentorId: ui.trainingMentorId, skill: ui.trainingSkill ?? 'injury_prevention' }
+  if (ui.trainingKind === 'inherit') {
+    const skill = ui.trainingSkill ?? 'injury_prevention'
+    const replaceSkill = resolveReplaceSkill(session, skill)
+    return { kind: 'inherit', mentorId: ui.trainingMentorId, skill, ...(replaceSkill ? { replaceSkill } : {}) }
+  }
   return { kind: 'mentor' }
 }
 
@@ -107,17 +140,48 @@ export function renderTraining(): string {
   `
 }
 
-/** 自动培养开关 + 自动策略按钮：放在培养卡片右边，开关和策略都是按球员保存的。 */
+/**
+ * 自动培养入口：
+ * - 未开启时点击「自动培养」直接弹出一级简洁预设菜单（选好预设即可一键开练/启动，无需先点策略再开开关）；
+ * - 开启中时点击开关可立即暂停，旁边提供当前预设按钮随时切换或进入二级细调。
+ */
 function autoControls(player: Player): string {
   const config = autoTrainingConfig(game, player.id)
   const on = config.autopilot === true
+  const label = autoPresetLabel(player, config)
+  if (!on) {
+    return `<div class="train-auto">
+      <button class="auto-switch" role="switch" aria-checked="false" data-action="training-auto-toggle" data-player="${esc(player.id)}"><i></i><span>自动培养</span></button>
+    </div>`
+  }
   return `<div class="train-auto">
-    <button class="auto-switch ${on ? 'on' : ''}" role="switch" aria-checked="${on}" data-action="training-auto-toggle" data-player="${esc(player.id)}"><i></i><span>自动培养</span></button>
-    <button class="btn small" data-action="auto-strategy-open" data-player="${esc(player.id)}">自动策略</button>
+    <button class="auto-switch on" role="switch" aria-checked="true" data-action="training-auto-toggle" data-player="${esc(player.id)}" title="点击暂停自动培养"><i></i><span>自动培养中</span></button>
+    <button class="btn ghost small" data-action="auto-strategy-open" data-player="${esc(player.id)}" title="切换预设或细调策略">${esc(label)} ▾</button>
   </div>`
 }
 
-/** 自动策略弹窗：当前选中球员的模式、属性优先级和最低目标。每次改动都由 app.ts 直接写回这名球员的设置并存档。 */
+function autoConfirmButton(player: Player): string {
+  const session = game.training[player.id]
+  const candidate = game.candidates[player.id]
+  const config = autoTrainingConfig(game, player.id)
+  if (autoTrainingRunnable(game, player.id)) {
+    return `<button class="btn primary" data-action="training-auto-confirm" data-player="${esc(player.id)}">${icon(config.autopilot ? 'check' : 'play', 14)}${config.autopilot ? '应用并继续自动培养' : '开启自动培养'}</button>`
+  }
+  if (session?.completed || candidate) {
+    return `<button class="btn" data-action="auto-strategy-close">保存策略（请先处理新卡）</button>`
+  }
+  const energy = player.energy ?? 100
+  if (energy >= TRAINING_ENERGY_COST) {
+    return `<button class="btn primary" data-action="training-auto-confirm" data-player="${esc(player.id)}">${icon('play', 14)}开始并自动培养（-${TRAINING_ENERGY_COST} 精力）</button>`
+  }
+  return `<button class="btn" data-action="auto-strategy-close">保存策略（精力不足 ${TRAINING_ENERGY_COST}）</button>`
+}
+
+/**
+ * 自动培养两级弹窗：
+ * - 1 级菜单（简洁）：展示直观的流派预设卡片 + 一键启动按钮 + 「细调策略」入口；
+ * - 2 级菜单（细调）：支持切换底层模式、调整属性优先级顺序或填写 0–2000 最低目标值。
+ */
 export function renderAutoStrategyOverlay(): string {
   if (!ui.autoStrategyOpen || !ui.trainingPlayerId) return ''
   const player = game.roster.find((item) => item.id === ui.trainingPlayerId)
@@ -125,40 +189,105 @@ export function renderAutoStrategyOverlay(): string {
   const config = autoTrainingConfig(game, player.id)
   const mains = mainAttrsFor(player.positions.GK > 0)
   const session = game.training[player.id]
-  const priority = config.priority.filter((key) => mains.includes(key))
   const keyAttrs = keyAttrsOf(player)
-  // 每轮培养都从**原始属性**开始，自动培养也按这个起点算；
-  // 这里绝不能显示当前装备的球员卡，否则玩家会以为是在现有属性上继续练。
+
+  if (!ui.autoStrategyDetail) {
+    const presets = autoTrainingPresetsFor(player)
+    const activePreset = resolveAutoPresetId(player, config)
+    const customDesc = config.mode === 'targets'
+      ? (() => {
+          const entries = mains.filter((k) => (config.targets[k] ?? 0) > 0).map((k) => `${attrLabel(k)}≥${config.targets[k]}`)
+          return entries.length ? `目标补齐：${entries.slice(0, 3).join('、')}${entries.length > 3 ? '…' : ''}` : '已选择最低目标模式（可在二级菜单设置数值）'
+        })()
+      : `自定义顺序：${config.priority.filter((k) => mains.includes(k)).slice(0, 3).map(attrLabel).join(' → ')}`
+    const cards = presets.map((preset) => `
+      <button type="button" class="auto-preset-card ${activePreset === preset.id ? 'active' : ''}" data-action="training-auto-preset" data-preset="${preset.id}" data-player="${esc(player.id)}">
+        <span class="auto-preset-head">
+          <b>${esc(preset.label)}</b>
+          ${preset.tag ? `<span class="tag gold">${esc(preset.tag)}</span>` : ''}
+        </span>
+        <span class="auto-preset-desc">${esc(preset.summary)}</span>
+      </button>`).join('')
+    const customCard = activePreset === 'custom'
+      ? `<button type="button" class="auto-preset-card active custom" data-action="auto-strategy-detail-open">
+          <span class="auto-preset-head">
+            <b>自定义细调方案</b>
+            <span class="tag info">${config.mode === 'targets' ? '最低目标' : '自定义顺序'}</span>
+          </span>
+          <span class="auto-preset-desc">${esc(customDesc)} · 点击微调</span>
+        </button>`
+      : ''
+    return `
+      <div class="overlay" data-action="auto-strategy-close">
+        <div class="modal auto-modal auto-modal-l1" data-stop="true" role="dialog" aria-modal="true" aria-label="自动培养">
+          <button class="modal-close" data-action="auto-strategy-close" aria-label="关闭">${icon('close', 16)}</button>
+          <div class="kicker">自动培养 · 快捷方向</div>
+          <h1>${esc(player.name)} <small class="muted">${POSITION_LABELS[primaryPosition(player)]} · 招牌：${keyAttrs.map(attrLabel).join(' / ')}</small></h1>
+          <div class="auto-preset-grid">
+            ${cards}
+            ${customCard}
+          </div>
+          <div class="auto-modal-foot">
+            <button type="button" class="btn ghost" data-action="auto-strategy-detail-open">细调属性与目标 ▸</button>
+            <div class="auto-modal-actions">
+              ${autoConfirmButton(player)}
+            </div>
+          </div>
+        </div>
+      </div>`
+  }
+
+  // 二级菜单：细调属性优先级或最低目标值（每轮从原始属性开始算起点）。
+  const priority = config.priority.filter((key) => mains.includes(key))
   const priorityRows = priority.map((key, index) => {
     const start = session?.candidate.attrs[key] ?? player.baseAttrs?.[key] ?? player.attrs[key] ?? 0
     return `<div class="row-line" style="gap:8px">
-      <span class="attr-name" style="flex:1;--attr-color:${attrColor(key)}">${index + 1}. ${attrLabel(key)} ${keyAttrs.includes(key) ? '<span class="tag gold">主要</span>' : ''} <span class="muted small">起点 ${Math.round(start)}</span></span>
+      <span class="attr-name" style="flex:1;--attr-color:${attrColor(key)}">${index + 1}. ${attrLabel(key)} ${keyAttrs.includes(key) ? '<span class="tag gold">主要</span>' : ''} <span class="muted small">当前 ${Math.round(start)}</span></span>
       <button class="btn ghost" data-action="training-auto-priority" data-attr="${key}" data-dir="up" ${index === 0 ? 'disabled' : ''}>↑</button>
       <button class="btn ghost" data-action="training-auto-priority" data-attr="${key}" data-dir="down" ${index === priority.length - 1 ? 'disabled' : ''}>↓</button>
     </div>`
   }).join('')
-  const targetRows = mains.map((key) => `<div class="form-row"><label class="attr-name" style="--attr-color:${attrColor(key)}" for="training-auto-target-${key}">${attrLabel(key)}</label>
+  const targetRows = mains.map((key) => {
+    const start = session?.candidate.attrs[key] ?? player.baseAttrs?.[key] ?? player.attrs[key] ?? 0
+    return `<div class="form-row"><label class="attr-name" style="--attr-color:${attrColor(key)}" for="training-auto-target-${key}">${attrLabel(key)} <small class="muted">(${Math.round(start)})</small></label>
       <input id="training-auto-target-${key}" data-auto-target="${key}" type="number" min="0" max="2000" step="50" value="${config.targets[key] ?? 0}" style="max-width:140px">
-    </div>`).join('')
+    </div>`
+  }).join('')
+  const detailBody = config.mode === 'targets'
+    ? `<div class="auto-detail-pane">
+        <div class="field-title">最低目标（0–2000，优先补差距最大的属性）</div>
+        <div class="auto-target-grid">${targetRows}</div>
+        <div class="btn-row"><button class="btn small" data-action="training-auto-save">保存目标值</button></div>
+      </div>`
+    : config.mode === 'max'
+      ? `<div class="auto-detail-pane">
+          <p class="hint">每回合自动挑选总属性成长最高的课程，并将该球员的招牌属性（<b>${keyAttrs.map(attrLabel).join('、')}</b>）按 3 倍权重计分，兼顾上限效率与球员定位。</p>
+        </div>`
+      : `<div class="auto-detail-pane">
+          <div class="field-title">属性优先级（从上到下依次练满）</div>
+          <div class="rows">${priorityRows}</div>
+          <div class="btn-row"><button class="btn ghost small" data-action="training-auto-reset">恢复默认优先级</button></div>
+        </div>`
   return `
     <div class="overlay" data-action="auto-strategy-close">
-      <div class="modal auto-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="自动策略">
+      <div class="modal auto-modal auto-modal-l2" data-stop="true" role="dialog" aria-modal="true" aria-label="细调自动策略">
         <button class="modal-close" data-action="auto-strategy-close" aria-label="关闭">${icon('close', 16)}</button>
-        <div class="kicker">自动策略</div>
-        <h1>${esc(player.name)}</h1>
-        <div class="btn-row" style="margin-top:0">
-          <div class="seg"><button class="${config.mode === 'priority' ? 'active' : ''}" data-action="training-auto-mode" data-mode="priority">属性优先</button><button class="${config.mode === 'targets' ? 'active' : ''}" data-action="training-auto-mode" data-mode="targets">最低目标</button><button class="${config.mode === 'max' ? 'active' : ''}" data-action="training-auto-mode" data-mode="max">自动选择</button></div>
+        <div class="auto-l2-nav">
+          <button type="button" class="btn ghost small" data-action="auto-strategy-detail-back">← 返回简洁选项</button>
+          <span class="kicker">二级细调 · ${esc(player.name)}</span>
         </div>
-        <div class="grid two">
-          <div>
-            <div class="field-title">属性优先级</div>
-            <div class="rows">${priorityRows}</div>
-            <button class="btn ghost small" data-action="training-auto-reset">恢复默认优先级</button>
+        <div class="btn-row" style="margin-top:6px">
+          <div class="seg">
+            <button class="${config.mode === 'priority' ? 'active' : ''}" data-action="training-auto-mode" data-mode="priority">属性优先</button>
+            <button class="${config.mode === 'targets' ? 'active' : ''}" data-action="training-auto-mode" data-mode="targets">最低目标</button>
+            <button class="${config.mode === 'max' ? 'active' : ''}" data-action="training-auto-mode" data-mode="max">自动选择</button>
           </div>
-          <div>
-            <div class="field-title">最低目标（0–2000）</div>
-            ${targetRows}
-            <button class="btn" data-action="training-auto-save">保存目标值</button>
+        </div>
+        ${detailBody}
+        <div class="auto-modal-foot">
+          <button type="button" class="btn ghost" data-action="auto-strategy-detail-back">← 一级预设</button>
+          <div class="auto-modal-actions">
+            ${autoConfirmButton(player)}
           </div>
         </div>
       </div>
@@ -344,12 +473,16 @@ function logList(session: TrainingSession, player: Player): string {
 }
 
 function previewBox(session: TrainingSession, plan: ReturnType<typeof planTraining>, isGk: boolean): string {
+  const stamina = 100 - session.fatigue
+  const failP = failureChance(stamina)
+  const riskAction = plan.fatigue > 0 || Object.keys(plan.gains).length > 0
   return `<div class="preview">
     <div class="preview-grid">
       <div class="preview-cell wide"><span>属性成长</span><b class="${gainText(plan.gains, isGk) ? 'up' : ''}">${gainText(plan.gains, isGk) || '—'}</b></div>
       <div class="preview-cell"><span>CA</span><b>${displayCA(plan.caBefore).toFixed(1)} → ${displayCA(plan.caAfter).toFixed(1)}</b></div>
-      <div class="preview-cell training-stamina-preview"><span>训练体力</span><b>${100 - session.fatigue} → ${100 - Math.max(0, Math.min(100, session.fatigue + plan.fatigue))}</b></div>
+      <div class="preview-cell training-stamina-preview"><span>训练体力</span><b>${stamina} → ${100 - Math.max(0, Math.min(100, session.fatigue + plan.fatigue))}</b></div>
     </div>
+    ${riskAction && failP > 0 ? `<p class="warn-text small">体力偏低（≤30）：当前失败率 ${pct(failP, 0)}，且无法触发大成功/完美成功，建议先恢复。</p>` : ''}
     ${plan.note ? `<p class="hint">${esc(plan.note)}</p>` : ''}
   </div>`
 }
@@ -385,19 +518,43 @@ function teammatePicker(teammates: Player[]): string {
   </div>`
 }
 
+function pickTrainablePosition(session: TrainingSession, isGk: boolean, current: Position): Position {
+  if (isGk) return 'GK'
+  const choices: Position[] = ['CB', 'W', 'CM', 'ST']
+  if (choices.includes(current) && session.candidate.positions[current] < 100) return current
+  return choices.find((pos) => session.candidate.positions[pos] < 100) ?? (choices.includes(current) ? current : 'CM')
+}
+
 function positionField(session: TrainingSession, isGk: boolean): string {
-  return `<div class="form-row"><label for="training-position">位置</label><select id="training-position">${(isGk ? ['GK'] : ['CB', 'W', 'CM', 'ST']).map((pos) => `<option value="${pos}" ${ui.trainingPosition === pos ? 'selected' : ''}>${positionLabel(pos as Position)} · 当前 ${Math.round(session.candidate.positions[pos as Position])}</option>`).join('')}</select></div>`
+  const choices = (isGk ? ['GK'] : ['CB', 'W', 'CM', 'ST']) as Position[]
+  return `<div class="form-row"><label for="training-position">位置</label><select id="training-position">${choices.map((pos) => {
+    const val = Math.round(session.candidate.positions[pos])
+    const maxed = val >= 100
+    return `<option value="${pos}" ${ui.trainingPosition === pos ? 'selected' : ''} ${maxed ? 'disabled' : ''}>${positionLabel(pos)} · 当前 ${val}${maxed ? '（已满）' : ''}</option>`
+  }).join('')}</select></div>`
 }
 
 function inheritFields(session: TrainingSession, mentors: Player[], mentor: Player | undefined): string {
   if (!mentor || !ui.trainingSkill) return '<p class="muted">阵容中没有拥有技能的可用导师。</p>'
+  const replaceSkill = resolveReplaceSkill(session, ui.trainingSkill)
+  const category = skillCategory(ui.trainingSkill)
+  const replaceable = replaceSkill ? session.candidate.skills.filter((s) => skillCategory(s) === category) : []
   const chances = inheritanceChances(session, mentor, ui.trainingSkill)
-  const error = validateInheritance(session, mentor, ui.trainingSkill)
+  const error = validateInheritance(session, mentor, ui.trainingSkill, replaceSkill)
+  const replaceField = replaceable.length > 0
+    ? `<div class="form-row"><label for="training-replace-skill">顶掉技能</label><select id="training-replace-skill">${replaceable.map((skill) => `<option value="${esc(skill)}" ${replaceSkill === skill ? 'selected' : ''}>${esc(skillName(skill))} · ${skillTierLabel(session.candidate, skill)}</option>`).join('')}</select></div>`
+    : ''
+  const statusMsg = error
+    ? esc(error)
+    : replaceSkill
+      ? `${category === 'main' ? '主技能槽' : '辅助技能槽'}已满：传承成功后将顶掉「${esc(skillName(replaceSkill))}」，未成功则保留原技能`
+      : '符合传承条件'
   return `<div class="form-row"><label for="training-mentor">导师</label><select id="training-mentor">${mentors.map((item) => `<option value="${esc(item.id)}" ${mentor.id === item.id ? 'selected' : ''}>${esc(item.name)}</option>`).join('')}</select></div>
     <div class="form-row"><label for="training-skill">技能</label><select id="training-skill">${mentor.skills.map((skill) => `<option value="${esc(skill)}" ${ui.trainingSkill === skill ? 'selected' : ''}>${esc(skillName(skill))} · ${skillTierLabel(mentor, skill)}</option>`).join('')}</select></div>
+    ${replaceField}
     <p class="small dim">${esc(skillEffectText(ui.trainingSkill, getSkillTier(mentor, ui.trainingSkill)))}</p>
     <p class="small">导师技能：${skillTierLabel(mentor, ui.trainingSkill)} · 成功率 ${pct(chances.success)}；成功后：银 ${pct(1 - chances.gold - chances.rainbow)} / 金 ${pct(chances.gold)} / 彩 ${pct(chances.rainbow)}</p>
-    <p class="small ${error ? 'warn-text' : 'muted'}">${error ? esc(error) : '符合传承条件'}</p>`
+    <p class="small ${error ? 'warn-text' : replaceSkill ? 'warn-text' : 'muted'}">${statusMsg}</p>`
 }
 
 function resolveMentor(session: TrainingSession): { mentors: Player[]; mentor: Player | undefined } {
@@ -428,8 +585,7 @@ function calendarActionPanel(session: TrainingSession): string {
   ui.trainingActivity = selected.id as TrainingActivityId
   const isGk = session.candidate.positions.GK > 0
   if (selected.parameters === 'position') {
-    if (isGk) ui.trainingPosition = 'GK'
-    else if (ui.trainingPosition === 'GK') ui.trainingPosition = 'CM'
+    ui.trainingPosition = pickTrainablePosition(session, isGk, ui.trainingPosition)
   }
   const { mentors, mentor } = resolveMentor(session)
   const request = buildTrainingRequest()
@@ -443,6 +599,7 @@ function calendarActionPanel(session: TrainingSession): string {
         ${options.map((item) => `<button class="activity ${item.id === selected.id ? 'active' : ''}" style="--act-color:${activityColor(isGk ? item.goalkeeperGains ?? item.gains : item.gains, isGk)}" data-training-activity="${esc(item.id)}"><b>${esc(item.label)}</b><span class="act-right">${activityMates(session, item.id)}<small class="${item.stamina.startsWith('+') ? 'up' : 'muted'}">${esc(activityStamina(session, item))}</small></span></button>`).join('')}
       </div>
       <div class="action-detail">
+        <p class="action-desc small">${esc(selected.desc)}</p>
         ${lowMood ? '<p class="warn-text small">低落情绪：本周一至周三成长 -50%。</p>' : ''}
         ${selected.parameters === 'position' ? positionField(session, isGk) : ''}
         ${selected.parameters === 'inherit' ? inheritFields(session, mentors, mentor) : ''}
@@ -459,8 +616,7 @@ function legacyActionPanel(session: TrainingSession): string {
   if (ui.trainingKind === 'drill' && !mainAttrsFor(isGk).includes(ui.trainingAttr)) ui.trainingAttr = 'passing'
   const { mentors, mentor } = resolveMentor(session)
   if (ui.trainingKind === 'position') {
-    if (isGk) ui.trainingPosition = 'GK'
-    else if (ui.trainingPosition === 'GK') ui.trainingPosition = 'CM'
+    ui.trainingPosition = pickTrainablePosition(session, isGk, ui.trainingPosition)
   }
   const request = buildTrainingRequest()
   const preview = previewTraining(game, session.playerId, request, true)

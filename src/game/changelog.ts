@@ -1,0 +1,169 @@
+/**
+ * 游戏版本号与更新说明（Changelog）配置。
+ *
+ * 每次发布新功能版本时更新 `APP_VERSION` 并在 `CHANGELOG_RELEASES` 顶部追加说明：
+ * - 玩家首次打开当前版本进入游戏后，更新说明弹窗会自动弹出一次；
+ * - 关闭或确认后将版本号写入 localStorage，同一版本不再重复打扰；
+ * - 玩家也可随时通过顶栏版本号按钮重新打开查看。
+ */
+
+export const APP_VERSION = 'v0.4.3'
+export const CHANGELOG_STORAGE_KEY = 'fm-world-changelog-seen'
+
+export type ChangelogItem = {
+  badge: string
+  tone?: 'good' | 'gold' | 'warn' | ''
+  title: string
+  desc: string
+}
+
+export type ChangelogRelease = {
+  version: string
+  date: string
+  headline: string
+  summary: string
+  items: readonly ChangelogItem[]
+}
+
+export const CHANGELOG_RELEASES: readonly ChangelogRelease[] = [
+  {
+    version: 'v0.4.3',
+    date: '2026-11-12',
+    headline: '离线 AI 智能接管与技能传承槽位替换',
+    summary: '超过 3 天未上线的玩家球队将自动由 AI 临时接管日常培养与赛前轮换，执教人像图标切换为黄色提示，玩家重新上线即刻恢复执教；同时技能传承支持在满槽时指定替换已有技能。',
+    items: [
+      {
+        badge: 'AI 接管',
+        tone: 'warn',
+        title: '超过 3 天未上线自动进入 AI 接管，执教人像变黄提示',
+        desc: '离线超过 72 小时的玩家球队在保留归属权与资金的前提下由 AI 临时接管：赛前自动轮换低体能与伤停球员、赛中自动执行体能/伤病换人、每轮利用球队精力代练并自动穿戴更高评分卡；积分榜与赛程中的绿色执教人像会变为黄色，玩家重新登录或上线后即刻解除接管恢复绿色。',
+      },
+      {
+        badge: '技能传承',
+        tone: 'gold',
+        title: '技能传承始终开放并支持满槽顶掉已有技能',
+        desc: '导师「技能传承」不再受学满隐藏限制；当学员主属性技能（4/4）或副属性技能（2/2）已满时，可直接选择顶掉同类别已有技能（传承失败时原技能安全保留）。',
+      },
+    ],
+  },
+  {
+    version: 'v0.4.2',
+    date: '2026-11-12',
+    headline: '联赛排名走势折线图、世界赛果记录与智能控体培养',
+    summary: '赛季页与世界页全面接入球队本赛季排名变化折线图，世界页新增各级联赛历史比赛记录浏览；同时升级自动培养按失败率智能休息，学满的功能课程自动移出候选。',
+    items: [
+      {
+        badge: '赛季走势',
+        tone: 'good',
+        title: '赛季页与世界页新增球队排名变化折线图',
+        desc: '赛季页直观展示己队每一轮后的名次起伏、升降级区间、最高/最低排名与单场比分提示；世界页点击任意球队即可查看其本赛季排名走势折线与完整名单。',
+      },
+      {
+        badge: '世界记录',
+        tone: 'gold',
+        title: '世界页新增各级别联赛历史比赛记录',
+        desc: '冠军联赛、一级联赛与二级南北赛区均支持按轮次快速翻阅完赛比分（悬停查看进球/助攻球员），并支持按任意球队单独筛选已赛战绩。',
+      },
+      {
+        badge: '智能培养',
+        tone: '',
+        title: '自动培养按失败率控体 + 学满功能课过滤 + 技能传承支持替换',
+        desc: '自动培养在体力进入 ≤30 失败率区间或强制比赛日前会主动安排恢复，不再低体力硬练；位置学习、伤病预防、伤病韧性学满后自动移出课程池；技能传承始终保留，并在技能槽已满时支持指定顶掉已有技能。',
+      },
+    ],
+  },
+  {
+    version: 'v0.4.1',
+    date: '2026-11-12',
+    headline: '培养训练题库扩充与两级自动培养升级',
+    summary: '大幅扩充外场与门将训练课程池，每半天独立刷新更多可选训练项；重做自动培养交互，点击即可一键选预设开练，支持二级菜单精细微调。',
+    items: [
+      {
+        badge: '训练扩充',
+        tone: 'good',
+        title: '新增 15 项专项训练课，上下午独立刷新 8 项可选',
+        desc: '外场新增冲刺跑、爆发变向、身体对抗、长传与传中、头球争顶、无球前插、停球摆脱、定位球主罚、耐力拉练、卡线拦截、高位逼抢等课程；门将新增高压手控、门卫清道夫、点球扑救、门前抗压。每半天独立刷新并保底提供充足属性课。',
+      },
+      {
+        badge: '自动培养',
+        tone: 'gold',
+        title: '1 级快捷预设一键开练 + 2 级细调菜单',
+        desc: '点击「自动培养」直接弹出简洁预设卡片（招牌特长、综合收益、锋线终结、组织传控、边路爆破、防守铁闸等），未开局时可一键开局并自动推进；需要精细控制时可打开二级菜单调整属性优先级与最低目标。',
+      },
+    ],
+  },
+  {
+    version: 'v0.4.0',
+    date: '2026-11-12',
+    headline: '比赛计划、智能位置换人与战术引擎升级',
+    summary: '全面升级赛前部署与临场指挥体验：支持按体力与指定位置智能自动换人、14 套动态比赛计划以及十二项战术指令体系。',
+    items: [
+      {
+        badge: '换人升级',
+        tone: 'good',
+        title: '赛中实时设置 + 按体力/指定位置智能换人',
+        desc: '比赛进行中打开「教练调整」即可随时修改自动换人；支持勾选生效位置（门将/中卫/边路/中场/前锋）、设定最早触发分钟、替补优先策略（熟练/体力/能力），并可添加多条按位置、槽位、球员与比分触发的条件换人规则。',
+      },
+      {
+        badge: '比赛计划',
+        tone: 'gold',
+        title: '新增 14 套 FM 风格下场比赛计划',
+        desc: '战术页新增「全力争胜」「龟缩防守」「抢开局闪电战」「领先锁局」「留力养生」「杯赛鏖战」等 14 套预案，随实时分钟与比分（含杯赛两回合总比分）自动变阵，同步影响赛季轮换与挑战赛破局。',
+      },
+      {
+        badge: '战术体系',
+        tone: '',
+        title: '11 套战术风格模板与十二项球队指令',
+        desc: '覆盖持球、攻防转换、无球防守三阶段共 12 项战术指令，结合首发熟练度与俱乐部战术研究室等级计算「战术执行度」，预设保存与切换完整联动。',
+      },
+    ],
+  },
+  {
+    version: 'v0.3.0',
+    date: '2026-11-08',
+    headline: '11 人制赛场、PES 物理引擎与全挑战模式',
+    summary: '升级 11 人制阵容与连续物理模拟引擎，开放传奇挑战、巅峰之路与多级杯赛荣誉体系。',
+    items: [
+      {
+        badge: '物理赛场',
+        tone: '',
+        title: '2D 连续物理比赛与 2D 战报回放',
+        desc: '支持实时战术轨迹观察、场边解说播报与赛后任意时间点拖动复盘。',
+      },
+      {
+        badge: '挑战赛事',
+        tone: '',
+        title: '传奇挑战 · 巅峰之路 · 赛季杯赛',
+        desc: '挑战历代传奇豪门赢取技能书与突破奖励，争夺俱乐部奖杯陈列室荣誉。',
+      },
+    ],
+  },
+]
+
+function storage(): Storage | null {
+  try {
+    return typeof globalThis.localStorage !== 'undefined' ? globalThis.localStorage : null
+  } catch {
+    return null
+  }
+}
+
+export function hasSeenLatestChangelog(): boolean {
+  const store = storage()
+  if (!store) return true
+  try {
+    return store.getItem(CHANGELOG_STORAGE_KEY) === APP_VERSION
+  } catch {
+    return true
+  }
+}
+
+export function markChangelogSeen(version = APP_VERSION): void {
+  const store = storage()
+  if (!store) return
+  try {
+    store.setItem(CHANGELOG_STORAGE_KEY, version)
+  } catch {
+    // 隐私模式或存储受限时静默忽略
+  }
+}

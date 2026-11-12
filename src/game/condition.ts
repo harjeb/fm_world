@@ -23,15 +23,15 @@ export const CONDITION_SETTLES_PER_GAME_DAY = 6
 const MIN_CONDITION = 1
 const MAX_CONDITION = 100
 
-/** 这名球员这场踢了 minutes 分钟，体能掉多少。 */
-export function matchConditionLoss(minutes: number): number {
+/** 这名球员这场踢了 minutes 分钟，体能掉多少（可按比赛计划体能倍率缩放）。 */
+export function matchConditionLoss(minutes: number, factor = 1): number {
   if (!(minutes > 0)) return 0
-  return (MATCH_CONDITION_LOSS * minutes) / FULL_MATCH_MINUTES
+  return (MATCH_CONDITION_LOSS * minutes * factor) / FULL_MATCH_MINUTES
 }
 
 /** 扣掉这场比赛的体能（最低 1）。 */
-export function applyConditionLoss(player: Pick<Player, 'condition'>, minutes: number): void {
-  player.condition = Math.max(MIN_CONDITION, Math.min(MAX_CONDITION, (player.condition ?? MAX_CONDITION) - matchConditionLoss(minutes)))
+export function applyConditionLoss(player: Pick<Player, 'condition'>, minutes: number, factor = 1): void {
+  player.condition = Math.max(MIN_CONDITION, Math.min(MAX_CONDITION, (player.condition ?? MAX_CONDITION) - matchConditionLoss(minutes, factor)))
 }
 
 /** 一次结算的时长（默认现实 1 小时）。 */

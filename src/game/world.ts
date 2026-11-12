@@ -16,7 +16,7 @@ import type {
 } from './types.ts'
 import { PLAYER_SEEDS, createPlayerFromSeed, seedById } from './data/players.ts'
 import { LEGACY_SQUAD_SIZE, buildNameBook, createRandomPlayer, randomSquadPositionTemplate, type SquadName } from './data/random-players.ts'
-import { DIVISION_IDS, WORLD_CLUB_DEFS, conferenceOfDivision, divisionIdForTier, type WorldClubDef } from './data/world-clubs.ts'
+import { DIVISION_IDS, WORLD_CLUB_DEFS, conferenceLabel, conferenceOfDivision, divisionIdForTier, type WorldClubDef } from './data/world-clubs.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION } from './names.ts'
 import { FULL_SQUAD, MIN_SQUAD, autoFillLineup, validateLineup } from './squad.ts'
 import { equipAICards, mergeSignings, seedAIClubs } from './ai-club.ts'
@@ -1303,10 +1303,10 @@ export function ensureWorldCalendar(world: WorldState): boolean {
   return true
 }
 
-export function worldDivisionLabel(world: WorldState, divisionId: string): string {
+export function worldDivisionLabel(_world: WorldState, divisionId: string): string {
   if (divisionId === 'champions') return '冠军联赛'
   if (divisionId === 'division1') return '一级联赛'
-  return divisionId === 'd2-south' ? '二级联赛 · 南区' : '二级联赛 · 北区'
+  return `二级联赛 · ${conferenceLabel(conferenceOfDivision(divisionId) ?? 'north')}`
 }
 
 export function worldTierLabel(tier: TierId): string {

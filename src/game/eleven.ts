@@ -71,7 +71,7 @@ function freshLineup(
   roster: Player[],
   formationId: string,
   tactics: Lineup['tactics'],
-  source?: Pick<Lineup, 'tacticalStyle' | 'tacticalInstructions'>,
+  source?: Pick<Lineup, 'tacticalStyle' | 'tacticalInstructions' | 'matchPlan'>,
 ): Omit<Lineup, 'presets'> {
   const id = elevenFormationFor(formationId)
   // 传一个空的“旧阵容”，避免 autoFillLineup 去拿最近校验过的 7 人制阵容里的摆位和预设。
@@ -79,6 +79,7 @@ function freshLineup(
     formationId: id,
     tacticalStyle: source?.tacticalStyle,
     tacticalInstructions: source?.tacticalInstructions,
+    matchPlan: source?.matchPlan,
   })
   return lineup
 }

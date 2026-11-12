@@ -1,12 +1,15 @@
-import type { AttrKey, GameState, Lineup, MatchMentality, Player, Position, RoleId, SkillId, Tactics } from '../game/types.ts'
+import type { AttrKey, AutoTrainingPresetId, GameState, Lineup, MatchMentality, Player, Position, RoleId, SkillId, Tactics } from '../game/types.ts'
 import { cacheGameLocally, clearSave, saveGame, setTeamPickPending, teamPickPending, upgradeLegacySignatures } from '../game/state.ts'
 import { createWorldGame, previewD2Clubs } from '../game/world.ts'
 import { friendlyStepMs } from './match-timing.ts'
 import {
+  applyAutoTrainingPreset,
+  autoPresetLabel,
   autoTrainingConfig,
   autoTrainingRunnable,
   defaultAutoPriority,
   autoTrainingStep,
+  changeMatchAutoSubs,
   changeMatchTactics,
   confirmTraining,
   discardTraining,
@@ -48,6 +51,7 @@ import {
   styleByRevision,
   type InstructionFieldId,
 } from '../game/pes/tactics.ts'
+import { isMatchPlanId } from '../game/pes/match-plan.ts'
 import { seasonStats } from '../game/player-stats.ts'
 import { injuryUntil } from '../game/injury.ts'
 import { mainAttrsFor } from '../game/rating.ts'
@@ -60,6 +64,7 @@ import { catchUpSeason, lineupLockState, settleGameConditions, skipToPostseasonE
 import { fetchFriendlyTeam, isOnlineMode } from '../online.ts'
 import { advanceLeagueRealtime, leagueDisplayClock, setLeagueClock } from '../game/realtime.ts'
 import { displayClock } from '../game/match/time.ts'
+import { hasSeenLatestChangelog, markChangelogSeen } from '../game/changelog.ts'
 import { emptyAutoSubs } from '../game/match/management.ts'
 import { payWageArrears, upgradeFacility, type FacilityId } from '../game/economy.ts'
 import { leadingBid, type Auction, type AuctionResult } from '../game/auction.ts'
@@ -67,7 +72,7 @@ import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPla
 import { minimumBid } from '../game/auction.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
 import { clubNameError, normalizeClubName } from '../game/club-name.ts'
-import { bidOnline, buyFromAIClubOnline, renameClubOnline, respondOfferOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, marketState, nextWorldSeasonOnline, onlineState, publicConfig, refreshPublicWorld, refreshRegistrationClubs, registerOnline, revokeAgentTokenOnline, serverNow, setRemoteGameHandler, subscribeMarket, subscribeOnline } from '../online.ts'
+import { bidOnline, buyFromAIClubOnline, renameClubOnline, respondOfferOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, refreshPublicWorld, refreshRegistrationClubs, registerOnline, revokeAgentTokenOnline, serverNow, setRemoteGameHandler, subscribeMarket, subscribeOnline } from '../online.ts'
 import { agentHandoffText } from './agent-handoff.ts'
 import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
 import { UNHAPPY_GAME_DAYS } from '../game/transfer-rules.ts'
@@ -88,8 +93,9 @@ import { renderTransfer } from './screens/transfer.ts'
 import { renderHome } from './screens/home.ts'
 import { renderInventory } from './screens/inventory.ts'
 import { parseLineupTarget, renderLineup, selectedSlotTarget } from './screens/lineup.ts'
+import { applyAutoSubAction, applyAutoSubFieldChange, type AutoSubScope } from './auto-sub-editor.ts'
 import { renderMatch } from './screens/match.ts'
-import { renderAccountOverlay, renderDetailOverlay, renderNegotiationOverlay, renderNewGameOverlay } from './screens/overlays.ts'
+import { renderAccountOverlay, renderChangelogOverlay, renderDetailOverlay, renderNegotiationOverlay, renderNewGameOverlay } from './screens/overlays.ts'
 import { renderClubOverlay } from './club-view.ts'
 import { renderCommentary, renderReview } from './screens/review.ts'
 import { cycleReplay2DSpeed, drawReplay2D, ensureReplay2D, previewReplay2DSeek, replay2d, resetReplay2D, restartReplay2D, seekReplay2D, setReplay2DHooks, toggleReplay2D } from './replay-2d.ts'
@@ -97,6 +103,7 @@ import { renderSeason } from './screens/season.ts'
 import { renderMarketTicker, renderSidebar, renderTopbar } from './screens/shell.ts'
 import { buildTrainingRequest, renderAutoStrategyOverlay, renderTraining } from './screens/training.ts'
 import { renderWorld } from './screens/world.ts'
+import { latestPlayedRound } from '../game/standings-history.ts'
 
 const app = document.getElementById('app')!
 
@@ -134,6 +141,47 @@ function announceMarket(previous: Auction[], previousLog: AuctionResult[]): void
   }
 }
 
+/** 首次进入当前版本时自动弹出一次更新说明；启动引导或选队弹窗打开期间暂缓弹出。 */
+function maybeOpenChangelog(): void {
+  if (ui.bootGate || ui.accountOpen || ui.newGameOpen) return
+  if (!hasSeenLatestChangelog()) {
+    ui.changelogOpen = true
+    markChangelogSeen()
+  }
+}
+
+function getAutoSubDraft(scope: AutoSubScope) {
+  if (scope === 'match') {
+    if (!ui.matchAutoSubsDraft && ui.matchEngine && game.activeMatch) {
+      const side = game.activeMatch.context.homeAway
+      ui.matchAutoSubsDraft = structuredClone(ui.matchEngine.getTeam(side).autoSubs ?? emptyAutoSubs())
+    }
+    return ui.matchAutoSubsDraft
+  }
+  if (!ui.autoSubsDraft) ui.autoSubsDraft = structuredClone(game.autoSubs ?? emptyAutoSubs())
+  return ui.autoSubsDraft
+}
+
+function pruneLiveAutoSubDraft(): void {
+  if (!ui.matchAutoSubsDraft || !ui.matchEngine || !game.activeMatch) return
+  const side = game.activeMatch.context.homeAway
+  const team = ui.matchEngine.getTeam(side)
+  const onPitchIds = new Set(team.players.filter((p) => p.onPitch).map((p) => p.sourceId))
+  const benchIds = new Set(ui.matchEngine.availableBench(side).map((p) => p.sourceId))
+  ui.matchAutoSubsDraft.timed = ui.matchAutoSubsDraft.timed.filter(
+    (r) => (!r.outId || onPitchIds.has(r.outId)) && (!r.inId || benchIds.has(r.inId)),
+  )
+  if (ui.matchAutoSubsDraft.conditionRules) {
+    ui.matchAutoSubsDraft.conditionRules = ui.matchAutoSubsDraft.conditionRules.filter(
+      (r) => r.targetKind !== 'player' || !r.targetValue || onPitchIds.has(r.targetValue),
+    )
+    for (const r of ui.matchAutoSubsDraft.conditionRules) {
+      if (r.inId && !benchIds.has(r.inId)) delete r.inId
+    }
+    if (ui.matchAutoSubsDraft.conditionRules.length === 0) delete ui.matchAutoSubsDraft.conditionRules
+  }
+}
+
 /** 开始一场友谊赛：切到比赛页并自动播放。 */
 function openFriendly(result: { ok: boolean; error?: string }): void {
   if (!result.ok) {
@@ -144,6 +192,7 @@ function openFriendly(result: { ok: boolean; error?: string }): void {
   ui.matchEngine = restoreActiveEngine(game)
   ui.matchPlaying = true
   ui.coachPanel = false
+  ui.matchAutoSubsDraft = null
   ui.completing = false
   persist()
   render()
@@ -163,6 +212,8 @@ function go(screen: Screen): void {
   stopTimer()
   ui.matchPlaying = false
   ui.coachPanel = false
+  ui.matchAutoSubsDraft = null
+  ui.changelogOpen = false
   ui.detailPlayerId = null
   ui.lineupSlot = null
   ui.screen = screen
@@ -251,6 +302,7 @@ function render(): void {
     ${renderAccountOverlay()}
     ${renderAutoStrategyOverlay()}
     ${renderNewGameOverlay()}
+    ${renderChangelogOverlay()}
     ${ui.notice ? `<div class="toast" data-action="dismiss-notice" role="status">${icon('info', 15)}<span class="toast-text">${esc(ui.notice)}</span><span class="toast-close">${icon('close', 13)}</span></div>` : ''}
   `)
   for (const select of document.querySelectorAll<HTMLSelectElement>('#match-mentality, #match-out, #match-in')) {
@@ -381,6 +433,7 @@ function applyOnlineGame(next: GameState, notice?: string): void {
   if (wasMatch && game.activeMatch) ui.matchEngine = restoreActiveEngine(game)
   else if (previous?.context.isLeague && !game.activeMatch) openFinishedLeague(previous)
   if (notice) ui.notice = notice
+  maybeOpenChangelog()
   render()
 }
 
@@ -547,6 +600,7 @@ function completeMatch(): void {
   const engine = ui.matchEngine
   const record = finishMatch(game, engine)
   ui.coachPanel = false
+  ui.matchAutoSubsDraft = null
   if (record) {
     // 单机：一轮结束后，各队的边缘球员会进入自由市场（联机市场由服务器维护）。
     if (record.isLeague && !isOnlineMode()) refreshClubMarket(game, record.round ?? game.season.round)
@@ -864,6 +918,8 @@ document.addEventListener('click', async (event) => {
   const worldDivision = target.closest<HTMLElement>('[data-world-div]')
   if (worldDivision?.dataset.worldDiv) {
     ui.worldDivision = worldDivision.dataset.worldDiv
+    ui.worldRound = null
+    ui.worldFixtureClubId = 'ALL'
     ui.worldClubId = null
     ui.worldPlayerId = null
     render()
@@ -980,6 +1036,15 @@ document.addEventListener('click', async (event) => {
   if (control && actionEl !== control && actionEl.contains(control)) return
   const action = actionEl.dataset.action
   if (!action) return
+  if (actionEl.dataset.asScope !== 'match' && action.startsWith('auto-sub-') && lineupLockedNow()) {
+    showNotice('阵容已锁定：开赛前 30 分钟内不能修改，比赛由服务器自动结算。')
+    return
+  }
+  const autoSubScope = applyAutoSubAction(action, actionEl, getAutoSubDraft)
+  if (autoSubScope !== null) {
+    render()
+    return
+  }
   const playerId = actionEl.dataset.player
   const recordId = actionEl.dataset.record
   switch (action) {
@@ -1165,6 +1230,16 @@ document.addEventListener('click', async (event) => {
       ui.transferTab = (actionEl.dataset.tab as TransferTab | undefined) ?? 'market'
       go('transfer')
       break
+    case 'changelog-open':
+      ui.changelogOpen = true
+      markChangelogSeen()
+      render()
+      break
+    case 'changelog-close':
+      ui.changelogOpen = false
+      markChangelogSeen()
+      render()
+      break
     case 'account-open':
       ui.accountOpen = true
       ui.authMode = 'login'
@@ -1239,7 +1314,8 @@ document.addEventListener('click', async (event) => {
       saveGame(game)
       setTeamPickPending(false)
       ui.newGameRequired = false
-      Object.assign(ui, { screen: 'home', trainingPlayerId: null, trainingBookIds: [], trainingTeammateIds: [], peakCardPlayerId: null, peakCardAttr: null, detailPlayerId: null, reviewId: null, lineupDraft: null, lineupSlot: null, autoSubsDraft: null, notice: '新游戏已创建。', matchEngine: null, matchPlaying: false, completing: false, coachPanel: false, seasonRound: null, worldDivision: null, worldClubId: null, worldPlayerId: null, newGameOpen: false, newGameClubId: null })
+      Object.assign(ui, { screen: 'home', trainingPlayerId: null, trainingBookIds: [], trainingTeammateIds: [], peakCardPlayerId: null, peakCardAttr: null, detailPlayerId: null, reviewId: null, lineupDraft: null, lineupSlot: null, autoSubsDraft: null, matchAutoSubsDraft: null, notice: '新游戏已创建。', matchEngine: null, matchPlaying: false, completing: false, coachPanel: false, seasonRound: null, worldDivision: null, worldRound: null, worldFixtureClubId: 'ALL', worldClubId: null, worldPlayerId: null, newGameOpen: false, newGameClubId: null })
+      maybeOpenChangelog()
       render()
       break
     case 'chemistry-detail':
@@ -1282,11 +1358,24 @@ document.addEventListener('click', async (event) => {
     case 'event-option':
       if (actionEl.dataset.option) chooseEvent(actionEl.dataset.option)
       break
+    case 'training-auto-preset': {
+      const id = playerId ?? ui.trainingPlayerId
+      const preset = actionEl.dataset.preset as Exclude<AutoTrainingPresetId, 'custom'> | undefined
+      if (!id || !preset) break
+      const next = applyAutoTrainingPreset(game, id, preset)
+      if (next) {
+        persist()
+        const player = game.roster.find((item) => item.id === id)
+        if (player) ui.notice = `已选预设：${autoPresetLabel(player, next)}`
+      }
+      render()
+      break
+    }
     case 'training-auto-mode': {
       const id = playerId ?? ui.trainingPlayerId
       if (!id) break
       const mode = actionEl.dataset.mode === 'targets' || actionEl.dataset.mode === 'max' ? actionEl.dataset.mode : 'priority'
-      setAutoTrainingConfig(game, id, { mode })
+      setAutoTrainingConfig(game, id, { mode, preset: mode === 'max' ? 'max' : mode === 'targets' ? 'custom' : undefined })
       persist()
       ui.notice = mode === 'targets' ? '自动培养改为：把主属性补到最低目标。' : mode === 'max' ? '自动培养改为：每次选属性成长最多的那一项。' : '自动培养改为：按属性优先级依次练满。'
       render()
@@ -1302,7 +1391,7 @@ document.addEventListener('click', async (event) => {
       if (index >= 0 && to >= 0 && to < config.priority.length) {
         const priority = [...config.priority]
         ;[priority[index], priority[to]] = [priority[to], priority[index]]
-        setAutoTrainingConfig(game, id, { priority })
+        setAutoTrainingConfig(game, id, { priority, preset: 'custom' })
         persist()
       }
       render()
@@ -1312,7 +1401,7 @@ document.addEventListener('click', async (event) => {
       const id = playerId ?? ui.trainingPlayerId
       const player = id ? game.roster.find((item) => item.id === id) : undefined
       if (!id || !player) break
-      setAutoTrainingConfig(game, id, { priority: defaultAutoPriority(player) })
+      setAutoTrainingConfig(game, id, { preset: 'signature', mode: 'priority', priority: defaultAutoPriority(player) })
       persist()
       ui.notice = '已恢复默认优先级：先练这名球员自己的 2 个主要属性。'
       render()
@@ -1326,31 +1415,82 @@ document.addEventListener('click', async (event) => {
         const key = input.dataset.autoTarget as AttrKey | undefined
         if (!key) return
         const value = Number(input.value)
-        targets[key] = Number.isFinite(value) ? Math.round(Math.max(0, Math.min(1500, value))) : 0
+        targets[key] = Number.isFinite(value) ? Math.round(Math.max(0, Math.min(2000, value))) : 0
       })
-      setAutoTrainingConfig(game, id, { targets })
+      setAutoTrainingConfig(game, id, { targets, preset: 'custom' })
       persist()
-      ui.notice = '自动培养设置已保存。'
+      ui.notice = '最低目标设置已保存。'
+      render()
+      break
+    }
+    case 'training-auto-confirm': {
+      const id = playerId ?? ui.trainingPlayerId
+      if (!id) break
+      const targetInputs = document.querySelectorAll<HTMLInputElement>('input[data-auto-target]')
+      if (targetInputs.length > 0) {
+        const targets: Partial<Record<AttrKey, number>> = { ...autoTrainingConfig(game, id).targets }
+        targetInputs.forEach((input) => {
+          const key = input.dataset.autoTarget as AttrKey | undefined
+          if (!key) return
+          const value = Number(input.value)
+          targets[key] = Number.isFinite(value) ? Math.round(Math.max(0, Math.min(2000, value))) : 0
+        })
+        setAutoTrainingConfig(game, id, { targets, preset: 'custom' })
+      }
+      if (!game.training[id] && !game.candidates[id]) {
+        const started = startTrainingWithSupport(game, id, undefined, ui.trainingBookIds)
+        if (!started.ok) {
+          showNotice(started.error ?? '无法开始培养')
+          break
+        }
+        ui.trainingBookIds = []
+        ui.trainingTeammateIds = []
+        ui.trainingPlayerId = id
+        ui.screen = 'training'
+      }
+      setAutoTrainingConfig(game, id, { autopilot: true })
+      ui.autoStrategyOpen = false
+      ui.autoStrategyDetail = false
+      persist()
+      const player = game.roster.find((item) => item.id === id)
+      const label = player ? autoPresetLabel(player, autoTrainingConfig(game, id)) : ''
+      ui.notice = `已开启自动培养${label ? `（${label}）` : ''}：后续回合将自动进行。`
       render()
       break
     }
     case 'training-auto-toggle': {
       const id = playerId ?? ui.trainingPlayerId
       if (!id) break
-      const on = !autoTrainingConfig(game, id).autopilot
-      setAutoTrainingConfig(game, id, { autopilot: on })
-      persist()
-      ui.notice = on ? '已开启自动培养：后续回合会自动进行。' : '已关闭自动培养。'
+      if (autoTrainingConfig(game, id).autopilot) {
+        setAutoTrainingConfig(game, id, { autopilot: false })
+        persist()
+        ui.notice = '已暂停自动培养。'
+        render()
+        break
+      }
+      ui.trainingPlayerId = id
+      ui.autoStrategyOpen = true
+      ui.autoStrategyDetail = false
       render()
       break
     }
     case 'auto-strategy-open':
       if (playerId) ui.trainingPlayerId = playerId
       ui.autoStrategyOpen = true
+      ui.autoStrategyDetail = false
+      render()
+      break
+    case 'auto-strategy-detail-open':
+      ui.autoStrategyDetail = true
+      render()
+      break
+    case 'auto-strategy-detail-back':
+      ui.autoStrategyDetail = false
       render()
       break
     case 'auto-strategy-close':
       ui.autoStrategyOpen = false
+      ui.autoStrategyDetail = false
       render()
       break
     case 'confirm-candidate':
@@ -1457,6 +1597,12 @@ document.addEventListener('click', async (event) => {
       })
       break
     }
+    case 'lineup-plan-reset': {
+      updateLineupDraft((draft) => {
+        delete draft.matchPlan
+      })
+      break
+    }
     case 'lineup-tactic': {
       const tactic = actionEl.dataset.tactic as keyof Tactics | undefined
       if (tactic && actionEl.dataset.value) {
@@ -1469,18 +1615,6 @@ document.addEventListener('click', async (event) => {
       }
       break
     }
-    case 'auto-sub-add':
-      if (ui.autoSubsDraft && ui.autoSubsDraft.timed.length < 3) {
-        ui.autoSubsDraft.timed.push({ atMinute: 5, outId: '', inId: '' })
-        render()
-      }
-      break
-    case 'auto-sub-remove':
-      if (ui.autoSubsDraft) {
-        ui.autoSubsDraft.timed.splice(Number(actionEl.dataset.index), 1)
-        render()
-      }
-      break
     case 'start-league': {
       if (ui.completing) break
       ui.completing = true
@@ -1498,6 +1632,7 @@ document.addEventListener('click', async (event) => {
         ui.matchEngine = restoreActiveEngine(game)
         ui.matchPlaying = false
         ui.coachPanel = false
+        ui.matchAutoSubsDraft = null
         if (!isOnlineMode()) persist()
         render()
       } catch (error) {
@@ -1545,6 +1680,28 @@ document.addEventListener('click', async (event) => {
     case 'season-round': {
       const delta = Number(actionEl.dataset.delta)
       ui.seasonRound = delta === 0 ? null : (ui.seasonRound ?? game.season.round) + delta
+      render()
+      break
+    }
+    case 'world-round': {
+      const delta = Number(actionEl.dataset.delta)
+      if (delta === 0) {
+        ui.worldRound = null
+      } else {
+        const divId = ui.worldDivision ?? game.world?.playerDivisionId ?? 'champions'
+        const snapshot = onlineState.status === 'online' ? publicWorld : null
+        const divFixtures = snapshot?.divisions.find((d) => d.id === divId)?.fixtures
+          ?? game.world?.divisions.find((d) => d.divisionId === divId)?.fixtures
+          ?? []
+        const lastRound = divFixtures.reduce((m, item) => Math.max(m, item.round), 1)
+        const base = ui.worldRound ?? latestPlayedRound(divFixtures, 1)
+        ui.worldRound = Math.max(1, Math.min(lastRound, base + delta))
+      }
+      render()
+      break
+    }
+    case 'world-filter-club': {
+      ui.worldFixtureClubId = actionEl.dataset.club || 'ALL'
       render()
       break
     }
@@ -1642,6 +1799,7 @@ document.addEventListener('click', async (event) => {
       ui.bootGate = false
       if (hasOnlineSession()) {
         joinOnline()
+        maybeOpenChangelog()
         render()
       } else {
         ui.accountOpen = true
@@ -1654,18 +1812,23 @@ document.addEventListener('click', async (event) => {
       ui.notice = '离线模式：本次不会连接服务器。'
       // 本地存档是系统自动建的、还没自己选过球队：先让玩家挑一支。
       if (teamPickPending()) openNewGamePicker(true)
+      else maybeOpenChangelog()
       render()
       break
     case 'match-coach':
       if (game.activeMatch?.context.isLeague) {
         ui.coachPanel = !ui.coachPanel
+        ui.matchAutoSubsDraft = ui.coachPanel && ui.matchEngine
+          ? structuredClone(ui.matchEngine.getTeam(game.activeMatch.context.homeAway).autoSubs ?? emptyAutoSubs())
+          : null
         render()
         break
       }
-      // 打开/收起面板都不消耗暂停次数，只有真正做出调整才扣（见 match-tactics-apply / match-sub）。
+      // 打开/收起面板都不消耗暂停次数，只有真正做出调整才扣（见 match-tactics-apply / match-sub / match-autosubs-apply）。
       if (ui.coachPanel) {
         ui.coachPanel = false
         ui.coachPauseUsed = false
+        ui.matchAutoSubsDraft = null
         if (ui.matchEngine && !ui.matchEngine.state.finished) ui.matchPlaying = true
         render()
         break
@@ -1678,6 +1841,9 @@ document.addEventListener('click', async (event) => {
       stopTimer()
       ui.coachPanel = true
       ui.coachPauseUsed = false
+      ui.matchAutoSubsDraft = ui.matchEngine && game.activeMatch
+        ? structuredClone(ui.matchEngine.getTeam(game.activeMatch.context.homeAway).autoSubs ?? emptyAutoSubs())
+        : null
       render()
       break
     case 'match-tactics-apply':
@@ -1711,6 +1877,7 @@ document.addEventListener('click', async (event) => {
       if (game.activeMatch?.context.isLeague && isOnlineMode()) {
         try {
           await leagueActionOnline({ action: 'substitute', outId: out, inId: input })
+          pruneLiveAutoSubDraft()
           ui.notice = '换人完成。'
         } catch (error) { ui.notice = error instanceof Error ? error.message : '换人失败' }
       } else {
@@ -1722,7 +1889,40 @@ document.addEventListener('click', async (event) => {
           ui.coachPauseUsed = pause.used
         }
         const result = makeSubstitution(game, ui.matchEngine, out, input)
+        if (result.ok) pruneLiveAutoSubDraft()
         ui.notice = result.ok ? '换人完成。' : result.error ?? '换人失败'
+      }
+      render()
+      break
+    }
+    case 'match-autosubs-apply': {
+      if (!ui.matchEngine || !game.activeMatch) break
+      const draft = getAutoSubDraft('match')
+      if (!draft) break
+      const syncDefault = ui.matchAutoSubsSyncDefault && (!isOnlineMode() || !lineupLockState(game).locked)
+      if (game.activeMatch.context.isLeague && isOnlineMode()) {
+        try {
+          await leagueActionOnline({ action: 'set_match_auto_subs', plan: draft, syncDefault })
+          ui.matchAutoSubsDraft = structuredClone(draft)
+          ui.notice = syncDefault ? '本场自动换人已更新，并同步保存为默认设置。' : '本场自动换人设置已生效。'
+        } catch (error) {
+          ui.notice = error instanceof Error ? error.message : '自动换人更新失败'
+        }
+      } else {
+        if (game.activeMatch.context.isLeague) tickRealtimeLeague()
+        if (!ui.matchEngine || !game.activeMatch) break
+        if (!game.activeMatch.context.isLeague) {
+          const pause = reserveCoachPause(game, ui.coachPauseUsed)
+          if (!pause.ok) { ui.notice = pause.error ?? '无法暂停'; render(); break }
+          ui.coachPauseUsed = pause.used
+        }
+        const result = changeMatchAutoSubs(game, ui.matchEngine, draft, syncDefault)
+        if (result.ok) {
+          if (syncDefault) ui.autoSubsDraft = structuredClone(game.autoSubs ?? emptyAutoSubs())
+          ui.notice = syncDefault ? '本场自动换人已更新，并同步保存为默认设置。' : '本场自动换人设置已生效。'
+        } else {
+          ui.notice = result.error ?? '自动换人设置无效'
+        }
       }
       render()
       break
@@ -1779,6 +1979,16 @@ document.addEventListener('click', async (event) => {
 
 document.addEventListener('change', (event) => {
   const target = event.target as HTMLSelectElement | HTMLInputElement
+  if (target.dataset.worldRound !== undefined) {
+    ui.worldRound = Math.max(1, Number(target.value) || 1)
+    render()
+    return
+  }
+  if (target.dataset.worldFxClub !== undefined) {
+    ui.worldFixtureClubId = target.value || 'ALL'
+    render()
+    return
+  }
   if (target.dataset.peakCardPlayer !== undefined) {
     ui.peakCardPlayerId = target.value || null
     const player = game.roster.find((item) => item.id === ui.peakCardPlayerId)
@@ -1825,6 +2035,16 @@ document.addEventListener('change', (event) => {
         draft.tacticalStyle = value
         draft.tacticalInstructions = cloneInstructions(tpl.instructions)
         draft.tactics = legacyTacticsFromInstructions(tpl.instructions)
+      })
+    }
+    return
+  }
+  if (target.dataset.matchPlan !== undefined) {
+    const value = target.value
+    if (isMatchPlanId(value)) {
+      updateLineupDraft((draft) => {
+        if (value === 'standard') delete draft.matchPlan
+        else draft.matchPlan = value
       })
     }
     return
@@ -1904,6 +2124,12 @@ document.addEventListener('change', (event) => {
   }
   if (target.id === 'training-skill') {
     ui.trainingSkill = target.value as SkillId
+    ui.trainingReplaceSkill = null
+    render()
+    return
+  }
+  if (target.id === 'training-replace-skill') {
+    ui.trainingReplaceSkill = (target.value as SkillId) || null
     render()
     return
   }
@@ -1912,34 +2138,15 @@ document.addEventListener('change', (event) => {
     render()
     return
   }
-  if (target.id === 'auto-sub-stamina' && ui.autoSubsDraft) {
-    ui.autoSubsDraft.staminaBelow = target.value ? Number(target.value) : null
+  if (target.id === 'match-autosubs-sync') {
+    ui.matchAutoSubsSyncDefault = (target as HTMLInputElement).checked
     render()
     return
   }
-  if (target.id === 'auto-sub-injury' && ui.autoSubsDraft) {
-    ui.autoSubsDraft.onInjury = (target as HTMLInputElement).checked
+  const autoSubChangedScope = applyAutoSubFieldChange(target, getAutoSubDraft)
+  if (autoSubChangedScope !== null) {
     render()
     return
-  }
-  if (ui.autoSubsDraft) {
-    const time = target.dataset.autoSubTime
-    const out = target.dataset.autoSubOut
-    const input = target.dataset.autoSubIn
-    if (time !== undefined || out !== undefined || input !== undefined) {
-      const index = Number(time ?? out ?? input)
-      const rule = ui.autoSubsDraft.timed[index]
-      if (rule) {
-        if (time !== undefined) {
-          rule.atMinute = Math.round(Number(target.value) * 10) / 10
-          delete rule.atSeconds
-        }
-        if (out !== undefined) rule.outId = target.value
-        if (input !== undefined) rule.inId = target.value
-      }
-      render()
-      return
-    }
   }
   const roleSlot = target.dataset.lineupRole
   if (roleSlot && ui.lineupDraft) {
@@ -2017,7 +2224,13 @@ document.addEventListener('keydown', (event) => {
     if (ui.newGameOpen) {
       if (ui.newGameRequired) return
       ui.newGameOpen = false
-    } else if (ui.autoStrategyOpen) ui.autoStrategyOpen = false
+    } else if (ui.changelogOpen) {
+      ui.changelogOpen = false
+      markChangelogSeen()
+    } else if (ui.autoStrategyOpen) {
+      if (ui.autoStrategyDetail) ui.autoStrategyDetail = false
+      else ui.autoStrategyOpen = false
+    }
     else if (ui.accountOpen) ui.accountOpen = false
     else if (ui.detailPlayerId) ui.detailPlayerId = null
     else return

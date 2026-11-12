@@ -57,7 +57,7 @@ const ROUTE_CHAIN: Record<string, string> = {
 export type TrainingActionId = 'drill' | 'combo' | 'match' | 'position' | 'rest' | 'mentor' | 'protection' | 'inherit'
 
 export type TrainingRequest =
-  | { kind: 'activity'; activityId: TrainingActivityId; teammateIds?: string[]; position?: Position; mentorId?: string; skill?: SkillId }
+  | { kind: 'activity'; activityId: TrainingActivityId; teammateIds?: string[]; position?: Position; mentorId?: string; skill?: SkillId; replaceSkill?: SkillId }
   | { kind: 'drill'; attr: AttrKey; teammateIds?: string[] }
   | { kind: 'combo'; focus: 'attack' | 'defense'; teammateIds?: string[] }
   | { kind: 'match'; teammateIds?: string[] }
@@ -65,7 +65,7 @@ export type TrainingRequest =
   | { kind: 'rest' }
   | { kind: 'mentor' }
   | { kind: 'protection'; focus: 'prevention' | 'resilience' }
-  | { kind: 'inherit'; mentorId: string; skill: SkillId }
+  | { kind: 'inherit'; mentorId: string; skill: SkillId; replaceSkill?: SkillId }
 
 export type TrainingPlan = {
   kind: TrainingActionId | 'activity'
@@ -339,7 +339,24 @@ function gainSpread(session: TrainingSession, key: AttrKey): number {
   return 1 + (roll * 2 - 1) * GAIN_SPREAD
 }
 
-function trainingFatigueCost(session: TrainingSession, base: number): number {
+/** 当前体力下的期望品质倍率（综合失败 ×0、一般 ×0.7、成功 ×1、大成功 ×1.3、完美 ×1.6 与球员天赋）。 */
+export function expectedQualityMultiplier(session: TrainingSession, stamina = 100 - session.fatigue): number {
+  const failure = failureChance(stamina)
+  const plain = plainChance(stamina)
+  const canCrit = stamina > FAILURE_STAMINA
+  const fastLearner = legendValue(session.candidate, 'lg_fast_learner', 0.05)
+  const perfect = canCrit ? PERFECT_CHANCE + fastLearner : 0
+  const great = canCrit ? GREAT_CHANCE + fastLearner : 0
+  const success = Math.max(0, 1 - failure - plain - great - perfect)
+  return (
+    plain * QUALITY_MULTIPLIER.plain +
+    success * QUALITY_MULTIPLIER.success +
+    great * QUALITY_MULTIPLIER.great +
+    perfect * QUALITY_MULTIPLIER.perfect
+  )
+}
+
+export function trainingFatigueCost(session: TrainingSession, base: number): number {
   return Math.max(0, Math.round(base * (1 - legendValue(session.candidate, 'lg_iron_constitution', 0.2))))
 }
 
@@ -392,7 +409,7 @@ export function planTraining(session: TrainingSession, request: TrainingRequest,
     const activity = trainingOptions(session).find(item => item.id === request.activityId)
     if (!activity) return emptyPlan('课程', '当前时段没有提供该课程。', before)
     const legacy: TrainingRequest | undefined = activity.id === 'position' ? { kind: 'position', position: request.position! } :
-      activity.id === 'inherit' ? { kind: 'inherit', mentorId: request.mentorId!, skill: request.skill! } :
+      activity.id === 'inherit' ? { kind: 'inherit', mentorId: request.mentorId!, skill: request.skill!, ...(request.replaceSkill ? { replaceSkill: request.replaceSkill } : {}) } :
       activity.id === 'prevention' || activity.id === 'resilience' ? { kind: 'protection', focus: activity.id } :
       activity.id === 'rest' ? { kind: 'rest' } : activity.id === 'mentor' ? { kind: 'mentor' } :
       activity.id === 'match' || activity.id === 'exchange' ? { kind: 'match' } : undefined
@@ -559,10 +576,13 @@ function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingR
   }
   if (request.kind === 'inherit') {
     if (!mentor || mentor.id !== request.mentorId) return emptyPlan('技能传承', '请选择队内导师。', before)
-    const error = validateInheritance(session, mentor, request.skill)
+    const error = validateInheritance(session, mentor, request.skill, request.replaceSkill)
     if (error) return emptyPlan('技能传承', error, before)
     const chance = inheritanceChances(session, mentor, request.skill)
-    return { kind: 'inherit', label: `技能传承 · ${SKILLS[request.skill].name}`, text: `向 ${mentor.name} 学习技能。`, gains: {}, fatigue: 8, energyCost: 0, error: false, caBefore: before, caAfter: before, scale: 1, cappedByCeiling: false, cappedByPa: false, note: `成功率 ${Math.round(chance.success * 100)}%，成功后金色 ${Math.round(chance.gold * 100)}%、彩色 ${Math.round(chance.rainbow * 100)}%` }
+    const replaceHint = (!canLearnSkill(session.candidate.skills, request.skill) || request.replaceSkill) && request.replaceSkill
+      ? ` · 成功后顶掉「${SKILLS[request.replaceSkill].name}」（失败保留原技能）`
+      : ''
+    return { kind: 'inherit', label: `技能传承 · ${SKILLS[request.skill].name}`, text: `向 ${mentor.name} 学习技能。`, gains: {}, fatigue: 8, energyCost: 0, error: false, caBefore: before, caAfter: before, scale: 1, cappedByCeiling: false, cappedByPa: false, note: `成功率 ${Math.round(chance.success * 100)}%，成功后金色 ${Math.round(chance.gold * 100)}%、彩色 ${Math.round(chance.rainbow * 100)}%${replaceHint}` }
   }
   if (request.kind === 'protection') {
     if (request.focus !== 'prevention' && request.focus !== 'resilience') return emptyPlan('伤病防护', '无效的防护方向。', before)
@@ -751,9 +771,10 @@ export function performTrainingAction(session: TrainingSession, request: Trainin
       session.candidate.positions = { ...session.candidate.positions, [pos]: Math.min(100, current + amount) }
       plan.text += ` 熟练度 ${Math.round(current)} → ${Math.round(Math.min(100, current + amount))}。`
     } else if (id === 'inherit') {
-      const outcome = mentorSkill(session, mentor!, request.skill!)
+      const outcome = mentorSkill(session, mentor!, request.skill!, request.replaceSkill)
       if (!outcome.ok) return { ok: false, error: outcome.error, completed: false }
-      plan.text += outcome.success ? ` 成功获得${{ silver: '银色', gold: '金色', rainbow: '彩色' }[outcome.tier!]}${SKILLS[request.skill!].name}。` : ' 本次传承未成功。'
+      const replacedText = outcome.replaced ? `（顶掉${SKILLS[outcome.replaced].name}）` : ''
+      plan.text += outcome.success ? ` 成功获得${{ silver: '银色', gold: '金色', rainbow: '彩色' }[outcome.tier!]}${SKILLS[request.skill!].name}${replacedText}。` : ' 本次传承未成功。'
     } else if (id === 'prevention' || id === 'resilience') {
       session.candidate.skills = [...session.candidate.skills, id === 'prevention' ? 'injury_prevention' : 'injury_resilience']
     }
@@ -812,9 +833,10 @@ export function performTrainingAction(session: TrainingSession, request: Trainin
       fatigue: plan.fatigue,
     })
   } else if (request.kind === 'inherit') {
-    const result = mentorSkill(session, mentor!, request.skill)
+    const result = mentorSkill(session, mentor!, request.skill, request.replaceSkill)
     if (!result.ok) return { ok: false, error: result.error, completed: false }
-    const outcome = result.success ? `成功获得${{ silver: '银色', gold: '金色', rainbow: '彩色' }[result.tier!]}${SKILLS[request.skill].name}。` : '本次传承未成功。'
+    const replacedText = result.replaced ? `（顶掉${SKILLS[result.replaced].name}）` : ''
+    const outcome = result.success ? `成功获得${{ silver: '银色', gold: '金色', rainbow: '彩色' }[result.tier!]}${SKILLS[request.skill].name}${replacedText}。` : '本次传承未成功。'
     session.log.push({ action: session.action + 1, week: weekOfAction(session.action + 1), kind: 'action', title: plan.label, text: `${plan.text} ${outcome}`, fatigue: plan.fatigue })
   } else if (request.kind === 'protection') {
     const skill: SkillId = request.focus === 'prevention' ? 'injury_prevention' : 'injury_resilience'

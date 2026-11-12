@@ -1,5 +1,5 @@
 import type { AIClubState, AttrKey, EventDef, EventOption, Player, TrainingSession } from './types.ts'
-import { branchProbability, createTrainingSession, performTrainingAction, resolveTrainingEvent, trainingActionsTotal } from './training.ts'
+import { branchProbability, createTrainingSession, failureChance, performTrainingAction, resolveTrainingEvent, trainingActionsTotal, trainingFatigueCost } from './training.ts'
 import { trainingOptions, type TrainingActivity } from './training-calendar.ts'
 import { eventById } from './data/events.ts'
 import { keyAttrsOf } from './data/key-attrs.ts'
@@ -23,10 +23,16 @@ function activityGains(activity: TrainingActivity, gk: boolean): Partial<Record<
 
 function chooseActivity(session: TrainingSession, weights: Map<AttrKey, number>): TrainingActivity | undefined {
   const options = trainingOptions(session)
+  const rest = options.find((item) => item.id === 'rest' && !item.noRecovery)
+  const mentor = options.find((item) => item.id === 'mentor')
+  const remaining = trainingActionsTotal(session) - session.action
+  const stamina = 100 - session.fatigue
+  if (remaining > 1 && failureChance(stamina) > 0 && rest) return rest
   const gk = session.candidate.positions.GK > 0
   let best: TrainingActivity | undefined
   let bestScore = 0
   for (const activity of options) {
+    if (activity.cost !== undefined && session.fatigue + trainingFatigueCost(session, activity.cost) > 100) continue
     const gains = activityGains(activity, gk)
     let score = 0
     for (const [attr, gain] of Object.entries(gains) as [AttrKey, number][]) {
@@ -37,11 +43,8 @@ function chooseActivity(session: TrainingSession, weights: Map<AttrKey, number>)
       bestScore = score
     }
   }
-  if (best && session.fatigue + (best.cost ?? 0) <= 100) return best
-  // 体力不够或没有能涨属性的项目时，和玩家自动策略一样先休息，否则导师/第一个项目。
-  const rest = options.find((item) => item.id === 'rest')
-  const mentor = options.find((item) => item.id === 'mentor')
-  return session.fatigue >= 60 && rest ? rest : mentor ?? rest ?? options[0]
+  if (best) return best
+  return (failureChance(stamina) > 0 || session.fatigue >= 45) && rest ? rest : mentor ?? rest ?? options[0]
 }
 
 function optionScore(session: TrainingSession, option: EventOption, weights: Map<AttrKey, number>): number {
@@ -73,11 +76,11 @@ function chooseEvent(session: TrainingSession, event: EventDef, weights: Map<Att
 }
 
 /**
- * 用玩家同一套培养规则跑完一整轮（30 个时段 + 事件），返回这一轮产出的真实候选属性。
- * AI 没有陪练/导师，选项目按“两个招牌属性权重 3、其余主属性 1”的自动策略，
- * 事件按期望成长选；体力不够时休息。最终仍受球员自己的 PA 上限约束。
+ * 用玩家同一套培养规则跑完一整轮（30 个时段 + 事件），返回完成的培养会话。
+ * AI 没有陪练/导师，选项目按“招牌属性优先、其余主属性兜底”的自动策略，
+ * 事件按期望成长选；体力进入失败率区间时自动休息。最终仍受球员自己的 PA 上限约束。
  */
-export function simulateAITrainingRound(base: Player, seed: number, economy: FacilityStages): Player {
+export function simulateAITrainingSession(base: Player, seed: number, economy: FacilityStages): TrainingSession {
   const session = createTrainingSession(untrainedPlayer(base), seed, {
     stadium: economy.stadium,
     academy: economy.academy,
@@ -102,7 +105,11 @@ export function simulateAITrainingRound(base: Player, seed: number, economy: Fac
     const result = performTrainingAction(session, { kind: 'activity', activityId: activity.id })
     if (!result.ok) break
   }
-  return session.candidate
+  return session
+}
+
+export function simulateAITrainingRound(base: Player, seed: number, economy: FacilityStages): Player {
+  return simulateAITrainingSession(base, seed, economy).candidate
 }
 
 export function aiTrainingGain(base: Player, trained: Player): number {

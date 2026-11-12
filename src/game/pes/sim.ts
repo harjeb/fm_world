@@ -2476,15 +2476,16 @@ export class PesMatch {
 
     // 体能
     const spd = Math.hypot(p.vel.x, p.vel.y)
+    const stamMul = this.teams[p.ti].tactics.staminaMul ?? 1
     if (this.rules.fatigue === 'distance') {
       // 按跑动距离消耗、耐力越高越慢（对齐现有引擎，计划 3.3 / 4.7）。
       // 以 D = 900 为基准，D 不同时按 900 / D 缩放：跑完整场的体力曲线与 D 无关。
       // 耐力因子 0.509 + 0.617 × 能力，等价于现有引擎的 0.7 + 耐力评分 / 180。
       const ef = 0.509 + 0.617 * p.ab.stamina
       if (spd < 0.8) p.stamina = clamp01(p.stamina + 2e-4 * dt)
-      else p.stamina = clamp01(p.stamina - moved * this.rules.fatiguePerMeter * (900 / (P.HALF * 2)) * (0.6 + 0.4 * (spd / 5) ** 2) / ef)
+      else p.stamina = clamp01(p.stamina - moved * this.rules.fatiguePerMeter * stamMul * (900 / (P.HALF * 2)) * (0.6 + 0.4 * (spd / 5) ** 2) / ef)
     } else {
-      const drain = 1.05e-4 * (0.35 + (spd / 7.2) ** 3 * 1.5) * (1.35 - 0.5 * p.ab.stamina)
+      const drain = 1.05e-4 * stamMul * (0.35 + (spd / 7.2) ** 3 * 1.5) * (1.35 - 0.5 * p.ab.stamina)
       p.stamina = clamp01(p.stamina + (spd > 3.0 ? -drain : 4.5e-5) * dt)
     }
   }

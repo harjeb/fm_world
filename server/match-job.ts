@@ -8,6 +8,7 @@ import { prepareMatchInjuries } from '../src/game/injury.ts'
 import { facilityLevel } from '../src/game/economy.ts'
 import { LOGIC_MATCH_SECONDS, matchRealSeconds } from '../src/game/match/time.ts'
 import { matchConditionLoss } from '../src/game/condition.ts'
+import { matchPlanConditionFactor } from '../src/game/pes/match-plan.ts'
 
 export type MatchBook = {
   injuries: Record<string, number>
@@ -31,6 +32,8 @@ export type LockedTeam = {
   performance?: number
   /** 没有教练的电脑球队：体能低于 80 的先休息。有教练的按教练排的阵容。 */
   ai?: boolean
+  /** 超过 3 天未上线的玩家球队：由 AI 自动轮换体能低/伤停球员并接管赛中换人，仍走 PES 引擎保留战术与回放。 */
+  aiTakeover?: boolean
 }
 export type MatchJob = {
   id: string
@@ -69,7 +72,8 @@ export function computeMatchJob(job: MatchJob): MatchJobResult {
     // 欠薪的球队按锁定时的状态只发挥一半（见 economy.ts）。
     const factor = locked.performance ?? 1
     const squad = factor < 1 ? { ...locked.team, players: playersAtPerformance(locked.team.players, factor) } : locked.team
-    const team = teamInputFromAI(squad, new Set(locked.suspended), { rotate: !!locked.ai, tacticsStage: locked.tacticsStage })
+    const injured = new Set(Object.entries(locked.injuries).filter(([, until]) => until > job.kickoffAt).map(([id]) => id))
+    const team = teamInputFromAI(squad, new Set(locked.suspended), { rotate: !!(locked.ai || locked.aiTakeover), tacticsStage: locked.tacticsStage, injured })
     if (locked.chemistry) team.chemistry = { ...locked.chemistry }
     if (locked.autoSubs) team.autoSubs = structuredClone(locked.autoSubs)
     return team
@@ -104,10 +108,12 @@ export function computeMatchJob(job: MatchJob): MatchJobResult {
   record.autoSimulated = true
   const conditionLoss: Record<string, number> = {}
   const appearances: Record<string, number> = Object.fromEntries([...job.home.team.players, ...job.away.team.players].map((player) => [player.id, 0]))
+  const homeFactor = matchPlanConditionFactor(state.teams[0].matchPlan)
+  const awayFactor = matchPlanConditionFactor(state.teams[1].matchPlan)
   for (const stat of record.playerStats) {
     const id = stat.sourceId ?? stat.playerId.split(':').slice(1).join(':')
-    // 踢满 90 分钟掉 70 点（见 condition.ts），和单机结算同一个算法。
-    conditionLoss[id] = matchConditionLoss(stat.minutes)
+    // 踢满 90 分钟掉 70 点（见 condition.ts），叠加比赛计划倍率，和单机结算同一个算法。
+    conditionLoss[id] = matchConditionLoss(stat.minutes, stat.side === 'home' ? homeFactor : awayFactor)
     appearances[id] = Math.round(stat.minutes)
   }
   const cards = state.log.flatMap((entry) => entry.card && entry.playerId ? [{ card: entry.card, playerId: entry.playerId }] : [])

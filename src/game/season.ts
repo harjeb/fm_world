@@ -6,6 +6,7 @@ import { ENERGY_RECOVERY_PER_GAME_DAY } from './training.ts'
 import { RECENT_MATCHES } from './transfer-rules.ts'
 import { settleSquadEnergy, shiftEnergyClock } from './energy.ts'
 import { applyConditionLoss, settleConditions, shiftConditionClock } from './condition.ts'
+import { matchPlanConditionFactor, type MatchPlanId } from './pes/match-plan.ts'
 import { expireOffers, runLocalTransfers } from './transfers.ts'
 import { refreshLocalFreeMarket } from './free-market.ts'
 import { awardSeasonPrize } from './economy.ts'
@@ -379,16 +380,22 @@ function recordAppearances(game: GameState, homeId: string, awayId: string, stat
   }
 }
 
-function applyMatchConditions(game: GameState, stats: MatchRecord['playerStats']): void {
+function applyMatchConditions(
+  game: GameState,
+  stats: MatchRecord['playerStats'],
+  teams?: readonly [{ matchPlan?: MatchPlanId }, { matchPlan?: MatchPlanId }],
+): void {
   const all = new Map<string, { condition: number }>()
   for (const player of game.roster) all.set(player.id, player)
   for (const team of game.aiTeams) for (const player of team.players) all.set(player.id, player)
+  const homeFactor = matchPlanConditionFactor(teams?.[0]?.matchPlan)
+  const awayFactor = matchPlanConditionFactor(teams?.[1]?.matchPlan)
   for (const stat of stats) {
     const id = stat.sourceId ?? stat.playerId.split(':').slice(1).join(':')
     const player = all.get(id)
     if (!player) continue
-    // 踢满 90 分钟掉 70 点（见 condition.ts）。
-    applyConditionLoss(player, stat.minutes)
+    // 踢满 90 分钟基准掉 70 点（见 condition.ts），叠加比赛计划体能倍率。
+    applyConditionLoss(player, stat.minutes, stat.side === 'home' ? homeFactor : awayFactor)
   }
 }
 
@@ -421,7 +428,7 @@ export function simulateFixture(game: GameState, fixture: Fixture, auto = false,
   fixture.scorers = tally.scorers
   fixture.assisters = tally.assisters
   if (auto) fixture.autoSimulated = true
-  applyMatchConditions(game, record.playerStats)
+  applyMatchConditions(game, record.playerStats, state.teams)
   recordAppearances(game, fixture.homeId, fixture.awayId, record.playerStats)
   return record
 }
@@ -452,7 +459,7 @@ export function simulateAIFixturesInRound(game: GameState, round = game.season.r
     })
     record.autoSimulated = true
     recordMatchChemistry(game, record.playerStats, now, game.season.gameDayMs)
-    applyMatchConditions(game, record.playerStats)
+    applyMatchConditions(game, record.playerStats, state.teams)
     recordAppearances(game, fixture.homeId, fixture.awayId, record.playerStats)
   }
   updateSeasonTable(game)
@@ -736,7 +743,7 @@ export function finishActiveMatch(game: GameState, engine: GameEngine, now = Dat
   const record = createMatchRecord(game, state, active.context)
   recordMatchChemistry(game, record.playerStats, now, game.season.gameDayMs)
   // 只有联赛扣体能：挑战里的比赛（友谊赛、单场挑战、世界挑战）都不扣。
-  if (active.context.isLeague) applyMatchConditions(game, record.playerStats)
+  if (active.context.isLeague) applyMatchConditions(game, record.playerStats, state.teams)
   if (active.context.isLeague) {
     const home = active.context.homeAway === 'home' ? PLAYER_TEAM_ID : active.context.opponentId
     recordAppearances(game, home, home === PLAYER_TEAM_ID ? active.context.opponentId : PLAYER_TEAM_ID, record.playerStats)

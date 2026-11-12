@@ -71,8 +71,14 @@ export type MatchTeamState = {
   accent: string
   formationId: FormationId
   tactics: Tactics
+  /** 赛前五项战术基线（供比赛计划恢复赛前阶段使用）。 */
+  baseTactics?: Tactics
   mentality?: MatchMentality
   tacticalStyle?: import('../pes/tactics.ts').StyleId
+  /** 赛前设定的下场比赛计划。 */
+  matchPlan?: import('../pes/match-plan.ts').MatchPlanId
+  /** 当前已触发的比赛计划阶段 ID。 */
+  activePlanPhase?: string
   /** 赛前战术指令基线（供临场心态叠加与回切恢复使用）。 */
   baseInstructions?: import('../pes/tactics.ts').TacticalInstructionsV2
   /** 当前生效的战术指令。 */
@@ -276,6 +282,8 @@ export type MatchTeamInput = {
   formationId: FormationId
   tactics: Tactics
   tacticalStyle?: import('../pes/tactics.ts').StyleId
+  /** 下场比赛计划（给了且非 standard 时随比赛时间和比分自动触发战术阶段）。 */
+  matchPlan?: import('../pes/match-plan.ts').MatchPlanId
   /** 十二项战术指令（docs/fm-tactical-styles-and-instructions.md）：给了才走新战术引擎分支。 */
   instructions?: import('../pes/tactics.ts').TacticalInstructionsV2
   /** 全队战术熟练度 0–1（缺省 1）。只在新指令下生效。 */

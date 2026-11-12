@@ -67,9 +67,12 @@ export class MatchScheduler {
       // 锁定到开球还有一段时间：快照里的体能按每小时的恢复结算到开球那一刻。
       for (const locked of [job.home, job.away]) {
         for (const player of locked.team.players) settleCondition(player, kickoffAt, job.gameDayMs, this.shared.matchBook!.conditionAt[player.id])
-        // 没有教练的电脑球队：锁定这一刻就按开球时的体能轮换（低于 80 的先休息、停赛的不排），
-        // 阵容连同快照一起冻结，战报里记的也是真正上场的名单。有教练的球队用教练自己排的阵容。
-        if (locked.ai) locked.team.lineup = aiMatchLineup(locked.team, new Set(locked.suspended), true)
+        // 没有教练的电脑球队（或超过 3 天未上线的 AI 接管球队）：锁定这一刻就按开球时的体能与伤停轮换
+        // （体能低于 80 或受伤的先休息、停赛的不排），阵容连同快照一起冻结，战报里记的也是真正上场的名单。
+        if (locked.ai || locked.aiTakeover) {
+          const injured = new Set(Object.entries(locked.injuries).filter(([, until]) => until > kickoffAt).map(([id]) => id))
+          locked.team.lineup = aiMatchLineup(locked.team, new Set(locked.suspended), true, injured)
+        }
         locked.chemistry = chemistrySnapshot(this.shared.matchBook!.chemistry, [...locked.team.lineup.starters.map(p => p.playerId), ...locked.team.lineup.bench], kickoffAt, job.gameDayMs)
       }
       this.queue.enqueue(job)

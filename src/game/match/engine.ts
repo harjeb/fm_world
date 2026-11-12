@@ -14,8 +14,9 @@ import type {
   RoleId,
   SkillId,
   MatchMentality,
+  AutoSubPlan,
 } from '../types.ts'
-import { MATCH_TACTICS, MATCH_MENTALITY_LABELS, autoSubDisplaySeconds } from './management.ts'
+import { MATCH_TACTICS, MATCH_MENTALITY_LABELS, executeTeamAutoSubs, validateLiveAutoSubPlan } from './management.ts'
 import { FORMATIONS } from '../data/formations.ts'
 import { MAX_SUBS } from '../squad.ts'
 import { ROLES, ROLES_BY_POSITION } from '../data/roles.ts'
@@ -26,6 +27,8 @@ import { injuryRecoveryDays } from '../injury.ts'
 import { commentLog, commentPossession, restoreCommentary } from './commentary.ts'
 import { chooseShotFoot, chooseShotTarget, shotAimPoint, shotPositionText, shotTargetText } from './shooting.ts'
 import { GOAL_Y, PITCH_LENGTH, PITCH_WIDTH, buildMatchTeam, opponentSide } from './team.ts'
+import { evaluateMatchPlan } from '../pes/match-plan.ts'
+import { applyMentalityOverlay, cloneInstructions, instructionsFromLegacyTactics, legacyTacticsFromInstructions } from '../pes/tactics.ts'
 import { LOGIC_MATCH_SECONDS, MATCH_BASE_TICK_SECONDS, MATCH_RULES_VERSION, displayClock, matchRuleSet } from './time.ts'
 import type { MatchRuleSet } from './time.ts'
 import { capturePlaybackPose, PLAYBACK_FRAME_LIMIT, PLAYBACK_FRAME_LIMIT_V3 } from './playback.ts'
@@ -158,6 +161,7 @@ export class MatchEngine {
     }
     this.resetKickoffPositions('home')
     this.initSkillStats()
+    this.applyMatchPlans(true)
     this.syncRng()
   }
 
@@ -259,7 +263,10 @@ export class MatchEngine {
       const from = this.state.pendingSetPiece
         ? { x: this.state.pendingSetPiece.x, y: this.state.pendingSetPiece.y }
         : oldOwner ? { x: oldOwner.x, y: oldOwner.y } : { x: oldBall.x, y: oldBall.y }
-      if (this.state.phase !== 'shootout' && this.state.clock < this.durationSeconds) this.applyAutoSubs()
+      if (this.state.phase !== 'shootout' && this.state.clock < this.durationSeconds) {
+        this.applyAutoSubs()
+        this.applyMatchPlans(false)
+      }
       if (this.state.phase === 'shootout') {
         this.advanceShootout()
       } else {
@@ -423,7 +430,10 @@ export class MatchEngine {
 
   private beginContinuousAction(): void {
     if (this.state.phase === 'shootout' || this.state.finished) return
-    if (this.state.clock < this.durationSeconds) this.applyAutoSubs()
+    if (this.state.clock < this.durationSeconds) {
+      this.applyAutoSubs()
+      this.applyMatchPlans(false)
+    }
     const pending = this.state.pendingSetPiece
     if (pending) {
       this.beginSetPieceAction(pending)
@@ -2726,34 +2736,52 @@ export class MatchEngine {
 
   private applyAutoSubs(): void {
     for (const team of this.state.teams) {
-      const plan = team.autoSubs
-      if (!plan) continue
-      const replace = (out: MatchPlayerState, reason: 'injury' | 'stamina'): boolean => {
-        const incoming = this.availableBench(team.side).filter(p => !p.injured && p.positions[out.position] > 0
-          && (reason !== 'stamina' || p.stamina / Math.max(1, p.maxStamina) * 100 >= plan.staminaBelow!))
-          .sort((a, b) => b.positions[out.position] - a.positions[out.position])[0]
-        return !!incoming && this.substitute(out.id, incoming.id, team.side, this.state.clock, reason).ok
-      }
-      if (plan.onInjury) {
-        for (const out of team.players.filter(p => p.onPitch && p.injured).sort((a, b) => a.stamina / a.maxStamina - b.stamina / b.maxStamina)) {
-          if (team.subsUsed >= MAX_SUBS) break
-          replace(out, 'injury')
-        }
-      }
-      plan.timed = plan.timed.filter(rule => {
-        const displayAt = autoSubDisplaySeconds(rule)
-        const atLogic = this.durationSeconds > 0 ? (displayAt / 5400) * this.durationSeconds : 0
-        if (atLogic > this.state.clock) return true
-        const out = team.players.find(p => p.sourceId === rule.outId && p.onPitch)
-        const incoming = team.bench.find(p => p.sourceId === rule.inId && !p.cameOff && !p.onPitch)
-        if (!out || !incoming || incoming.injured || team.subsUsed >= MAX_SUBS) return false
-        return !this.substitute(out.id, incoming.id, team.side, this.state.clock, 'timed').ok
+      if (!team.autoSubs) continue
+      const myScore = team.side === 'home' ? this.state.score.home : this.state.score.away
+      const oppScore = team.side === 'home' ? this.state.score.away : this.state.score.home
+      const offsetDiff = this.state.shootoutOffset
+        ? (team.side === 'home'
+            ? this.state.shootoutOffset.home - this.state.shootoutOffset.away
+            : this.state.shootoutOffset.away - this.state.shootoutOffset.home)
+        : 0
+      executeTeamAutoSubs({
+        team,
+        clockSeconds: this.state.clock,
+        durationSeconds: this.durationSeconds,
+        scoreDiff: myScore - oppScore + offsetDiff,
+        availableBench: () => this.availableBench(team.side),
+        substitute: (outId, inId, reason) => this.substitute(outId, inId, team.side, this.state.clock, reason).ok,
       })
-      if (plan.staminaBelow !== null) {
-        for (const out of team.players.filter(p => p.onPitch && p.stamina / p.maxStamina * 100 < plan.staminaBelow!).sort((a, b) => a.stamina / a.maxStamina - b.stamina / b.maxStamina)) {
-          if (team.subsUsed >= MAX_SUBS) break
-          replace(out, 'stamina')
-        }
+    }
+  }
+
+  private applyMatchPlans(isKickoff: boolean): void {
+    const minute = this.durationSeconds > 0 ? (this.state.clock / this.durationSeconds) * 90 : 0
+    for (const team of this.state.teams) {
+      if (!team.matchPlan || team.matchPlan === 'standard') continue
+      const myScore = team.side === 'home' ? this.state.score.home : this.state.score.away
+      const oppScore = team.side === 'home' ? this.state.score.away : this.state.score.home
+      const scoreDiff = myScore - oppScore
+      const offsetDiff = this.state.shootoutOffset
+        ? (team.side === 'home'
+            ? this.state.shootoutOffset.home - this.state.shootoutOffset.away
+            : this.state.shootoutOffset.away - this.state.shootoutOffset.home)
+        : 0
+      const base = team.baseInstructions ?? instructionsFromLegacyTactics(team.baseTactics ?? team.tactics)
+      team.baseInstructions = base
+      const phase = evaluateMatchPlan(
+        team.matchPlan,
+        base,
+        { minute, scoreDiff, effectiveDiff: scoreDiff + offsetDiff, knockout: this.knockout },
+        team.baseTactics,
+      )
+      if (!phase || phase.phaseId === team.activePlanPhase) continue
+      team.activePlanPhase = phase.phaseId
+      team.instructions = phase.instructions
+      team.tactics = { ...phase.tactics }
+      if (!isKickoff || phase.phaseId !== 'base') {
+        this.state.instructions.push({ step: this.state.step, kind: 'tactic', mentality: team.mentality ?? 'balanced', tactics: { ...team.tactics } })
+        this.log('tactic', team.side, phase.announcement, { clock: Math.floor(this.state.clock * 10) / 10 })
       }
     }
   }
@@ -2761,11 +2789,33 @@ export class MatchEngine {
   setTactics(mentality: MatchMentality, side: MatchSide = 'home', eventClock = this.state.clock): { ok: boolean; error?: string } {
     if (this.state.finished) return { ok: false, error: '比赛已经结束' }
     if (mentality !== 'attack' && mentality !== 'balanced' && mentality !== 'defend') return { ok: false, error: '无效的比赛心态' }
-    const tactics = MATCH_TACTICS[mentality]
-    this.getTeam(side).tactics = { ...tactics }
-    this.getTeam(side).mentality = mentality
-    this.state.instructions.push({ step: this.state.step, kind: 'tactic', mentality, tactics: { ...tactics } })
+    const team = this.getTeam(side)
+    team.mentality = mentality
+    if (team.baseInstructions || team.instructions) {
+      const base = team.baseInstructions ?? cloneInstructions(team.instructions!)
+      team.baseInstructions = base
+      const overlaid = applyMentalityOverlay(base, mentality)
+      const tactics = legacyTacticsFromInstructions(overlaid)
+      team.instructions = overlaid
+      team.tactics = { ...tactics }
+      this.state.instructions.push({ step: this.state.step, kind: 'tactic', mentality, tactics: { ...tactics } })
+    } else {
+      const tactics = MATCH_TACTICS[mentality]
+      team.tactics = { ...tactics }
+      this.state.instructions.push({ step: this.state.step, kind: 'tactic', mentality, tactics: { ...tactics } })
+    }
     this.log('tactic', side, `教练调整战术：${MATCH_MENTALITY_LABELS[mentality]}。`, { clock: Math.floor(eventClock * 10) / 10 })
+    this.syncRng()
+    return { ok: true }
+  }
+
+  setAutoSubs(plan: AutoSubPlan, side: MatchSide = 'home', eventClock = this.state.clock): { ok: boolean; error?: string } {
+    if (this.state.finished) return { ok: false, error: '比赛已经结束' }
+    const team = this.getTeam(side)
+    const errors = validateLiveAutoSubPlan(team, plan)
+    if (errors.length) return { ok: false, error: errors[0] }
+    team.autoSubs = structuredClone(plan)
+    this.log('tactic', side, '教练更新了比赛自动换人设置。', { clock: Math.floor(eventClock * 10) / 10 })
     this.syncRng()
     return { ok: true }
   }

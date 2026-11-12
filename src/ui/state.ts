@@ -70,6 +70,8 @@ export type UIState = {
   /** 友谊赛页面选中的联赛分区（可以约世界任意球队）。 */
   challengeDivision: string | null
   worldDivision: string | null
+  worldRound: number | null
+  worldFixtureClubId: string
   worldClubId: string | null
   worldPlayerId: string | null
   trainingPlayerId: string | null
@@ -84,6 +86,7 @@ export type UIState = {
   trainingProtection: 'prevention' | 'resilience'
   trainingMentorId: string
   trainingSkill: SkillId | null
+  trainingReplaceSkill: SkillId | null
   detailPlayerId: string | null
   /** 任意界面点开的球队（世界里的 club id，玩家球队为 player）。 */
   clubViewId: string | null
@@ -110,12 +113,19 @@ export type UIState = {
   /** 战术页“自动填充”用哪种方式：最强阵容 / 部分轮换 / 全部轮换。 */
   lineupAutoMode: 'best' | 'half' | 'full'
   autoSubsDraft: AutoSubPlan | null
+  /** 比赛中教练调整面板里的自动换人草稿与“同步保存为默认”勾选状态。 */
+  matchAutoSubsDraft: AutoSubPlan | null
+  matchAutoSubsSyncDefault: boolean
+  /** 版本更新说明弹窗是否打开。 */
+  changelogOpen: boolean
   completing: boolean
   accountOpen: boolean
   /** 注册表单预选的球队；注册成功后不允许更换。 */
   registrationClubId: string
   /** 自动策略弹窗（针对当前选中的培养球员）。 */
   autoStrategyOpen: boolean
+  /** 自动策略弹窗是否展开到二级细调菜单（false 为一级简洁预设页）。 */
+  autoStrategyDetail: boolean
   authMode: 'login' | 'register'
   turnstileToken: string
   newGameOpen: boolean
@@ -175,6 +185,8 @@ export const ui: UIState = {
   cupPreviewId: null,
   challengeDivision: null,
   worldDivision: null,
+  worldRound: null,
+  worldFixtureClubId: 'ALL',
   worldClubId: null,
   worldPlayerId: null,
   trainingPlayerId: null,
@@ -186,6 +198,7 @@ export const ui: UIState = {
   trainingProtection: 'prevention',
   trainingMentorId: '',
   trainingSkill: null,
+  trainingReplaceSkill: null,
   trainingCombo: 'attack',
   trainingPosition: 'CM',
   detailPlayerId: null,
@@ -207,10 +220,14 @@ export const ui: UIState = {
   lineupSlot: null,
   lineupAutoMode: 'best',
   autoSubsDraft: null,
+  matchAutoSubsDraft: null,
+  matchAutoSubsSyncDefault: false,
+  changelogOpen: false,
   completing: false,
   accountOpen: false,
   registrationClubId: '',
   autoStrategyOpen: false,
+  autoStrategyDetail: false,
   authMode: 'login',
   turnstileToken: '',
   newGameOpen: false,

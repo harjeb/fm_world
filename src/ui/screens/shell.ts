@@ -2,6 +2,7 @@ import { economyOf } from '../../game/economy.ts'
 import { transferWindowOpen } from '../../game/market.ts'
 import { PLAYER_TEAM_ID, inPostseason, matchdayCountdown, nextMatchCountdown, nextSeasonCountdown, playerFixture, seasonRoundLabel } from '../../game/season.ts'
 import { gameDateOf } from '../../game/calendar.ts'
+import { APP_VERSION } from '../../game/changelog.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
 import { isOnlineMode, marketState, onlineKickoffPending, onlineState, serverNow } from '../../online.ts'
 import { clubLook, crest } from '../components.ts'
@@ -83,7 +84,7 @@ export function renderSidebar(): string {
     </nav>
     <div class="side-foot">
       <span class="brand-mark">FM</span>
-      <span class="brand-text"><b>FM 世界</b><small>种子 ${game.seed}</small></span>
+      <span class="brand-text"><b>FM 世界</b><small>${esc(APP_VERSION)} · 种子 ${game.seed}</small></span>
     </div>
   </aside>`
 }
@@ -136,6 +137,7 @@ export function renderTopbar(): string {
     <div class="top-actions">
       <div class="top-controls">
         ${auctionChip()}
+        <button class="btn ghost top-version" data-action="changelog-open" title="查看版本更新说明">${icon('info', 15)}<span>${esc(APP_VERSION)}</span><span class="optional">更新说明</span></button>
         <button class="btn ghost top-account" data-action="account-open">${icon('user', 15)}<span class="account-name">${account}</span>${sync ? `<span class="sync-state ${onlineState.connected ? 'ok' : 'muted'}">${sync}</span>` : ''}</button>
         <button class="btn ghost" data-action="new-game" title="开始新游戏">${icon('newgame', 15)}<span class="optional">新游戏</span></button>
       </div>

@@ -7,7 +7,7 @@
  * 状态里的时钟、比分、统计、文字直播（log / commentary）、球员体力每个模拟秒都会同步，所以比赛页的数据条和文字直播照常工作。
  */
 import { MatchEngine } from '../match/engine.ts'
-import type { MatchLogEntry, MatchMentality } from '../types.ts'
+import type { AutoSubPlan, MatchLogEntry, MatchMentality } from '../types.ts'
 import type { MatchEngineOptions, MatchPlayerState, MatchSide, MatchState, MatchTeamState, StepResult } from '../match/types.ts'
 import { PesGame } from './game.ts'
 import type { PesSettlementJSON } from './settle.ts'
@@ -98,6 +98,10 @@ export class PesEngine {
   /** `eventClock`：联赛里这次调整对应的比赛时刻（现实时钟换算），播报按它记；不给就用比赛当前时刻。 */
   setTactics(mentality: MatchMentality, side: MatchSide = 'home', eventClock?: number): { ok: boolean; error?: string } {
     return this.game.setTactics(mentality, side, eventClock)
+  }
+
+  setAutoSubs(plan: AutoSubPlan, side: MatchSide = 'home', eventClock?: number): { ok: boolean; error?: string } {
+    return this.game.setAutoSubs(plan, side, eventClock)
   }
 
   substitute(outId: string, inId: string, side: MatchSide = 'home', eventClock?: number, autoReason?: 'injury' | 'timed' | 'stamina'): { ok: boolean; error?: string } {

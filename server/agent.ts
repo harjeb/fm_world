@@ -28,6 +28,7 @@ import {
   type StyleId,
   type TacticalInstructionsV2,
 } from '../src/game/pes/tactics.ts'
+import { MATCH_PLAN_LIST, isMatchPlanId, matchPlanPhaseName, type MatchPlanId } from '../src/game/pes/match-plan.ts'
 import { emptyAutoSubs, validateAutoSubPlan } from '../src/game/match/management.ts'
 import { positionMultiplier } from '../src/game/ca.ts'
 import { displayClock } from '../src/game/match/time.ts'
@@ -44,6 +45,7 @@ import {
   autoTrainingStep,
   defaultAutoPriority,
   setAutoTrainingConfig,
+  changeMatchAutoSubs,
   changeMatchTactics,
   confirmTraining,
   discardTraining,
@@ -256,6 +258,9 @@ function matchView(game: GameState) {
     },
     tactics: { ...playerTeam.tactics },
     mentality: playerTeam.mentality ?? null,
+    matchPlan: playerTeam.matchPlan ?? 'standard',
+    activePlanPhase: playerTeam.activePlanPhase ?? null,
+    activePlanPhaseLabel: matchPlanPhaseName(playerTeam.activePlanPhase) || null,
     autoSubs: playerTeam.autoSubs ?? emptyAutoSubs(),
     onPitch: playerTeam.players.filter((player) => player.onPitch).map(matchPlayerView),
     bench: playerTeam.bench.map(matchPlayerView),
@@ -414,6 +419,7 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
       ...STYLE_META[style.id],
       instructions: style.instructions,
     })),
+    matchPlans: MATCH_PLAN_LIST,
     roles: ROLES_BY_POSITION,
     trainingSessions: sessionView,
     candidates: Object.values(game.candidates).map((player) => playerView(player, game, now)),
@@ -454,16 +460,18 @@ function parseTrainingRequest(value: unknown): TrainingRequest | null {
   if (request.teammateIds !== undefined && kind !== 'drill' && kind !== 'combo' && kind !== 'match' && kind !== 'activity') return null
   const teammates = request.teammateIds === undefined ? {} : { teammateIds: request.teammateIds as string[] }
   if (kind === 'activity') {
-    if (!Object.keys(request).every(key => ['kind', 'activityId', 'teammateIds', 'position', 'mentorId', 'skill'].includes(key))) return null
+    if (!Object.keys(request).every(key => ['kind', 'activityId', 'teammateIds', 'position', 'mentorId', 'skill', 'replaceSkill'].includes(key))) return null
     const activityId = text(request.activityId)
     if (!activityId.trim()) return null
     if (request.position !== undefined && !(POSITIONS as readonly string[]).includes(text(request.position))) return null
     if (request.mentorId !== undefined && !text(request.mentorId).trim()) return null
     if (request.skill !== undefined && !Object.hasOwn(SKILLS, text(request.skill))) return null
+    if (request.replaceSkill !== undefined && !Object.hasOwn(SKILLS, text(request.replaceSkill))) return null
     return { kind, activityId: activityId as TrainingActivityId, ...teammates,
       ...(request.position === undefined ? {} : { position: request.position as Position }),
       ...(request.mentorId === undefined ? {} : { mentorId: request.mentorId as string }),
-      ...(request.skill === undefined ? {} : { skill: request.skill as SkillId }) }
+      ...(request.skill === undefined ? {} : { skill: request.skill as SkillId }),
+      ...(request.replaceSkill === undefined ? {} : { replaceSkill: request.replaceSkill as SkillId }) }
   }
   if (kind === 'drill') {
     const attr = text(request.attr)
@@ -485,7 +493,11 @@ function parseTrainingRequest(value: unknown): TrainingRequest | null {
   if (kind === 'inherit') {
     const mentorId = text(request.mentorId)
     const skill = text(request.skill)
-    return mentorId && Object.hasOwn(SKILLS, skill) ? { kind, mentorId, skill: skill as SkillId } : null
+    const replaceSkill = request.replaceSkill === undefined ? undefined : text(request.replaceSkill)
+    if (replaceSkill !== undefined && !Object.hasOwn(SKILLS, replaceSkill)) return null
+    return mentorId && Object.hasOwn(SKILLS, skill)
+      ? { kind, mentorId, skill: skill as SkillId, ...(replaceSkill ? { replaceSkill: replaceSkill as SkillId } : {}) }
+      : null
   }
   if (kind === 'rest' || kind === 'mentor') return { kind }
   return null
@@ -516,7 +528,18 @@ function parseLineup(game: GameState, value: unknown): { lineup?: Lineup; error?
   let tacticalInstructions: TacticalInstructionsV2 | undefined = game.lineup.tacticalInstructions
     ? cloneInstructions(game.lineup.tacticalInstructions)
     : undefined
+  let matchPlan: MatchPlanId | undefined = game.lineup.matchPlan
   let tactics: Tactics = isTactics(raw.tactics) ? raw.tactics : game.lineup.tactics
+
+  if (raw.matchPlan !== undefined) {
+    if (raw.matchPlan === null || raw.matchPlan === 'standard') {
+      matchPlan = undefined
+    } else if (!isMatchPlanId(raw.matchPlan)) {
+      return { error: `未知比赛计划：${String(raw.matchPlan)}` }
+    } else {
+      matchPlan = raw.matchPlan
+    }
+  }
 
   if (raw.tacticalStyle !== undefined && raw.tacticalStyle !== null && !isStyleId(raw.tacticalStyle)) {
     return { error: `未知战术风格：${String(raw.tacticalStyle)}` }
@@ -562,6 +585,7 @@ function parseLineup(game: GameState, value: unknown): { lineup?: Lineup; error?
     tactics,
     ...(tacticalStyle ? { tacticalStyle } : {}),
     ...(tacticalInstructions ? { tacticalInstructions } : {}),
+    ...(matchPlan ? { matchPlan } : {}),
   }
   if (game.lineup.customPositions && game.lineup.formationId === formationId) {
     next.customPositions = structuredClone(game.lineup.customPositions)
@@ -838,6 +862,15 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       const engine = restoreActiveEngine(game)
       if (!engine) return { ok: false, error: '无法恢复比赛引擎' }
       const result = changeMatchTactics(game, engine, body.mentality)
+      return { ...result, result: result.ok ? matchView(game) : undefined }
+    }
+    case 'set_match_auto_subs': {
+      if (!game.activeMatch) return { ok: false, error: '当前没有进行中的比赛' }
+      const engine = restoreActiveEngine(game)
+      if (!engine) return { ok: false, error: '无法恢复比赛引擎' }
+      const rawPlan = body.plan ?? body.autoSubs
+      const syncDefault = body.syncDefault === true && !lineupLockState(game, now).locked
+      const result = changeMatchAutoSubs(game, engine, rawPlan as Parameters<typeof changeMatchAutoSubs>[2], syncDefault)
       return { ...result, result: result.ok ? matchView(game) : undefined }
     }
     case 'substitute': {

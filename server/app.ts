@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { createInitialGame, GAME_VERSION, upgradeLegacySignatures } from '../src/game/state.ts'
-import { ensureCards } from '../src/game/cards.ts'
+import { addTrainedCard, ensureCards, equipCard, playerCards } from '../src/game/cards.ts'
 import { ensurePve } from '../src/game/pve.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
 import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, wageForPlayer, worldForClub, worldSlots, worldWageBill } from '../src/game/world.ts'
@@ -41,6 +41,14 @@ import { MatchScheduler } from './match-scheduler.ts'
 import { emptyMatchBook, matchJobId, recordForClub, type LockedTeam, type MatchBook, type MatchJob } from './match-job.ts'
 import { chemistryForPlayers, mergeChemistryTraining } from '../src/game/chemistry.ts'
 import { isStyleId, tryValidateInstructions } from '../src/game/pes/tactics.ts'
+import { isMatchPlanId, matchPlanConditionFactor } from '../src/game/pes/match-plan.ts'
+import { simulateAITrainingSession } from '../src/game/ai-training.ts'
+import { settleSquadEnergy } from '../src/game/energy.ts'
+import { TRAINING_ENERGY_COST } from '../src/game/training.ts'
+
+/** 玩家超过 3 天未上线（现实 72 小时）后，球队临时进入 AI 接管状态；重新上线即刻解除。 */
+export const AI_TAKEOVER_INACTIVE_MS = 3 * 24 * 60 * 60_000
+const ONLINE_PERSIST_INTERVAL_MS = 5 * 60_000
 
 type Account = {
   id: string
@@ -55,6 +63,10 @@ type Account = {
   appliedMatchIds?: string[]
   /** 上一次给这个账号发 AI 报价的“赛季:轮次”，每轮最多发一次。 */
   offerKey?: string
+  /** 玩家（或绑定 Agent）最近一次真实在线的时间戳；区别于后台结算写入的 updatedAt。 */
+  lastOnlineAt?: number
+  /** AI 接管期间最近一次按轮打理的“赛季:轮次”。 */
+  aiTakeoverKey?: string
   createdAt: number
   updatedAt: number
 }
@@ -224,6 +236,32 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   }
   writeJson(worldPath, sharedWorld)
   const persistWorld = () => writeJson(worldPath, sharedWorld)
+  const persistDb = () => writeJson(dbPath, db)
+  const sessions: SessionMap = readJson<SessionMap>(sessionPath, {})
+  const persistSessions = () => writeJson(sessionPath, sessions)
+  const clients = new Map<string, Set<ServerResponse>>()
+  const registerAttempts = new Map<string, number[]>()
+  let closed = false
+
+  function isAccountOnlineNow(account: Account): boolean {
+    return (clients.get(account.id)?.size ?? 0) > 0
+  }
+
+  function isAccountAITakeover(account: Account, at = now()): boolean {
+    if (isAccountOnlineNow(account)) return false
+    const lastOnline = account.lastOnlineAt ?? account.createdAt
+    return at - lastOnline > AI_TAKEOVER_INACTIVE_MS
+  }
+
+  function touchAccountOnline(account: Account, forcePersist = false): void {
+    const t = now()
+    const prev = account.lastOnlineAt
+    const wasTakeover = prev !== undefined && t - prev > AI_TAKEOVER_INACTIVE_MS
+    account.lastOnlineAt = t
+    if (!closed && (forcePersist || prev === undefined || wasTakeover || t - prev >= ONLINE_PERSIST_INTERVAL_MS)) {
+      persistDb()
+    }
+  }
   function cupOpeningTeams(): AITeam[] {
     if (sharedWorld.cupOpening?.seasonIndex !== sharedWorld.world.seasonIndex) {
       sharedWorld.cupOpening = { seasonIndex: sharedWorld.world.seasonIndex, teams: structuredClone(sharedWorld.teams ?? {}) }
@@ -233,7 +271,6 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   }
   const matchQueue = new MatchQueue(path.join(dataDir, 'match-jobs'), options.matchQueue)
   const matchScheduler = new MatchScheduler(matchQueue, sharedWorld, lockedTeamFor, persistWorld)
-  let closed = false
   const market: FreeMarket = {
     pool: sharedWorld.freeStars,
     auctions: sharedWorld.auctions ?? [],
@@ -419,6 +456,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const account = db.accounts.find((item) => item.id === sharedWorld.owners[clubId])
     const valid = account?.game.world?.clubs.find((club) => club.id === 'player')?.squadKey === clubId
     const game = valid ? account.game : undefined
+    const aiTakeover = !!(account && valid && isAccountAITakeover(account))
     const injuries = { ...sharedWorld.matchBook!.injuries }
     for (const [id, until] of Object.entries(game?.injuries ?? {})) injuries[id] = Math.max(injuries[id] ?? 0, until)
     const bans = { ...sharedWorld.matchBook!.suspensions }
@@ -428,17 +466,26 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const shared = conditions.get(player.id)
       return shared ? { ...player, condition: shared.condition, recoveryAt: shared.recoveryAt } : { ...player }
     }
+    const lockedLineup = game
+      ? aiTakeover && game.lineup.matchPlan && matchPlanConditionFactor(game.lineup.matchPlan) > 1.05
+        ? { ...game.lineup, matchPlan: 'standard' as const }
+        : game.lineup
+      : team.lineup
     return {
-      team: game ? { ...team, name: game.clubName, players: game.roster.map(withCondition), lineup: game.lineup, formationId: game.lineup.formationId, tactics: game.lineup.tactics } : team,
-      autoSubs: game ? game.autoSubs ?? { timed: [], staminaBelow: null, onInjury: false } : undefined,
+      team: game ? { ...team, name: game.clubName, players: game.roster.map(withCondition), lineup: lockedLineup, formationId: lockedLineup.formationId, tactics: lockedLineup.tactics } : team,
+      autoSubs: game
+        ? aiTakeover
+          ? { timed: [], staminaBelow: game.autoSubs?.staminaBelow ?? 35, onInjury: true }
+          : game.autoSubs ?? { timed: [], staminaBelow: null, onInjury: false }
+        : undefined,
       injuries,
       suspended: Object.entries(bans).filter(([, ban]) => ban.matches > 0).map(([id]) => id),
       medical: game ? economyOf(game).medical : sharedWorld.aiClubs?.[clubId]?.economy.medical ?? 1,
       tacticsStage: game ? economyOf(game).tactics : sharedWorld.aiClubs?.[clubId]?.economy.tactics ?? 1,
       // 锁定时还欠薪：这场只发挥一半。
       ...(game && matchPerformanceOf(game) < 1 ? { performance: matchPerformanceOf(game) } : {}),
-      // 没有教练的电脑球队：开球时体能低于 80 的先休息（体能在入队时按开球时间结算）。
-      ...(game ? {} : { ai: true }),
+      // 没有教练的电脑球队：开球时体能低于 80 的先休息；超过 3 天未上线的玩家球队则进入 aiTakeover 自动轮换。
+      ...(game ? (aiTakeover ? { aiTakeover: true } : {}) : { ai: true }),
     }
   }
 
@@ -639,9 +686,13 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     return { id, name, enName, country, era, age, foot, height, positions, attrs: visible, traitId, skills, skillTiers, ca: displayCA(caOf(attrs, positions.GK > 0)), baseCa }
   }
   for (const account of db.accounts) account.lastUserRevision ??= account.revision
-  // 清理旧版新账号准备期；正式开球时间不因注册或登录而变化。
+  // 清理旧版新账号准备期并补齐真实在线时间戳；正式开球时间不因注册或登录而变化。
   let removedPreparation = false
   for (const account of db.accounts) {
+    if (account.lastOnlineAt === undefined) {
+      account.lastOnlineAt = account.updatedAt || account.createdAt || now()
+      removedPreparation = true
+    }
     const clubId = ownedClubId(account)
     if (clubId && !account.appliedMatchIds) {
       account.appliedMatchIds = inheritedMatchIds(account.game, clubId)
@@ -652,13 +703,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       removedPreparation = true
     }
   }
-  if (removedPreparation) writeJson(dbPath, db)
-  const sessions: SessionMap = readJson<SessionMap>(sessionPath, {})
-  const clients = new Map<string, Set<ServerResponse>>()
-  const registerAttempts = new Map<string, number[]>()
-
-  const persistDb = () => writeJson(dbPath, db)
-  const persistSessions = () => writeJson(sessionPath, sessions)
+  if (removedPreparation) persistDb()
 
   /** 全服广播用的竞拍信息：不含账号 ID 以外的隐私，也不带完整球员池，池子变了客户端按 version 重新拉。 */
   const marketPayload = () => ({ type: 'market', auctions: market.auctions, log: market.log, version: market.version, serverTime: now() })
@@ -795,9 +840,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         const owner = db.accounts.find((item) => item.id === sharedWorld.owners[club.id])
         const team = sharedWorld.teams?.[club.id]
         const validOwner = owner?.game.world?.clubs.find((item) => item.id === 'player')?.squadKey === club.id
+        const aiTakeover = !!owner && isAccountAITakeover(owner)
         return {
           id: club.id, name: validOwner ? owner.game.clubName : club.name, color: club.color,
-          tier: club.tier, conference: club.conference, managed: !!owner, formationId: validOwner ? owner.game.lineup.formationId : team?.formationId ?? club.formationId,
+          tier: club.tier, conference: club.conference, managed: !!owner, aiTakeover,
+          formationId: validOwner ? owner.game.lineup.formationId : team?.formationId ?? club.formationId,
           players: (validOwner ? owner.game.roster : team?.players ?? []).map(publicPlayer),
           // RANK：首发 CA 之和。玩家管理的球队只按身上装备的属性算，不暴露库存里的卡。
           rating: validOwner ? Math.round(lineupRating(owner.game.roster, owner.game.lineup)) : team ? Math.round(lineupRating(team.players, team.lineup)) : undefined,
@@ -1031,6 +1078,70 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     for (const res of group) sendState(res, account, source)
   }
 
+  /**
+   * 超过 3 天未上线的玩家球队：每轮由 AI 自动打理基础阵容与培养——
+   * 1. 若库存已有更高 CA 的球员卡则自动装上（绝不删除玩家已有卡片）；
+   * 2. 修复不合法的首发阵容；
+   * 3. 用球队自有训练精力代练 1 名球员，仅当练出更高 CA 的卡时才收进库存并装备（不花资金、不卖球员）。
+   */
+  function runAITakeoverUpkeep(account: Account): boolean {
+    if (!isAccountAITakeover(account) || account.game.activeMatch) return false
+    const key = `${account.game.season.index}:${account.game.season.round}`
+    if (account.aiTakeoverKey === key) return false
+    account.aiTakeoverKey = key
+    const game = account.game
+    let changed = true
+    ensureCards(game)
+    for (const player of game.roster) {
+      const gk = player.positions.GK > 0
+      let bestId: string | null = null
+      let bestCa = caOf(player.attrs, gk) + 0.5
+      for (const card of playerCards(game, player.id)) {
+        const cardCa = caOf(card.attrs, gk)
+        if (cardCa > bestCa) {
+          bestCa = cardCa
+          bestId = card.id
+        }
+      }
+      if (bestId && equipCard(game, player.id, bestId).ok) changed = true
+    }
+    const repaired = repairLineup(game.roster, game.lineup)
+    if (repaired.changed) {
+      game.lineup = repaired.lineup
+      changed = true
+    }
+    settleSquadEnergy(game, now())
+    const starterSet = new Set(game.lineup.starters.map((item) => item.playerId))
+    const benchSet = new Set(game.lineup.bench)
+    const eligible = game.roster.filter((player) => {
+      const running = game.training?.[player.id]
+      if (running && !running.completed) return false
+      return (player.energy ?? 100) >= TRAINING_ENERGY_COST
+    })
+    if (eligible.length > 0) {
+      const ranked = [...eligible].sort((a, b) => {
+        const tierOf = (p: Player) => (starterSet.has(p.id) ? 2 : benchSet.has(p.id) ? 1 : 0)
+        const tierDiff = tierOf(b) - tierOf(a)
+        if (tierDiff !== 0) return tierDiff
+        const verDiff = (a.version ?? 0) - (b.version ?? 0)
+        if (verDiff !== 0) return verDiff
+        return caOf(b.baseAttrs ?? b.attrs, b.positions.GK > 0) - caOf(a.baseAttrs ?? a.attrs, a.positions.GK > 0)
+      })
+      const target = ranked[(Math.max(1, game.season.round) - 1) % Math.min(ranked.length, 11)] ?? ranked[0]
+      target.energy = Math.max(0, (target.energy ?? 100) - TRAINING_ENERGY_COST)
+      const economy = economyOf(game)
+      const seed = splitSeed(sharedWorld.seed, `ai-takeover-train-${account.id}-${game.season.index}-${game.season.round}-${target.id}`)
+      const session = simulateAITrainingSession(target, seed, economy)
+      const gk = target.positions.GK > 0
+      if (caOf(session.candidate.attrs, gk) > caOf(target.attrs, gk) + 0.5) {
+        const card = addTrainedCard(game, session)
+        equipCard(game, target.id, card.id)
+      }
+      changed = true
+    }
+    return changed
+  }
+
   function advanceAccount(account: Account): boolean {
     try {
       if (!account.game) return false
@@ -1067,6 +1178,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         const ids = (account.game.season.clubIds ?? []).filter((id) => id !== 'player')
         if (generateAIOffers({ game: account.game, clubs: sharedMarketClubs(ids), season: serverSeason(), round: account.game.season.round, now: now(), seed: splitSeed(sharedWorld.seed, `offers-${account.id}`) })) migrated = true
       }
+      if (runAITakeoverUpkeep(account)) migrated = true
       if (!changed && !migrated && !economyAdded) return false
       publishClub(account)
       // 补算 / 自动结算会改动本地那份对手名单（体能、伤病）：同一次推进里就换回共享名册，
@@ -1392,10 +1504,15 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
     if (url.pathname === '/api/world' && req.method === 'GET') {
       advanceAllMatches()
+      const aiTakeoverClubs = sharedWorld.world.clubs.flatMap((club) => {
+        const owner = db.accounts.find((item) => item.id === sharedWorld.owners[club.id])
+        return owner && isAccountAITakeover(owner) ? [club.id] : []
+      })
       json(res, 200, {
         seed: sharedWorld.seed,
         startedAt: sharedWorld.startedAt,
         owners: sharedWorld.owners,
+        aiTakeoverClubs,
         slots: slotInfo(),
         round: sharedWorld.world.divisions[0]?.round ?? 1,
         seasonIndex: sharedWorld.world.seasonIndex,
@@ -1482,6 +1599,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         game: createWorldGameFromWorld(sharedWorld.world, club.id, sharedWorld.seed, sharedWorld.startedAt, [], sharedWorld.reserveStars),
         revision: 1,
         lastUserRevision: 1,
+        lastOnlineAt: now(),
         createdAt: now(),
         updatedAt: now(),
       }
@@ -1510,6 +1628,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const password = String(body.password ?? '')
       const account = db.accounts.find((item) => item.username.toLowerCase() === username)
       if (!account || hashPassword(password, account.salt) !== account.passwordHash) return json(res, 401, { error: '用户名或密码错误' })
+      touchAccountOnline(account, true)
       const token = createSession(account.id)
       persistSessions()
       advanceAccount(account)
@@ -1528,6 +1647,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (url.pathname === '/api/agent/token' && req.method === 'POST') {
       const account = accountFromToken(tokenFromRequest(req))
       if (!account) return json(res, 401, { error: '请先登录' })
+      touchAccountOnline(account)
       if (!account.agentToken) {
         account.agentToken = createAgentToken()
         persistDb()
@@ -1539,6 +1659,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (url.pathname === '/api/agent/revoke' && req.method === 'POST') {
       const account = accountFromToken(tokenFromRequest(req))
       if (!account) return json(res, 401, { error: '请先登录' })
+      touchAccountOnline(account)
       delete account.agentToken
       persistDb()
       json(res, 200, { ok: true })
@@ -1548,6 +1669,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (url.pathname.startsWith('/api/agent/')) {
       const agentAccount = agentAccountFromToken(tokenFromRequest(req))
       if (!agentAccount) return json(res, 401, { error: 'Agent 令牌无效，请在游戏账号面板重新生成' })
+      touchAccountOnline(agentAccount)
       // 联机时有教练执教的球队不能从 AI 购买入口买人，和转会页一致。
       const agentOptions: AgentOptions = { isManaged: (clubId) => !!sharedWorld.owners[clubId] }
       const agentState = () => withSharedMarket(agentView(agentAccount.game, now(), agentOptions), agentAccount)
@@ -1610,7 +1732,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         if (outcome.ok && !['get_player', 'get_match', 'preview_training', 'preview_signing'].includes(String(body.action))) {
           publishClub(agentAccount)
           agentAccount.revision++
-          const leagueOnly = agentAccount.game.activeMatch?.context.isLeague && ['start_league', 'set_match_tactics', 'substitute'].includes(String(body.action))
+          const leagueOnly = agentAccount.game.activeMatch?.context.isLeague && ['start_league', 'set_match_tactics', 'set_match_auto_subs', 'substitute'].includes(String(body.action))
           if (!leagueOnly) agentAccount.lastUserRevision = agentAccount.revision
           agentAccount.updatedAt = now()
           persistDb()
@@ -1626,6 +1748,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
     const account = accountFromToken(tokenFromRequest(req))
     if (!account) return json(res, 401, { error: '请先登录' })
+    touchAccountOnline(account)
 
     if (url.pathname === '/api/world/next-season' && req.method === 'POST') {
       advanceAccount(account)
@@ -1729,7 +1852,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
     if (url.pathname === '/api/match/action' && req.method === 'POST') {
       const body = await readJsonBody(req)
-      if (!['start_league', 'set_match_tactics', 'substitute'].includes(String(body.action))) return json(res, 400, { error: '不支持的比赛操作' })
+      if (!['start_league', 'set_match_tactics', 'set_match_auto_subs', 'substitute'].includes(String(body.action))) return json(res, 400, { error: '不支持的比赛操作' })
       if (body.action === 'start_league') return json(res, 400, { error: '联赛由服务器提前排队计算、开球 10 分钟后统一公布，不需要手动开赛' })
       advanceAccount(account)
       if (body.action !== 'start_league' && !account.game.activeMatch?.context.isLeague) return json(res, 400, { error: '当前没有进行中的联赛' })
@@ -1791,6 +1914,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         const check = tryValidateInstructions(body.game.lineup.tacticalInstructions)
         if (!check.ok) return json(res, 400, { error: `战术指令无效：${check.error}` })
       }
+      if (body.game.lineup.matchPlan !== undefined && !isMatchPlanId(body.game.lineup.matchPlan)) {
+        return json(res, 400, { error: `未知比赛计划：${String(body.game.lineup.matchPlan)}` })
+      }
       for (const preset of body.game.lineup.presets ?? []) {
         if (preset?.lineup?.tacticalStyle !== undefined && !isStyleId(preset.lineup.tacticalStyle)) {
           return json(res, 400, { error: `预设“${preset.name}”战术风格无效` })
@@ -1798,6 +1924,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         if (preset?.lineup?.tacticalInstructions !== undefined) {
           const check = tryValidateInstructions(preset.lineup.tacticalInstructions)
           if (!check.ok) return json(res, 400, { error: `预设“${preset.name}”战术指令无效：${check.error}` })
+        }
+        if (preset?.lineup?.matchPlan !== undefined && !isMatchPlanId(preset.lineup.matchPlan)) {
+          return json(res, 400, { error: `预设“${preset.name}”比赛计划无效` })
         }
       }
       if (account.game.activeMatch?.context.isLeague) {
@@ -1887,11 +2016,17 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     group.add(res)
     sendState(res, account)
     res.write(`data: ${JSON.stringify(marketPayload())}\n\n`)
-    const heartbeat = setInterval(() => res.write(': ping\n\n'), 15_000)
+    const heartbeat = setInterval(() => {
+      touchAccountOnline(account)
+      res.write(': ping\n\n')
+    }, 15_000)
     const cleanup = () => {
       clearInterval(heartbeat)
       group!.delete(res)
-      if (group!.size === 0) clients.delete(account.id)
+      if (group!.size === 0) {
+        clients.delete(account.id)
+        touchAccountOnline(account, true)
+      }
     }
     req.on('close', cleanup)
     res.on('close', cleanup)
