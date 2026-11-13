@@ -3,6 +3,7 @@ import { SKILLS, basicSkillsFor, basicSkillScopeMatches, canLearnSkill, skillCat
 import { getSkillTier, inheritanceChances } from './inheritance.ts'
 import { LEGEND_SKILLS, MAX_BOOKS } from './data/legend-skills.ts'
 import { PEAK_SKILLS } from './data/peak-skills.ts'
+import { basicBookDef } from './data/basic-skill-books.ts'
 import { effectiveClubCeilings } from './cup-rewards.ts'
 import { attrHardLimit } from './scale.ts'
 import { attrLabel } from './data/attributes.ts'
@@ -15,7 +16,9 @@ type BookRequirement = { attr: AttrKey; silver?: number; gold: number; rainbow: 
 type BookDef = { name: string; scope: 'any' | 'field' | 'gk'; requires: BookRequirement[] }
 
 function bookDef(id: SkillBookId): BookDef | undefined {
-  return (LEGEND_SKILLS as unknown as Record<string, BookDef>)[id] ?? (PEAK_SKILLS as unknown as Record<string, BookDef>)[id]
+  const special = (LEGEND_SKILLS as unknown as Record<string, BookDef>)[id] ?? (PEAK_SKILLS as unknown as Record<string, BookDef>)[id]
+  if (special) return special
+  return Object.hasOwn(SKILLS, id) ? basicBookDef(id, SKILLS[id].name) : undefined
 }
 
 function peakDef(id: SkillBookId) {

@@ -147,8 +147,11 @@ export type LegendSkillId = Exclude<Extract<SkillId, `lg_${string}`>, PeakSkillI
 
 export type SkillTier = 'silver' | 'gold' | 'rainbow'
 export type LegendBookTier = SkillTier
-export type SkillBookId = LegendSkillId | PeakSkillId
+/** 任何技能都可以成为技能书：传奇 / 巅峰书来自挑战，基础技能书主要来自联赛掉落。 */
+export type SkillBookId = SkillId
 export type LegendBook = { id: SkillBookId; tier: LegendBookTier }
+/** 联机联赛赛后掉落：场上球员的某项技能按其档位变成技能书。 */
+export type LeagueBookDrop = { playerId: string; playerName: string; side: 'home' | 'away'; id: SkillBookId; tier: LegendBookTier; minutes: number }
 
 export type TraitEffect =
   | 'vision'
@@ -828,6 +831,8 @@ export type MatchRecord = {
   autoSimulated?: boolean
   /** 联机联赛：服务器留着开球时的引擎初始状态，可以在复盘页 2D 重看整场（`GET /api/match/replay`）。 */
   hasReplay?: boolean
+  /** 联机联赛赛后技能书掉落（只给真人执教的球队，服务器判定）。 */
+  bookDrops?: LeagueBookDrop[]
 }
 
 export type MatchInstruction = {

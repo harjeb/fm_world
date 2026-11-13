@@ -57,7 +57,7 @@ function legendBooksPanel(): string {
   const books = game.legendBooks ?? []
   if (!books.length) return ''
   const tierShort = { silver: '银', gold: '金', rainbow: '彩' } as const
-  return panel(`技能书库存 <small>${books.length}</small>`, `<p class="hint pad">技能书分银、金、彩等不同稀有度，可重复携带：前往培养页选择球员并配置到书槽。</p><div class="rows">${books.map((book) => `<div class="row-line"><span>${tag(tierShort[book.tier], `skill-${book.tier}`)} ${esc(legendBookLabel(book))}</span><small class="muted">可在培养页带进书槽</small></div>`).join('')}</div><div class="btn-row pad"><button class="btn small" data-nav="training">去培养配置技能卡 ${icon('right', 12)}</button></div>`, { flush: true })
+  return panel(`技能书库存 <small>${books.length}</small>`, `<p class="hint pad">技能书分银、金、彩等不同稀有度，可重复携带：联赛场上球员会随机掉落，传奇挑战与巅峰之路也能获得；前往培养页选择球员并配置到书槽。</p><div class="rows">${books.map((book) => `<div class="row-line"><span>${tag(tierShort[book.tier], `skill-${book.tier}`)} ${esc(legendBookLabel(book))}</span><small class="muted">可在培养页带进书槽</small></div>`).join('')}</div><div class="btn-row pad"><button class="btn small" data-nav="training">去培养配置技能卡 ${icon('right', 12)}</button></div>`, { flush: true })
 }
 
 function renderLegend(): string {

@@ -39,6 +39,7 @@ import { startChallengeWithOpponent } from '../src/game/actions.ts'
 import { MatchQueue, type MatchQueueOptions } from './match-queue.ts'
 import { MatchScheduler } from './match-scheduler.ts'
 import { emptyMatchBook, matchJobId, recordForClub, type LockedTeam, type MatchBook, type MatchJob } from './match-job.ts'
+import { awardLeagueBookDrops } from '../src/game/league-book-drops.ts'
 import { chemistryForPlayers, mergeChemistryTraining } from '../src/game/chemistry.ts'
 import { isStyleId, tryValidateInstructions } from '../src/game/pes/tactics.ts'
 import { isMatchPlanId, matchPlanConditionFactor } from '../src/game/pes/match-plan.ts'
@@ -506,6 +507,17 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const coached = input.kickoffAt > account.createdAt
       coachedMatch ||= coached
       if (coached && !game.matchHistory.some((record) => record.id === id)) game.matchHistory.unshift(recordForClub(input, result, clubId))
+      if (coached) {
+        // 真人执教球队独立判定：双方场上球员都可能掉书，已收集（同档或更高档）的不再掉。
+        const drops = awardLeagueBookDrops(game, {
+          players: [...input.home.team.players, ...input.away.team.players],
+          stats: result.record.playerStats,
+          seed: input.seed,
+          label: `${id}|${clubId}`,
+        })
+        const record = game.matchHistory.find((item) => item.id === id)
+        if (record) record.bookDrops = drops
+      }
       const economy = economyOf(game)
       if (coached && fixture.round > economy.lastIncomeRound) {
         awardRoundIncome(game, fixture.round)
@@ -2060,6 +2072,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       incomingGame.appearances = account.game.appearances
       incomingGame.suspensions = account.game.suspensions
       incomingGame.yellowCounts = account.game.yellowCounts
+      // 技能书永不消耗：服务器联赛掉落的书不能被尚未刷新的旧页面保存覆盖掉。
+      const bookKeys = new Set((incomingGame.legendBooks ?? []).map((book) => `${book.id}:${book.tier}`))
+      const serverBooks = (account.game.legendBooks ?? []).filter((book) => !bookKeys.has(`${book.id}:${book.tier}`))
+      if (serverBooks.length) incomingGame.legendBooks = [...(incomingGame.legendBooks ?? []), ...serverBooks]
       for (const player of incomingGame.roster) {
         const known = account.game.roster.find((item) => item.id === player.id)
         // 联机比赛体能由已发布的服务器结果决定；旧页面不能把赛后体能恢复成赛前值。

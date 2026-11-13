@@ -296,6 +296,7 @@ function matchSummary(record: GameState['matchHistory'][number]) {
     shootout: record.shootout ?? null,
     result: record.result,
     autoSimulated: !!record.autoSimulated,
+    bookDrops: (record.bookDrops ?? []).map((drop) => ({ ...drop, key: bookKey(drop), name: bookName(drop.id) })),
   }
 }
 

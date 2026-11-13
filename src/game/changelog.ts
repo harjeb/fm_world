@@ -7,7 +7,7 @@
  * - 玩家也可随时通过顶栏版本号按钮重新打开查看。
  */
 
-export const APP_VERSION = 'v0.4.4'
+export const APP_VERSION = 'v0.4.5'
 export const CHANGELOG_STORAGE_KEY = 'fm-world-changelog-seen'
 
 export type ChangelogItem = {
@@ -26,6 +26,32 @@ export type ChangelogRelease = {
 }
 
 export const CHANGELOG_RELEASES: readonly ChangelogRelease[] = [
+  {
+    version: 'v0.4.5',
+    date: '2026-11-13',
+    headline: '联赛比赛随机掉落技能书',
+    summary: '联机联赛每场结束后，双方上场球员都有机会把自己的一项技能变成技能书掉落给你，档位与球员技能一致；基础技能也能做成技能书带进培养。',
+    items: [
+      {
+        badge: '联赛掉书',
+        tone: 'gold',
+        title: '场上球员按上场时间约 5% 概率掉落技能书',
+        desc: '真人执教的球队在联赛比赛公布后由服务器判定：双方所有上场球员每人按「5% × 上场分钟 / 90」独立掉落，命中后从其技能中随机一项、按该技能的银/金/彩档位入库，不设每场上限（满场期望约 1 本）。已有同档或更高档的同技能书不会重复掉落。',
+      },
+      {
+        badge: '基础技能书',
+        tone: 'good',
+        title: '基础技能也能成为技能书',
+        desc: '禁区猎手、线路预判、门线神扑等基础技能书可在培养页「装备技能卡」中配置，学习门槛为对应单项属性（主属性 银 600 / 金 750 / 彩 900，隐藏属性 银 8 / 金 11 / 彩 14）。',
+      },
+      {
+        badge: '复盘',
+        tone: '',
+        title: '复盘页显示赛后掉落',
+        desc: '比赛记录列表用「书 ×N」角标标出掉书场次，赛后复盘中新增「赛后技能书掉落」面板，注明来源球员、所属球队与上场时间；Agent API 的 matchHistory 同步提供 bookDrops。',
+      },
+    ],
+  },
   {
     version: 'v0.4.4',
     date: '2026-11-13',

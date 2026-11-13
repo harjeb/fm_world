@@ -301,7 +301,7 @@ function bookPicker(player: Player): string {
   const missing = [...selected].filter((key) => !books.some((book) => bookKey(book) === key)).map((key) => `<label class="check-field muted"><input type="checkbox" data-training-book="${esc(key)}" checked><span>已不在库存：${esc(key)}（请取消选择）</span></label>`).join('')
   const body = books.length || missing
     ? `<div class="check-grid">${rows}${missing}</div><div class="btn-row pad"><button class="btn small" data-action="training-books-save" data-player="${esc(player.id)}">保存当前配置</button><span class="muted small">${dirty ? '有未保存的修改；开始培养时也会保存' : '已保存，按球员分别记住'}</span></div>`
-    : `<p class="muted pad">还没有技能书（支持银、金、彩多种稀有度）。 <button class="link" data-nav="challenge">前往挑战 ${icon('right', 12)}</button></p>`
+    : `<p class="muted pad">还没有技能书（支持银、金、彩多种稀有度）。联赛比赛场上球员会随机掉落技能书，传奇挑战与巅峰之路也能获得。 <button class="link" data-nav="challenge">前往挑战 ${icon('right', 12)}</button></p>`
   const rarities = `<span class="tag-row">${tag('银书', 'skill-silver')}${tag('金书', 'skill-gold')}${tag('彩书', 'skill-rainbow')}</span>`
   return panel(`装备技能卡 <small>${selected.size} / ${MAX_BOOKS}</small>`, `${basicList}${body}`, { flush: true, className: 'book-slot-panel', aside: rarities })
 }

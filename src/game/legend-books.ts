@@ -1,6 +1,5 @@
 import type { GameState, LegendBook, LegendBookTier, SkillBookId, SkillTier } from './types.ts'
-import { LEGEND_SKILLS, LEGEND_SKILL_DROPS } from './data/legend-skills.ts'
-import { PEAK_SKILLS } from './data/peak-skills.ts'
+import { LEGEND_SKILL_DROPS } from './data/legend-skills.ts'
 import { SKILLS } from './data/skills.ts'
 import { LEGEND_TEAMS } from './data/legend-teams.ts'
 import { economyOf, MAX_FANS } from './economy.ts'
@@ -24,7 +23,7 @@ export function ensureLegendBooks(game: GameState): boolean {
   }
   const seen = new Set<string>()
   const valid = game.legendBooks.filter((book) => {
-    if (!book || (!Object.hasOwn(LEGEND_SKILLS, book.id) && !Object.hasOwn(PEAK_SKILLS, book.id)) || (book.tier !== 'silver' && book.tier !== 'gold' && book.tier !== 'rainbow')) return false
+    if (!book || !Object.hasOwn(SKILLS, book.id) || (book.tier !== 'silver' && book.tier !== 'gold' && book.tier !== 'rainbow')) return false
     const key = `${book.id}:${book.tier}`
     if (seen.has(key)) return false
     seen.add(key)
@@ -39,6 +38,13 @@ export function ensureLegendBooks(game: GameState): boolean {
 
 export function hasLegendBook(game: GameState, id: SkillBookId, tier?: LegendBookTier): boolean {
   return !!game.legendBooks?.some((book) => book.id === id && (tier === undefined || book.tier === tier))
+}
+
+const BOOK_RANK: Record<LegendBookTier, number> = { silver: 0, gold: 1, rainbow: 2 }
+
+/** 库存里已有同档或更高档的同技能书。 */
+export function hasBookAtOrAbove(game: GameState, id: SkillBookId, tier: LegendBookTier): boolean {
+  return !!game.legendBooks?.some((book) => book.id === id && BOOK_RANK[book.tier] >= BOOK_RANK[tier])
 }
 
 export function addLegendBook(game: GameState, id: SkillBookId, tier: LegendBookTier): boolean {
