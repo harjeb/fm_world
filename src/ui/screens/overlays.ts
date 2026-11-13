@@ -143,7 +143,7 @@ export function renderDetailOverlay(): string {
             <div class="profile-meters">${personality.map(([label, value]) => `<div><span>${label}</span><span class="meter-wrap"><span class="meter neutral"><i style="width:${Math.max(0, Math.min(100, value))}%"></i></span><span class="meter-value">${Math.round(value)}</span></span></div>`).join('')}</div>
             ${owned ? (session || candidate
               ? `<div class="banner good compact split"><b>${candidate || session?.completed ? '培养出了新球员卡' : '正在培养'}</b><button class="btn primary small" data-action="open-training" data-player="${esc(player.id)}">查看培养</button></div>`
-              : `<button class="btn primary wide" data-action="start-training" data-player="${esc(player.id)}">${icon('play', 14)}培养角色卡</button>`) : '<p class="hint">这名球员不在你的阵容中。</p>'}
+              : `<button class="btn primary wide" data-action="open-training" data-player="${esc(player.id)}">${icon('play', 14)}培养角色卡</button>`) : '<p class="hint">这名球员不在你的阵容中。</p>'}
           </section>
         </div>
         ${owned && player.history?.length ? `<section class="profile-history"><h3>${worn ? `${esc(cardName(worn))}的培养记录` : '培养记录'}</h3><div class="log compact">${player.history.slice(-8).reverse().map((entry) => `<div class="log-row"><div class="log-head"><b>${esc(entry.title)}</b></div><p>${esc(trainingLogText(entry, gk))}</p></div>`).join('')}</div></section>` : ''}

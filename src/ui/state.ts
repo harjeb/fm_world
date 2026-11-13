@@ -84,9 +84,8 @@ export type UIState = {
   trainingCombo: 'attack' | 'defense'
   trainingPosition: Position
   trainingProtection: 'prevention' | 'resilience'
-  trainingMentorId: string
-  trainingSkill: SkillId | null
-  trainingReplaceSkill: SkillId | null
+  /** 赛后每个学习选项各自选定的替换技能。 */
+  trainingEventReplacements: Record<string, SkillId>
   detailPlayerId: string | null
   /** 任意界面点开的球队（世界里的 club id，玩家球队为 player）。 */
   clubViewId: string | null
@@ -199,9 +198,7 @@ export const ui: UIState = {
   trainingTeammateIds: [],
   trainingAttr: 'passing',
   trainingProtection: 'prevention',
-  trainingMentorId: '',
-  trainingSkill: null,
-  trainingReplaceSkill: null,
+  trainingEventReplacements: {},
   trainingCombo: 'attack',
   trainingPosition: 'CM',
   detailPlayerId: null,

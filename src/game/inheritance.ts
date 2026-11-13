@@ -35,7 +35,7 @@ export function validateInheritance(session: TrainingSession, mentor: Player, sk
 }
 
 /** Tier probabilities are conditional on successful inheritance; silver is the remainder. */
-export function inheritanceChances(session: TrainingSession, mentor: Player, skillId: SkillId): { success: number; gold: number; rainbow: number } {
+export function inheritanceChances(session: TrainingSession, mentor: Pick<Player, 'positions' | 'skillTiers'>, skillId: SkillId): { success: number; gold: number; rainbow: number } {
   const primary = POSITIONS.reduce((best, pos) => mentor.positions[pos] > mentor.positions[best] ? pos : best, POSITIONS[0])
   const compatible = session.candidate.positions[primary] >= 60
   const tier = getSkillTier(mentor, skillId)

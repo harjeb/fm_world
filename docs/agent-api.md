@@ -87,18 +87,23 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 ### 培养
 
 - `start_next_season` — 联机时由服务器全服统一结算；你的赛季结束且全服各队比赛都完成后，才能开始下一赛季。服务器到赛季结束时间也会自动推进，所有账号同步新赛程、升降级与 AI 名册；`state.season.index` 表示赛季编号。
+- `set_training_books` — 保存指定球员的技能书配置；`playerId`，`bookKeys` 为最多 4 个 `state.legendBooks[].key`（例如 `lg_drill_master:rainbow`），传空数组清空。位置不符、原始技能已掌握、同一技能重复选不同档位或库存不存在会被拒绝；技能槽满时可配置，成功学习时需替换同类技能。
 - `start_training` — 开始一轮 30 时段培养，消耗 30 精力（精力每个游戏日恢复 50 点，按经过的时间连续恢复，满 100 为止；不满的球员只恢复一成），不消耗金币；每轮都从原始属性开始，成长不跨轮累积。无 `scheduleVersion` 的旧 18/30 次课程保留旧规则。陪练队友由系统自动选 6 名（按阵型其他位置，中卫、边路、中场、前锋轮流挑，练外场必带 1 名其他门将；整轮固定，下一轮重新随机）：每个时段这 6 人会随机分到当天的各个选项里（含 `rest`，合计 6 人，有的选项可能没有人）：选哪个选项拿哪个选项上的人，训练项目每名队友每项正成长主属性加 N 点（N = 开始这一轮时七座设施里最低的等级，1–5；没有设施快照的旧课程仍是 2），站在恢复上的每人多恢复 4 点训练体力；他们不消耗精力、不生成 session；交流赛/队内赛只有一个选项，6 人全在上面；交流赛用当前保存的 11 人首发，培养中的球员一定上场（不在首发时顶替同位置 CA 最低的人）。`partnerIds` 参数已不再生效。
   - `playerId`
+  - `bookKeys?`: 可选，指定并保存本轮配置；省略则使用该球员已保存的配置。配置在 `state.trainingBooksByPlayer`，本轮快照在 `state.trainingSessions[].books`。
+
+  **只有培养中的交流赛后**：技能书、本轮随机最多 5 名共同培养队友、该位置的基础技能按 50:30:20 的来源权重逐项抽取，去重后最多 3 选 1；某类没有候选时剩余权重重新归一化。队友只来自本轮陪练或本次共同训练球员，玩家不选导师；`skillTeacherIds` 显示本轮抽中的人，选项中 `source`（`"book" | "teammate" | "basic"`）/ `skillId` / `mentorName` 显示来源与技能。已掌握技能不出现；少于 3 个按实际数量显示。基础技能学习必定成功并获得银档，书看属性，队友看位置、疲劳和导师档位；失败可在下次交流赛重试，书永久保留。满槽选项的 `replaceOptions` 列出可替换同类技能，成功才替换。队内赛、联赛和挑战赛均不触发，普通事件排队处理；技能属于本轮产出的球员卡。
 - `preview_training` — 预览下一次行动，不写入存档；与执行使用同一套规则。
   - `playerId`
   - `request`: 同 `training_action`
 - `training_action` — 执行一次训练行动。
   - `playerId`
-  - 新日历 `request`: `{ "kind": "activity", "activityId": "选项ID", "teammateIds": ["球员ID"], "position": "CM", "mentorId": "球员ID", "skill": "技能ID" }`；除 `kind` 和 `activityId` 外均可省略，参数按选项要求填写，队友仅用于允许组队的活动。
+  - 新日历 `request`: `{ "kind": "activity", "activityId": "选项ID", "teammateIds": ["球员ID"], "position": "CM" }`；除 `kind` 和 `activityId` 外均可省略，参数按选项要求填写，队友仅用于允许组队的活动。
   - 旧课程 `request`: `{ "kind": "drill", "attr": "passing" }`、`{ "kind": "combo", "focus": "attack" | "defense" }`、`{ "kind": "position", "position": "GK" | "CB" | "W" | "CM" | "ST" }`、`{ "kind": "match" }`、`{ "kind": "rest" }` 或 `{ "kind": "mentor" }`
 - `training_event_choice` — 处理训练事件。
   - `playerId`
   - `optionId`: 来自 `state.trainingSessions[].pendingEvent.options[].id`
+  - `replaceSkill?`: 技能槽满时，从该选项的 `replaceOptions` 选择同类已学技能 ID；失败不会替换。
 - `confirm_training` — 把刚练出的新卡装备到球员身上，并收起培养结果。
   - `playerId`
 - `keep_training` — 不换卡，新卡留在库存，并收起培养结果。
@@ -137,7 +142,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 新课程的 `state.trainingSessions[]` 提供 `date`（下一时段的 week、day、dayLabel、slot）、`options`（id、label、desc、stamina、group 和可选 parameters）、`lowMoodWeeks` 和 `exchangeMatches`。15 天每周 7 天、每天两个时段；周一上午强制 AI 交流赛，周五上午强制队内赛、下午强制休整（选项 id 仍是 `rest`，但不恢复体力），其余时段从每日随机选项（含休息）中选择。交流赛和队内赛不消耗训练体力。交流赛使用当前的首发、替补及已装备的属性，不使用培养中的成果；仅在执行时模拟产生结果，不改变联赛体能、伤病或赛程，也不受赛季伤病限制。组队行动共享比分，单独培养各自模拟。失利使参与该行动的球员下周一至周三正向属性成长减少 50%，包括设施、队友和事件成长；事件提示为基础值。固定比赛消耗至多 25 训练体力，不足时耗尽剩余体力而不中断课程。
 
-旧课程训练请求：`{ "kind": "protection", "focus": "prevention" | "resilience" }` 用于伤病防护；`{ "kind": "inherit", "mentorId": "球员ID", "skill": "技能ID" }` 用于导师技能传承。导师须在当前 `roster`，可从球员的 `skills` 和 `skillTiers` 查看可用技能及等级；具体资格以预览和执行规则为准。预览不修改培养状态。
+旧课程训练请求：`{ "kind": "protection", "focus": "prevention" | "resilience" }` 用于伤病防护。独立 `inherit` 技能传承课已取消，新旧课程均不能执行；队友技能改为通过交流赛后的技能选择获取。预览不修改培养状态。
 
 新课程中 `group: true` 的选项及旧课程的 `drill`、`combo`、`match` 可附加 `teammateIds: string[]`，选择同版本、同日程种子及同一行动次数的进行中培养队友同步训练；队友不可有待处理事件，所有参与者必须符合规则。无效 ID、重复或不符合条件的组会返回错误，不会静默忽略。预览使用相同的组验证，错误通过 `error` 返回；成功的 `plan.quality`（若有）包含 `label` 和 `multiplier`，收益仅展示可见主属性。执行后可通过各参与者的状态查看事件和进度。
 

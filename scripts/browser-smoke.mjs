@@ -161,10 +161,13 @@ try {
   const training = await evaluate(`JSON.parse(localStorage.getItem('fm-seven-a-side-save-v3')).training[${JSON.stringify(playerId)}]`)
   const teammateTraining = await evaluate(`JSON.parse(localStorage.getItem('fm-seven-a-side-save-v3')).training[${JSON.stringify(teammateId)}]`)
   if (training.facilityLevels.medical !== 2 || training.fatigue !== 0 || !training.exchangeMatches?.length) throw new Error('Monday exchange did not record its result, or it used stamina')
-  if (teammateTraining.action !== 1 || teammateTraining.fatigue !== 0 || teammateTraining.pendingEventId !== 'main_intake') throw new Error('teammate did not execute training and receive their own event')
+  if (teammateTraining.action !== 1 || teammateTraining.fatigue !== 0 || teammateTraining.pendingEventId !== 'match-book-choice' || teammateTraining.queuedEventId !== 'main_intake') throw new Error('teammate did not receive their own post-exchange choice and queued intake event')
   if (!(await evaluate(`document.querySelector('[data-action="open-training"][data-player="${teammateId}"]').innerText.includes('待处理事件')`))) throw new Error('teammate pending event is not visible')
   if (await evaluate(`JSON.parse(localStorage.getItem('fm-seven-a-side-save-v3')).economy.balance`) !== trainingBalance) throw new Error('training unexpectedly charged coins')
-  if (await evaluate(`!!document.querySelector('[data-action="event-option"]')`)) await click('[data-action="event-option"]')
+  for (let i = 0; i < 2; i++) {
+    if (!(await evaluate(`!!document.querySelector('[data-action="event-option"]')`))) break
+    await click('[data-action="event-option"]')
+  }
   await waitFor(`!!document.querySelector('[data-training-activity="rest"]')`)
   await click('[data-training-activity="rest"]')
   const staminaBeforeRest = await evaluate(`JSON.parse(localStorage.getItem('fm-seven-a-side-save-v3')).training[${JSON.stringify(playerId)}].fatigue`)

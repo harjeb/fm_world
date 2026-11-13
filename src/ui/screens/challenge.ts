@@ -56,7 +56,7 @@ function renderFriendly(): string {
 function legendBooksPanel(): string {
   const books = game.legendBooks ?? []
   if (!books.length) return ''
-  return panel(`传奇技能书 <small>${books.length}</small>`, `<div class="rows">${books.map((book) => `<div class="row-line"><span>${book.tier === 'rainbow' ? tag('彩', 'gold') : tag('金', 'info')} ${esc(legendBookLabel(book))}</span><small class="muted">可在培养页带进书槽</small></div>`).join('')}</div>`, { flush: true })
+  return panel(`传奇技能书 <small>${books.length}</small>`, `<p class="hint pad">技能书可重复使用：前往培养页选择球员、配置并保存，交流赛后从未学会的技能中选择学习。</p><div class="rows">${books.map((book) => `<div class="row-line"><span>${book.tier === 'rainbow' ? tag('彩', 'gold') : tag('金', 'info')} ${esc(legendBookLabel(book))}</span><small class="muted">可在培养页带进书槽</small></div>`).join('')}</div><div class="btn-row pad"><button class="btn small" data-nav="training">去培养配置技能卡 ${icon('right', 12)}</button></div>`, { flush: true })
 }
 
 function renderLegend(): string {

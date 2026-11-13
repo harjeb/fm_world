@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
-import { pickExchangeOpponent, previewTraining, startTraining, trainingAction, trainingEventChoice } from '../src/game/actions.ts'
+import { autoTrainingStep, pickExchangeOpponent, previewTraining, startTraining, trainingAction, trainingEventChoice } from '../src/game/actions.ts'
 import { planTraining } from '../src/game/training.ts'
 import { trainingDate, trainingLowMood, trainingOptions, type TrainingActivityId } from '../src/game/training-calendar.ts'
 import { EVENTS, eventById } from '../src/game/data/events.ts'
@@ -81,7 +81,7 @@ describe('calendar training', () => {
     const session = game.training[id]
     for (let guard = 0; guard < 80 && !session.completed; guard++) {
       if (session.pendingEventId) {
-        expect(trainingEventChoice(game, id, eventById(session.pendingEventId)!.options[0].id).ok).toBe(true)
+        expect(autoTrainingStep(game, id).ok).toBe(true)
       } else {
         const options = trainingOptions(session)
         const option = options.find(item => item.id === (session.fatigue > 70 ? 'rest' : 'shooting')) ?? options.find(item => item.gains) ?? options[0]
@@ -299,7 +299,7 @@ describe('calendar training', () => {
     expect(game.candidates[ids[0]]).toBeTruthy()
   })
 
-  it('位置学习、伤病预防、伤病韧性与技能传承在学满后不再出现在候选课程中', () => {
+  it('位置学习与防护课学满后不再出现，技能传承已移入交流赛', () => {
     const { game, ids } = setup()
     const s = game.training[ids[0]]
     s.candidate.skills = ['injury_prevention']
@@ -328,15 +328,12 @@ describe('calendar training', () => {
       expect(trainingOptions(s).map(o => o.id)).not.toContain('position')
     }
 
-    // 4 个主技能槽 + 2 个辅助技能槽全部满员时，技能传承仍然保留（允许顶掉已有技能）
+    // 独立传承课程已删除；满槽替换由交流赛后选择处理。
     s.candidate.skills = ['through_ball', 'long_shot', 'safe_pass', 'one_touch', 'injury_prevention', 'injury_resilience']
-    let inheritSeen = false
     for (let seed = 1; seed <= 40; seed++) {
       s.scheduleSeed = seed
       s.action = 2
-      const optIds = trainingOptions(s).map(o => o.id)
-      if (optIds.includes('inherit')) inheritSeen = true
+      expect(trainingOptions(s).map(o => o.id)).not.toContain('inherit')
     }
-    expect(inheritSeen).toBe(true)
   })
 })

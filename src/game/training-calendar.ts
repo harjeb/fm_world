@@ -84,7 +84,6 @@ export const ACTIVITIES: TrainingActivity[] = [
   { id: 'defending', label: '防守配合', desc: '练习抢断、补位与防线协防。', stamina: '-16', group: true, cooperative: true, cost: 16, gains: { tackling: 1.5, teamwork: 0.5, defPos: 0.5 }, goalkeeperGains: { oneOnOne: 1.5, teamwork: 0.5, composure: 0.5 } },
   { id: 'pressing', label: '高位逼抢', desc: '前场协同围抢、压迫出球与连续反抢。', stamina: '-16', group: true, cooperative: true, cost: 16, gains: { tackling: 1.25, speed: 0.75, endurance: 0.5, anticipation: 0.5 } },
   { id: 'position', label: '位置学习', desc: '学习位置或提高熟练度。', stamina: '-8', group: false, parameters: 'position' },
-  { id: 'inherit', label: '技能传承', desc: '向队友学习技能。', stamina: '-8', group: false, parameters: 'inherit' },
   { id: 'mentor', label: '导师复盘', desc: '和导师交流，优先触发培养事件。', stamina: '+5', group: false },
   { id: 'prevention', label: '伤病预防', desc: '学习伤病预防技能。', stamina: '-8', group: false },
   { id: 'resilience', label: '伤病韧性', desc: '学习伤病韧性技能。', stamina: '-8', group: false },
@@ -113,7 +112,7 @@ export const GK_ACTIVITIES: TrainingActivity[] = [
   ...(['goalkeeping', 'video', 'tactics'] as TrainingActivityId[]).map((id) => ACTIVITIES.find((item) => item.id === id)!),
 ]
 
-const EXCHANGE: TrainingActivity = { id: 'exchange', label: '交流赛', desc: '使用当前保存的阵容和已装备的属性与 AI 球队比赛，培养中的成果不参与。按位置与职责轮换两项主属性成长；失败使本课程下周一至周三属性成长减半。不消耗训练体力。', stamina: '不耗体力', group: true, cooperative: true }
+const EXCHANGE: TrainingActivity = { id: 'exchange', label: '交流赛', desc: '使用当前保存的阵容和已装备的属性与 AI 球队比赛，培养中的成果不参与。赛后从技能书、一起培养的队友与位置基础技能中按概率抽取最多三选一；交流赛失利使本课程下周一至周三属性成长减半。不消耗训练体力。', stamina: '不耗体力', group: true, cooperative: true }
 const MATCH: TrainingActivity = { id: 'match', label: '队内比赛', desc: '按位置与职责轮换两项主属性，并练习团队合作。不消耗训练体力。', stamina: '不耗体力', group: true, cooperative: true }
 const REST: TrainingActivity = { id: 'rest', label: '恢复', desc: '恢复 30 点训练体力。', stamina: '+30', group: false }
 const MATCH_DAY_REST: TrainingActivity = { id: 'rest', label: '休整', desc: '队内比赛后的休整，不恢复训练体力。', stamina: '体力不变', group: false, noRecovery: true }
@@ -143,7 +142,7 @@ export function trainingDate(action: number): { week: number; day: number; dayLa
  * 判断非属性类的功能课程当前是否仍可学习：
  * - 伤病预防 / 伤病韧性：已学会或辅助技能槽已满后不再出现；
  * - 位置学习：所有可练位置均达 100 熟练度后不再出现；
- * - 技能传承：始终保留（技能槽满时支持顶掉已有技能）。
+ * - 技能传承已合并到交流赛后的学习选择。
  */
 export function isSpecialActivityAvailable(session: TrainingSession, item: TrainingActivity): boolean {
   const candidate = session.candidate

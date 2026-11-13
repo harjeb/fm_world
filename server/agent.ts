@@ -2,7 +2,7 @@ import type { AttrKey, EventDef, FormationId, GameState, Lineup, PlayerCard, Pos
 import type { TrainingRequest } from '../src/game/training.ts'
 import { trainingDate, trainingOptions, type TrainingActivityId } from '../src/game/training-calendar.ts'
 import type { SkillId } from '../src/game/types.ts'
-import { SKILLS } from '../src/game/data/skills.ts'
+import { SKILLS, canLearnSkill, skillCategory } from '../src/game/data/skills.ts'
 import { economyOf, payWageArrears, upgradeFacility, FACILITIES, facilityLevel, facilityRoundIncome, facilityStageChance, facilityStageInLevel, facilityUpgradeCost, type FacilityId } from '../src/game/economy.ts'
 import { aiTransferOffers, previewClubSigning, bestMarketValue, buyFreeAgent, listPlayer, cancelListing, releasePlayer, renewContract, signClubPlayer, transferWindowOpen } from '../src/game/market.ts'
 import { negotiationDemands, negotiationTerms, SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../src/game/negotiation.ts'
@@ -12,7 +12,7 @@ import { displayCA, displayAttr, displayGain, initialDisplayCA } from '../src/ga
 import { mainAttrsFor } from '../src/game/scale.ts'
 import { FORMATIONS, FORMATION_LIST, isLegacyFormation } from '../src/game/data/formations.ts'
 import { ROLES, ROLES_BY_POSITION } from '../src/game/data/roles.ts'
-import { eventById } from '../src/game/data/events.ts'
+import { bookKey, bookLearnChance, bookName, bookRequirementText, eventForSession, trainingSkillChance } from '../src/game/legend-learning.ts'
 import { branchProbability, eventChance, trainingActionsTotal, eventGrowthScale, TRAINING_ACTION_INFO } from '../src/game/training.ts'
 import { computeLineupFamiliarity, lineupSlots, validateLineup } from '../src/game/squad.ts'
 import {
@@ -45,6 +45,8 @@ import {
   autoTrainingStep,
   defaultAutoPriority,
   setAutoTrainingConfig,
+  setTrainingBookLoadout,
+  trainingBookLoadout,
   changeMatchAutoSubs,
   changeMatchTactics,
   confirmTraining,
@@ -304,9 +306,14 @@ function eventView(session: TrainingSession, event: EventDef) {
     hintNote: session.scheduleVersion === 1 ? '提示为基础成长；低落情绪可能使正向属性成长减少 50%。' : null,
     options: event.options.map((option) => ({
       id: option.id, label: option.label, hint: displayEventHint(option.hint, gk, eventGrowthScale(session)),
-      chanceText: option.branch?.chanceText ?? null,
-      probability: option.branch ? Math.round(branchProbability(session, option.branch.check, option.branch.p) * 1000) / 1000 : null,
-      successText: option.branch?.success.text ?? null, failureText: option.branch?.failure.text ?? null,
+      chanceText: option.book || option.trainingSkill ? '成功率' : option.branch?.chanceText ?? null,
+      probability: option.trainingSkill ? Math.round(trainingSkillChance(session, option.trainingSkill) * 1000) / 1000 : option.book ? Math.round(bookLearnChance(session.candidate, option.book) * 1000) / 1000 : option.branch ? Math.round(branchProbability(session, option.branch.check, option.branch.p) * 1000) / 1000 : null,
+      source: option.trainingSkill?.source ?? null,
+      skillId: option.trainingSkill?.id ?? null,
+      mentorName: option.trainingSkill?.source === 'teammate' ? option.trainingSkill.mentor.name : null,
+      replaceOptions: option.trainingSkill && !canLearnSkill(session.candidate.skills, option.trainingSkill.id) ? session.candidate.skills.filter((id) => skillCategory(id) === skillCategory(option.trainingSkill!.id)) : [],
+      successText: option.trainingSkill || option.book ? '学会技能；满槽时成功替换同类技能' : option.branch?.success.text ?? null,
+      failureText: option.trainingSkill || option.book ? '原有技能与技能书保留' : option.branch?.failure.text ?? null,
     })),
   }
 }
@@ -314,7 +321,7 @@ function eventView(session: TrainingSession, event: EventDef) {
 export function agentView(game: GameState, now = Date.now(), options: AgentOptions = {}) {
   const sessionView = Object.values(game.training).map((session) => {
     const player = game.roster.find((item) => item.id === session.playerId)
-    const pending = session.pendingEventId ? eventById(session.pendingEventId) : undefined
+    const pending = session.pendingEventId ? eventForSession(session, session.pendingEventId) : undefined
     return {
       playerId: session.playerId,
       playerName: player?.name ?? session.playerId,
@@ -325,6 +332,8 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
       options: session.scheduleVersion === 1 && session.action < trainingActionsTotal(session) ? trainingOptions(session).map(({ id, label, desc, stamina, group, parameters }) => ({ id, label, desc, stamina, group, ...(parameters ? { parameters } : {}) })) : [],
       lowMoodWeeks: session.lowMoodWeeks ?? [],
       exchangeMatches: session.exchangeMatches ?? [],
+      books: session.books ?? [],
+      skillTeacherIds: session.skillTeacherIds ?? [],
       facilityLevels: session.facilityLevels ?? null,
       fatigue: session.fatigue,
       stamina: 100 - session.fatigue,
@@ -422,6 +431,8 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
     matchPlans: MATCH_PLAN_LIST,
     roles: ROLES_BY_POSITION,
     trainingSessions: sessionView,
+    legendBooks: (game.legendBooks ?? []).map((book) => ({ ...book, key: bookKey(book), name: bookName(book.id), requirements: bookRequirementText(book) })),
+    trainingBooksByPlayer: Object.fromEntries(game.roster.map((player) => [player.id, trainingBookLoadout(game, player.id)])),
     candidates: Object.values(game.candidates).map((player) => playerView(player, game, now)),
     cards: cardsOf(game).map((card) => cardView(card, game)),
     activeMatch: matchView(game),
@@ -668,9 +679,15 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       const result = startNextSeasonAction(game, now)
       return { ...result, result }
     }
+    case 'set_training_books': {
+      if (!Array.isArray(body.bookKeys) || body.bookKeys.some((key) => typeof key !== 'string')) return { ok: false, error: 'bookKeys 必须是技能书 key 数组' }
+      const result = setTrainingBookLoadout(game, text(body.playerId), body.bookKeys as string[])
+      return { ...result, result }
+    }
     case 'start_training': {
-      // 陪练队友由系统自动挑 6 个（含门将），不再由调用方指定。
-      const result = startTrainingWithSupport(game, text(body.playerId))
+      // 省略 bookKeys 时使用该球员已保存的配置。
+      if (body.bookKeys !== undefined && (!Array.isArray(body.bookKeys) || body.bookKeys.some((key) => typeof key !== 'string'))) return { ok: false, error: 'bookKeys 必须是技能书 key 数组' }
+      const result = startTrainingWithSupport(game, text(body.playerId), undefined, body.bookKeys as string[] | undefined)
       return { ...result, result }
     }
     case 'preview_training': {
@@ -696,9 +713,10 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
     case 'training_event_choice': {
       const playerId = text(body.playerId)
       const session = game.training[playerId]
-      const pending = session?.pendingEventId ? eventById(session.pendingEventId) : undefined
+      const pending = session?.pendingEventId ? eventForSession(session, session.pendingEventId) : undefined
       const event = pending && session ? eventView(session, pending) : undefined
-      const result = trainingEventChoice(game, playerId, text(body.optionId))
+      const replaceSkill = typeof body.replaceSkill === 'string' ? body.replaceSkill as SkillId : undefined
+      const result = trainingEventChoice(game, playerId, text(body.optionId), replaceSkill)
       const option = event?.options.find(item => item.id === result.option?.id)
       const visible = { ...result, event, option, gains: result.gains && visibleGains(result.gains, (session?.candidate.positions.GK ?? 0) > 0) }
       return { ...visible, result: visible }

@@ -1,9 +1,8 @@
 import type { Player, Position, SkillId, TrainingLogEntry, TrainingSession } from '../../game/types.ts'
 import { eventById, ROUTE_LABELS } from '../../game/data/events.ts'
 import { POSITION_LABELS } from '../../game/data/attributes.ts'
-import { inheritanceChances, validateInheritance } from '../../game/inheritance.ts'
-import { canLearnSkill, skillCategory } from '../../game/data/skills.ts'
-import { autoPresetLabel, autoTrainingConfig, autoTrainingPresetsFor, autoTrainingRunnable, previewTraining, resolveAutoPresetId } from '../../game/actions.ts'
+import { SKILLS, basicSkillsFor, canLearnSkill, skillCategory } from '../../game/data/skills.ts'
+import { autoPresetLabel, autoTrainingConfig, autoTrainingPresetsFor, autoTrainingRunnable, previewTraining, resolveAutoPresetId, trainingBookLoadout } from '../../game/actions.ts'
 import { displayCA, initialDisplayCA, mainAttrsFor } from '../../game/rating.ts'
 import { caCeilingOf } from '../../game/ca.ts'
 import { cupCeilingBonus, effectiveClubCeilings, effectiveTrainingCeilings } from '../../game/cup-rewards.ts'
@@ -12,9 +11,10 @@ import { partnerAssignment, trainingDate, trainingOptions, type TrainingActivity
 import { baseBuild, playerCards } from '../../game/cards.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
 import { getSkillTier } from '../../game/inheritance.ts'
-import { bookKey, bookLearnChance, bookName, bookRequirementText, bookTierLabel, canUseBookOnPlayer, eventForSession } from '../../game/legend-learning.ts'
+import { bookKey, bookLearnChance, bookName, bookRequirementText, bookTierLabel, canChooseTrainingBook, eventForSession, trainingSkillChance } from '../../game/legend-learning.ts'
+import { MAX_BOOKS } from '../../game/data/legend-skills.ts'
 import { keyAttrsOf } from '../../game/data/key-attrs.ts'
-import { activityColor, attrColor, attributeRadar, attrHeat, caHeat, cardName, cardSelect, icon, mainAttrs, meter, pageHead, panel, posBadge, primaryPosition, skillGroups, skillTierLabel, tag, tile, traitLabel } from '../components.ts'
+import { activityColor, attrColor, attributeRadar, attrHeat, caHeat, cardName, cardSelect, icon, mainAttrs, meter, pageHead, panel, posBadge, primaryPosition, skillGroups, tag, tile, traitLabel } from '../components.ts'
 import { attrLabel, attrValue, caDelta, displayEventHint, esc, gainText, pct, playerCA, positionLabel, skillName, trainingLogText } from '../format.ts'
 import { game, ui } from '../state.ts'
 
@@ -29,24 +29,6 @@ export function eligibleTrainingTeammates(session: TrainingSession): Player[] {
 
 const TIER_ORDER: Record<'silver' | 'gold' | 'rainbow', number> = { silver: 0, gold: 1, rainbow: 2 }
 
-/** 当目标技能类别槽位已满时，解析（并默认按银→金→彩挑选）要顶掉的已有同类别技能。 */
-function resolveReplaceSkill(session: TrainingSession | undefined, targetSkill: SkillId | null): SkillId | undefined {
-  if (!session || !targetSkill) return undefined
-  if (session.candidate.skills.includes(targetSkill)) return undefined
-  if (canLearnSkill(session.candidate.skills, targetSkill)) return undefined
-  const category = skillCategory(targetSkill)
-  const replaceable = session.candidate.skills.filter((s) => skillCategory(s) === category)
-  if (replaceable.length === 0) return undefined
-  if (ui.trainingReplaceSkill && replaceable.includes(ui.trainingReplaceSkill)) {
-    return ui.trainingReplaceSkill
-  }
-  const bestDefault = [...replaceable].sort(
-    (a, b) => TIER_ORDER[getSkillTier(session.candidate, a)] - TIER_ORDER[getSkillTier(session.candidate, b)],
-  )[0]
-  ui.trainingReplaceSkill = bestDefault
-  return bestDefault
-}
-
 export function buildTrainingRequest(): TrainingRequest {
   const session = ui.trainingPlayerId ? game.training[ui.trainingPlayerId] : undefined
   const eligible = session ? new Set(eligibleTrainingTeammates(session).map((player) => player.id)) : new Set<string>()
@@ -57,14 +39,11 @@ export function buildTrainingRequest(): TrainingRequest {
     const activity = options.find((option) => option.id === ui.trainingActivity) ?? options[0]
     if (activity) {
       ui.trainingActivity = activity.id as TrainingActivityId
-      const skill = ui.trainingSkill ?? 'injury_prevention'
-      const replaceSkill = activity.parameters === 'inherit' ? resolveReplaceSkill(session, skill) : undefined
       return {
         kind: 'activity',
         activityId: ui.trainingActivity,
         ...(activity.group ? { teammateIds } : {}),
         ...(activity.parameters === 'position' ? { position: ui.trainingPosition } : {}),
-        ...(activity.parameters === 'inherit' ? { mentorId: ui.trainingMentorId, skill, ...(replaceSkill ? { replaceSkill } : {}) } : {}),
       }
     }
   }
@@ -74,11 +53,6 @@ export function buildTrainingRequest(): TrainingRequest {
   if (ui.trainingKind === 'position') return { kind: 'position', position: ui.trainingPosition }
   if (ui.trainingKind === 'rest') return { kind: 'rest' }
   if (ui.trainingKind === 'protection') return { kind: 'protection', focus: ui.trainingProtection }
-  if (ui.trainingKind === 'inherit') {
-    const skill = ui.trainingSkill ?? 'injury_prevention'
-    const replaceSkill = resolveReplaceSkill(session, skill)
-    return { kind: 'inherit', mentorId: ui.trainingMentorId, skill, ...(replaceSkill ? { replaceSkill } : {}) }
-  }
   return { kind: 'mentor' }
 }
 
@@ -138,7 +112,7 @@ export function renderTraining(): string {
       actions: playerSelect(),
     })}
     ${sessionStrip()}
-    ${selected ? renderTrainingPlayer(selected) : overviewTable()}
+    ${selected ? renderTrainingPlayer(selected) : `<p class="hint">先选择球员，再在开始培养前配置挑战获得的技能卡（技能书）。</p>${overviewTable()}`}
   `
 }
 
@@ -307,26 +281,39 @@ function attrCompareTable(current: Player, candidate: Player): string {
 
 function bookPicker(player: Player): string {
   const books = game.legendBooks ?? []
-  if (!books.length) return ''
   const selected = new Set(ui.trainingBookIds)
+  const base = { ...player, ...baseBuild(player) }
+  const saved = trainingBookLoadout(game, player.id)
+  const dirty = saved.length !== selected.size || saved.some((key) => !selected.has(key))
   const rows = books.map((book) => {
     const key = bookKey(book)
-    const check = canUseBookOnPlayer(player, book)
+    const check = canChooseTrainingBook(base, book)
     const checked = selected.has(key)
-    const chance = bookLearnChance(player, book)
-    const reason = check.ok ? '' : ` · ${check.reason}`
-    return `<label class="check-field ${check.ok ? '' : 'muted'}" title="${esc(reason)}">
-      <input type="checkbox" data-training-book="${esc(key)}" ${checked ? 'checked' : ''} ${!check.ok || (!checked && selected.size >= 4) ? 'disabled' : ''}>
-      <span><b>${esc(bookTierLabel(book.tier))}·${esc(bookName(book.id))}</b><small class="muted"> 要求 ${esc(bookRequirementText(book))} · 成功率 ${Math.round(chance * 100)}%${esc(reason)}</small></span>
+    const duplicate = !checked && books.some((other) => other.id === book.id && selected.has(bookKey(other)))
+    const reason = !check.ok ? ` · ${check.reason}` : duplicate ? ' · 已选同技能的其他档位' : ''
+    return `<label class="check-field training-book-option ${check.ok && !duplicate ? '' : 'muted'}" title="${esc(reason)}">
+      <input type="checkbox" data-training-book="${esc(key)}" ${checked ? 'checked' : ''} ${!checked && (!check.ok || duplicate || selected.size >= MAX_BOOKS) ? 'disabled' : ''}>
+      <span><b>${esc(bookTierLabel(book.tier))}·${esc(bookName(book.id))}</b><small>${esc(SKILLS[book.id]?.desc ?? '')} ${esc(skillEffectText(book.id, book.tier))}</small><small class="muted">要求 ${esc(bookRequirementText(book))} · 起点成功率 ${Math.round(bookLearnChance(base, book) * 100)}%${esc(reason)}</small></span>
     </label>`
   }).join('')
-  return panel(`传奇技能书槽 <small>${selected.size} / 4</small>`, `<p class="hint pad">每轮最多带 4 本；书不会消耗，学习成功与否都留在库存。失败后同一本还能再触发一次。</p><div class="check-grid">${rows}</div>`, { flush: true })
+  const basic = basicSkillsFor(base)
+  const basicList = `<details class="training-basic-skills"><summary>本位置基础技能池（${basic.length} 项）</summary><div class="rows">${basic.map((id) => `<div class="row-line"><span><b>${esc(SKILLS[id].name)}</b> ${base.skills.includes(id) ? '<small class="muted">已掌握</small>' : ''}<small class="muted"> · ${esc(SKILLS[id].desc)} ${esc(skillEffectText(id, 'silver'))}</small></span></div>`).join('')}</div></details>`
+  const missing = [...selected].filter((key) => !books.some((book) => bookKey(book) === key)).map((key) => `<label class="check-field muted"><input type="checkbox" data-training-book="${esc(key)}" checked><span>已不在库存：${esc(key)}（请取消选择）</span></label>`).join('')
+  const body = books.length || missing
+    ? `<div class="check-grid">${rows}${missing}</div><div class="btn-row pad"><button class="btn small" data-action="training-books-save" data-player="${esc(player.id)}">保存当前配置</button><span class="muted small">${dirty ? '有未保存的修改；开始培养时也会保存' : '已保存，按球员分别记住'}</span></div>`
+    : `<p class="muted pad">还没有技能卡。传奇挑战胜/平或巅峰之路里程碑可获得技能书。 <button class="link" data-nav="challenge">前往挑战 ${icon('right', 12)}</button></p>`
+  return panel(`传奇技能书槽 · 装备技能卡 <small>${selected.size} / ${MAX_BOOKS}</small>`, `<p class="hint pad">最多选择 ${MAX_BOOKS} 本，保存后下次培养可继续使用。只有交流赛后触发学习：技能书、一起培养的队友（随机最多 5 人）和位置基础技能按来源权重 50:30:20 抽取最多 3 选 1；来源不足时按剩余权重抽取。已掌握的技能不出现，满槽可选择替换，失败保留原技能和书。每轮从原始技能开始，学会的技能属于本轮产出的球员卡。自动培养会自动选择；如要手选请先暂停自动培养。</p>${basicList}${body}`, { flush: true })
 }
 
 function bookLoadout(session: TrainingSession): string {
-  if (!session.books?.length) return ''
-  const rows = session.books.map((book) => `<div class="row-line"><span>${esc(bookTierLabel(book.tier))} · ${esc(bookRequirementText(book))}</span><b>${Math.round(bookLearnChance(session.candidate, book) * 100)}%</b></div>`).join('')
-  return panel(`本轮技能书槽 <small>${session.books.length} / 4</small>`, `<div class="rows">${rows}</div><p class="hint pad">书不消耗；12/14/16/18 次行动前各有一次保底学习事件。</p>`, { flush: true })
+  const names = (session.skillTeacherIds ?? []).map((id) => game.roster.find((player) => player.id === id)?.name).filter((name): name is string => !!name)
+  const teachers = names.length ? `<p class="hint pad">本轮技能来源队友（随机最多 5 人）：${names.map(esc).join('、')}。只有当前仍参与培养的人可提供选项。</p>` : ''
+  if (!session.books?.length) return panel(`本轮技能书槽 <small>0 / ${MAX_BOOKS}</small>`, `<p class="hint pad">本轮没有配置技能书，交流赛后仍可学习一起培养的队友或位置基础技能；下次开始培养前可以配置技能书。</p>${teachers}`, { flush: true })
+  const rows = session.books.map((book) => {
+    const check = canChooseTrainingBook(session.candidate, book)
+    return `<div class="row-line"><span>${esc(bookTierLabel(book.tier))} · ${esc(bookName(book.id))} <small class="muted">${check.ok ? esc(bookRequirementText(book)) : esc(check.reason ?? '')}</small></span><b>${check.ok ? `${Math.round(bookLearnChance(session.candidate, book) * 100)}%` : '—'}</b></div>`
+  }).join('')
+  return panel(`本轮技能书槽 <small>${session.books.length} / ${MAX_BOOKS}</small>`, `<div class="rows">${rows}</div><p class="hint pad">交流赛后从技能书、共同培养队友和基础技能按概率抽取；已掌握技能不出现。书不会消耗。</p>${teachers}`, { flush: true })
 }
 
 function renderTrainingStart(player: Player): string {
@@ -543,37 +530,6 @@ function positionField(session: TrainingSession, isGk: boolean): string {
   }).join('')}</select></div>`
 }
 
-function inheritFields(session: TrainingSession, mentors: Player[], mentor: Player | undefined): string {
-  if (!mentor || !ui.trainingSkill) return '<p class="muted">阵容中没有拥有技能的可用导师。</p>'
-  const replaceSkill = resolveReplaceSkill(session, ui.trainingSkill)
-  const category = skillCategory(ui.trainingSkill)
-  const replaceable = replaceSkill ? session.candidate.skills.filter((s) => skillCategory(s) === category) : []
-  const chances = inheritanceChances(session, mentor, ui.trainingSkill)
-  const error = validateInheritance(session, mentor, ui.trainingSkill, replaceSkill)
-  const replaceField = replaceable.length > 0
-    ? `<div class="form-row"><label for="training-replace-skill">顶掉技能</label><select id="training-replace-skill">${replaceable.map((skill) => `<option value="${esc(skill)}" ${replaceSkill === skill ? 'selected' : ''}>${esc(skillName(skill))} · ${skillTierLabel(session.candidate, skill)}</option>`).join('')}</select></div>`
-    : ''
-  const statusMsg = error
-    ? esc(error)
-    : replaceSkill
-      ? `${category === 'main' ? '主技能槽' : '辅助技能槽'}已满：传承成功后将顶掉「${esc(skillName(replaceSkill))}」，未成功则保留原技能`
-      : '符合传承条件'
-  return `<div class="form-row"><label for="training-mentor">导师</label><select id="training-mentor">${mentors.map((item) => `<option value="${esc(item.id)}" ${mentor.id === item.id ? 'selected' : ''}>${esc(item.name)}</option>`).join('')}</select></div>
-    <div class="form-row"><label for="training-skill">技能</label><select id="training-skill">${mentor.skills.map((skill) => `<option value="${esc(skill)}" ${ui.trainingSkill === skill ? 'selected' : ''}>${esc(skillName(skill))} · ${skillTierLabel(mentor, skill)}</option>`).join('')}</select></div>
-    ${replaceField}
-    <p class="small dim">${esc(skillEffectText(ui.trainingSkill, getSkillTier(mentor, ui.trainingSkill)))}</p>
-    <p class="small">导师技能：${skillTierLabel(mentor, ui.trainingSkill)} · 成功率 ${pct(chances.success)}；成功后：银 ${pct(1 - chances.gold - chances.rainbow)} / 金 ${pct(chances.gold)} / 彩 ${pct(chances.rainbow)}</p>
-    <p class="small ${error ? 'warn-text' : replaceSkill ? 'warn-text' : 'muted'}">${statusMsg}</p>`
-}
-
-function resolveMentor(session: TrainingSession): { mentors: Player[]; mentor: Player | undefined } {
-  const mentors = game.roster.filter((player) => player.id !== session.playerId && player.skills.length > 0)
-  const mentor = mentors.find((player) => player.id === ui.trainingMentorId) ?? mentors[0]
-  ui.trainingMentorId = mentor?.id ?? ''
-  if (!mentor?.skills.includes(ui.trainingSkill as SkillId)) ui.trainingSkill = mentor?.skills[0] ?? null
-  return { mentors, mentor }
-}
-
 /** 选项按钮上的陪练人数徽标，悬停看名字。 */
 function activityMates(session: TrainingSession, optionId: string): string {
   const players = optionPartners(session, optionId)
@@ -596,7 +552,6 @@ function calendarActionPanel(session: TrainingSession): string {
   if (selected.parameters === 'position') {
     ui.trainingPosition = pickTrainablePosition(session, isGk, ui.trainingPosition)
   }
-  const { mentors, mentor } = resolveMentor(session)
   const request = buildTrainingRequest()
   const preview = previewTraining(game, session.playerId, request, true)
   const plan = preview.plan
@@ -611,7 +566,6 @@ function calendarActionPanel(session: TrainingSession): string {
         <p class="action-desc small">${esc(selected.desc)}</p>
         ${lowMood ? '<p class="warn-text small">低落情绪：本周一至周三成长 -50%。</p>' : ''}
         ${selected.parameters === 'position' ? positionField(session, isGk) : ''}
-        ${selected.parameters === 'inherit' ? inheritFields(session, mentors, mentor) : ''}
         ${session.partnerIds?.length ? optionPartnerList(session, selected.id) : selected.group ? teammatePicker(teammates) : ''}
         ${plan ? previewBox(session, plan as ReturnType<typeof planTraining>, isGk) : ''}
         ${preview.error ? `<p class="warn-text training-error small" role="alert">${esc(preview.error)}</p>` : ''}
@@ -623,13 +577,12 @@ function calendarActionPanel(session: TrainingSession): string {
 function legacyActionPanel(session: TrainingSession): string {
   const isGk = session.candidate.positions.GK > 0
   if (ui.trainingKind === 'drill' && !mainAttrsFor(isGk).includes(ui.trainingAttr)) ui.trainingAttr = 'passing'
-  const { mentors, mentor } = resolveMentor(session)
   if (ui.trainingKind === 'position') {
     ui.trainingPosition = pickTrainablePosition(session, isGk, ui.trainingPosition)
   }
   const request = buildTrainingRequest()
   const preview = previewTraining(game, session.playerId, request, true)
-  const plan = preview.plan ?? planTraining(session, request, mentor, 0, true)
+  const plan = preview.plan ?? planTraining(session, request, undefined, 0, true)
   const error = preview.error
   const teammates = eligibleTrainingTeammates(session)
   const groupAction = ui.trainingKind === 'drill' || ui.trainingKind === 'combo' || ui.trainingKind === 'match'
@@ -643,7 +596,6 @@ function legacyActionPanel(session: TrainingSession): string {
         ${ui.trainingKind === 'combo' ? `<div class="seg"><button class="${ui.trainingCombo === 'attack' ? 'active' : ''}" data-training-combo="attack">进攻配合</button><button class="${ui.trainingCombo === 'defense' ? 'active' : ''}" data-training-combo="defense">防守配合</button></div>` : ''}
         ${ui.trainingKind === 'position' ? positionField(session, isGk) : ''}
         ${ui.trainingKind === 'protection' ? `<div class="form-row"><label for="training-protection">防护方向</label><select id="training-protection"><option value="prevention" ${ui.trainingProtection === 'prevention' ? 'selected' : ''}>伤病预防</option><option value="resilience" ${ui.trainingProtection === 'resilience' ? 'selected' : ''}>伤病韧性</option></select></div>` : ''}
-        ${ui.trainingKind === 'inherit' ? inheritFields(session, mentors, mentor) : ''}
         ${session.partnerIds?.length ? squadRoster(session) : groupAction ? teammatePicker(teammates) : ''}
         ${previewBox(session, plan, isGk)}
         ${error ? `<p class="warn-text training-error small" role="alert">${esc(error)}</p>` : ''}
@@ -658,12 +610,18 @@ function eventPanel(session: TrainingSession, event: NonNullable<ReturnType<type
     <p class="event-text">${esc(event.text)}</p>
     <div class="options">
       ${event.options.map((option) => {
-        const p = option.book ? bookLearnChance(session.candidate, option.book) : option.branch ? branchProbability(session, option.branch.check, option.branch.p) : undefined
-        return `<button class="option" data-action="event-option" data-option="${esc(option.id)}">
-          <span class="option-head"><b>${esc(option.label)}</b>${p !== undefined ? `<span class="prob">${option.book ? '成功率' : esc(option.branch?.chanceText ?? '成功率')} ${pct(p, 0)}</span>` : ''}</span>
-          <span class="option-hint">${esc(displayEventHint(option.hint, isGk, eventGrowthScale(session)))}</span>
-          ${option.branch ? `<span class="branch-preview"><span class="up">成功：${esc(option.branch.success.text ?? '')}</span><span class="down">失败：${esc(option.branch.failure.text ?? '')}</span></span>` : option.book ? `<span class="branch-preview"><span class="up">成功：学会并保留书</span><span class="down">失败：疲劳 +6，书保留</span></span>` : ''}
-        </button>`
+        const choice = option.trainingSkill
+        const p = choice ? trainingSkillChance(session, choice) : option.book ? bookLearnChance(session.candidate, option.book) : option.branch ? branchProbability(session, option.branch.check, option.branch.p) : undefined
+        const replaceable = choice && !canLearnSkill(session.candidate.skills, choice.id) ? session.candidate.skills.filter((id) => skillCategory(id) === skillCategory(choice.id)).sort((a, b) => TIER_ORDER[getSkillTier(session.candidate, a)] - TIER_ORDER[getSkillTier(session.candidate, b)]) : []
+        const saved = ui.trainingEventReplacements[option.id]
+        const replacement = saved && replaceable.includes(saved) ? saved : replaceable[0]
+        const select = replacement ? `<label class="field-inline"><span>槽位已满，成功后替换</span><select data-event-replace="${esc(option.id)}">${replaceable.map((id) => `<option value="${esc(id)}" ${id === replacement ? 'selected' : ''}>${esc(skillName(id))} · ${{ silver: '银', gold: '金', rainbow: '彩' }[getSkillTier(session.candidate, id)]}</option>`).join('')}</select></label>` : ''
+        return `<div class="skill-choice"><button class="option" data-action="event-option" data-option="${esc(option.id)}">
+          <span class="option-head"><b>${esc(option.label)}</b>${p !== undefined ? `<span class="prob">${choice || option.book ? '成功率' : esc(option.branch?.chanceText ?? '成功率')} ${pct(p, 0)}</span>` : ''}</span>
+          <span class="option-hint">${esc(choice ? option.hint : displayEventHint(option.hint, isGk, eventGrowthScale(session)))}</span>
+          ${choice ? `<span class="option-hint">${esc(skillEffectText(choice.id, choice.source === 'book' ? choice.tier : choice.source === 'teammate' ? getSkillTier(choice.mentor, choice.id) : 'silver'))}</span>` : ''}
+          ${option.branch ? `<span class="branch-preview"><span class="up">成功：${esc(option.branch.success.text ?? '')}</span><span class="down">失败：${esc(option.branch.failure.text ?? '')}</span></span>` : choice || option.book ? `<span class="branch-preview"><span class="up">成功：学会技能${replacement ? '并替换所选技能' : ''}</span><span class="down">失败：保留原技能和技能书</span></span>` : ''}
+        </button>${select}</div>`
       }).join('')}
     </div>
   `, { className: 'event-panel', aside: tag(event.category === 'mainline' ? '主线' : event.category === 'chain' ? `事件链 ${event.stage}/3` : '训练事件', event.category === 'mainline' ? 'gold' : '') })

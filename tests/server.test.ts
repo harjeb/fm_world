@@ -492,12 +492,19 @@ describe('Agent API', () => {
       const result = JSON.parse((preview.content as Array<{ text: string }>)[0].text)
       expect(result.result.plan).toMatchObject({ fatigue: 0, quality: { label: expect.any(String), multiplier: expect.any(Number) } })
       expect((await client.callTool({ name: 'training_action', arguments: { playerId: first.id, request } })).isError).not.toBe(true)
-      const view = await (await fetch(`${base}/api/agent/state`, { headers: { Authorization: `Bearer ${token}` } })).json() as { game: { trainingSessions: Array<{ playerId: string; action: number; actionsTotal: number; stamina: number; pendingEvent: { id: string } }> } }
-      for (const id of [first.id, second.id]) expect(view.game.trainingSessions.find(session => session.playerId === id)).toMatchObject({ action: 1, actionsTotal: 30, stamina: 100, pendingEvent: { id: 'main_intake' } })
+      const view = await (await fetch(`${base}/api/agent/state`, { headers: { Authorization: `Bearer ${token}` } })).json() as { game: { trainingSessions: Array<{ playerId: string; action: number; actionsTotal: number; stamina: number; pendingEvent: { id: string; options: Array<{ id: string; replaceOptions: string[] }> } }> } }
+      for (const id of [first.id, second.id]) expect(view.game.trainingSessions.find(session => session.playerId === id)).toMatchObject({ action: 1, actionsTotal: 30, stamina: 100, pendingEvent: { id: 'match-book-choice' } })
       const invalid = await action({ action: 'training_action', playerId: first.id, request: { ...request, teammateIds: [second.id, second.id] } })
       expect(invalid.status).toBe(400)
       const saved = await (await fetch(`${base}/api/game`, { headers: { Authorization: `Bearer ${account.token}` } })).json() as { game: { training: Record<string, { action: number; fatigue: number; pendingEventId: string }> } }
-      for (const id of [first.id, second.id]) expect(saved.game.training[id]).toMatchObject({ action: 1, fatigue: 0, pendingEventId: 'main_intake' })
+      for (const id of [first.id, second.id]) expect(saved.game.training[id]).toMatchObject({ action: 1, fatigue: 0, pendingEventId: 'match-book-choice' })
+      for (const id of [first.id, second.id]) {
+        const option = view.game.trainingSessions.find(session => session.playerId === id)!.pendingEvent.options[0]
+        const learned = await client.callTool({ name: 'training_event_choice', arguments: { playerId: id, optionId: option.id, ...(option.replaceOptions[0] ? { replaceSkill: option.replaceOptions[0] } : {}) } })
+        expect(learned.isError).not.toBe(true)
+      }
+      const after = await (await fetch(`${base}/api/agent/state`, { headers: { Authorization: `Bearer ${token}` } })).json() as typeof view
+      for (const id of [first.id, second.id]) expect(after.game.trainingSessions.find(session => session.playerId === id)?.pendingEvent.id).toBe('main_intake')
     } finally {
       await client.close()
       await mcp.close()

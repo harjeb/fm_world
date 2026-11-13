@@ -614,6 +614,11 @@ h3:first-child { margin-top: 0; }
 .preview-cell b { font: 500 13px var(--font-num); }
 .training-teammates { margin: 10px 0; }
 .check-grid { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.training-book-option { align-items: flex-start; flex: 1 1 280px; padding: 8px; }
+.training-book-option input { margin-top: 3px; }
+.training-book-option small { display: block; line-height: 1.45; margin-top: 3px; }
+.training-basic-skills { margin: 4px 12px 10px; }
+.training-basic-skills summary { cursor: pointer; color: var(--text-2); font-size: 12px; }
 .training-error { margin-bottom: 8px; }
 .attr-picker { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: 8px 0; }
 .attr-chip { display: flex; justify-content: space-between; align-items: center; gap: 6px; height: 28px; padding: 0 8px; background: var(--panel-2); border: 1px solid transparent; border-radius: var(--radius); color: var(--text-2); font-size: 12px; }
@@ -626,6 +631,8 @@ h3:first-child { margin-top: 0; }
 .options { display: grid; gap: 6px; margin-top: 10px; }
 .option { display: grid; gap: 3px; width: 100%; padding: 9px 11px; text-align: left; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: var(--radius); }
 .option:hover { border-color: var(--accent); background: var(--hover); }
+.skill-choice { display: grid; gap: 4px; }
+.skill-choice > label { padding: 0 8px 4px; }
 .option-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
 .option-head b { font-weight: 600; }
 .prob { color: var(--warn); font: 500 12px var(--font-num); white-space: nowrap; }

@@ -32,6 +32,19 @@ const SKILL_EFFECTS: Partial<Record<SkillId, (m: number) => string>> = {
   injury_prevention: (m) => `比赛中的受伤风险 -${num(30 * m)}%。`,
   injury_resilience: (m) => `受伤后的恢复时间 -${num(30 * m)}%。`,
   penalty_specialist: (m) => `主罚点球：射正率 +${num(5 * m)}%，进球率 +${num(4 * m)}%；点球大战命中率 +${num(6 * m)}%。`,
+  gk_safe_hands: (m) => `扑救后抱住球的概率 +${num(8 * m)}%。`,
+  gk_high_ball: (m) => `门将争夺高球：争顶评分 +${num(5 * m)}。`,
+  gk_close_down: (m) => `面对单刀：门将评分 +${num(5 * m)}。`,
+  gk_long_kick: (m) => `门将长传：传球评分 +${num(4 * m)}。`,
+  cb_intercept: (m) => `拦截传球时：线路评分 +${num(4 * m)}，防守评分 +${num(3 * m)}。`,
+  cb_block: (m) => `己方半场封堵射门：封堵评分 +${num(5 * m)}。`,
+  cb_cover: (m) => `己方半场争抢二点球：争抢评分 +${num(5 * m)}。`,
+  wing_cross: (m) => `传中时：传球评分 +${num(4 * m)}。`,
+  wing_support: (m) => `前场边路接球：传球评分 +${num(4 * m)}。`,
+  wing_track_back: (m) => `边路防守一对一：防守评分 +${num(4 * m)}。`,
+  cm_long_pass: (m) => `长传时：传球评分 +${num(4 * m)}。`,
+  cm_shield: (m) => `受压盘带时：盘带评分 +${num(4 * m)}。`,
+  st_breakaway: (m) => `接应直塞：传球评分 +${num(4 * m)}。`,
 }
 
 export function skillEffectText(id: SkillId, tier: SkillTier = 'silver'): string {

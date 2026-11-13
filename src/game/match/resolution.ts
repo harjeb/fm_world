@@ -155,6 +155,10 @@ export class SettlementKernel {
     let a = 0.7 * this.ratings.eff(carrier, 'passing', { passing: true, crossing: type === 'cross' }) + 0.2 * this.ratings.eff(carrier, 'composure') + 0.1 * this.ratings.eff(receiver, 'firstTouch', { finalThird: progressOf(carrier.side, receiver.x) > 0.65 })
     const support = interceptors.slice(1, 2).reduce((sum, item) => sum + Math.min(6, Math.max(0, item.score) * 0.1), 0)
     let d = main ? 0.75 * this.ratings.eff(main, 'tackling') + 0.25 * this.ratings.eff(main, 'agility') + Math.min(12, support) : 0
+    if (main?.skills.includes('cb_intercept') && !this.hooks.legacyRules) {
+      d += 3 * skillTierMultiplier(main, 'cb_intercept')
+      if (markSkills) this.hooks.markSkill(main, 'cb_intercept', true, true)
+    }
     if (main?.skills.includes('sweeper')) {
       d += 4 * skillTierMultiplier(main, 'sweeper')
       if (markSkills) this.hooks.markSkill(main, 'sweeper', true, true)
@@ -170,6 +174,28 @@ export class SettlementKernel {
     if (type === 'through') c -= 2
     if (type === 'long') c -= 2
     let p0 = type === 'short' ? 0.86 : type === 'long' ? 0.74 : type === 'through' ? 0.6 : 0.64
+    if (!this.hooks.legacyRules) {
+      if (carrier.skills.includes('gk_long_kick') && carrier.position === 'GK' && type === 'long') {
+        a += 4 * skillTierMultiplier(carrier, 'gk_long_kick')
+        if (markSkills) this.hooks.markSkill(carrier, 'gk_long_kick', true, true)
+      }
+      if (carrier.skills.includes('wing_cross') && type === 'cross') {
+        a += 4 * skillTierMultiplier(carrier, 'wing_cross')
+        if (markSkills) this.hooks.markSkill(carrier, 'wing_cross', true, true)
+      }
+      if (carrier.skills.includes('cm_long_pass') && type === 'long') {
+        a += 4 * skillTierMultiplier(carrier, 'cm_long_pass')
+        if (markSkills) this.hooks.markSkill(carrier, 'cm_long_pass', true, true)
+      }
+      if (receiver.skills.includes('wing_support') && wideZone(receiver) && progressOf(receiver.side, receiver.x) > 0.5) {
+        a += 4 * skillTierMultiplier(receiver, 'wing_support')
+        if (markSkills) this.hooks.markSkill(receiver, 'wing_support', true, true)
+      }
+      if (receiver.skills.includes('st_breakaway') && type === 'through') {
+        a += 4 * skillTierMultiplier(receiver, 'st_breakaway')
+        if (markSkills) this.hooks.markSkill(receiver, 'st_breakaway', true, true)
+      }
+    }
     if (carrier.skills.includes('safe_pass') && type === 'short' && pressure > 2.5) {
       a += 4 * skillTierMultiplier(carrier, 'safe_pass')
       if (markSkills) this.hooks.markSkill(carrier, 'safe_pass', true, true)
@@ -219,7 +245,7 @@ export class SettlementKernel {
       const dist = distanceToSegment(player, from, to)
       const reach = 2.1 + this.ratings.eff(player, 'anticipation') * 0.028 + (player.position === 'GK' ? 0.8 : 0)
       if (dist <= reach) {
-        const score = 0.4 * this.ratings.eff(player, 'anticipation') + 0.3 * this.ratings.eff(player, 'defPos') + 0.3 * this.ratings.eff(player, 'agility') - dist * 6
+        const score = 0.4 * this.ratings.eff(player, 'anticipation') + 0.3 * this.ratings.eff(player, 'defPos') + 0.3 * this.ratings.eff(player, 'agility') - dist * 6 + (!this.hooks.legacyRules && player.skills.includes('cb_intercept') ? 4 * skillTierMultiplier(player, 'cb_intercept') : 0)
         list.push({ player, score, dist })
       }
     }
@@ -258,6 +284,14 @@ export class SettlementKernel {
       if (markSkills) this.hooks.markSkill(defender, 'sweeper', true, true)
     }
     let c = -pressure * 2 - (weak ? 3 : 0)
+    if (!this.hooks.legacyRules && carrier.skills.includes('cm_shield') && pressure) {
+      a += 4 * skillTierMultiplier(carrier, 'cm_shield')
+      if (markSkills) this.hooks.markSkill(carrier, 'cm_shield', true, true)
+    }
+    if (!this.hooks.legacyRules && defender.skills.includes('wing_track_back') && wideZone(defender)) {
+      d += 4 * skillTierMultiplier(defender, 'wing_track_back')
+      if (markSkills) this.hooks.markSkill(defender, 'wing_track_back', true, true)
+    }
     if (carrier.skills.includes('weak_foot') && weak) c += 2 * skillTierMultiplier(carrier, 'weak_foot')
     if (!this.hooks.legacyRules) {
       if (carrier.skills.includes('lg_rainbow_flick') && wing) {
@@ -459,6 +493,10 @@ export class SettlementKernel {
           ? 0.55 * this.ratings.eff(gk, 'oneOnOne', { oneOnOne: true, penalty: opts.penalty }) + 0.3 * this.ratings.eff(gk, 'reflexes') + 0.15 * this.ratings.eff(gk, 'defPos')
           : 0.65 * this.ratings.eff(gk, 'reflexes', { oneOnOne: false }) + 0.35 * this.ratings.eff(gk, 'defPos')
       }
+      if (!this.hooks.legacyRules && !gkOut && chance.type === 'clear_chance' && gk.skills.includes('gk_close_down')) {
+        gkScore += 5 * skillTierMultiplier(gk, 'gk_close_down')
+        if (markSkills) this.hooks.markSkill(gk, 'gk_close_down', true, true)
+      }
       if (gk.skills.includes('gk_reflexes')) {
         if (!gkOut) gkScore += 5 * skillTierMultiplier(gk, 'gk_reflexes')
         if (markSkills) this.hooks.markSkill(gk, 'gk_reflexes', true, true)
@@ -570,7 +608,7 @@ export class SettlementKernel {
     goalGiven = clamp(goalGiven, 0.05, noKeeper || chance.type === 'open_goal' ? 1 : 0.95)
     let block = 0
     if (!opts.penalty) {
-      const blockers = this.findBlockers(opp, opts.point, target)
+      const blockers = this.findBlockers(opp, opts.point, target, false, markSkills)
       if (blockers.length > 0) {
         const score = blockers[0]
         block = clamp(0.015 + Math.max(0, score - 30) * 0.008, 0.01, 0.42)
@@ -582,7 +620,7 @@ export class SettlementKernel {
     return { block, onTarget, goalGivenOnTarget: goalGiven, pGoal, finishScore, gkScore, distance: dist, chance }
   }
 
-  findBlockers(opp: MatchTeamState, shooter: { x: number; y: number }, target: { x: number; y: number }, includeGk = false): number[] {
+  findBlockers(opp: MatchTeamState, shooter: { x: number; y: number }, target: { x: number; y: number }, includeGk = false, markSkills = false): number[] {
     const scores: number[] = []
     for (const player of opp.players) {
       if (!player.onPitch || (!includeGk && player.position === 'GK')) continue
@@ -590,7 +628,9 @@ export class SettlementKernel {
       if (dist > 5.2) continue
       const between = (player.x - shooter.x) * (target.x - shooter.x) >= 0 && (player.x - shooter.x) * (target.x - shooter.x) <= (target.x - shooter.x) ** 2 + 0.1
       if (!between) continue
-      scores.push(this.ratings.eff(player, 'defPos') * 0.45 + this.ratings.eff(player, 'anticipation') * 0.35 + (5.2 - dist) * 4 + (player.skills.includes('lg_goal_line_clearance') && !this.hooks.legacyRules ? 8 * legendMultiplier(player, 'lg_goal_line_clearance') : 0))
+      const blockSkill = !this.hooks.legacyRules && player.skills.includes('cb_block') && progressOf(player.side, player.x) < 0.5
+      scores.push(this.ratings.eff(player, 'defPos') * 0.45 + this.ratings.eff(player, 'anticipation') * 0.35 + (5.2 - dist) * 4 + (player.skills.includes('lg_goal_line_clearance') && !this.hooks.legacyRules ? 8 * legendMultiplier(player, 'lg_goal_line_clearance') : 0) + (blockSkill ? 5 * skillTierMultiplier(player, 'cb_block') : 0))
+      if (blockSkill && markSkills) this.hooks.markSkill(player, 'cb_block', true, true)
     }
     scores.sort((a, b) => b - a)
     return scores
@@ -688,7 +728,9 @@ export class SettlementKernel {
 
   /** 门将把射门抱住（而不是扑出）的概率。 */
   keeperCatchChance(gk: MatchPlayerState, shooter: MatchPlayerState): number {
-    return clamp(0.35 + (this.ratings.eff(gk, 'handling') - this.ratings.eff(shooter, 'shooting')) / 150, 0.12, 0.88)
+    const skill = !this.hooks.legacyRules && gk.skills.includes('gk_safe_hands')
+    if (skill) this.hooks.markSkill(gk, 'gk_safe_hands', true, true)
+    return clamp(0.35 + (this.ratings.eff(gk, 'handling') - this.ratings.eff(shooter, 'shooting')) / 150 + (skill ? 0.08 * skillTierMultiplier(gk, 'gk_safe_hands') : 0), 0.12, 0.88)
   }
 
   /** 防守者动手的倾向（盘带犯规和战术犯规共用）：逼抢越凶、角色越爱逼抢越高。新战术指令下保持基准中性，不借上抢频率隐性抬高犯规率。 */
@@ -821,7 +863,8 @@ export class SettlementKernel {
       if (dist <= (isGk ? 11 : 13)) {
         const weight = (isGk
           ? 0.4 * this.ratings.eff(player, 'rushing', { aerial: true }) + 0.3 * this.ratings.eff(player, 'handling') + 0.2 * this.ratings.eff(player, 'anticipation') + 10
-          : 0.4 * this.ratings.eff(player, 'heading', { aerial: true }) + 0.3 * this.ratings.eff(player, 'strength', { aerial: true }) + 0.2 * this.ratings.eff(player, 'defPos') + 0.1 * this.ratings.eff(player, 'anticipation')) + Math.max(0, player.height - 175) * 0.2
+          : 0.4 * this.ratings.eff(player, 'heading', { aerial: true }) + 0.3 * this.ratings.eff(player, 'strength', { aerial: true }) + 0.2 * this.ratings.eff(player, 'defPos') + 0.1 * this.ratings.eff(player, 'anticipation')) + Math.max(0, player.height - 175) * 0.2 + (isGk && !this.hooks.legacyRules && player.skills.includes('gk_high_ball') ? 5 * skillTierMultiplier(player, 'gk_high_ball') : 0)
+        if (isGk && !this.hooks.legacyRules && player.skills.includes('gk_high_ball')) this.hooks.markSkill(player, 'gk_high_ball', true, true)
         contestants.push({ player, weight: weight * (0.85 + jitter() * 0.3), side: defending.side })
         if (!isGk && player.skills.includes('aerial')) this.hooks.markSkill(player, 'aerial', true, true)
       }
@@ -850,7 +893,9 @@ export class SettlementKernel {
               0.07 * this.ratings.eff(player, 'speed') +
               0.08 * this.ratings.eff(player, 'acceleration') +
               (player.skills.includes('lg_off_ball_iq') && !this.hooks.legacyRules ? 6 * legendMultiplier(player, 'lg_off_ball_iq') : 0) +
+              (!this.hooks.legacyRules && player.skills.includes('cb_cover') && progressOf(player.side, player.x) < 0.5 ? 5 * skillTierMultiplier(player, 'cb_cover') : 0) +
               Math.max(0, player.height - 175) * 0.15
+          if (!gk && !this.hooks.legacyRules && player.skills.includes('cb_cover') && progressOf(player.side, player.x) < 0.5) this.hooks.markSkill(player, 'cb_cover', true, true)
           candidates.push({ player, weight: weight * (0.75 + jitter() * 0.5) })
         }
       }

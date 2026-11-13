@@ -20,6 +20,8 @@ import {
   removePlayerCard,
   restoreActiveEngine,
   setAutoTrainingConfig,
+  setTrainingBookLoadout,
+  trainingBookLoadout,
   setLineup,
   simulateSeasonRound,
   startLeague,
@@ -668,7 +670,8 @@ function completeMatch(): void {
 function openTraining(playerId: string): void {
   ui.trainingPlayerId = playerId
   ui.trainingTeammateIds = []
-  ui.trainingBookIds = []
+  ui.trainingEventReplacements = {}
+  ui.trainingBookIds = trainingBookLoadout(game, playerId)
   ui.trainingKind = 'drill'
   ui.trainingAttr = 'passing'
   ui.coachPanel = false
@@ -779,11 +782,13 @@ function tickAutoTraining(): void {
 
 function chooseEvent(optionId: string): void {
   if (!ui.trainingPlayerId) return
-  const result = trainingEventChoice(game, ui.trainingPlayerId, optionId)
+  const replacement = [...document.querySelectorAll<HTMLSelectElement>('[data-event-replace]')].find((element) => element.dataset.eventReplace === optionId)?.value as SkillId | undefined
+  const result = trainingEventChoice(game, ui.trainingPlayerId, optionId, replacement || undefined)
   if (!result.ok) {
     showNotice(result.error ?? '事件结算失败')
     return
   }
+  ui.trainingEventReplacements = {}
   const outcome = result.success === undefined ? '' : result.success ? `成功（${pct(result.probability ?? 0, 0)}）` : `失败（${pct(result.probability ?? 0, 0)}）`
   ui.notice = `${result.event?.title ?? '事件'}：${outcome}${result.completed ? ' · 培养完成' : ''}`
   render()
@@ -1400,6 +1405,16 @@ document.addEventListener('click', async (event) => {
     case 'open-training':
       if (playerId) openTraining(playerId)
       break
+    case 'training-books-save': {
+      const id = playerId ?? ui.trainingPlayerId
+      if (!id) break
+      const result = setTrainingBookLoadout(game, id, ui.trainingBookIds)
+      if (!result.ok) { showNotice(result.error ?? '无法保存技能卡配置'); break }
+      ui.notice = '技能卡配置已保存，下次培养也会使用。'
+      persist()
+      render()
+      break
+    }
     case 'training-execute':
       executeTraining()
       break
@@ -1547,6 +1562,7 @@ document.addEventListener('click', async (event) => {
         ui.notice = result.ok ? `${result.replacedName ?? ''} 换上了新卡，体能和精力不变。` : result.error ?? '换卡失败'
         if (result.ok) {
           ui.trainingPlayerId = playerId
+          ui.trainingBookIds = trainingBookLoadout(game, playerId)
           ui.lineupDraft = null
           ui.autoSubsDraft = null
         }
@@ -1557,6 +1573,7 @@ document.addEventListener('click', async (event) => {
       if (playerId) {
         const result = keepTraining(game, playerId)
         ui.notice = result.ok ? '新卡留在库存，球员继续用原来的卡。' : result.error ?? '操作失败'
+        if (result.ok) ui.trainingBookIds = trainingBookLoadout(game, playerId)
         render()
       }
       break
@@ -1564,6 +1581,7 @@ document.addEventListener('click', async (event) => {
       if (playerId) {
         const result = discardTraining(game, playerId)
         ui.notice = result.ok ? '已丢弃这张卡，球员继续用原来的卡。' : result.error ?? '操作失败'
+        if (result.ok) ui.trainingBookIds = trainingBookLoadout(game, playerId)
         render()
       }
       break
@@ -2084,6 +2102,10 @@ document.addEventListener('change', (event) => {
     render()
     return
   }
+  if (target.dataset.eventReplace) {
+    ui.trainingEventReplacements[target.dataset.eventReplace] = target.value as SkillId
+    return
+  }
   if (target.dataset.trainingBook) {
     const key = target.dataset.trainingBook
     const checked = (target as HTMLInputElement).checked
@@ -2184,8 +2206,9 @@ document.addEventListener('change', (event) => {
   }
   if (target.id === 'training-player-select') {
     ui.trainingTeammateIds = []
-    ui.trainingBookIds = []
+    ui.trainingEventReplacements = {}
     ui.trainingPlayerId = target.value || null
+    ui.trainingBookIds = ui.trainingPlayerId ? trainingBookLoadout(game, ui.trainingPlayerId) : []
     ui.trainingKind = 'drill'
     ui.trainingAttr = 'passing'
     render()
@@ -2193,23 +2216,6 @@ document.addEventListener('change', (event) => {
   }
   if (target.id === 'training-protection') {
     ui.trainingProtection = target.value as 'prevention' | 'resilience'
-    render()
-    return
-  }
-  if (target.id === 'training-mentor') {
-    ui.trainingMentorId = target.value
-    ui.trainingSkill = null
-    render()
-    return
-  }
-  if (target.id === 'training-skill') {
-    ui.trainingSkill = target.value as SkillId
-    ui.trainingReplaceSkill = null
-    render()
-    return
-  }
-  if (target.id === 'training-replace-skill') {
-    ui.trainingReplaceSkill = (target.value as SkillId) || null
     render()
     return
   }

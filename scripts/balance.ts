@@ -4,9 +4,8 @@ import { simulateAIvsAIState } from '../src/game/match/setup.ts'
 import { caOf } from '../src/game/ca.ts'
 import { catchUpSeason } from '../src/game/season.ts'
 import { postseasonStartAt } from '../src/game/calendar.ts'
-import { startTraining, trainingAction, trainingEventChoice } from '../src/game/actions.ts'
+import { autoTrainingStep, startTraining, trainingAction } from '../src/game/actions.ts'
 import { trainingOptions } from '../src/game/training-calendar.ts'
-import { eventById } from '../src/game/data/events.ts'
 import { MAIN_FIELD_ATTRS, MAIN_GK_ATTRS } from '../src/game/scale.ts'
 import type { AITeam } from '../src/game/types.ts'
 
@@ -77,7 +76,7 @@ const session = game.training[p.id]
 const startCa = caOf(session.candidate.attrs, false)
 while (!session.completed) {
   if (session.pendingEventId) {
-    const result = trainingEventChoice(game, p.id, eventById(session.pendingEventId)!.options[0].id)
+    const result = autoTrainingStep(game, p.id)
     if (!result.ok) throw new Error(result.error)
     continue
   }

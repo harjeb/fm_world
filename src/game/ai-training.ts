@@ -1,7 +1,8 @@
 import type { AIClubState, AttrKey, EventDef, EventOption, Player, TrainingSession } from './types.ts'
 import { branchProbability, createTrainingSession, failureChance, performTrainingAction, resolveTrainingEvent, trainingActionsForSeason, trainingActionsTotal, trainingFatigueCost } from './training.ts'
 import { trainingOptions, type TrainingActivity } from './training-calendar.ts'
-import { eventById } from './data/events.ts'
+import { eventForSession, trainingSkillChance } from './legend-learning.ts'
+import { canLearnSkill, skillCategory } from './data/skills.ts'
 import { keyAttrsOf } from './data/key-attrs.ts'
 import { mainAttrsFor } from './scale.ts'
 import { untrainedPlayer } from './cards.ts'
@@ -55,6 +56,7 @@ function optionScore(session: TrainingSession, option: EventOption, weights: Map
     }
     return total
   }
+  if (option.trainingSkill) return { book: 850, teammate: 650, basic: 500 }[option.trainingSkill.source] * trainingSkillChance(session, option.trainingSkill)
   if (option.branch) {
     const probability = branchProbability(session, option.branch.check, option.branch.p)
     return probability * score(option.branch.success) + (1 - probability) * score(option.branch.failure)
@@ -93,9 +95,13 @@ export function simulateAITrainingSession(base: Player, seed: number, economy: F
   const weights = weightsFor(base)
   for (let step = 0; step < 200 && !session.completed; step++) {
     if (session.pendingEventId) {
-      const event = eventById(session.pendingEventId)
+      const event = eventForSession(session, session.pendingEventId)
       if (!event) break
-      const result = resolveTrainingEvent(session, chooseEvent(session, event, weights).id)
+      const option = chooseEvent(session, event, weights)
+      const choice = option.trainingSkill
+      const replace = choice && !canLearnSkill(session.candidate.skills, choice.id)
+        ? session.candidate.skills.find((id) => skillCategory(id) === skillCategory(choice.id)) : undefined
+      const result = resolveTrainingEvent(session, option.id, replace)
       if (!result.ok) break
       continue
     }

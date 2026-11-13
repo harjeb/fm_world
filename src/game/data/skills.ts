@@ -119,6 +119,41 @@ export const SKILLS: Record<SkillId, SkillDef> = {
     condition: '主罚点球',
     cost: '低',
   },
+  gk_safe_hands: { id: 'gk_safe_hands', name: '稳健抱球', desc: '门将扑救后更容易把球抱住。', condition: '扑救射门', cost: '低' },
+  gk_high_ball: { id: 'gk_high_ball', name: '高球控制', desc: '门将参与高空球争夺时更有优势。', condition: '门将争夺高球', cost: '低' },
+  gk_close_down: { id: 'gk_close_down', name: '单刀封角', desc: '面对单刀时提高扑救评分。', condition: '门将面对单刀', cost: '低' },
+  gk_long_kick: { id: 'gk_long_kick', name: '长传发动', desc: '门将长传出球更准确。', condition: '门将长传', cost: '低' },
+  cb_intercept: { id: 'cb_intercept', name: '线路预判', desc: '拦截传球时更容易选准线路。', condition: '拦截传球', cost: '低' },
+  cb_block: { id: 'cb_block', name: '禁区封堵', desc: '在己方禁区附近封堵射门更有效。', condition: '封堵射门', cost: '低' },
+  cb_cover: { id: 'cb_cover', name: '补位保护', desc: '在己方半场争抢二点球时占优。', condition: '己方半场争抢二点球', cost: '低' },
+  wing_cross: { id: 'wing_cross', name: '精准传中', desc: '传中球的出球质量更高。', condition: '边路传中', cost: '低' },
+  wing_support: { id: 'wing_support', name: '肋部接应', desc: '前场边路接球时提高传球配合质量。', condition: '前场边路接球', cost: '低' },
+  wing_track_back: { id: 'wing_track_back', name: '边路回追', desc: '在边路防守一对一时提高抢断评分。', condition: '边路防守对抗', cost: '低' },
+  cm_long_pass: { id: 'cm_long_pass', name: '长传调度', desc: '长距离传球更准确。', condition: '长传', cost: '低' },
+  cm_shield: { id: 'cm_shield', name: '高压护球', desc: '受到贴身逼抢时提高盘带对抗能力。', condition: '受压盘带', cost: '低' },
+  st_breakaway: { id: 'st_breakaway', name: '前插接应', desc: '接应直塞时提高传球配合质量。', condition: '接应直塞', cost: '低' },
+}
+
+/** 每个位置推荐 6 项基础技能；同一技能可供多个位置使用。 */
+export const POSITION_BASIC_SKILLS: Record<import('../types.ts').Position, readonly SkillId[]> = {
+  GK: ['gk_reflexes', 'gk_sweeper', 'gk_safe_hands', 'gk_high_ball', 'gk_close_down', 'gk_long_kick'],
+  CB: ['sweeper', 'aerial', 'safe_pass', 'cb_intercept', 'cb_block', 'cb_cover'],
+  W: ['wing_runner', 'weak_foot', 'one_touch', 'wing_cross', 'wing_support', 'wing_track_back'],
+  CM: ['through_ball', 'safe_pass', 'one_touch', 'iron_lung', 'cm_long_pass', 'cm_shield'],
+  ST: ['box_hunter', 'long_shot', 'aerial', 'penalty_specialist', 'weak_foot', 'st_breakaway'],
+}
+
+export function basicSkillsFor(player: Pick<import('../types.ts').Player, 'positions'>): readonly SkillId[] {
+  if (player.positions.GK > 0) return POSITION_BASIC_SKILLS.GK
+  const pos = (['CB', 'W', 'CM', 'ST'] as const).reduce((best, item) => player.positions[item] > player.positions[best] ? item : best, 'CB')
+  return POSITION_BASIC_SKILLS[pos]
+}
+
+/** 仅门将能学门将专属基础技能；外场技能不能传给门将。 */
+export function basicSkillScopeMatches(id: SkillId, gk: boolean): boolean {
+  const isKeeper = POSITION_BASIC_SKILLS.GK.includes(id)
+  const isField = (['CB', 'W', 'CM', 'ST'] as const).some((pos) => POSITION_BASIC_SKILLS[pos].includes(id))
+  return (!isKeeper && !isField) || (gk ? isKeeper : isField)
 }
 
 /** 随机球员用的 20 个通用特性；真实球星用 star-traits.ts 里的专属特性。 */

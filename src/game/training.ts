@@ -20,8 +20,8 @@ import { PLAYER_COUNT } from './data/players.ts'
 import { FACILITY_STAGE_VERSION, MAX_FACILITY_LEVEL, MAX_FACILITY_STAGE, STAGES_PER_LEVEL, facilityLevel, facilityStageChance, type FacilityId } from './economy.ts'
 import { addTrainedCard, closeFinishedTraining, deleteCard, equipCard } from './cards.ts'
 import { attrMax, attrRating, CA_MAX, MAIN_ATTR_MAX, displayGain, isMainAttr, scaleAuthoredGains } from './rating.ts'
-import { inheritanceChances, mentorSkill, validateInheritance } from './inheritance.ts'
-import { bookEvents, bookLearnChance, eventForSession, grantBookSkill, bookTierLabel } from './legend-learning.ts'
+import { inheritanceChances } from './inheritance.ts'
+import { bookLearnChance, drawTrainingSkills, eventForSession, grantBookSkill, grantTrainingSkill, skillChoiceReplacementError, trainingSkillChance, bookTierLabel, MAX_SKILL_TEACHERS, MATCH_BOOK_EVENT_ID } from './legend-learning.ts'
 import { effectiveTrainingCeilings } from './cup-rewards.ts'
 import { legendMultiplier, legendValue } from './legend-bonus.ts'
 import { partnerAssignment, trainingDate, trainingLowMood, trainingOptions, type TrainingActivityId } from './training-calendar.ts'
@@ -109,7 +109,6 @@ export const TRAINING_ACTION_INFO: { id: TrainingActionId; label: string; desc: 
   { id: 'match', label: '队内比赛', desc: '高强度综合练习，多项属性成长较多。', fatigue: '+25', energy: '不耗精力' },
   { id: 'position', label: '位置训练', desc: '学习一个未解锁位置，或提高现有位置熟练度。不消耗 CA。', fatigue: '约 +8', energy: '不耗精力' },
   { id: 'protection', label: '伤病防护', desc: '学习银色伤病预防或伤病韧性辅助技能。', fatigue: '约 +8', energy: '不耗精力' },
-  { id: 'inherit', label: '技能传承', desc: '向队友学习技能；位置、疲劳和导师技能品质影响成功与品质。', fatigue: '约 +8', energy: '不耗精力' },
   { id: 'rest', label: '休息', desc: '恢复 30 点训练体力。', fatigue: '-30', energy: '不耗精力' },
   { id: 'mentor', label: '导师活动', desc: '不直接成长，但保证触发一次当前可用的事件，适合推进路线。', fatigue: '约 -5', energy: '不耗精力' },
 ]
@@ -422,6 +421,7 @@ export function partnersAt(session: TrainingSession, request: TrainingRequest): 
  */
 export function planTraining(session: TrainingSession, request: TrainingRequest, mentor?: Player, teammateCount = 0, hideQuality = false): TrainingPlan {
   const before = caOf(session.candidate.attrs, candidateIsGk(session))
+  if (request.kind === 'inherit' || (request.kind === 'activity' && request.activityId === 'inherit')) return emptyPlan('技能学习', '技能传承已合并至交流赛后的技能学习。', before)
   if (session.scheduleVersion === 1) {
     if (session.completed || session.action >= trainingActionsTotal(session)) return emptyPlan('课程', '本轮培养已经结束。', before)
     if (session.pendingEventId) return emptyPlan('课程', '请先处理当前事件。', before)
@@ -429,7 +429,6 @@ export function planTraining(session: TrainingSession, request: TrainingRequest,
     const activity = trainingOptions(session).find(item => item.id === request.activityId)
     if (!activity) return emptyPlan('课程', '当前时段没有提供该课程。', before)
     const legacy: TrainingRequest | undefined = activity.id === 'position' ? { kind: 'position', position: request.position! } :
-      activity.id === 'inherit' ? { kind: 'inherit', mentorId: request.mentorId!, skill: request.skill!, ...(request.replaceSkill ? { replaceSkill: request.replaceSkill } : {}) } :
       activity.id === 'prevention' || activity.id === 'resilience' ? { kind: 'protection', focus: activity.id } :
       activity.id === 'rest' ? { kind: 'rest' } : activity.id === 'mentor' ? { kind: 'mentor' } :
       activity.id === 'match' || activity.id === 'exchange' ? { kind: 'match' } : undefined
@@ -594,16 +593,6 @@ function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingR
       note: `熟练度 ${Math.round(current)} → ${Math.min(100, Math.round(current + amount))}`,
     }
   }
-  if (request.kind === 'inherit') {
-    if (!mentor || mentor.id !== request.mentorId) return emptyPlan('技能传承', '请选择队内导师。', before)
-    const error = validateInheritance(session, mentor, request.skill, request.replaceSkill)
-    if (error) return emptyPlan('技能传承', error, before)
-    const chance = inheritanceChances(session, mentor, request.skill)
-    const replaceHint = (!canLearnSkill(session.candidate.skills, request.skill) || request.replaceSkill) && request.replaceSkill
-      ? ` · 成功后顶掉「${SKILLS[request.replaceSkill].name}」（失败保留原技能）`
-      : ''
-    return { kind: 'inherit', label: `技能传承 · ${SKILLS[request.skill].name}`, text: `向 ${mentor.name} 学习技能。`, gains: {}, fatigue: 8, energyCost: 0, error: false, caBefore: before, caAfter: before, scale: 1, cappedByCeiling: false, cappedByPa: false, note: `成功率 ${Math.round(chance.success * 100)}%，成功后金色 ${Math.round(chance.gold * 100)}%、彩色 ${Math.round(chance.rainbow * 100)}%${replaceHint}` }
-  }
   if (request.kind === 'protection') {
     if (request.focus !== 'prevention' && request.focus !== 'resilience') return emptyPlan('伤病防护', '无效的防护方向。', before)
     const skill: SkillId = request.focus === 'prevention' ? 'injury_prevention' : 'injury_resilience'
@@ -670,7 +659,7 @@ function emptyPlan(label: string, text: string, ca: number): TrainingPlan {
 
 export function eligibleEvents(session: TrainingSession, action = session.action): EventDef[] {
   const isGk = candidateIsGk(session)
-  return [...EVENTS, ...bookEvents(session)].filter((event) => {
+  return EVENTS.filter((event) => {
     const trigger = event.trigger
     if (event.once !== false) {
       if (session.flags.includes(event.id)) return false
@@ -763,6 +752,8 @@ function eventWeight(session: TrainingSession, event: EventDef): number {
 }
 
 export function eventChance(session: TrainingSession, action = session.action): number {
+  const date = trainingDate(action)
+  if (session.scheduleVersion === 1 && date.slot === '上午' && date.day === 1 && drawTrainingSkills(session).length) return 1
   if (guaranteedEvent(session, action)) return 1
   return eligibleEvents(session, action).some((event) => !event.mainline) ? EVENT_BASE_CHANCE : 0
 }
@@ -776,7 +767,7 @@ export type PerformResult = {
 }
 
 /** Applies a session action only; callers must simulate and persist calendar exchange results via trainingAction. */
-export function performTrainingAction(session: TrainingSession, request: TrainingRequest, mentor?: Player, teammateCount = 0, options: { silent?: boolean } = {}): PerformResult {
+export function performTrainingAction(session: TrainingSession, request: TrainingRequest, mentor?: Player, teammateCount = 0, options: { silent?: boolean; skillTeammates?: Player[] } = {}): PerformResult {
   if (session.completed) return { ok: false, error: '本轮培养已经结束', completed: true }
   if (session.pendingEventId) return { ok: false, error: '请先处理当前事件', completed: false }
   if (session.action >= trainingActionsTotal(session)) return { ok: false, error: '本轮培养的时段已用完', completed: true }
@@ -790,11 +781,6 @@ export function performTrainingAction(session: TrainingSession, request: Trainin
       const amount = current <= 0 ? 35 + session.candidate.personality.adaptability * 0.15 : 6 + session.candidate.personality.adaptability / 18 + actionRng(session, session.action + 1, `position-${pos}`).int(3)
       session.candidate.positions = { ...session.candidate.positions, [pos]: Math.min(100, current + amount) }
       plan.text += ` 熟练度 ${Math.round(current)} → ${Math.round(Math.min(100, current + amount))}。`
-    } else if (id === 'inherit') {
-      const outcome = mentorSkill(session, mentor!, request.skill!, request.replaceSkill)
-      if (!outcome.ok) return { ok: false, error: outcome.error, completed: false }
-      const replacedText = outcome.replaced ? `（顶掉${SKILLS[outcome.replaced].name}）` : ''
-      plan.text += outcome.success ? ` 成功获得${{ silver: '银色', gold: '金色', rainbow: '彩色' }[outcome.tier!]}${SKILLS[request.skill!].name}${replacedText}。` : ' 本次传承未成功。'
     } else if (id === 'prevention' || id === 'resilience') {
       session.candidate.skills = [...session.candidate.skills, id === 'prevention' ? 'injury_prevention' : 'injury_resilience']
     }
@@ -852,12 +838,6 @@ export function performTrainingAction(session: TrainingSession, request: Trainin
       text: plan.text + ` 熟练度 ${Math.round(current)} → ${Math.round(Math.min(100, current + amount))}。`,
       fatigue: plan.fatigue,
     })
-  } else if (request.kind === 'inherit') {
-    const result = mentorSkill(session, mentor!, request.skill, request.replaceSkill)
-    if (!result.ok) return { ok: false, error: result.error, completed: false }
-    const replacedText = result.replaced ? `（顶掉${SKILLS[result.replaced].name}）` : ''
-    const outcome = result.success ? `成功获得${{ silver: '银色', gold: '金色', rainbow: '彩色' }[result.tier!]}${SKILLS[request.skill].name}${replacedText}。` : '本次传承未成功。'
-    session.log.push({ action: session.action + 1, week: weekOfAction(session.action + 1), kind: 'action', title: plan.label, text: `${plan.text} ${outcome}`, fatigue: plan.fatigue })
   } else if (request.kind === 'protection') {
     const skill: SkillId = request.focus === 'prevention' ? 'injury_prevention' : 'injury_resilience'
     session.candidate.skills = [...session.candidate.skills, skill]
@@ -884,8 +864,25 @@ export function performTrainingAction(session: TrainingSession, request: Trainin
   session.fatigue = Math.max(0, Math.min(100, session.fatigue + plan.fatigue))
   session.action += 1
   const mentorAction = request.kind === 'mentor' || (request.kind === 'activity' && request.activityId === 'mentor')
-  // 小队里只有主练的球员触发事件；队友静默推进，免得攒一堆没人处理的事件卡住下一时段。
+  const exchange = request.kind === 'activity' && request.activityId === 'exchange'
   const event = options.silent ? null : pickEvent(session, mentorAction)
+  const available = options.skillTeammates ?? []
+  if (!options.silent && exchange) {
+    session.skillTeacherIds ??= []
+    const candidates = [...new Set(available.map((player) => player.id).filter((id) => id !== session.playerId && !session.skillTeacherIds!.includes(id)))]
+    const rng = derivedRng(session.seed, 'training-skill-teammates', session.playerId, session.action)
+    while (candidates.length && session.skillTeacherIds.length < MAX_SKILL_TEACHERS) session.skillTeacherIds.push(candidates.splice(rng.int(candidates.length), 1)[0])
+  }
+  const teachers = available.filter((player) => session.skillTeacherIds?.includes(player.id))
+  const choices = !options.silent && exchange ? drawTrainingSkills(session, teachers) : []
+  if (choices.length) {
+    session.pendingSkillChoices = choices
+    // 主线/普通事件不能被赛后学习覆盖。
+    if (event) session.queuedEventId = event.id
+    session.pendingEventId = MATCH_BOOK_EVENT_ID
+    session.pendingEventAction = session.action
+    return { ok: true, event: eventForSession(session, MATCH_BOOK_EVENT_ID), completed: false }
+  }
   if (event) {
     session.pendingEventId = event.id
     session.pendingEventAction = session.action
@@ -921,20 +918,44 @@ export type ResolveResult = {
   completed: boolean
 }
 
-export function resolveTrainingEvent(session: TrainingSession, optionId: string): ResolveResult {
+export function resolveTrainingEvent(session: TrainingSession, optionId: string, replaceSkill?: SkillId): ResolveResult {
   if (!session.pendingEventId) return { ok: false, error: '当前没有待处理事件', completed: session.completed }
   const event = eventForSession(session, session.pendingEventId)
   if (!event) return { ok: false, error: '未知事件配置', completed: session.completed }
   const option = event.options.find((item) => item.id === optionId)
   if (!option) return { ok: false, error: '未知选项', completed: session.completed }
+  if (option.trainingSkill) {
+    const error = skillChoiceReplacementError(session, option.trainingSkill, replaceSkill)
+    if (error) return { ok: false, error, completed: session.completed }
+  }
   const rng = derivedRng(session.seed, 'event-outcome', session.playerId, event.id, option.id, session.action)
   let effect: EventEffect = option.effect ?? {}
   let success: boolean | undefined
   let probability: number | undefined
   let roll: number | undefined
-  if (option.book) {
+  if (option.trainingSkill) {
+    const choice = option.trainingSkill
+    probability = trainingSkillChance(session, choice)
+    roll = rng.float()
+    success = roll < probability
+    if (success) {
+      let tier: import('./types.ts').SkillTier = choice.source === 'book' ? choice.tier : 'silver'
+      if (choice.source === 'teammate') {
+        const chances = inheritanceChances(session, choice.mentor, choice.id)
+        const tierRoll = rng.float()
+        tier = tierRoll < chances.rainbow ? 'rainbow' : tierRoll < chances.rainbow + chances.gold ? 'gold' : 'silver'
+      }
+      const granted = grantTrainingSkill(session, choice, tier, replaceSkill)
+      if (!granted.ok) return { ok: false, error: granted.reason, completed: session.completed }
+      effect = { text: `学会${{ silver: '银色', gold: '金色', rainbow: '彩色' }[tier]}《${SKILLS[choice.id].name}》${replaceSkill ? `，替换《${SKILLS[replaceSkill].name}》` : ''}。` }
+    } else {
+      effect = { text: `《${SKILLS[choice.id].name}》学习未成功，原有技能和技能书都保留。`, ...(choice.source === 'book' ? { fatigue: 6 } : {}) }
+    }
+    probability = Math.round(probability * 1000) / 1000
+    roll = Math.round(roll * 1000) / 1000
+  } else if (option.book) {
     // 书用平方曲线，不能复用 branchProbability 的线性公式。
-    const chance = bookLearnChance?.(session.candidate, option.book) ?? 0
+    const chance = bookLearnChance(session.candidate, option.book)
     probability = chance
     roll = rng.float()
     success = roll < chance
@@ -967,10 +988,16 @@ export function resolveTrainingEvent(session: TrainingSession, optionId: string)
   session.flags.push(event.id)
   session.eventCounts[event.id] = (session.eventCounts[event.id] ?? 0) + 1
   session.lastEventAction[event.id] = session.action
-  session.trainedSinceEvent = {}
-  session.pendingEventId = null
-  session.pendingEventAction = null
-  if (session.action >= trainingActionsTotal(session)) completeSession(session)
+  // 交流赛额外插入的技能选择不清空普通事件的训练计数。
+  if (event.id !== MATCH_BOOK_EVENT_ID) session.trainedSinceEvent = {}
+  if (event.id === MATCH_BOOK_EVENT_ID) {
+    delete session.pendingBookChoices
+    delete session.pendingSkillChoices
+  }
+  session.pendingEventId = session.queuedEventId ?? null
+  delete session.queuedEventId
+  session.pendingEventAction = session.pendingEventId ? session.action : null
+  if (!session.pendingEventId && session.action >= trainingActionsTotal(session)) completeSession(session)
   return {
     ok: true,
     event,

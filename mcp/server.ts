@@ -61,7 +61,6 @@ const trainingRequestSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('rest') }),
   z.object({ kind: z.literal('mentor') }),
   z.object({ kind: z.literal('protection'), focus: z.enum(['prevention', 'resilience']) }),
-  z.object({ kind: z.literal('inherit'), mentorId: z.string().min(1), skill: z.string().min(1) }),
 ])
 
 export function createFmMcpServer(config: FmMcpConfig): McpServer {
@@ -159,8 +158,14 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     plan: autoSubsSchema,
   }, (args) => action('set_auto_subs', args))
 
-  register('start_training', '开始培养', '每轮都从原始属性开始，结束后产出一张新球员卡进入库存。开始 30 时段、15 天的培养，消耗 30 精力；无 scheduleVersion 的旧 18/30 次培养保留旧规则。', {
+  register('set_training_books', '保存培养技能卡配置', '按球员保存最多 4 本技能书，key 来自 get_state 的 legendBooks。交流赛后从技能书、随机最多 5 名共同培养的队友和基础技能按 50:30:20 权重抽取三选一；已学技能不出现。', {
     playerId: z.string(),
+    bookKeys: z.array(z.string()).max(4),
+  }, (args) => action('set_training_books', args))
+
+  register('start_training', '开始培养', '每轮从原始属性开始，产出球员卡；省略 bookKeys 时使用保存的技能卡配置，传入时同时保存。交流赛后可学习技能书，书不会消耗。', {
+    playerId: z.string(),
+    bookKeys: z.array(z.string()).max(4).optional(),
   }, (args) => action('start_training', args))
 
   register('preview_training', '预览训练行动', '验证训练并预览成长等信息，不写入存档；交流赛结果在执行时产生，预览不保证比赛结果。', {
@@ -176,6 +181,7 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
   register('training_event_choice', '处理训练事件', '选择一个训练事件选项。optionId 来自 get_state 的 pendingEvent.options。', {
     playerId: z.string(),
     optionId: z.string(),
+    replaceSkill: z.string().optional().describe('同类别技能槽已满时，选择要替换的已学技能 ID；失败不替换'),
   }, (args) => action('training_event_choice', args))
 
   register('confirm_training', '装备刚练出的卡', '培养结束后新卡已自动进入库存；这个操作把它装备到球员身上并收起培养结果。', {

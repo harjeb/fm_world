@@ -71,6 +71,19 @@ export type SkillId =
   | 'gk_sweeper'
   | 'gk_reflexes'
   | 'penalty_specialist'
+  | 'gk_safe_hands'
+  | 'gk_high_ball'
+  | 'gk_close_down'
+  | 'gk_long_kick'
+  | 'cb_intercept'
+  | 'cb_block'
+  | 'cb_cover'
+  | 'wing_cross'
+  | 'wing_support'
+  | 'wing_track_back'
+  | 'cm_long_pass'
+  | 'cm_shield'
+  | 'st_breakaway'
   | 'injury_prevention'
   | 'injury_resilience'
   | 'lg_drill_master'
@@ -474,6 +487,11 @@ export type TrainingExchange = {
   result: 'win' | 'draw' | 'loss'
 }
 
+export type TrainingSkillChoice =
+  | { source: 'book'; id: SkillBookId; tier: LegendBookTier }
+  | { source: 'teammate'; id: SkillId; mentor: Pick<Player, 'id' | 'name' | 'positions' | 'skillTiers'> }
+  | { source: 'basic'; id: SkillId }
+
 export type TrainingSession = {
   /** 无此字段的旧课程继续使用旧行动规则。 */
   scheduleVersion?: 1
@@ -489,8 +507,15 @@ export type TrainingSession = {
   candidate: Player
   /** 当前所属俱乐部的奖杯上限加成；夺冠后会同步到进行中的培养。 */
   cupCeilingBonus?: number
-  /** 本轮携带的传奇技能书；书不消耗，只影响这轮事件。 */
+  /** 本轮携带的技能书快照；书不消耗。 */
   books?: LegendBook[]
+  /** 已抽出的交流赛后选项及同一行动等待处理的普通事件，均随存档保存。 */
+  pendingBookChoices?: LegendBook[]
+  /** 新版交流赛技能候选；包含来源与队友快照，读档不重新抽签。 */
+  pendingSkillChoices?: TrainingSkillChoice[]
+  /** 本轮随机挑出的最多五名技能来源，仅能来自共同培养的队友。 */
+  skillTeacherIds?: string[]
+  queuedEventId?: string
   academyLevel?: number
   stadiumLevel?: number
   /** 培养快照里的设施阶段；旧存档/旧课程可能缺新增的两个设施。 */
@@ -558,6 +583,8 @@ export type EventOption = {
   branch?: EventBranch
   /** 传奇技能书：动态概率由 bookLearnChance() 计算，不走 branch 的线性公式。 */
   book?: { id: SkillBookId; tier: LegendBookTier }
+  /** 交流赛后的技能学习（含书、队友和基础技能）。 */
+  trainingSkill?: TrainingSkillChoice
 }
 
 export type EventTrigger = {
@@ -1073,8 +1100,10 @@ export type GameState = {
   lineup: Lineup
   autoSubs?: AutoSubPlan
   training: Record<string, TrainingSession>
-  /** 已获得的传奇技能书；只增不减，学习不消耗。 */
+  /** 已获得的传奇/巅峰技能书；只增不减，学习不消耗。 */
   legendBooks?: LegendBook[]
+  /** 按球员保存的培养技能书配置，key 为 id:tier。 */
+  trainingBooksByPlayer?: Record<string, string[]>
   /** 每支传奇队“已有彩书后再次获胜”的球迷补偿是否已发；每队只发一次。 */
   legendRepeatFans?: Record<string, true>
   injuries?: Record<string, number>

@@ -31,16 +31,52 @@ import { eventById } from './data/events.ts'
 import { attrLabel } from './data/attributes.ts'
 import { keyAttrsOf } from './data/key-attrs.ts'
 import { isGoalkeeper } from './ca.ts'
-import { bookLearnChance, canUseBookOnPlayer, eventForSession } from './legend-learning.ts'
+import { bookKey, bookLearnChance, canChooseTrainingBook, eventForSession, trainingSkillChance } from './legend-learning.ts'
+import { canLearnSkill, skillCategory } from './data/skills.ts'
+import { getSkillTier } from './inheritance.ts'
+import { MAX_BOOKS } from './data/legend-skills.ts'
 import { cupCeilingBonus, effectiveTrainingCeilings } from './cup-rewards.ts'
 import { MAIN_ATTR_HARD_MAX, mainAttrsFor } from './rating.ts'
 import { settleEnergy } from './energy.ts'
+
+/** 保存的配置按球员区分；开始时再校验库存和本轮原始技能。 */
+export function trainingBookLoadout(game: GameState, playerId: string): string[] {
+  const saved = game.trainingBooksByPlayer?.[playerId]
+  return Array.isArray(saved) ? [...saved] : []
+}
+
+function validateTrainingBooks(game: GameState, playerId: string, keys: string[]): { books?: NonNullable<GameState['legendBooks']>; error?: string } {
+  const player = game.roster.find((item) => item.id === playerId)
+  if (!player) return { error: '球员不存在' }
+  if (!Array.isArray(keys) || keys.some((key) => typeof key !== 'string') || new Set(keys).size !== keys.length) return { error: '技能卡配置无效或有重复' }
+  if (keys.length > MAX_BOOKS) return { error: `一轮培养最多带 ${MAX_BOOKS} 本技能书` }
+  const books = keys.map((key) => game.legendBooks?.find((book) => bookKey(book) === key))
+  if (books.some((book) => !book)) return { error: '技能书不在库存里，可能已被移除' }
+  const selected = books as NonNullable<GameState['legendBooks']>
+  if (new Set(selected.map((book) => book.id)).size !== selected.length) return { error: '同一个技能只能选择一种档位' }
+  const base = untrainedPlayer(player)
+  const unusable = selected.find((book) => !canChooseTrainingBook(base, book).ok)
+  if (unusable) return { error: `这本书本轮不能使用：${canChooseTrainingBook(base, unusable).reason ?? '位置或技能槽不匹配'}` }
+  return { books: selected.map((book) => ({ ...book })) }
+}
+
+export function setTrainingBookLoadout(game: GameState, playerId: string, keys: string[]): { ok: boolean; error?: string } {
+  const check = validateTrainingBooks(game, playerId, keys)
+  if (check.error) return { ok: false, error: check.error }
+  game.trainingBooksByPlayer = { ...game.trainingBooksByPlayer, [playerId]: [...keys] }
+  saveGame(game)
+  return { ok: true }
+}
 
 export function startTraining(game: GameState, playerId: string, seed?: number, bookKeys?: string[]): { ok: boolean; error?: string } {
   const running = game.training[playerId]
   if (running && !running.completed) return { ok: false, error: '该球员已有一轮培养' }
   const player = game.roster.find((item) => item.id === playerId)
   if (!player) return { ok: false, error: '球员不存在' }
+  const keys = bookKeys ?? trainingBookLoadout(game, playerId)
+  const checked = validateTrainingBooks(game, playerId, keys)
+  if (checked.error) return { ok: false, error: checked.error }
+  const books = checked.books!
   settleEnergy(player, Date.now())
   const energy = player.energy ?? 100
   if (!Number.isFinite(energy) || energy < TRAINING_ENERGY_COST) {
@@ -51,12 +87,6 @@ export function startTraining(game: GameState, playerId: string, seed?: number, 
   if (running?.completed || game.candidates[playerId]) closeFinishedTraining(game, playerId)
   player.energy = Math.max(0, energy - TRAINING_ENERGY_COST)
   const economy = economyOf(game)
-  const keys = [...new Set(bookKeys ?? [])]
-  const books = keys.map((key) => game.legendBooks?.find((book) => `${book.id}:${book.tier}` === key)).filter((book): book is NonNullable<typeof book> => !!book)
-  if (books.length !== keys.length) return { ok: false, error: '技能书不在库存里，可能已被移除' }
-  if (books.length > 4) return { ok: false, error: '一轮培养最多带 4 本技能书' }
-  const unusable = books.find((book) => !canUseBookOnPlayer(player, book).ok)
-  if (unusable) return { ok: false, error: `这本书当前不能使用：${canUseBookOnPlayer(player, unusable).reason ?? '位置或技能槽不匹配'}` }
   // 每轮都从原始属性开始，和他现在装备哪张卡无关；第 2 赛季 +5 天（40 时段），第 3 赛季起再 +2 天（44 时段）。
   const seasonIndex = Math.max(game.season?.index ?? 1, game.world?.seasonIndex ?? 1)
   const session = createTrainingSession(untrainedPlayer(player), seed ?? newTrainingSeed(game, playerId), { stadium: economy.stadium, academy: economy.academy, medical: economy.medical, shop: economy.shop, sponsor: economy.sponsor, psychology: economy.psychology, tactics: economy.tactics }, 1, books, trainingActionsForSeason(seasonIndex))
@@ -67,6 +97,7 @@ export function startTraining(game: GameState, playerId: string, seed?: number, 
   delete session.candidate.energyAt
   delete session.candidate.unhappy
   game.training[playerId] = session
+  game.trainingBooksByPlayer = { ...game.trainingBooksByPlayer, [playerId]: [...keys] }
   saveGame(game)
   return { ok: true }
 }
@@ -154,9 +185,15 @@ function trainingMentor(game: GameState, request: TrainingRequest) {
     ? game.roster.find(item => item.id === request.mentorId) : undefined
 }
 
+function skillTeammates(game: GameState, session: TrainingSession, groupIds: string[]): Player[] {
+  const ids = new Set([...(session.partnerIds ?? []), ...groupIds].filter((id) => id !== session.playerId))
+  return game.roster.filter((player) => ids.has(player.id)).map((player) => groupIds.includes(player.id) ? game.training[player.id]?.candidate ?? player : player)
+}
+
 function prepareTraining(game: GameState, playerId: string, request: TrainingRequest, hideQuality = false): { plan?: TrainingPlan; error?: string; completed?: boolean; ids?: string[] } {
   const session = game.training[playerId]
   if (!session) return { error: '没有进行中的培养', completed: false }
+  if (request.kind === 'inherit' || (request.kind === 'activity' && request.activityId === 'inherit')) return { error: '技能传承已合并至交流赛后的技能学习' }
   const rawIds = (request as TrainingRequest & { teammateIds?: unknown }).teammateIds
   const groupAllowed = ['drill', 'combo', 'match'].includes(request.kind) ||
     (request.kind === 'activity' && !!trainingOptions(session).find(item => item.id === request.activityId)?.group)
@@ -179,7 +216,7 @@ function prepareTraining(game: GameState, playerId: string, request: TrainingReq
     const support = partnersAt(participant, request)
     const plan = planTraining(structuredClone(participant), request, mentor, Math.max(ids.length - 1, support), hideQuality)
     if (plan.invalid) return { error: plan.note ?? '无法执行此培养行动' }
-    const trial = performTrainingAction(structuredClone(participant), request, mentor, Math.max(ids.length - 1, support))
+    const trial = performTrainingAction(structuredClone(participant), request, mentor, Math.max(ids.length - 1, support), { skillTeammates: skillTeammates(game, participant, ids) })
     if (!trial.ok) return { error: trial.error, completed: id === playerId ? trial.completed : false }
     if (id === playerId) primaryPlan = plan
   }
@@ -306,7 +343,7 @@ export function trainingAction(game: GameState, playerId: string, request: Train
   let primaryResult: PerformResult | undefined
   for (let i = 0; i < staged.length; i++) {
     // 陪练小队固定按人数加成长；手动组队（Agent/旧流程）仍按实际参与的队友数。
-    const result = performTrainingAction(staged[i], request, mentor, Math.max(staged.length - 1, support))
+    const result = performTrainingAction(staged[i], request, mentor, Math.max(staged.length - 1, support), { skillTeammates: skillTeammates(game, staged[i], prepared.ids) })
     if (!result.ok) return result
     if (exchange) {
       const session = staged[i]
@@ -327,10 +364,10 @@ export function trainingAction(game: GameState, playerId: string, request: Train
   return exchange ? { ...primaryResult!, exchange } : primaryResult!
 }
 
-export function trainingEventChoice(game: GameState, playerId: string, optionId: string): ResolveResult {
+export function trainingEventChoice(game: GameState, playerId: string, optionId: string, replaceSkill?: import('./types.ts').SkillId): ResolveResult {
   const session = game.training[playerId]
   if (!session) return { ok: false, error: '没有进行中的培养', completed: false }
-  const result = resolveTrainingEvent(session, optionId)
+  const result = resolveTrainingEvent(session, optionId, replaceSkill)
   if (result.ok) syncCandidate(game, playerId)
   saveGame(game)
   return result
@@ -606,7 +643,9 @@ function autoEventOption(session: TrainingSession, event: EventDef, weights: Aut
   let best = event.options[0]
   let bestScore = -Infinity
   for (const option of event.options) {
-    const value = option.book
+    const value = option.trainingSkill
+      ? ({ book: 850, teammate: 650, basic: 500 }[option.trainingSkill.source] * trainingSkillChance(session, option.trainingSkill))
+      : option.book
       ? (() => {
           const p = bookLearnChance(session.candidate, option.book)
           return p > 0 ? 500 * p : -1
@@ -647,7 +686,12 @@ export function autoTrainingStep(game: GameState, playerId: string): AutoTrainin
     const event = eventForSession(session, session.pendingEventId) ?? eventById(session.pendingEventId)
     if (!event) return { ok: false, error: '未知的事件配置', completed: false, kind: 'event' }
     const option = autoEventOption(session, event, weights)
-    const result = trainingEventChoice(game, playerId, option.id)
+    const choice = option.trainingSkill
+    const rank = { silver: 0, gold: 1, rainbow: 2 }
+    const replace = choice && !canLearnSkill(session.candidate.skills, choice.id)
+      ? session.candidate.skills.filter((id) => skillCategory(id) === skillCategory(choice.id)).sort((a, b) => rank[getSkillTier(session.candidate, a)] - rank[getSkillTier(session.candidate, b)])[0]
+      : undefined
+    const result = trainingEventChoice(game, playerId, option.id, replace)
     if (!result.ok) return { ok: false, error: result.error ?? '事件结算失败', completed: false, kind: 'event' }
     return { ok: true, completed: result.completed, kind: 'event', label: `${event.title} · ${option.label}` }
   }

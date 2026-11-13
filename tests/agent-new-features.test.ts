@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { applyAgentAction, agentView } from '../server/agent.ts'
-import { eventById } from '../src/game/data/events.ts'
 import { trainingOptions } from '../src/game/training-calendar.ts'
 import { playerMarketValue } from '../src/game/market.ts'
 import { isOnMarketToday } from '../src/game/market-window.ts'
@@ -35,10 +34,12 @@ describe('agent economy, market and training', () => {
     const session = game.training[player.id]
     const action = applyAgentAction(game, { action: 'training_action', playerId: player.id, request: { kind: 'activity', activityId: trainingOptions(session)[0].id } })
     expect(action.ok).toBe(true)
+    const learning = agentView(game).trainingSessions[0].pendingEvent!
+    expect((action.result as { event: unknown }).event).toEqual(learning)
+    expect(JSON.stringify(action.result)).not.toContain('"effect"')
+    expect(applyAgentAction(game, { action: 'training_event_choice', playerId: player.id, optionId: learning.options[0].id, replaceSkill: learning.options[0].replaceOptions[0] }).ok).toBe(true)
     const pending = agentView(game).trainingSessions[0].pendingEvent!
     expect(pending.options[0].hint).toContain('第一脚触球 +2')
-    expect((action.result as { event: unknown }).event).toEqual(pending)
-    expect(JSON.stringify(action.result)).not.toContain('"effect"')
     const result = applyAgentAction(game, { action: 'training_event_choice', playerId: player.id, optionId: 'passing' })
     expect(result.ok).toBe(true)
     const gains = (result.result as { gains: Record<string, number> }).gains
@@ -90,7 +91,8 @@ describe('agent 球员卡', () => {
     for (let guard = 0; guard < 200 && !game.training[playerId].completed; guard++) {
       const session = game.training[playerId]
       if (session.pendingEventId) {
-        applyAgentAction(game, { action: 'training_event_choice', playerId, optionId: eventById(session.pendingEventId)!.options[0].id })
+        const option = agentView(game).trainingSessions.find((item) => item.playerId === playerId)!.pendingEvent!.options[0]
+        expect(applyAgentAction(game, { action: 'training_event_choice', playerId, optionId: option.id, replaceSkill: option.replaceOptions[0] }).ok).toBe(true)
         continue
       }
       const options = trainingOptions(session).filter((item) => !item.parameters)

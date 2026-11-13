@@ -48,7 +48,7 @@ describe('传奇技能书学习', () => {
     expect(bookLearnChance(p, { ...drillBook, tier: 'gold' })).toBeCloseTo(0.51, 1)
   })
 
-  it('每本书有 12/14/16/18 的保底点', () => {
+  it('兼容旧存档的单书事件保留 12/14/16/18 触发点', () => {
     const p = player(2)
     const books: LegendBook[] = [
       { id: 'lg_drill_master', tier: 'gold' },
