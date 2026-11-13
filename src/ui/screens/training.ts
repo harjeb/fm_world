@@ -112,7 +112,7 @@ export function renderTraining(): string {
       actions: playerSelect(),
     })}
     ${sessionStrip()}
-    ${selected ? renderTrainingPlayer(selected) : `<p class="hint">先选择球员，再在开始培养前配置挑战获得的技能卡（技能书）。</p>${overviewTable()}`}
+    ${selected ? renderTrainingPlayer(selected) : `<p class="hint">先选择球员，再在开始培养前配置携带的技能书（支持银、金、彩多种稀有度）。</p>${overviewTable()}`}
   `
 }
 
@@ -291,9 +291,9 @@ function bookPicker(player: Player): string {
     const checked = selected.has(key)
     const duplicate = !checked && books.some((other) => other.id === book.id && selected.has(bookKey(other)))
     const reason = !check.ok ? ` · ${check.reason}` : duplicate ? ' · 已选同技能的其他档位' : ''
-    return `<label class="check-field training-book-option ${check.ok && !duplicate ? '' : 'muted'}" title="${esc(reason)}">
+    return `<label class="check-field training-book-option tier-${book.tier} ${check.ok && !duplicate ? '' : 'muted'}" title="${esc(reason)}">
       <input type="checkbox" data-training-book="${esc(key)}" ${checked ? 'checked' : ''} ${!checked && (!check.ok || duplicate || selected.size >= MAX_BOOKS) ? 'disabled' : ''}>
-      <span><b>${esc(bookTierLabel(book.tier))}·${esc(bookName(book.id))}</b><small>${esc(SKILLS[book.id]?.desc ?? '')} ${esc(skillEffectText(book.id, book.tier))}</small><small class="muted">要求 ${esc(bookRequirementText(book))} · 起点成功率 ${Math.round(bookLearnChance(base, book) * 100)}%${esc(reason)}</small></span>
+      <span><span class="book-option-head">${tag(esc(bookTierLabel(book.tier)), `skill-${book.tier}`)} <b>${esc(bookName(book.id))}</b></span><small>${esc(SKILLS[book.id]?.desc ?? '')} ${esc(skillEffectText(book.id, book.tier))}</small><small class="muted">要求 ${esc(bookRequirementText(book))} · 起点成功率 ${Math.round(bookLearnChance(base, book) * 100)}%${esc(reason)}</small></span>
     </label>`
   }).join('')
   const basic = basicSkillsFor(base)
@@ -301,19 +301,20 @@ function bookPicker(player: Player): string {
   const missing = [...selected].filter((key) => !books.some((book) => bookKey(book) === key)).map((key) => `<label class="check-field muted"><input type="checkbox" data-training-book="${esc(key)}" checked><span>已不在库存：${esc(key)}（请取消选择）</span></label>`).join('')
   const body = books.length || missing
     ? `<div class="check-grid">${rows}${missing}</div><div class="btn-row pad"><button class="btn small" data-action="training-books-save" data-player="${esc(player.id)}">保存当前配置</button><span class="muted small">${dirty ? '有未保存的修改；开始培养时也会保存' : '已保存，按球员分别记住'}</span></div>`
-    : `<p class="muted pad">还没有技能卡。传奇挑战胜/平或巅峰之路里程碑可获得技能书。 <button class="link" data-nav="challenge">前往挑战 ${icon('right', 12)}</button></p>`
-  return panel(`传奇技能书槽 · 装备技能卡 <small>${selected.size} / ${MAX_BOOKS}</small>`, `<p class="hint pad">最多选择 ${MAX_BOOKS} 本，保存后下次培养可继续使用。只有交流赛后触发学习：技能书、一起培养的队友（随机最多 5 人）和位置基础技能按来源权重 50:30:20 抽取最多 3 选 1；来源不足时按剩余权重抽取。已掌握的技能不出现，满槽可选择替换，失败保留原技能和书。每轮从原始技能开始，学会的技能属于本轮产出的球员卡。自动培养会自动选择；如要手选请先暂停自动培养。</p>${basicList}${body}`, { flush: true })
+    : `<p class="muted pad">还没有技能书（支持银、金、彩多种稀有度）。 <button class="link" data-nav="challenge">前往挑战 ${icon('right', 12)}</button></p>`
+  const rarities = `<span class="tag-row">${tag('银书', 'skill-silver')}${tag('金书', 'skill-gold')}${tag('彩书', 'skill-rainbow')}</span>`
+  return panel(`装备技能卡 <small>${selected.size} / ${MAX_BOOKS}</small>`, `${basicList}${body}`, { flush: true, className: 'book-slot-panel', aside: rarities })
 }
 
 function bookLoadout(session: TrainingSession): string {
   const names = (session.skillTeacherIds ?? []).map((id) => game.roster.find((player) => player.id === id)?.name).filter((name): name is string => !!name)
   const teachers = names.length ? `<p class="hint pad">本轮技能来源队友（随机最多 5 人）：${names.map(esc).join('、')}。只有当前仍参与培养的人可提供选项。</p>` : ''
-  if (!session.books?.length) return panel(`本轮技能书槽 <small>0 / ${MAX_BOOKS}</small>`, `<p class="hint pad">本轮没有配置技能书，交流赛后仍可学习一起培养的队友或位置基础技能；下次开始培养前可以配置技能书。</p>${teachers}`, { flush: true })
+  if (!session.books?.length) return panel(`本轮技能书槽 <small>0 / ${MAX_BOOKS}</small>`, `<p class="hint pad">本轮未装备技能卡；交流赛后仍可学习共同培养的队友或位置基础技能。</p>${teachers}`, { flush: true, className: 'book-slot-panel' })
   const rows = session.books.map((book) => {
     const check = canChooseTrainingBook(session.candidate, book)
-    return `<div class="row-line"><span>${esc(bookTierLabel(book.tier))} · ${esc(bookName(book.id))} <small class="muted">${check.ok ? esc(bookRequirementText(book)) : esc(check.reason ?? '')}</small></span><b>${check.ok ? `${Math.round(bookLearnChance(session.candidate, book) * 100)}%` : '—'}</b></div>`
+    return `<div class="row-line"><span>${tag(esc(bookTierLabel(book.tier)), `skill-${book.tier}`)} ${esc(bookName(book.id))} <small class="muted">${check.ok ? esc(bookRequirementText(book)) : esc(check.reason ?? '')}</small></span><b>${check.ok ? `${Math.round(bookLearnChance(session.candidate, book) * 100)}%` : '—'}</b></div>`
   }).join('')
-  return panel(`本轮技能书槽 <small>${session.books.length} / ${MAX_BOOKS}</small>`, `<div class="rows">${rows}</div><p class="hint pad">交流赛后从技能书、共同培养队友和基础技能按概率抽取；已掌握技能不出现。书不会消耗。</p>${teachers}`, { flush: true })
+  return panel(`本轮技能书槽 <small>${session.books.length} / ${MAX_BOOKS}</small>`, `<div class="rows">${rows}</div>${teachers}`, { flush: true, className: 'book-slot-panel' })
 }
 
 function renderTrainingStart(player: Player): string {
@@ -339,8 +340,8 @@ function renderTrainingStart(player: Player): string {
       </div>
     `, { className: 'training-start', aside: posBadge(primaryPosition(player)) })}
     ${panel('培养起点：原始属性', `<div class="radar-pair">${attributeRadar(base, undefined, 208, true)}<div>${attrList(base)}</div></div>`)}
-    ${bookPicker(player)}
-  </div>`
+  </div>
+  ${bookPicker(player)}`
 }
 
 function attrList(player: Pick<Player, 'attrs' | 'positions'>): string {

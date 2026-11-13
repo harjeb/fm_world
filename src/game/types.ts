@@ -146,7 +146,7 @@ export type PeakSkillId = 'lg_peak_striker' | 'lg_peak_engine' | 'lg_peak_wall' 
 export type LegendSkillId = Exclude<Extract<SkillId, `lg_${string}`>, PeakSkillId>
 
 export type SkillTier = 'silver' | 'gold' | 'rainbow'
-export type LegendBookTier = 'gold' | 'rainbow'
+export type LegendBookTier = SkillTier
 export type SkillBookId = LegendSkillId | PeakSkillId
 export type LegendBook = { id: SkillBookId; tier: LegendBookTier }
 

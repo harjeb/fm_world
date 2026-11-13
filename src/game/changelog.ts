@@ -7,7 +7,7 @@
  * - 玩家也可随时通过顶栏版本号按钮重新打开查看。
  */
 
-export const APP_VERSION = 'v0.4.3'
+export const APP_VERSION = 'v0.4.4'
 export const CHANGELOG_STORAGE_KEY = 'fm-world-changelog-seen'
 
 export type ChangelogItem = {
@@ -26,6 +26,32 @@ export type ChangelogRelease = {
 }
 
 export const CHANGELOG_RELEASES: readonly ChangelogRelease[] = [
+  {
+    version: 'v0.4.4',
+    date: '2026-11-13',
+    headline: '技能书槽改版、多种稀有度区分与交流赛技能学习',
+    summary: '「装备技能卡」移至培养面板下方全宽醒目展示并精简文字说明，新增银/金/彩多稀有度区分；交流赛后可从技能书、共同培养队友及位置基础技能中抽取学习。',
+    items: [
+      {
+        badge: '技能书槽',
+        tone: 'good',
+        title: '「装备技能卡」移至培养区域下方全宽醒目展示',
+        desc: '培养开始页面的技能书槽独立置于「开始培养」与「培养起点」下方，以高亮边框与抬头呈现，去掉冗长文字说明并保留本位置基础技能池折叠清单。',
+      },
+      {
+        badge: '多稀有度',
+        tone: 'gold',
+        title: '技能书支持银书 / 金书 / 彩书多种稀有度色标',
+        desc: '技能书不再只有彩色档位：库存与配置列表统一以银、金、彩独立色标与左框线区分，不同稀有度对应不同属性门槛与技能等级效果。',
+      },
+      {
+        badge: '技能学习',
+        tone: '',
+        title: '交流赛后多来源技能学习与 Agent API 同步支持',
+        desc: '培养期间不再触发散落书事件，改为每周交流赛后从装备技能书、同轮共同培养队友与位置基础技能中抽取选项，满槽时支持直接替换，自动培养与 Agent API / MCP 同步支持。',
+      },
+    ],
+  },
   {
     version: 'v0.4.3',
     date: '2026-11-12',

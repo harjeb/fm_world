@@ -11,7 +11,8 @@ import { derivedRng } from './rng.ts'
 
 const RANK: Record<string, number> = { silver: 0, gold: 1, rainbow: 2 }
 
-type BookDef = { name: string; scope: 'any' | 'field' | 'gk'; requires: { attr: AttrKey; gold: number; rainbow: number }[] }
+type BookRequirement = { attr: AttrKey; silver?: number; gold: number; rainbow: number }
+type BookDef = { name: string; scope: 'any' | 'field' | 'gk'; requires: BookRequirement[] }
 
 function bookDef(id: SkillBookId): BookDef | undefined {
   return (LEGEND_SKILLS as unknown as Record<string, BookDef>)[id] ?? (PEAK_SKILLS as unknown as Record<string, BookDef>)[id]
@@ -26,7 +27,13 @@ export function bookKey(book: Pick<LegendBook, 'id' | 'tier'>): string {
 }
 
 export function bookTierLabel(tier: LegendBookTier): string {
-  return tier === 'rainbow' ? '彩书' : '金书'
+  return tier === 'rainbow' ? '彩书' : tier === 'gold' ? '金书' : '银书'
+}
+
+function bookThreshold(requirement: BookRequirement, tier: LegendBookTier): number {
+  if (tier === 'rainbow') return requirement.rainbow
+  if (tier === 'gold') return requirement.gold
+  return requirement.silver ?? Math.max(1, requirement.gold - Math.max(4, Math.round((requirement.rainbow - requirement.gold) * 0.7)))
 }
 
 export function bookScopeMatches(player: Pick<Player, 'positions'>, book: { id: SkillBookId }): boolean {
@@ -42,7 +49,7 @@ export function bookLearnChance(player: Pick<Player, 'attrs' | 'positions'>, boo
   const def = bookDef(book.id)
   if (!def) return 0
   const values = def.requires.map((requirement) => {
-    const threshold = book.tier === 'rainbow' ? requirement.rainbow : requirement.gold
+    const threshold = bookThreshold(requirement, book.tier)
     if (!(threshold > 0)) return 1
     const ratio = (player.attrs[requirement.attr] ?? 0) / threshold
     return Math.max(0.02, Math.min(1, Math.max(0, (ratio - 0.65) / 0.35) ** 2))
@@ -55,7 +62,7 @@ export function bookRequirementText(book: { id: SkillBookId; tier: LegendBookTie
   const def = bookDef(book.id)
   if (!def) return ''
   return def.requires
-    .map((requirement) => `${attrLabel(requirement.attr)} ${book.tier === 'rainbow' ? requirement.rainbow : requirement.gold}`)
+    .map((requirement) => `${attrLabel(requirement.attr)} ${bookThreshold(requirement, book.tier)}`)
     .join(' + ')
 }
 
@@ -210,10 +217,8 @@ export function grantTrainingSkill(session: TrainingSession, choice: TrainingSki
     session.candidate.skillTiers = tiers
   }
   if (choice.id.startsWith('lg_')) {
-    // 原有书技能实现负责巅峰属性奖励；银档沿用金档校验，随后保留实际传承档位。
-    const result = grantBookSkill(session, { id: choice.id as SkillBookId, tier: tier === 'silver' ? 'gold' : tier })
+    const result = grantBookSkill(session, { id: choice.id as SkillBookId, tier })
     if (!result.ok) return { ok: false, reason: result.reason }
-    session.candidate.skillTiers![choice.id] = tier
   } else {
     session.candidate.skills = [...session.candidate.skills, choice.id]
     session.candidate.skillTiers = { ...session.candidate.skillTiers, [choice.id]: tier }

@@ -55,7 +55,7 @@ export function skillEffectText(id: SkillId, tier: SkillTier = 'silver'): string
   const effect = legend?.effect ?? peak?.effect
   if (!effect) return ''
   const text = effect.replace(/(\d+\.\d{2,})/g, (_match, value: string) => String(Math.round(Number(value) * 10) / 10))
-  return `${text}（金 ×1 / 彩 ×1.4）`
+  return `${text}（银/金 ×1 / 彩 ×1.4）`
 }
 
 /** 铁肺不是按倍数算的，单独说明。 */

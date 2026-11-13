@@ -24,7 +24,7 @@ export function ensureLegendBooks(game: GameState): boolean {
   }
   const seen = new Set<string>()
   const valid = game.legendBooks.filter((book) => {
-    if (!book || (!Object.hasOwn(LEGEND_SKILLS, book.id) && !Object.hasOwn(PEAK_SKILLS, book.id)) || (book.tier !== 'gold' && book.tier !== 'rainbow')) return false
+    if (!book || (!Object.hasOwn(LEGEND_SKILLS, book.id) && !Object.hasOwn(PEAK_SKILLS, book.id)) || (book.tier !== 'silver' && book.tier !== 'gold' && book.tier !== 'rainbow')) return false
     const key = `${book.id}:${book.tier}`
     if (seen.has(key)) return false
     seen.add(key)
