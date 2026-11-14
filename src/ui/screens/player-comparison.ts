@@ -6,7 +6,7 @@ import { marketState } from '../../online.ts'
 import { countryLabel } from '../components.ts'
 import { esc } from '../format.ts'
 import { game } from '../state.ts'
-import { aggregatePerformance, type PerformanceTotals } from './player-performance.ts'
+import { aggregatePerformance, averageRating, type AdvancedMetric, type PerformanceTotals } from './player-performance.ts'
 
 export type CompareTab = 'overview' | 'attributes' | 'stats' | 'positions'
 
@@ -61,6 +61,15 @@ function passRate(t?: PerformanceTotals): string {
   return t?.appearances && t.passes !== null && t.passesCompleted !== null && t.passes > 0 && t.passesCompleted <= t.passes
     ? `${Math.round(t.passesCompleted / t.passes * 100)}%` : '—'
 }
+function advancedValue(t: PerformanceTotals | undefined, key: AdvancedMetric, digits = 0): string {
+  if (!t || !t.coverage[key]) return '—'
+  const value = key === 'rating' ? averageRating(t) : t[key]
+  return value === null ? '—' : `${value.toFixed(digits)}（${t.coverage[key]}/${t.appearances} 场）`
+}
+function tackleRate(t?: PerformanceTotals): string {
+  const rate = t?.tackleRate
+  return rate && rate.attempts > 0 ? `${Math.round(rate.success / rate.attempts * 100)}%（${rate.matches}/${t!.appearances} 场）` : '—'
+}
 function statTable(p: Player, other?: Player): string {
   const first = recordedStats(p), second = recordedStats(other)
   const rows: [string, string, string][] = [
@@ -68,9 +77,11 @@ function statTable(p: Player, other?: Player): string {
     ['出场时间（分钟）', statValue(first, 'minutes'), statValue(second, 'minutes')],
     ...([['进球', 'goals'], ['助攻', 'assists'], ['射门', 'shots'], ['传球', 'passes'], ['抢断', 'tackles'], ['拦截', 'interceptions']] as const)
       .map(([label, key]): [string, string, string] => [label, statValue(first, key), statValue(second, key)]),
-    ['传球成功率', passRate(first), passRate(second)], ['评分', '—', '—'],
+    ...([['射正', 'shotsOnTarget', 0], ['创造机会', 'chancesCreated', 0], ['预期进球', 'xg', 2], ['预期助攻', 'xa', 2], ['评分', 'rating', 1]] as const)
+      .map(([label, key, digits]): [string, string, string] => [label, advancedValue(first, key, digits), advancedValue(second, key, digits)]),
+    ['传球成功率', passRate(first), passRate(second)], ['抢断成功率', tackleRate(first), tackleRate(second)],
   ]
-  return `<p class="pc-muted">仅统计本赛季已保存的战报；未收录的比赛不计入，缺失数据以 — 显示。</p><div class="pc-table-wrap"><table class="pc-table"><thead><tr><th>本赛季数据</th><th>${esc(p.name)}</th><th>${other ? esc(other.name) : '对比球员'}</th></tr></thead><tbody>${rows.map(([label, a, b]) => `<tr><th>${label}</th><td>${a}</td><td>${b}</td></tr>`).join('')}</tbody></table></div>`
+  return `<p class="pc-muted">仅统计本赛季已保存的战报；新增数据只汇总有记录的场次，括号为已记录 / 出场场次；缺失数据以 — 显示。评分为游戏事件估算。</p><div class="pc-table-wrap"><table class="pc-table"><thead><tr><th>本赛季数据</th><th>${esc(p.name)}</th><th>${other ? esc(other.name) : '对比球员'}</th></tr></thead><tbody>${rows.map(([label, a, b]) => `<tr><th>${label}</th><td>${a}</td><td>${b}</td></tr>`).join('')}</tbody></table></div>`
 }
 function attributeTable(p: Player, other?: Player): string {
   const raw = (target: Player | undefined, key: AttrKey) => attr(target, key) === undefined ? '—' : number(target!.attrs[key])
@@ -82,7 +93,7 @@ function positionsTable(p: Player, other?: Player): string {
 function overview(p: Player, other?: Player): string {
   return `<div class="pc-overview-cards">${[p, other].map(target => {
     const stats = recordedStats(target)
-    return `<article class="pc-summary"><div><h3>赛季统计</h3><p class="pc-muted">仅含已保存战报</p><p>出场 ${statValue(stats, 'appearances')}　进球 ${statValue(stats, 'goals')}　助攻 ${statValue(stats, 'assists')}</p><p>传球成功率 ${passRate(stats)}　评分 —</p></div><div>${pitch(target)}<p>${target ? esc(positionName(target)) : '未选择球员'}</p></div></article>`
+    return `<article class="pc-summary"><div><h3>赛季统计</h3><p class="pc-muted">仅含已保存战报</p><p>出场 ${statValue(stats, 'appearances')}　进球 ${statValue(stats, 'goals')}　助攻 ${statValue(stats, 'assists')}</p><p>传球成功率 ${passRate(stats)}　评分 ${advancedValue(stats, 'rating', 1)}</p></div><div>${pitch(target)}<p>${target ? esc(positionName(target)) : '未选择球员'}</p></div></article>`
   }).join('')}</div><section class="pc-radar-section"><h3>属性对比</h3><div class="pc-radar-layout"><div class="pc-facts"><span>惯用脚</span><b>${esc(({ L: '左脚', R: '右脚', B: '双脚' } as const)[p.foot] ?? '—')}</b><span>身高</span><b>${number(p.height)} 厘米</b></div><div>${radar(p, other)}<div class="pc-legend"><span><i class="pc-dot-first"></i>${esc(p.name)}</span>${other ? `<span><i class="pc-dot-second"></i>${esc(other.name)}</span>` : ''}</div><p class="pc-muted pc-center">比赛评分，雷达上限为 100（超出部分截顶）${other && isKeeper(p) !== isKeeper(other) ? '；门将与外场球员尺度不同，仅供参考' : ''}</p></div><div class="pc-facts pc-facts-right"><span>惯用脚</span><b>${other ? esc(({ L: '左脚', R: '右脚', B: '双脚' } as const)[other.foot] ?? '—') : '—'}</b><span>身高</span><b>${other ? `${number(other.height)} 厘米` : '—'}</b></div></div></section>`
 }
 

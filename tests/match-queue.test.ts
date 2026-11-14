@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { buildOwnerlessTeams, createOwnerlessWorld } from '../src/game/world.ts'
-import { computeMatchJob, matchJobId, type MatchJob, type MatchJobResult } from '../server/match-job.ts'
+import { computeMatchJob, matchJobId, recordForClub, type MatchJob, type MatchJobResult } from '../server/match-job.ts'
 import { MatchQueue } from '../server/match-queue.ts'
 
 const dirs: string[] = [], queues: MatchQueue[] = []
@@ -38,6 +38,14 @@ describe('持久化比赛任务队列', () => {
     expect(job).toEqual(before)
     expect(first.record.createdAt).toBe(job.kickoffAt)
     expect(first.id).toBe(job.id)
+    expect(first.record.playerStats.length).toBeGreaterThan(20)
+    for (const stat of first.record.playerStats.filter(row => row.minutes > 0)) {
+      expect(stat.rating).toBeGreaterThanOrEqual(1)
+      expect(stat.shotsOnTarget).toBeGreaterThanOrEqual(0)
+      expect(stat.tackleAttempts).toBeGreaterThanOrEqual(stat.tackles)
+    }
+    expect(recordForClub(job, first, job.home.team.id).playerStats).toEqual(first.record.playerStats)
+    expect(recordForClub(job, first, job.away.team.id).playerStats).toEqual(first.record.playerStats)
   })
 
   it('最多一场在计算；快照和已计算结果重启后复用，不受后来改阵容/属性影响', async () => {

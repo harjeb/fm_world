@@ -2,6 +2,7 @@ import { STAR_TRAITS } from '../data/star-traits.generated.ts'
 import type { ShotScope, TraitCondition } from '../data/star-traits.ts'
 import type { BaseTraitId } from '../types.ts'
 import { skillTierMultiplier } from './team.ts'
+import { recordChance, recordChanceGoal, recordSave, recordShot, recordTackleAttempt } from './performance.ts'
 import { MatchRatings } from './ratings.ts'
 import { FREE_KICK_DELIVERY_RANGE, FREE_KICK_SHOT_RANGE, PRESS_LEVEL, SettlementKernel, pickByWeight, totalWeight } from './resolution.ts'
 import type { PassModel, PassType, ShotModel } from './resolution.ts'
@@ -941,7 +942,7 @@ export class MatchEngine {
     const opp = this.getOpponent(sp.teamSide)
     const taker = this.playerById(sp.takerId ?? null)
     if (!taker) return null
-    if (sp.type === 'corner') return this.resolveAerial(team, opp, choice.point, sp.teamSide, true)
+    if (sp.type === 'corner') return this.resolveAerial(team, opp, choice.point, sp.teamSide, true, taker)
     if (sp.type === 'free_kick') {
       if (sp.mode === 'shot') {
         return this.resolveShot(taker, team, opp, { point: { x: sp.x, y: sp.y }, header: false, penalty: false, freeKick: true, target: action.shotTarget })
@@ -1020,6 +1021,7 @@ export class MatchEngine {
 
   /** v3 进球后不立刻把全队拉回中圈：等开球动作开始时再切镜头。 */
   private deferKickoff(side: MatchSide): void {
+    delete this.state.recordKeyPass
     this.state.pendingSetPiece = { type: 'kickoff', teamSide: side, x: PITCH_LENGTH / 2, y: GOAL_Y }
     this.state.phase = 'setpiece'
     this.state.possession = side
@@ -1708,6 +1710,7 @@ export class MatchEngine {
   }
 
   private resolvePass(team: MatchTeamState, opp: MatchTeamState, carrier: MatchPlayerState, choice: ActionChoice, time: number): MatchLogEntry | null {
+    delete this.state.recordKeyPass
     const receiver = this.playerById(choice.targetId ?? null)
     if (!receiver || !receiver.onPitch) return this.resolveLooseBall()
     const from = this.continuous ? (choice.start ?? { x: carrier.x, y: carrier.y }) : { x: carrier.x, y: carrier.y }
@@ -1745,6 +1748,7 @@ export class MatchEngine {
         }
       }
       this.state.recordAssist = { id: carrier.id, name: carrier.name, side: carrier.side, step: this.state.step }
+      this.state.recordKeyPass = { id: carrier.id, receiverId: receiver.id, side: carrier.side, step: this.state.step }
       carrier.stats.passesCompleted++
       this.statsOf(team).passesCompleted++
       this.state.ball = { x: receiver.x, y: receiver.y, ownerId: receiver.id, justReceived: true }
@@ -1769,7 +1773,7 @@ export class MatchEngine {
           ratings,
           roll,
         })
-        this.resolveAerial(team, opp, { x: goalXOf(carrier.side) - dirOf(carrier.side) * 8, y: GOAL_Y }, carrier.side, true)
+        this.resolveAerial(team, opp, { x: goalXOf(carrier.side) - dirOf(carrier.side) * 8, y: GOAL_Y }, carrier.side, true, carrier)
         return entry
       }
       if (choice.type === 'through') {
@@ -1838,6 +1842,7 @@ export class MatchEngine {
       this.state.ball = { x: carrier.x, y: carrier.y, ownerId: carrier.id, justReceived: false }
       return this.log('dribble', carrier.side, `${carrier.name} 带球推进 ${moved.toFixed(1)} 米。`, { playerId: carrier.id, probabilities: { success: 1 } })
     }
+    recordTackleAttempt(defender.stats)
     const model = this.dribbleModel(carrier, defender, true)
     const { tackle: tackleShare, foul: foulP, loose: looseShare } = this.kernel.dribbleOdds(model, defender, opp)
     const probabilities = {
@@ -1859,6 +1864,7 @@ export class MatchEngine {
       })
     }
     if (roll < model.p + tackleShare) {
+      delete this.state.recordKeyPass
       defender.stats.tackles++
       this.statsOf(opp).tackles++
       this.state.ball = { x: defender.x, y: defender.y, ownerId: defender.id, justReceived: true }
@@ -1891,6 +1897,7 @@ export class MatchEngine {
       this.maybeInjure(carrier)
       return entry
     }
+    delete this.state.recordKeyPass
     this.state.ball = { x: (carrier.x + defender.x) / 2, y: (carrier.y + defender.y) / 2, ownerId: null, justReceived: false }
     this.state.possession = null
     this.addFailure(carrier, 'execution', `${carrier.name} 与 ${defender.name} 对抗后球权未定`)
@@ -1923,6 +1930,7 @@ export class MatchEngine {
   }
 
   private resolveClear(team: MatchTeamState, carrier: MatchPlayerState, choice: ActionChoice): MatchLogEntry | null {
+    delete this.state.recordKeyPass
     const point = choice.point
     this.state.ball = { x: point.x, y: point.y, ownerId: null, justReceived: false }
     this.state.possession = null
@@ -1980,7 +1988,14 @@ export class MatchEngine {
     shooter.stats.touches++
     this.statsOf(team).shots++
     this.statsOf(team).xg += raw.goal
+    recordShot(shooter.stats, raw.goal, roll < raw.goal + raw.save)
+    const pass = this.state.recordKeyPass
+    const creator = pass && !opts.penalty && !opts.freeKick && pass.side === shooter.side && pass.id !== shooter.id
+      && pass.receiverId === shooter.id && this.state.step >= pass.step && this.state.step - pass.step <= 3 ? this.playerById(pass.id) : undefined
+    delete this.state.recordKeyPass
+    if (creator) recordChance(creator.stats, raw.goal)
     if (roll < raw.goal) {
+      if (creator) recordChanceGoal(creator.stats)
       this.state.score[shooter.side]++
       this.state.lastGoalBy = shooter.side
       shooter.stats.goals++
@@ -2015,6 +2030,7 @@ export class MatchEngine {
     if (roll < raw.goal + raw.save) {
       this.statsOf(team).shotsOnTarget++
       const gk = this.teamGoalkeeper(opp)
+      if (gk) recordSave(gk.stats)
       if (gk && opts.penalty) {
         this.state.ball = { x: gk.x, y: gk.y, ownerId: gk.id, justReceived: true }
         this.state.possession = gk.side
@@ -2125,11 +2141,12 @@ export class MatchEngine {
     return this.kernel.teamGoalkeeper(team)
   }
 
-  private resolveAerial(team: MatchTeamState, opp: MatchTeamState, point: { x: number; y: number }, attackingSide: MatchSide, headerShot: boolean): MatchLogEntry | null {
+  private resolveAerial(team: MatchTeamState, opp: MatchTeamState, point: { x: number; y: number }, attackingSide: MatchSide, headerShot: boolean, creator?: MatchPlayerState): MatchLogEntry | null {
     const attacking = this.getTeam(attackingSide)
     const defending = this.getOpponent(attackingSide)
     const contestants = this.kernel.aerialContestants(attacking, defending, point, attackingSide, () => this.resultRng.float())
     if (contestants.length === 0) {
+      delete this.state.recordKeyPass
       this.state.ball = { x: point.x, y: point.y, ownerId: null, justReceived: false }
       return this.log('contest', attackingSide, '禁区里没有人碰到球，球落在草地上。', {})
     }
@@ -2139,6 +2156,7 @@ export class MatchEngine {
     const probabilities: Record<string, number> = {}
     for (const item of contestants.slice(0, 4)) probabilities[item.player.name] = round(item.weight / total)
     if (winner.player.position === 'GK' || winner.side !== attackingSide) {
+      delete this.state.recordKeyPass
       this.state.ball = { x: winner.player.x, y: winner.player.y, ownerId: winner.player.id, justReceived: true }
       this.state.possession = winner.side
       return this.log('contest', winner.side, `${winner.player.name} 抢到第一点，把球顶出危险区域。`, {
@@ -2148,6 +2166,8 @@ export class MatchEngine {
       })
     }
     if (headerShot) {
+      if (creator && creator.id !== winner.player.id) this.state.recordKeyPass = { id: creator.id, receiverId: winner.player.id, side: creator.side, step: this.state.step }
+      else delete this.state.recordKeyPass
       this.state.ball = { x: winner.player.x, y: winner.player.y, ownerId: winner.player.id, justReceived: true }
       this.log('contest', attackingSide, `${winner.player.name} 抢到落点，直接头球攻门！`, {
         playerId: winner.player.id,
@@ -2337,7 +2357,7 @@ export class MatchEngine {
         this.state.ball = { x: sp.x, y: sp.y, ownerId: taker.id, justReceived: false }
         this.log('setpiece', sp.teamSide, `${taker.name} 主罚角球。`, { playerId: taker.id })
         this.state.ball = { x: goalXOf(team.side) - dirOf(team.side) * 8, y: GOAL_Y, ownerId: null, justReceived: false }
-        entry = this.resolveAerial(team, opp, { x: goalXOf(team.side) - dirOf(team.side) * 8, y: GOAL_Y }, team.side, true)
+        entry = this.resolveAerial(team, opp, { x: goalXOf(team.side) - dirOf(team.side) * 8, y: GOAL_Y }, team.side, true, taker)
       }
       time = this.legacyRules ? 12 : 7
     } else if (sp.type === 'free_kick') {
@@ -2411,7 +2431,7 @@ export class MatchEngine {
     this.statsOf(team).passesCompleted++
     this.state.ball = { x: point.x, y: point.y, ownerId: null, justReceived: false }
     this.log('pass', team.side, `${taker.name} 把任意球传入禁区。`, { playerId: taker.id, probabilities: { success: round(p), fail: round(1 - p) }, roll: round(roll) })
-    return this.resolveAerial(team, opp, point, team.side, true)
+    return this.resolveAerial(team, opp, point, team.side, true, taker)
   }
 
   /**
@@ -2509,6 +2529,7 @@ export class MatchEngine {
   }
 
   private setPendingSetPiece(type: SetPieceState['type'], teamSide: MatchSide, x: number, y: number, note?: string): void {
+    delete this.state.recordKeyPass
     this.state.pendingSetPiece = {
       type,
       teamSide,
@@ -2539,6 +2560,7 @@ export class MatchEngine {
   }
 
   private resetKickoffPositions(teamSide: MatchSide): void {
+    delete this.state.recordKeyPass
     // 仅 step 中保留首次重置前的位置；构造/读档不会留下临时视觉状态。
     if (this.playbackStepActive && !this.playbackBeforeReset) this.playbackBeforeReset = capturePlaybackPose(this.state)
     const formationHome = FORMATIONS[this.state.teams[0].formationId]

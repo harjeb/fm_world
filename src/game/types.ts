@@ -655,6 +655,16 @@ export type PlayerMatchStats = {
   passes: number
   passesCompleted: number
   shots: number
+  /** 以下高级数据只在完整记录的比赛中存在；旧战报缺省表示未知，而非零。 */
+  shotsOnTarget?: number
+  xg?: number
+  chancesCreated?: number
+  chancesConverted?: number
+  xa?: number
+  tackleAttempts?: number
+  saves?: number
+  /** 赛后按本场事件计算的 1–10 分游戏评分。 */
+  rating?: number
   goals: number
   /** 助攻：进球前最后一次成功传球。旧战报没有这一项。 */
   assists?: number

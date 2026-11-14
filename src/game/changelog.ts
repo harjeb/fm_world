@@ -7,7 +7,7 @@
  * - 玩家也可随时通过顶栏版本号按钮重新打开查看。
  */
 
-export const APP_VERSION = 'v0.4.6'
+export const APP_VERSION = 'v0.4.7'
 export const CHANGELOG_STORAGE_KEY = 'fm-world-changelog-seen'
 
 export type ChangelogItem = {
@@ -26,6 +26,22 @@ export type ChangelogRelease = {
 }
 
 export const CHANGELOG_RELEASES: readonly ChangelogRelease[] = [
+  {
+    version: 'v0.4.7',
+    date: '2026-11-14',
+    headline: '球员比赛数据记录',
+    summary: '新比赛记录射正、创造机会、预期进球与助攻、抢断成功率和比赛评分。',
+    items: [
+      {
+        badge: '比赛记录', tone: 'good', title: '新增进攻、组织和防守数据',
+        desc: '单机与联机的新比赛记录球员射正、预期进球、创造机会、预期助攻、抢断尝试与扑救；球员表现和对比页展示这些数据及游戏事件估算的赛后评分。',
+      },
+      {
+        badge: '历史兼容', tone: 'gold', title: '明确标注数据覆盖场次',
+        desc: '旧战报和更新前已开始的比赛可能缺少新增数据，不能可靠补算；页面仅汇总有记录的场次，并标明覆盖数量，不把缺失当成零。',
+      },
+    ],
+  },
   {
     version: 'v0.4.6',
     date: '2026-11-14',

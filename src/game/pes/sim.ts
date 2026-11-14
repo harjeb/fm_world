@@ -561,11 +561,11 @@ export class PesMatch {
    * 一次犯规的后续：犯规 / 出牌 / 受伤事件，然后开任意球或点球。
    * `victim` 是被犯规的持球人；禁区内犯规判点球（`rules.penalties` 打开时）。
    */
-  private awardFoul(def: PesPlayer, victim: PesPlayer, v: { card: 'yellow' | 'red' | null; second: boolean; injured: number; recoveryDays: number; p: number }): void {
+  private awardFoul(def: PesPlayer, victim: PesPlayer, v: { card: 'yellow' | 'red' | null; second: boolean; injured: number; recoveryDays: number; p: number }, tackleAttempt = false): void {
     const defTeam = this.teams[def.ti]
     defTeam.stats.fouls++
     const penalty = this.rules.penalties && this.inBoxOf(defTeam, victim.pos)
-    this.event('foul', def.ti, [def.pid, victim.pid], undefined, { penalty, p: Math.round(v.p * 1000) / 1000, x: Math.round(victim.pos.x * 100) / 100, y: Math.round(victim.pos.y * 100) / 100 })
+    this.event('foul', def.ti, [def.pid, victim.pid], undefined, { penalty, p: Math.round(v.p * 1000) / 1000, x: Math.round(victim.pos.x * 100) / 100, y: Math.round(victim.pos.y * 100) / 100, ...(tackleAttempt && this.contact?.recordsTackleAttempts ? { tackleAttempt: true } : {}) })
     if (v.card) this.showCard(def, v.card, v.second)
     if (v.injured >= 0) this.event('injury', this.players[v.injured].ti, [v.injured], undefined, { days: v.recoveryDays })
     if (penalty) {
@@ -2533,7 +2533,7 @@ export class PesMatch {
     const b = this.ball
     const meta = { outcome: v.outcome, p: Math.round(v.p * 1000) / 1000 }
     if (v.outcome === 'foul') {
-      this.awardFoul(def, att, v)
+      this.awardFoul(def, att, v, true)
       return
     }
     if (v.outcome === 'tackle') {

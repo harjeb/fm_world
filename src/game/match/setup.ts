@@ -12,6 +12,7 @@ import { applyAITacticsToLineup, defaultAIAutoSubs, defaultAITacticsStage } from
 import { prepareMatchInjuries } from '../injury.ts'
 import { LOGIC_MATCH_SECONDS } from './time.ts'
 import { matchPerformanceOf } from '../economy.ts'
+import { performanceRating } from './performance.ts'
 
 export type TeamIdentity = { id: string; name: string; color: string; accent: string }
 
@@ -154,7 +155,12 @@ export function createMatchRecord(game: { season?: { index: number }; lineup: Li
   const playerStats = state.teams.flatMap((team) =>
     [...team.players, ...team.bench]
       .filter((player) => player.stats.minutes > 0 || player.stats.touches > 0)
-      .map((player) => ({ ...player.stats })),
+      .map((player) => {
+        const stats = { ...player.stats }
+        const rating = performanceRating(stats)
+        if (rating !== undefined) stats.rating = rating
+        return stats
+      }),
   )
   const failureStats = (Object.entries(state.failures) as [keyof typeof state.failures, { count: number; examples: string[] }][]).map(
     ([reason, aggregate]) => ({ reason, count: aggregate.count, examples: [...aggregate.examples] }),

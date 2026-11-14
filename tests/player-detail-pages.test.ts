@@ -50,6 +50,18 @@ describe('球员详情中的表现与对比页面', () => {
     expect(html).toContain('<th>传球成功率</th><td>80%</td><td>80%</td>')
     expect(html).toContain('<th>评分</th><td>—</td><td>—</td>')
   })
+  it('对比页显示有记录场次的高级数据和平均评分', () => {
+    const { game, player } = setup()
+    Object.assign(game.matchHistory[0].playerStats[0], { shotsOnTarget: 3, xg: 0.5, chancesCreated: 2, chancesConverted: 1, xa: 0.3, tackleAttempts: 4, rating: 7.5 })
+    ui.playerDetailView = 'compare'
+    ui.playerCompareTab = 'stats'
+    const html = renderDetailOverlay()
+    expect(html).toContain('<th>射正</th><td>3（1/2 场）</td>')
+    expect(html).toContain('<th>预期进球</th><td>0.50（1/2 场）</td>')
+    expect(html).toContain('<th>评分</th><td>7.5（1/2 场）</td>')
+    expect(html).toContain('<th>抢断成功率</th><td>50%（1/2 场）</td>')
+    expect(player.id).toBe(game.matchHistory[0].playerStats[0].sourceId)
+  })
   it('表现页面按选择的赛事汇总，不使用其他赛事的数据', () => {
     setup()
     ui.playerDetailView = 'performance'

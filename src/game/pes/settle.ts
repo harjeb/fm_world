@@ -15,6 +15,7 @@ import { derivedRng } from '../rng.ts'
 import { prepareMatchInjuries } from '../injury.ts'
 import { commentLog } from '../match/commentary.ts'
 import { shotPositionText, shotTargetText } from '../match/shooting.ts'
+import { recordChance, recordChanceGoal, recordSave, recordShot, recordTackleAttempt } from '../match/performance.ts'
 import { MatchRatings } from '../match/ratings.ts'
 import { SettlementKernel, pickByWeight, totalWeight } from '../match/resolution.ts'
 import { GOAL_Y, PITCH_LENGTH, PITCH_WIDTH, buildMatchTeam } from '../match/team.ts'
@@ -74,8 +75,10 @@ interface Extra {
   tuning: SettlementTuning
   /** 最近一次成功传球（助攻用）：传球人 pid 和时间 */
   lastPass: { passer: number; t: number } | null
+  /** 单独追踪创造机会，防止复用助攻状态导致反弹射门重复计数。旧存档缺省表示不完整。 */
+  keyPass?: { passer: number; receiver: number; t: number; cross: boolean } | null
   /** 最近一脚射门的细节（进球战报用） */
-  lastShot: { pid: number; t: number; xg: number; /** 这脚射门已经写进文字直播 */ logged: boolean; meta: Record<string, number | string | boolean> } | null
+  lastShot: { pid: number; t: number; xg: number; /** 这脚射门已经写进文字直播 */ logged: boolean; meta: Record<string, number | string | boolean>; keyPasser?: number } | null
   /** 新战术实验快照保存已触发的单场一次体力技能，旧快照保持原结构。 */
   secondWindUsed?: number[]
   /** 每个 pid 上场 / 离场的模拟时刻（算出场分钟；没有 left 表示踢到终场） */
@@ -161,7 +164,7 @@ export class PesSettlement implements ContactModel {
       this.extra.tuning.injuryRate ??= 1
     } else {
       this.game = createGameState(source)
-      this.extra = { knockout: source.knockout, offside: source.offside, tuning: { ...DEFAULT_TUNING, ...source.tuning }, lastPass: null, lastShot: null, joined: {}, left: {} }
+      this.extra = { knockout: source.knockout, offside: source.offside, tuning: { ...DEFAULT_TUNING, ...source.tuning }, lastPass: null, keyPass: null, lastShot: null, joined: {}, left: {} }
     }
     this.ratings = new MatchRatings(() => this.game, () => this.game.durationSeconds)
     this.kernel = new SettlementKernel(this.ratings, {
@@ -176,6 +179,10 @@ export class PesSettlement implements ContactModel {
 
   get offside(): boolean {
     return this.extra.offside
+  }
+
+  get recordsTackleAttempts(): boolean {
+    return this.extra.keyPass !== undefined
   }
 
   toJSON(): PesSettlementJSON {
@@ -526,8 +533,10 @@ export class PesSettlement implements ContactModel {
           passer.stats.passesCompleted++
           team.passesCompleted++
           this.extra.lastPass = { passer: e.actors[0], t: e.t }
+          if (this.extra.keyPass !== undefined) this.extra.keyPass = { passer: e.actors[0], receiver: e.actors[1], t: e.t, cross: e.meta?.kind === 'cross' }
         } else {
           this.extra.lastPass = null
+          if (this.extra.keyPass !== undefined) this.extra.keyPass = null
           if (result === 'icpt' && typeof e.meta?.icpt === 'number') {
             const interceptor = this.mp[e.meta.icpt]
             interceptor.stats.interceptions++
@@ -543,8 +552,16 @@ export class PesSettlement implements ContactModel {
         team.shots++
         team.xg += e.xg ?? 0
         const result = e.meta?.result
-        if (result === 'goal' || result === 'save') team.shotsOnTarget++
-        this.extra.lastShot = { pid: e.actors[0], t: e.t, xg: e.xg ?? 0, logged: result === 'block' || result === 'miss', meta: { ...e.meta } }
+        const onTarget = result === 'goal' || result === 'save'
+        if (onTarget) team.shotsOnTarget++
+        recordShot(shooter.stats, e.xg ?? 0, onTarget)
+        const pass = this.extra.keyPass
+        const passer = pass && pass.receiver === e.actors[0] && pass.passer !== e.actors[0] && e.t >= pass.t && e.t - pass.t <= 8
+          && this.mp[pass.passer]?.side === shooter.side && (m.ball.lastTouch === e.actors[0] || pass.cross && m.ball.meta?.cross === true && m.ball.meta.from === pass.passer)
+          && e.meta?.penalty !== true && e.meta?.freeKick !== true ? this.mp[pass.passer] : undefined
+        if (passer) recordChance(passer.stats, e.xg ?? 0)
+        if (this.extra.keyPass !== undefined) this.extra.keyPass = null
+        this.extra.lastShot = { pid: e.actors[0], t: e.t, xg: e.xg ?? 0, logged: result === 'block' || result === 'miss', meta: { ...e.meta }, ...(passer ? { keyPasser: pass!.passer } : {}) }
         if (result === 'block') this.note('block', shooter.side, `${shooter.name} 的射门被${typeof e.meta?.blocker === 'number' ? ` ${this.mp[e.meta.blocker].name} ` : '防守者'}封堵。`, { playerId: shooter.id, probabilities: { goal: e.xg ?? 0 } }, e.t)
         else if (result === 'miss') this.note('miss', shooter.side, `${shooter.name} ${e.meta?.header ? '头球' : '射门'}偏出球门。`, { playerId: shooter.id, probabilities: { goal: e.xg ?? 0 } }, e.t)
         break
@@ -559,6 +576,8 @@ export class PesSettlement implements ContactModel {
         g.score.away = m.teams[1].score
         if (!own && scorer) {
           scorer.stats.goals++
+          const shot = this.extra.lastShot
+          if (shot?.pid === e.actors[0] && shot.keyPasser !== undefined) recordChanceGoal(this.mp[shot.keyPasser].stats)
           const last = this.extra.lastPass
           if (last && e.t - last.t <= 8 && last.passer !== e.actors[0] && this.mp[last.passer].side === scorer.side) {
             const assister = this.mp[last.passer]
@@ -599,8 +618,24 @@ export class PesSettlement implements ContactModel {
         }
         break
       }
+      case 'aerial': {
+        const ball = m.ball.meta
+        if (this.extra.keyPass !== undefined && ball?.type === 'pass' && ball.cross && ball.from >= 0) {
+          const passer = this.mp[ball.from], receiver = this.mp[e.actors[0]]
+          this.extra.keyPass = passer && receiver && passer.side === receiver.side && passer !== receiver
+            ? { passer: ball.from, receiver: e.actors[0], t: e.t, cross: true } : null
+        }
+        break
+      }
+      case 'duel': {
+        recordTackleAttempt(this.mp[e.actors[0]].stats)
+        if (e.meta?.outcome === 'loose' && this.extra.keyPass !== undefined) this.extra.keyPass = null
+        break
+      }
       case 'tackle': {
         const tackler = this.mp[e.actors[0]]
+        recordTackleAttempt(tackler.stats)
+        if (this.extra.keyPass !== undefined) this.extra.keyPass = null
         tackler.stats.tackles++
         g.stats[tackler.side].tackles++
         this.recover(tackler, m, 'lg_tackle_second_wind', 1.5)
@@ -608,8 +643,10 @@ export class PesSettlement implements ContactModel {
         break
       }
       case 'save': {
+        if (this.extra.keyPass !== undefined) this.extra.keyPass = null
         if (e.meta?.claim === true) break
         const keeper = this.mp[e.actors[0]]
+        recordSave(keeper.stats)
         this.recover(keeper, m, 'lg_save_second_wind', 3)
         const shooter = e.actors[1] !== undefined ? this.mp[e.actors[1]] : null
         const detail = e.meta?.hold === true ? '，稳稳抱住' : e.meta?.corner === true ? '，托出底线形成角球' : '，但没有抱稳'
@@ -621,6 +658,8 @@ export class PesSettlement implements ContactModel {
         g.stats[sideOf(e.ti as TeamIndex)].fouls++
         this.extra.lastPass = null
         const offender = this.mp[e.actors[0]]
+        if (e.meta?.tackleAttempt === true) recordTackleAttempt(offender.stats)
+        if (this.extra.keyPass !== undefined) this.extra.keyPass = null
         const victim = this.mp[e.actors[1]]
         this.note(e.meta?.penalty === true ? 'penalty' : 'foul', offender.side, `${offender.name} 对 ${victim?.name ?? '对手'} 犯规，判罚${e.meta?.penalty === true ? '点球' : '任意球'}。`, { playerId: offender.id }, e.t)
         break
@@ -653,15 +692,18 @@ export class PesSettlement implements ContactModel {
         break
       }
       case 'corner':
+        if (this.extra.keyPass !== undefined) this.extra.keyPass = null
         g.stats[sideOf(e.ti as TeamIndex)].corners++
         this.extra.lastPass = null
         this.note('setpiece', sideOf(e.ti as TeamIndex), `${g.teams[e.ti as TeamIndex].name} 获得角球。`, {}, e.t)
         break
       case 'half':
+        if (this.extra.keyPass !== undefined) this.extra.keyPass = null
         for (const team of g.teams) for (const player of team.players) if (player.onPitch) this.recover(player, m, 'lg_halftime_recovery', 8)
         this.note('half', 'none', '上半场结束，双方交换半场。', {}, e.t)
         break
       case 'offside':
+        if (this.extra.keyPass !== undefined) this.extra.keyPass = null
         this.extra.lastPass = null
         this.note('out', sideOf(e.ti as TeamIndex), `${this.mp[e.actors[0]].name} 越位，进攻被吹停。`, { offside: true, playerId: this.mp[e.actors[0]].id }, e.t)
         break
@@ -669,7 +711,12 @@ export class PesSettlement implements ContactModel {
       case 'goalkick':
       case 'fk':
       case 'penalty':
+        if (this.extra.keyPass !== undefined) this.extra.keyPass = null
         this.extra.lastPass = null
+        break
+      case 'kickoff':
+      case 'sub':
+        if (this.extra.keyPass !== undefined) this.extra.keyPass = null
         break
       default:
         break

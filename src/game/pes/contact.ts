@@ -69,6 +69,8 @@ export interface FoulVerdict {
 }
 
 export interface ContactModel {
+  /** 新比赛在上抢犯规事件上标明来源；旧快照不改变历史事件格式。 */
+  readonly recordsTackleAttempts?: boolean
   /** 比赛对象建好 / 读档后调用一次，让模型拿到物理比赛的引用 */
   attach(m: PesMatch): void
   /** 内核每产生一个事件就通知一次；统计只能从事件流推出来 */

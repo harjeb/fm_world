@@ -254,6 +254,8 @@ export type MatchState = {
   motionProfiles?: Record<string, { stamina: number; profile: { maxSpeed: number; acceleration: number; deceleration: number; turnRate: number } }>
   /** 最近一次成功传球：进球助攻要在读档后仍然成立。 */
   recordAssist?: { id: string; name: string; side: MatchSide; step: number }
+  /** 最近一次可归属射门机会的传球；只用于高级统计，不改变助攻规则。 */
+  recordKeyPass?: { id: string; side: MatchSide; step: number; receiverId?: string }
   possession: MatchSide | null
   pendingSetPiece: SetPieceState | null
   finished: boolean
