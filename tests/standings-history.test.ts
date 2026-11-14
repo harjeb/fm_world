@@ -6,8 +6,27 @@ import { PLAYER_TEAM_ID, updateSeasonTable } from '../src/game/season.ts'
 import { setGame, ui } from '../src/ui/state.ts'
 import { renderSeason } from '../src/ui/screens/season.ts'
 import { renderWorld } from '../src/ui/screens/world.ts'
+import { leaderPanels } from '../src/ui/leaderboard.ts'
 
 describe('联赛排名变化轨迹与世界页历史比赛记录', () => {
+  it('射手榜和助攻榜使用所选联赛的名称，包括联机公开数据', () => {
+    const worldGame = createWorldGame(777)
+    setGame(worldGame)
+    for (const [id, label] of [['champions', '冠军联赛'], ['division1', '一级联赛'], ['d2-south', '二级联赛 · 南区']]) {
+      const division = worldGame.world!.divisions.find((d) => d.divisionId === id)!
+      for (const data of [division, { id, fixtures: division.fixtures }]) {
+        const html = leaderPanels(data)
+        expect(html).toContain(`${label} · 射手榜`)
+        expect(html).toContain(`${label} · 助攻榜`)
+      }
+      ui.worldDivision = id
+      const html = renderWorld()
+      expect(html).toContain(`${label} · 射手榜`)
+      expect(html).toContain(`${label} · 助攻榜`)
+    }
+    ui.worldDivision = null
+  })
+
   it('按每轮积分、净胜球、进球数计算排名轨迹，并忽略尚未完赛的半轮', () => {
     const ids = ['a', 'b', 'c', 'd']
     const names = new Map([

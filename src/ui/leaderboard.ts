@@ -22,10 +22,10 @@ function leaderRows(division: { fixtures: Fixture[] }, kind: 'goals' | 'assists'
 }
 
 /** 一个联赛的射手榜 + 助攻榜，世界页和赛季页共用。 */
-export function leaderPanels(division: { fixtures: Fixture[]; divisionId?: string } | undefined, options: { limit?: number; compact?: boolean } = {}): string {
+export function leaderPanels(division: { fixtures: Fixture[]; divisionId?: string; id?: string } | undefined, options: { limit?: number; compact?: boolean } = {}): string {
   if (!division) return ''
   const limit = options.limit ?? 5
-  const label = worldDivisionLabel(game.world!, division.divisionId ?? game.world!.playerDivisionId)
+  const label = game.world ? worldDivisionLabel(game.world, division.divisionId ?? division.id ?? game.world.playerDivisionId) : '联赛'
   if (options.compact) {
     return `<div class="leader-compact">
       <div class="leader-col"><h3>射手榜</h3>${leaderRows(division, 'goals', limit)}</div>
