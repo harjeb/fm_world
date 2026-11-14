@@ -368,6 +368,8 @@ h3:first-child { margin-top: 0; }
 .score-cell b { font: 600 14px var(--font-num); }
 .score-cell small { display: block; color: var(--warn); font-size: 10.5px; }
 .rank { width: 30px; }
+.table-rank-change { display: inline-block; width: 16px; margin-right: 4px; text-align: center; vertical-align: middle; font: 700 15px/1 var(--font-num); }
+.table-rank-change.flat { color: #76818c; font-size: 13px; }
 .dt tr td.zone-champion { box-shadow: inset 3px 0 var(--accent); }
 .dt tr td.zone-promote { box-shadow: inset 3px 0 var(--good); }
 .dt tr td.zone-playoff { box-shadow: inset 3px 0 var(--info); }

@@ -11,6 +11,7 @@ import { injuryUntil } from '../game/injury.ts'
 import { attrRating, initialDisplayCA, mainAttrsFor } from '../game/rating.ts'
 import { isMainAttr } from '../game/scale.ts'
 import { PLAYER_TEAM_ID, teamName } from '../game/season.ts'
+import { latestRoundRankChanges } from '../game/standings-history.ts'
 import { isOnlineMode, marketState, publicWorld } from '../online.ts'
 import { esc, playerCA, positionClass, positionLabel, skillName, traitName } from './format.ts'
 import { tipAttrs } from './tooltip.ts'
@@ -385,6 +386,8 @@ export function leagueTable(rows: SeasonTableRow[], options: { tier?: TierId; fi
   const from = options.window?.from ?? 0
   const to = options.window?.to ?? rows.length
   const shown = rows.slice(from, to)
+  const names = new Map(rows.map((row) => [row.teamId, options.clubLabels?.[row.teamId]?.name ?? clubLook(row.teamId).name]))
+  const rankChanges = latestRoundRankChanges(rows, options.fixtures ?? [], names)
   const head = options.compact
     ? '<th class="num">#</th><th>球队</th><th class="num">场</th><th class="num">净胜</th><th class="num">分</th>'
     : '<th class="num">#</th><th>球队</th><th class="num">场</th><th class="num">胜</th><th class="num">平</th><th class="num">负</th><th class="num">进</th><th class="num">失</th><th class="num">净</th><th class="num">分</th><th>近况</th>'
@@ -398,9 +401,13 @@ export function leagueTable(rows: SeasonTableRow[], options: { tier?: TierId; fi
       : `<td class="num">${row.played}</td><td class="num">${row.won}</td><td class="num">${row.drawn}</td><td class="num">${row.lost}</td><td class="num">${row.gf}</td><td class="num">${row.ga}</td><td class="num">${diff > 0 ? '+' : ''}${diff}</td>`
     const form = options.compact ? '' : `<td>${options.fixtures ? formPills(teamForm(row.teamId, options.fixtures)) : ''}</td>`
     const look = options.clubLabels?.[row.teamId]
+    const change = rankChanges.get(row.teamId)
+    const direction = change === undefined || change === 0 ? 'flat' : change > 0 ? 'up' : 'down'
+    const changeText = change === undefined ? '暂无上一轮排名' : change === 0 ? '较上一轮排名不变' : `较上一轮${change > 0 ? '上升' : '下降'} ${Math.abs(change)} 名`
+    const rankChange = `<span class="table-rank-change ${direction}" role="img" aria-label="${changeText}" title="${changeText}">${direction === 'up' ? '↑' : direction === 'down' ? '↓' : '—'}</span>`
     // 积分榜里的球队名一律可点开名单（赛季页、世界页都一样）。
     const browse = `<button type="button" class="club club-btn" data-club-open="${esc(row.teamId)}" aria-label="查看${esc(look?.name ?? row.teamId)}球员">${crest(look ?? clubLook(row.teamId))}<span class="club-name">${esc(look?.name ?? clubLook(row.teamId).name)}</span>${humanMark(row.teamId)}</button>`
-    return `<tr class="${row.teamId === PLAYER_TEAM_ID ? 'me' : ''}"><td class="num rank ${zone ? `zone-${zone}` : ''}">${index + 1}</td><td>${browse}</td>${cells}${options.ratings ? `<td class="num dim">${Math.round(options.ratings.get(row.teamId) ?? 0) || ''}</td>` : ''}<td class="num strong">${row.points}</td>${form}</tr>`
+    return `<tr class="${row.teamId === PLAYER_TEAM_ID ? 'me' : ''}"><td class="num rank ${zone ? `zone-${zone}` : ''}">${index + 1}</td><td>${rankChange}${browse}</td>${cells}${options.ratings ? `<td class="num dim">${Math.round(options.ratings.get(row.teamId) ?? 0) || ''}</td>` : ''}<td class="num strong">${row.points}</td>${form}</tr>`
   }).join('')
   return `<div class="table-scroll"><table class="dt league"><thead><tr>${head.replace('<th class="num">分</th>', `${ratingHead}<th class="num">分</th>`)}</tr></thead><tbody>${body}</tbody></table></div>${options.compact ? '' : zoneLegend(options.tier)}`
 }

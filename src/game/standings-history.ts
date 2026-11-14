@@ -167,6 +167,50 @@ export function computeTeamRankTrend(options: {
   }
 }
 
+/**
+ * 最近一轮相对于上一轮的排名变化。以当前积分榜为准，撤销该轮已完赛的比分，
+ * 只计算一次完整榜单，避免截取显示的球队时丢失其他球队的名次。
+ * 尚无上一轮完赛记录时返回空 Map（没有可比较的排名）。
+ */
+export function latestRoundRankChanges(rows: SeasonTableRow[], fixtures: Fixture[], names?: ReadonlyMap<string, string>): Map<string, number> {
+  const previous = rows.map((row) => ({ ...row }))
+  const byId = new Map(previous.map((row) => [row.teamId, row]))
+  const played = fixtures.filter((fixture) => fixture.played && fixture.score && byId.has(fixture.homeId) && byId.has(fixture.awayId))
+  const latest = played.reduce((max, fixture) => Math.max(max, fixture.round), 0)
+  if (!played.some((fixture) => fixture.round < latest)) return new Map()
+
+  for (const fixture of played) {
+    if (fixture.round !== latest) continue
+    const home = byId.get(fixture.homeId)!
+    const away = byId.get(fixture.awayId)!
+    const score = fixture.score!
+    home.played--
+    away.played--
+    home.gf -= score.home
+    home.ga -= score.away
+    away.gf -= score.away
+    away.ga -= score.home
+    if (score.home > score.away) {
+      home.won--
+      home.points -= 3
+      away.lost--
+    } else if (score.home < score.away) {
+      away.won--
+      away.points -= 3
+      home.lost--
+    } else {
+      home.drawn--
+      away.drawn--
+      home.points--
+      away.points--
+    }
+  }
+  previous.sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf ||
+    (names?.get(a.teamId) ?? a.teamId).localeCompare(names?.get(b.teamId) ?? b.teamId, 'zh-CN'))
+  const previousRanks = new Map(previous.map((row, index) => [row.teamId, index + 1]))
+  return new Map(rows.map((row, index) => [row.teamId, previousRanks.get(row.teamId)! - (index + 1)]))
+}
+
 /** 返回该联赛最近一轮已有完赛记录的轮次；若本赛季尚未开踢则返回 fallbackRound。 */
 export function latestPlayedRound(fixtures: Fixture[], fallbackRound = 1): number {
   let latest = 0
