@@ -100,6 +100,7 @@ import { parseLineupTarget, renderLineup, selectedSlotTarget } from './screens/l
 import { applyAutoSubAction, applyAutoSubFieldChange, type AutoSubScope } from './auto-sub-editor.ts'
 import { renderMatch } from './screens/match.ts'
 import { renderAccountOverlay, renderChangelogOverlay, renderDetailOverlay, renderNegotiationOverlay, renderNewGameOverlay } from './screens/overlays.ts'
+import { comparisonCandidates } from './screens/player-comparison.ts'
 import { renderClubOverlay } from './club-view.ts'
 import { renderCommentary, renderReview } from './screens/review.ts'
 import { cycleReplay2DSpeed, drawReplay2D, ensureReplay2D, previewReplay2DSeek, replay2d, resetReplay2D, restartReplay2D, seekReplay2D, setReplay2DHooks, toggleReplay2D } from './replay-2d.ts'
@@ -205,6 +206,16 @@ function openFriendly(result: { ok: boolean; error?: string }): void {
 function showNotice(text: string): void {
   ui.notice = text
   render()
+}
+
+/** 每次打开新球员先回到档案，避免上一个人的筛选泄漏到新详情。 */
+function openPlayerDetail(id: string): void {
+  ui.detailPlayerId = id
+  ui.playerDetailView = 'profile'
+  ui.playerCompareId = null
+  ui.playerCompareTab = 'overview'
+  ui.playerPerformancePeriod = 'season'
+  ui.playerPerformanceCompetition = 'all'
 }
 
 function go(screen: Screen): void {
@@ -1007,6 +1018,41 @@ document.addEventListener('click', async (event) => {
     }
     return
   }
+  const detailView = target.closest<HTMLElement>('[data-player-detail-view]')
+  if (detailView?.dataset.playerDetailView && ui.detailPlayerId) {
+    const view = detailView.dataset.playerDetailView
+    if (view === 'profile' || view === 'performance' || view === 'compare') {
+      if (view === 'compare' && !ui.playerCompareId) {
+        const candidates = comparisonCandidates()
+        const player = candidates.find((item) => item.id === ui.detailPlayerId)
+        const others = candidates.filter((item) => item.id !== ui.detailPlayerId)
+        ui.playerCompareId = (others.find((item) => !!item.positions.GK === !!player?.positions.GK) ?? others[0])?.id ?? null
+      }
+      ui.playerDetailView = view
+      render()
+    }
+    return
+  }
+  const compareTab = target.closest<HTMLElement>('[data-player-compare-tab]')
+  if (compareTab?.dataset.playerCompareTab) {
+    const tab = compareTab.dataset.playerCompareTab
+    if (tab === 'overview' || tab === 'attributes' || tab === 'stats' || tab === 'positions') ui.playerCompareTab = tab
+    render()
+    return
+  }
+  const performancePeriod = target.closest<HTMLElement>('[data-performance-period]')
+  if (performancePeriod?.dataset.performancePeriod) {
+    ui.playerPerformancePeriod = performancePeriod.dataset.performancePeriod === 'career' ? 'career' : 'season'
+    render()
+    return
+  }
+  const competition = target.closest<HTMLElement>('[data-performance-competition]')
+  if (competition?.dataset.performanceCompetition) {
+    const value = competition.dataset.performanceCompetition
+    if (value === 'all' || value === 'league' || value === 'friendly' || value === 'legend' || value === 'cup' || value === 'peak') ui.playerPerformanceCompetition = value
+    render()
+    return
+  }
   const statsTab = target.closest<HTMLElement>('[data-player-stats-tab]')
   if (statsTab?.dataset.playerStatsTab) {
     ui.playerStatsTab = statsTab.dataset.playerStatsTab === 'career' ? 'career' : 'season'
@@ -1373,7 +1419,7 @@ document.addEventListener('click', async (event) => {
       break
     case 'chemistry-detail':
       if (playerId) {
-        ui.detailPlayerId = playerId
+        openPlayerDetail(playerId)
         render()
       }
       break
@@ -1386,7 +1432,7 @@ document.addEventListener('click', async (event) => {
         break
       }
       if (playerId) {
-        ui.detailPlayerId = playerId
+        openPlayerDetail(playerId)
         render()
       }
       break
@@ -2077,6 +2123,22 @@ document.addEventListener('click', async (event) => {
 
 document.addEventListener('change', (event) => {
   const target = event.target as HTMLSelectElement | HTMLInputElement
+  if (target.dataset.playerCompareBase !== undefined) {
+    if (comparisonCandidates().some((player) => player.id === target.value)) {
+      const previous = ui.detailPlayerId
+      ui.detailPlayerId = target.value
+      if (ui.playerCompareId === target.value) ui.playerCompareId = previous
+      render()
+    }
+    return
+  }
+  if (target.dataset.playerCompareSelect !== undefined) {
+    if (!target.value || comparisonCandidates().some((player) => player.id === target.value)) {
+      ui.playerCompareId = target.value || null
+      render()
+    }
+    return
+  }
   if (target.dataset.worldRound !== undefined) {
     ui.worldRound = Math.max(1, Number(target.value) || 1)
     render()

@@ -17,6 +17,8 @@ import { game, ui } from '../state.ts'
 import { careerStats, fixtureTotals, isOwnPlayer, seasonStats } from '../../game/player-stats.ts'
 import { APP_VERSION, CHANGELOG_RELEASES } from '../../game/changelog.ts'
 import { chemistryPartners } from '../chemistry.ts'
+import { comparisonCandidates, renderPlayerComparison } from './player-comparison.ts'
+import { renderPlayerPerformance } from './player-performance.ts'
 
 function cardRows(player: Player): string {
   const cards = playerCards(game, player.id)
@@ -47,7 +49,7 @@ function statsBlock(player: Player): string {
         ['抢断', totals.tackles], ['拦截', totals.interceptions], ['出场分钟', Math.round(totals.minutes)],
       ]
     : [
-        ['出场', other!.apps], ['进球', other!.goals], ['助攻', other!.assists],
+        ['出场', '—'], ['进球', other!.goals], ['助攻', other!.assists],
       ]
   return `<section class="player-stats">
     <div class="stat-tabs">
@@ -55,7 +57,13 @@ function statsBlock(player: Player): string {
       ${own ? `<button class="tab ${ui.playerStatsTab === 'career' ? 'active' : ''}" data-player-stats-tab="career">生涯</button>` : ''}
     </div>
     <dl class="facts">${rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>
+    ${own ? '' : '<p class="hint">进球与助攻来自赛程记录；未记录完整出场次数。</p>'}
   </section>`
+}
+
+function detailNavigation(): string {
+  const tabs = [['profile', '球员档案'], ['performance', '球员表现'], ['compare', '球员对比']] as const
+  return `<nav class="player-detail-nav" aria-label="球员详情页面">${tabs.map(([view, label]) => `<button type="button" data-player-detail-view="${view}" class="${ui.playerDetailView === view ? 'active' : ''}" aria-pressed="${ui.playerDetailView === view}">${label}</button>`).join('')}</nav>`
 }
 
 export function renderDetailOverlay(): string {
@@ -67,6 +75,27 @@ export function renderDetailOverlay(): string {
   const transferPreview = !owned && ui.screen === 'transfer'
   const player = transferPreview ? untrainedPlayer(source) : source
   const gk = player.positions.GK > 0
+  const head = `<header class="profile-head">
+    <div class="profile-id">${posBadge(primaryPosition(player))}<div>
+      <h1>${esc(player.name)} <small>${esc(player.enName)}</small></h1>
+      <p class="muted">球员详情 · ${[countryLabel(player), player.era === 'random' ? '' : player.era, gk ? '门将' : '外场'].filter(Boolean).map(esc).join(' · ')}</p>
+    </div></div>
+    <div class="big-ca"><span>${transferPreview ? '原始 CA' : 'CA'}</span><b>${caHeat(playerCA(player), 1)}</b><small>${transferPreview ? '转会不包含球员卡' : `原始 CA ${initialDisplayCA(player).toFixed(1)}`}</small></div>
+  </header>`
+  if (ui.playerDetailView !== 'profile') {
+    const candidates = comparisonCandidates()
+    const opponentSource = candidates.find((candidate) => candidate.id === ui.playerCompareId)
+    const opponent = opponentSource && ui.screen === 'transfer' && !game.roster.some((item) => item.id === opponentSource.id) ? untrainedPlayer(opponentSource) : opponentSource
+    const content = ui.playerDetailView === 'performance'
+      ? renderPlayerPerformance(player, ui.playerPerformancePeriod, ui.playerPerformanceCompetition)
+      : renderPlayerComparison(player, opponent, candidates, ui.playerCompareTab)
+    return `<div class="overlay" data-action="close-detail">
+      <div class="modal profile player-analysis-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="${esc(player.name)} 球员详情">
+        <button class="modal-close" data-action="close-detail" aria-label="关闭">${icon('close', 16)}</button>
+        ${head}${detailNavigation()}${ui.screen === 'transfer' && ui.playerDetailView === 'compare' ? '<p class="player-analysis-note">转会页面中非本队球员的对比使用转会后可获得的原始属性，不包含球员卡。</p>' : ''}${content}
+      </div>
+    </div>`
+  }
   const session = owned ? game.training[player.id] : undefined
   const candidate = owned ? game.candidates[player.id] : undefined
   const injury = owned ? injuryLabel(player) : ''
@@ -104,16 +133,7 @@ export function renderDetailOverlay(): string {
     <div class="overlay" data-action="close-detail">
       <div class="modal profile" data-stop="true" role="dialog" aria-modal="true" aria-label="${esc(player.name)} 球员详情">
         <button class="modal-close" data-action="close-detail" aria-label="关闭">${icon('close', 16)}</button>
-        <header class="profile-head">
-          <div class="profile-id">
-            ${posBadge(primaryPosition(player))}
-            <div>
-              <h1>${esc(player.name)} <small>${esc(player.enName)}</small></h1>
-              <p class="muted">球员详情 · ${[countryLabel(player), player.era === 'random' ? '' : player.era, gk ? '门将' : '外场'].filter(Boolean).map(esc).join(' · ')}</p>
-            </div>
-          </div>
-          <div class="big-ca"><span>${transferPreview ? '原始 CA' : 'CA'}</span><b>${caHeat(playerCA(player), 1)}</b><small>${transferPreview ? '转会不包含球员卡' : `原始 CA ${initialDisplayCA(player).toFixed(1)}`}</small></div>
-        </header>
+        ${head}${detailNavigation()}
         ${injury ? `<div class="banner bad">${icon('cross', 16)}<span>${injury}；带伤比赛能力下降 30%，不影响精力或培养。</span></div>` : ''}
         <div class="profile-grid">
           <section class="profile-col">

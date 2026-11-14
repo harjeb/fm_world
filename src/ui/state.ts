@@ -87,6 +87,12 @@ export type UIState = {
   /** 赛后每个学习选项各自选定的替换技能。 */
   trainingEventReplacements: Record<string, SkillId>
   detailPlayerId: string | null
+  /** 球员详情内的档案、表现和对比页面；仅是界面状态，不写入存档。 */
+  playerDetailView: 'profile' | 'performance' | 'compare'
+  playerCompareId: string | null
+  playerCompareTab: 'overview' | 'attributes' | 'stats' | 'positions'
+  playerPerformancePeriod: 'season' | 'career'
+  playerPerformanceCompetition: 'all' | 'league' | 'friendly' | 'legend' | 'cup' | 'peak'
   /** 任意界面点开的球队（世界里的 club id，玩家球队为 player）。 */
   clubViewId: string | null
   /** 球队详情里选中的球员。 */
@@ -202,6 +208,11 @@ export const ui: UIState = {
   trainingCombo: 'attack',
   trainingPosition: 'CM',
   detailPlayerId: null,
+  playerDetailView: 'profile',
+  playerCompareId: null,
+  playerCompareTab: 'overview',
+  playerPerformancePeriod: 'season',
+  playerPerformanceCompetition: 'all',
   clubViewId: null,
   clubViewPlayerId: null,
   playerStatsTab: 'season',

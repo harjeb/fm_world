@@ -7,7 +7,7 @@
  * - 玩家也可随时通过顶栏版本号按钮重新打开查看。
  */
 
-export const APP_VERSION = 'v0.4.5'
+export const APP_VERSION = 'v0.4.6'
 export const CHANGELOG_STORAGE_KEY = 'fm-world-changelog-seen'
 
 export type ChangelogItem = {
@@ -26,6 +26,22 @@ export type ChangelogRelease = {
 }
 
 export const CHANGELOG_RELEASES: readonly ChangelogRelease[] = [
+  {
+    version: 'v0.4.6',
+    date: '2026-11-14',
+    headline: '球员对比与表现数据',
+    summary: '球员详情新增对比和表现页面，方便按位置、属性和比赛数据分析球员。',
+    items: [
+      {
+        badge: '球员对比', tone: 'good', title: '两名球员并排对比',
+        desc: '从球员详情进入对比，可切换两侧球员，查看属性雷达、位置熟练度、合同、估值和本赛季战报数据。转会市场中的非本队球员显示转会后可获得的原始属性。',
+      },
+      {
+        badge: '球员表现', tone: 'gold', title: '按赛事和时间查看比赛表现',
+        desc: '表现页面从已保存的战报汇总出场、进球、助攻、传球和防守数据，支持本赛季与生涯、联赛与各挑战赛事筛选；缺失和不可计算的指标显示为 —。',
+      },
+    ],
+  },
   {
     version: 'v0.4.5',
     date: '2026-11-13',

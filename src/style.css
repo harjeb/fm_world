@@ -901,6 +901,13 @@ h3:first-child { margin-top: 0; }
 .pick-club.active { border-color: var(--accent); background: var(--accent-soft); }
 
 .profile { padding: 0; }
+.player-analysis-modal { max-width: 1600px; }
+.player-detail-nav { display: flex; gap: 4px; padding: 0 16px; overflow-x: auto; background: var(--side); border-bottom: 1px solid var(--line); }
+.player-detail-nav button { flex: none; padding: 11px 14px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text-2); }
+.player-detail-nav button:hover { color: var(--text); }
+.player-detail-nav button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.player-analysis-note { margin: 12px 24px 0; color: var(--text-2); }
+.player-analysis-modal > .player-performance { margin: 20px; }
 .profile-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 52px 14px 16px; background: var(--panel-2); border-bottom: 1px solid var(--line); border-radius: 4px 4px 0 0; }
 .profile-id { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
 .profile-id .pos { margin-top: 5px; }
