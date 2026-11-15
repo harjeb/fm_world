@@ -1,10 +1,10 @@
 import type { AttrKey, Player, PlayerCard, Position } from '../../game/types.ts'
 import { POSITIONS } from '../../game/types.ts'
-import { CARD_NAME_LIMIT, baseBuild, cardsOf, playerCards, renameCard } from '../../game/cards.ts'
+import { CARD_NAME_LIMIT, baseBuild, cardRecyclePoints, cardsOf, playerCards, renameCard } from '../../game/cards.ts'
 import { initialDisplayCA } from '../../game/rating.ts'
 import { saveGame } from '../../game/state.ts'
 import { attrHeat, caHeat, cardRoute, emptyState, findAnyPlayer, icon, mainAttrs, meter, pageHead, panel, posBadge, primaryPosition, skillTag, tag } from '../components.ts'
-import { attrLabel, esc, playerCA, positionLabel } from '../format.ts'
+import { attrLabel, esc, playerCA, positionLabel, skillName } from '../format.ts'
 import { morph } from '../morph.ts'
 import { game, ui } from '../state.ts'
 
@@ -70,11 +70,11 @@ function skillRow(card: Pick<PlayerCard, 'skills' | 'skillTiers'>): string {
 }
 
 function deleteControls(card: PlayerCard, equipped: boolean): string {
-  if (equipped) return ''
+  if (equipped || card.recycleLocked) return ''
   if (ui.cardDeleteId === card.id) {
-    return `<button class="btn small danger" data-action="card-delete-confirm" data-card="${esc(card.id)}">确认删除</button><button class="btn small ghost" data-action="card-delete-cancel">取消</button>`
+    return `<button class="btn small danger" data-action="card-delete-confirm" data-card="${esc(card.id)}">确认删除（不返点）</button><button class="btn small ghost" data-action="card-delete-cancel">取消</button>`
   }
-  return `<button class="btn small ghost" data-action="card-delete" data-card="${esc(card.id)}">删除</button>`
+  return `<button class="btn small ghost" data-action="card-delete" data-card="${esc(card.id)}" title="直接删除不会获得培养点">直接删除</button>`
 }
 
 /* ---------- 卡名 ---------- */
@@ -130,6 +130,29 @@ function cardNameField(card: PlayerCard): string {
   </span>`
 }
 
+function recycleEligible(card: PlayerCard): boolean {
+  return cardRecyclePoints(card) !== null && !card.recycleLocked && !game.roster.some((player) => player.equippedCardId === card.id)
+    && !Object.values(game.training).some((session) => session?.cardId === card.id)
+}
+
+/** 与确认操作共用同一份可回收清单，避免确认时提交未展示的卡。 */
+export function selectedRecycleCards(): PlayerCard[] {
+  const selected = new Set(ui.recycleSelectedIds)
+  return cardsOf(game).filter((card) => selected.has(card.id) && recycleEligible(card))
+}
+
+function recyclePreview(): string {
+  const cards = selectedRecycleCards()
+  const total = cards.reduce((sum, card) => sum + (cardRecyclePoints(card) ?? 0), 0)
+  return `<section class="panel recycle-preview" aria-labelledby="recycle-preview-title">
+    <h2 id="recycle-preview-title">回收确认</h2>
+    <p class="recycle-warning" role="alert">回收不可逆，球员卡及其培养成果将永久消失，请仔细确认。</p>
+    ${cards.length ? `<ul class="recycle-list">${cards.map((card) => `<li><strong>${esc(card.customName?.trim() || `卡 ${card.serial}`)}</strong> · ${esc(card.playerName)} · CA ${Math.round(playerCA(card))} · 技能：${esc(card.skills.map((skill) => `${skillName(skill)}（${card.skillTiers?.[skill] === 'rainbow' ? '彩' : card.skillTiers?.[skill] === 'gold' ? '金' : '银'}）`).join('、') || '无')} · ${cardRecyclePoints(card)} 培养点</li>`).join('')}</ul>` : '<p>没有可回收的已选卡片。</p>'}
+    <p>共 ${cards.length} 张，可获得 <strong>${total}</strong> 培养点。已失效的选择不会列入预览。</p>
+    <div class="recycle-actions"><button class="btn danger" data-action="card-recycle-confirm" ${cards.length ? '' : 'disabled'}>确认回收</button><button class="btn ghost" data-action="card-recycle-cancel">取消</button></div>
+  </section>`
+}
+
 function cardTile(card: PlayerCard, owner: Player | undefined): string {
   const equipped = owner?.equippedCardId === card.id
   const pending = game.training[card.playerId]?.cardId === card.id
@@ -142,7 +165,12 @@ function cardTile(card: PlayerCard, owner: Player | undefined): string {
     ${attrGrid(card.attrs, mainAttrs({ positions: card.positions }), reference)}
     ${positionRow(card.positions)}
     ${skillRow(card)}
+    <div class="recycle-card-controls">
+      <label><input type="checkbox" data-recycle-card="${esc(card.id)}" ${ui.recycleSelectedIds.includes(card.id) ? 'checked' : ''} ${recycleEligible(card) ? '' : 'disabled'} /> 选择回收</label>
+      <span class="muted small">${cardRecyclePoints(card) === null ? '卡片能力无效，不能回收' : `回收 ${cardRecyclePoints(card)} 培养点`}${equipped ? ' · 已装备' : pending ? ' · 新卡待处理' : card.recycleLocked ? ' · 已锁定' : ''}</span>
+    </div>
     <footer class="pcard-actions">
+      <button class="btn small ghost" data-action="card-recycle-lock" data-card="${esc(card.id)}" data-locked="${card.recycleLocked ? 'false' : 'true'}" aria-label="${card.recycleLocked ? '解锁' : '锁定'}${esc(card.customName?.trim() || `卡 ${card.serial}`)}回收">${card.recycleLocked ? '解锁' : '锁定'}</button>
       ${owner && !equipped ? `<button class="btn small primary" data-action="card-equip" data-player="${esc(owner.id)}" data-card="${esc(card.id)}" ${game.activeMatch ? 'disabled title="比赛进行中不能换卡"' : ''}>${icon('check', 13)}装备</button>` : ''}
       ${deleteControls(card, equipped)}
     </footer>
@@ -200,6 +228,11 @@ export function renderInventory(): string {
       title: `球员卡 <small class="head-count">${total} 张</small>`,
       sub: '一张卡是一轮培养的成果。球员装备自己的卡后，比赛就用这张卡的属性；一名球员可以有多张卡，随时搭配。点卡片名字可以给卡改名（留空恢复“卡 N”），同一名球员的卡名不能重复。体能、精力、伤病和停赛跟着球员走，换卡不会恢复。',
     })}
+    <section class="panel recycle-bar" aria-label="球员卡回收">
+      <div><strong>共享培养点：${esc(game.trainingPoints ?? 0)}</strong><p class="muted small">回收未装备、未锁定且已处理完培养结果的卡，获得共享培养点：显示 CA 每 100 分得 1 点，最低 1 点。挂牌出售成交时该球员的卡会销毁，锁定也不例外。</p></div>
+      <div class="recycle-actions"><button class="btn small" data-action="card-recycle-select-all" ${groups.some((group) => group.cards.some(recycleEligible)) ? '' : 'disabled'}>全选当前筛选结果</button><button class="btn small primary" data-action="card-recycle-open" ${ui.recycleSelectedIds.length ? '' : 'disabled'}>预览回收（${ui.recycleSelectedIds.length}）</button></div>
+    </section>
+    ${ui.recycleConfirm ? recyclePreview() : ''}
     ${total === 0 ? '' : `<div class="toolbar">
       <div class="input-icon">${icon('search', 14)}<input id="inventory-search" placeholder="搜索球员" value="${esc(ui.inventorySearch)}" /></div>
       <div class="seg" role="group" aria-label="位置">

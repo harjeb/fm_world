@@ -52,6 +52,9 @@ export type UIState = {
   inventorySort: 'new' | 'ca' | 'player'
   /** 正在确认删除的球员卡。 */
   cardDeleteId: string | null
+  /** 仅在库存页暂存的回收选择与二次确认状态。 */
+  recycleSelectedIds: string[]
+  recycleConfirm: boolean
   seasonRound: number | null
   /** 正式赛季杯赛选中的赛事标签。 */
   seasonCupTab: import('../game/season-cups.ts').SeasonCupId
@@ -77,6 +80,8 @@ export type UIState = {
   worldClubId: string | null
   worldPlayerId: string | null
   trainingPlayerId: string | null
+  /** 下次手动或自动开始培养时选择的点数档位，不写入存档。 */
+  trainingPointSpend: 0 | 10 | 20 | 30
   /** 本轮培养准备携带的传奇技能书 key（id:tier）。 */
   trainingBookIds: string[]
   trainingKind: TrainingActionId
@@ -181,6 +186,8 @@ export const ui: UIState = {
   inventoryPos: 'ALL',
   inventorySort: 'new',
   cardDeleteId: null,
+  recycleSelectedIds: [],
+  recycleConfirm: false,
   seasonRound: null,
   seasonCupTab: 'community',
   challengeMode: 'friendly',
@@ -201,6 +208,7 @@ export const ui: UIState = {
   worldClubId: null,
   worldPlayerId: null,
   trainingPlayerId: null,
+  trainingPointSpend: 0,
   trainingBookIds: [],
   trainingKind: 'drill',
   trainingActivity: null,

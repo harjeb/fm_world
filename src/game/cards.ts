@@ -1,4 +1,6 @@
 import type { GameState, Player, PlayerCard, RouteId, TrainingSession } from './types.ts'
+import { caOf, costAttrs } from './ca.ts'
+import { CA_MAX } from './scale.ts'
 
 /**
  * 球员卡。
@@ -35,6 +37,53 @@ function cloneBuild(source: Build): Build {
 
 export function cardsOf(game: Pick<GameState, 'cards'>): PlayerCard[] {
   return game.cards ?? []
+}
+
+/** 显示 CA 先取整，再按每 100 CA 折算；无效旧卡不允许回收。 */
+export function cardRecyclePoints(card: Pick<PlayerCard, 'attrs' | 'positions'>): number | null {
+  if (!card.attrs || !card.positions || typeof card.positions.GK !== 'number' || !Number.isFinite(card.positions.GK) || card.positions.GK < 0) return null
+  const gk = card.positions.GK > 0
+  if (costAttrs(gk).some(key => typeof card.attrs[key] !== 'number' || !Number.isFinite(card.attrs[key]) || card.attrs[key] < 0 || card.attrs[key] > Number.MAX_SAFE_INTEGER)) return null
+  const ca = Math.round(caOf(card.attrs, gk))
+  return Number.isSafeInteger(ca) && ca >= 0 && ca <= CA_MAX ? Math.max(1, Math.floor(ca / 100)) : null
+}
+
+/** 锁定或解锁库存卡（装备中的卡也可以提前上锁）。 */
+export function setCardRecycleLock(game: GameState, cardId: string, locked: boolean): CardOutcome {
+  const card = cardsOf(game).find(item => item.id === cardId)
+  if (!card || typeof locked !== 'boolean') return fail('球员卡或锁定状态无效')
+  card.recycleLocked = locked
+  return { ok: true }
+}
+
+/** 整批校验通过后一次性删除卡片并增加俱乐部共享点数。 */
+export function recyclePlayerCards(game: GameState, cardIds: string[]): { ok: boolean; error?: string; points?: number; count?: number } {
+  if (!Array.isArray(cardIds) || !cardIds.length || cardIds.some(id => typeof id !== 'string' || !id) || new Set(cardIds).size !== cardIds.length) return fail('球员卡列表无效或重复')
+  const balance = game.trainingPoints === undefined ? 0 : game.trainingPoints
+  if (!Number.isSafeInteger(balance) || balance < 0) return fail('训练点数无效')
+  const cards = cardsOf(game)
+  const byId = new Map<string, PlayerCard>()
+  const duplicates = new Set<string>()
+  for (const card of cards) {
+    if (byId.has(card.id)) duplicates.add(card.id)
+    else byId.set(card.id, card)
+  }
+  const equipped = new Set(game.roster.map(player => player.equippedCardId).filter(Boolean))
+  const pending = new Set(Object.values(game.training ?? {}).map(session => session?.cardId).filter(Boolean))
+  let points = 0
+  for (const id of cardIds) {
+    const card = byId.get(id)
+    if (!card || duplicates.has(id)) return fail('球员卡不存在或重复')
+    if (card.recycleLocked || equipped.has(id) || pending.has(id)) return fail('球员卡已锁定、装备或等待处理')
+    const value = cardRecyclePoints(card)
+    if (value === null) return fail('球员卡能力无效')
+    points += value
+    if (!Number.isSafeInteger(points) || !Number.isSafeInteger(balance + points)) return fail('训练点数溢出')
+  }
+  const selected = new Set(cardIds)
+  game.cards = cards.filter(card => !selected.has(card.id))
+  game.trainingPoints = balance + points
+  return { ok: true, points, count: cardIds.length }
 }
 
 /** 卡名的最大长度，和界面里的输入框保持一致。 */
@@ -183,6 +232,7 @@ export function deleteCard(game: GameState, cardId: string): CardOutcome {
   const cards = cardsOf(game)
   const card = cards.find((item) => item.id === cardId)
   if (!card) return fail('球员卡不存在')
+  if (card.recycleLocked) return fail('这张卡已锁定，请先解锁')
   if (game.roster.some((player) => player.equippedCardId === cardId)) return fail('这张卡正在装备中，先换下来')
   if (game.training[card.playerId]?.cardId === cardId) closeFinishedTraining(game, card.playerId)
   game.cards = cards.filter((item) => item !== card)

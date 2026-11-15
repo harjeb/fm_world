@@ -570,6 +570,35 @@ export async function respondOfferOnline(offerId: string, accept: boolean): Prom
   return onlineGameAction('/api/transfer/offer', { offerId, accept })
 }
 
+/** 响应丢失或并发失败时先取回权威状态：请求可能已提交，不能盲目在本地重做。 */
+async function protectedGameAction(endpoint: string, body: Record<string, unknown>): Promise<GameState> {
+  try {
+    return await onlineGameAction(endpoint, body)
+  } catch (error) {
+    try {
+      const current = await requestJson<{ game: GameState; revision: number }>('/api/game')
+      if (current.revision >= onlineState.revision) {
+        onlineState.revision = current.revision
+        remoteGameHandler?.(current.game)
+        notify()
+      }
+    } catch { /* 保留原始错误，用户可手动刷新检查。 */ }
+    throw error
+  }
+}
+
+export async function recycleCardsOnline(cardIds: string[], baseRevision: number): Promise<GameState> {
+  return protectedGameAction('/api/cards/recycle', { cardIds, baseRevision })
+}
+
+export async function setCardRecycleLockOnline(cardId: string, locked: boolean): Promise<GameState> {
+  return protectedGameAction('/api/cards/lock', { cardId, locked })
+}
+
+export async function startTrainingOnline(playerId: string, bookKeys: string[], points: number): Promise<GameState> {
+  return protectedGameAction('/api/training/start', { playerId, bookKeys, points })
+}
+
 export async function nextWorldSeasonOnline(): Promise<GameState> {
   const next = await onlineGameAction('/api/world/next-season', {})
   void refreshPublicWorld()

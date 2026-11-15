@@ -301,6 +301,8 @@ export type TransferOffer = {
  * 姓名、年龄、合同、体力、精力、伤病、停赛都在 Player 上，换卡不影响。
  */
 export type PlayerCard = {
+  /** 锁定后不能回收或手动删除；挂牌出售成交仍按原规则销毁。 */
+  recycleLocked?: boolean
   id: string
   playerId: string
   /** 球员离队后库存里仍要显示名字。 */
@@ -501,6 +503,8 @@ export type TrainingSkillChoice =
   | { source: 'basic'; id: SkillId }
 
 export type TrainingSession = {
+  /** 本轮开始时消耗的培养点，结束或中途取消均不退。 */
+  qualityBonusPoints?: 0 | 10 | 20 | 30
   /** 无此字段的旧课程继续使用旧行动规则。 */
   scheduleVersion?: 1
   /** 陪练队友：开局选定的其他 6 名队友，只给本次培养的主角加成长，不消耗精力也不涨属性。 */
@@ -1119,6 +1123,8 @@ export type PairChemistry = {
 export type Chemistry = Record<string, PairChemistry>
 
 export type GameState = {
+  /** 全俱乐部共用的回收培养点；旧档不存在时为 0。 */
+  trainingPoints?: number
   version: number
   createdAt: number
   seed: number

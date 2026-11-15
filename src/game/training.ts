@@ -305,6 +305,13 @@ export const PLAIN_MAX_CHANCE = 0.4
 /** 大成功、完美成功的概率；体力 30 及以下直接关掉。 */
 export const GREAT_CHANCE = 0.1
 export const PERFECT_CHANCE = 0.02
+/** 消耗点数与基础品质概率；界面和结算共用。 */
+export const TRAINING_POINT_TIERS = [
+  { points: 0, great: GREAT_CHANCE, perfect: PERFECT_CHANCE },
+  { points: 10, great: 0.15, perfect: 0.03 },
+  { points: 20, great: 0.20, perfect: 0.04 },
+  { points: 30, great: 0.30, perfect: 0.06 },
+] as const
 /** 体力 30 及以下不再有大成功/完美，并开始出现“失败”（不涨属性）。 */
 export const FAILURE_STAMINA = 30
 /** 刚好 30 体力时的失败概率。 */
@@ -327,21 +334,21 @@ export function failureChance(stamina: number): number {
   return Math.min(FAILURE_MAX_CHANCE, FAILURE_BASE_CHANCE + (FAILURE_MAX_CHANCE - FAILURE_BASE_CHANCE) * low)
 }
 
-/**
- * 这次培养的品质。同一次行动只掷一个骰子（由球员的培养种子和第几次行动决定），
- * 所以换课程不能重抽；骰子落在哪一档只看当前体力：
- * 体力 30 以上才有大成功/完美成功；体力 30 及以下会出现失败（×0），一般最多 40%，
- * 其余是成功。低体力时失败和一般一起挤压成功，逼着玩家安排休息。
- */
-export function trainingQuality(session: TrainingSession): { label: string; multiplier: number } {
-  const roll = derivedRng(session.seed, 'training-quality', session.playerId, session.action + 1).float()
-  const stamina = 100 - session.fatigue
+/** 品质概率：点数与悟性只挤占普通成功，体力 30 及以下不触发大成功/完美。 */
+export function trainingQualityChances(session: Pick<TrainingSession, 'candidate' | 'fatigue' | 'qualityBonusPoints'>, stamina = 100 - session.fatigue): { failure: number; plain: number; success: number; great: number; perfect: number } {
   const failure = failureChance(stamina)
   const plain = plainChance(stamina)
-  const canCrit = stamina > FAILURE_STAMINA
+  const tier = TRAINING_POINT_TIERS.find((item) => item.points === (session.qualityBonusPoints ?? 0)) ?? TRAINING_POINT_TIERS[0]
   const fastLearner = legendValue(session.candidate, 'lg_fast_learner', 0.05)
-  const perfect = canCrit ? PERFECT_CHANCE + fastLearner : 0
-  const great = canCrit ? GREAT_CHANCE + fastLearner : 0
+  const great = stamina > FAILURE_STAMINA ? tier.great + fastLearner : 0
+  const perfect = stamina > FAILURE_STAMINA ? tier.perfect + fastLearner : 0
+  return { failure, plain, success: 1 - failure - plain - great - perfect, great, perfect }
+}
+
+/** 同一球员的同一行动只掷一个确定性骰子，换课程不能重抽。 */
+export function trainingQuality(session: TrainingSession): { label: string; multiplier: number } {
+  const roll = derivedRng(session.seed, 'training-quality', session.playerId, session.action + 1).float()
+  const { failure, plain, great, perfect } = trainingQualityChances(session)
   if (roll < failure) return { label: '失败', multiplier: QUALITY_MULTIPLIER.failure }
   if (roll >= 1 - perfect) return { label: '完美成功', multiplier: QUALITY_MULTIPLIER.perfect }
   if (roll >= 1 - perfect - great) return { label: '大成功', multiplier: QUALITY_MULTIPLIER.great }
@@ -360,13 +367,7 @@ function gainSpread(session: TrainingSession, key: AttrKey): number {
 
 /** 当前体力下的期望品质倍率（综合失败 ×0、一般 ×0.7、成功 ×1、大成功 ×1.3、完美 ×1.6 与球员天赋）。 */
 export function expectedQualityMultiplier(session: TrainingSession, stamina = 100 - session.fatigue): number {
-  const failure = failureChance(stamina)
-  const plain = plainChance(stamina)
-  const canCrit = stamina > FAILURE_STAMINA
-  const fastLearner = legendValue(session.candidate, 'lg_fast_learner', 0.05)
-  const perfect = canCrit ? PERFECT_CHANCE + fastLearner : 0
-  const great = canCrit ? GREAT_CHANCE + fastLearner : 0
-  const success = Math.max(0, 1 - failure - plain - great - perfect)
+  const { plain, success, great, perfect } = trainingQualityChances(session, stamina)
   return (
     plain * QUALITY_MULTIPLIER.plain +
     success * QUALITY_MULTIPLIER.success +

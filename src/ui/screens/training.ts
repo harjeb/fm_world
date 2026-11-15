@@ -6,9 +6,9 @@ import { autoPresetLabel, autoTrainingConfig, autoTrainingPresetsFor, autoTraini
 import { displayCA, initialDisplayCA, mainAttrsFor } from '../../game/rating.ts'
 import { caCeilingOf } from '../../game/ca.ts'
 import { cupCeilingBonus, effectiveClubCeilings, effectiveTrainingCeilings } from '../../game/cup-rewards.ts'
-import { branchProbability, eventChance, eventGrowthScale, failureChance, planTraining, REST_PARTNER_RECOVERY, trainingActionsForSeason, trainingActionsTotal, trainingDaysForSeason, TRAINING_ACTION_INFO, TRAINING_ENERGY_COST, weekOfAction, type TrainingRequest } from '../../game/training.ts'
+import { branchProbability, eventChance, eventGrowthScale, failureChance, planTraining, REST_PARTNER_RECOVERY, trainingActionsForSeason, trainingActionsTotal, trainingDaysForSeason, trainingQualityChances, TRAINING_ACTION_INFO, TRAINING_ENERGY_COST, TRAINING_POINT_TIERS, weekOfAction, type TrainingRequest } from '../../game/training.ts'
 import { partnerAssignment, trainingDate, trainingOptions, type TrainingActivityId } from '../../game/training-calendar.ts'
-import { baseBuild, playerCards } from '../../game/cards.ts'
+import { baseBuild, playerCards, untrainedPlayer } from '../../game/cards.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
 import { getSkillTier } from '../../game/inheritance.ts'
 import { bookKey, bookLearnChance, bookName, bookRequirementText, bookTierLabel, canChooseTrainingBook, eventForSession, trainingSkillChance } from '../../game/legend-learning.ts'
@@ -136,6 +136,19 @@ function autoControls(player: Player): string {
   </div>`
 }
 
+function trainingPointsPicker(player: Player): string {
+  const balance = game.trainingPoints ?? 0
+  const selected = ui.trainingPointSpend
+  const actual = trainingQualityChances({ candidate: untrainedPlayer(player), fatigue: 0, qualityBonusPoints: selected })
+  return `<div class="training-points">
+    <div class="field-title">培养点加成 · 余额 ${esc(String(balance))}</div>
+    <p class="muted small">以下为各档基础概率，不含悟性技能。</p>
+    <div class="btn-row">${TRAINING_POINT_TIERS.map(({ points, great, perfect }) => `<button type="button" class="btn small ${selected === points ? 'active' : ''}" aria-pressed="${selected === points}" data-action="training-points-select" data-points="${points}" data-player="${esc(player.id)}" ${points > balance ? 'disabled' : ''}>${points === 0 ? '无加成（0点）' : `${points}点`} · 大成功 ${pct(great, 0)} / 完美 ${pct(perfect, 0)}</button>`).join('')}</div>
+    <p class="hint">以本轮初始技能、体力充足计算：大成功 ${pct(actual.great, 0)} / 完美 ${pct(actual.perfect, 0)}。培养中学会悟性时会再次叠加。</p>
+    <p class="hint">体力≤30无大成功/完美；悟性可叠加；不保证最终CA；成功开始时扣除，不退</p>
+  </div>`
+}
+
 function autoConfirmButton(player: Player): string {
   const session = game.training[player.id]
   const candidate = game.candidates[player.id]
@@ -203,6 +216,7 @@ export function renderAutoStrategyOverlay(): string {
             ${cards}
             ${customCard}
           </div>
+          ${!session && !game.candidates[player.id] ? trainingPointsPicker(player) : ''}
           <div class="auto-modal-foot">
             <button type="button" class="btn ghost" data-action="auto-strategy-detail-open">细调属性与目标 ▸</button>
             <div class="auto-modal-actions">
@@ -260,6 +274,7 @@ export function renderAutoStrategyOverlay(): string {
           </div>
         </div>
         ${detailBody}
+        ${!session && !game.candidates[player.id] ? trainingPointsPicker(player) : ''}
         <div class="auto-modal-foot">
           <button type="button" class="btn ghost" data-action="auto-strategy-detail-back">← 一级预设</button>
           <div class="auto-modal-actions">
@@ -334,6 +349,7 @@ function renderTrainingStart(player: Player): string {
         ${tile('本轮时长', `${days} 天 · ${slots} 时段`, daysHint)}
         ${tile('精力', String(Math.round(energy)), `开始消耗 ${TRAINING_ENERGY_COST}`)}
       </div>
+      ${trainingPointsPicker(player)}
       <div class="btn-row">
         <button class="btn primary" data-action="start-training" data-player="${esc(player.id)}" ${enough ? '' : 'disabled'}>${enough ? `${icon('play', 14)}开始培养` : '精力不足，等待恢复'}</button>
         ${autoControls(player)}
@@ -386,6 +402,7 @@ function trainingHeader(current: Player, session: TrainingSession, cand: Player)
   const total = trainingActionsTotal(session)
   const route = session.routeId ? `${ROUTE_LABELS[session.routeId]} · ${session.routePoints}/2` : '未选择路线'
   const eventP = eventChance(session, session.action + 1)
+  const quality = trainingQualityChances(session)
   const when = session.scheduleVersion === 1
     ? (() => { const date = trainingDate(Math.min(total, session.action + 1)); return `第 ${date.week} 周 · ${date.dayLabel} ${date.slot}` })()
     : `第 ${weekOfAction(Math.max(1, session.action))} 周`
@@ -400,6 +417,7 @@ function trainingHeader(current: Player, session: TrainingSession, cand: Player)
       </div>
       ${autoControls(current)}
     </div>
+    <p class="hint">本轮培养点投入 ${esc(String(session.qualityBonusPoints ?? 0))} · 当前品质概率：失败 ${pct(quality.failure, 2)} / 一般 ${pct(quality.plain, 2)} / 成功 ${pct(quality.success, 2)} / 大成功 ${pct(quality.great, 2)} / 完美 ${pct(quality.perfect, 2)}</p>
     <div class="train-stats">
       <div class="stat-box"><span>当前 CA</span><b>${playerCA(current).toFixed(1)}</b></div>
       <div class="stat-box"><span>培养中 CA</span><b>${playerCA(cand).toFixed(1)}</b><small class="${playerCA(cand) >= playerCA(current) ? 'up' : 'down'}">${caDelta(current, cand)} · 上限 ${Math.round(caCeilingOf(effectiveTrainingCeilings(session), current.positions.GK > 0))}</small></div>

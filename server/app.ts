@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { createInitialGame, GAME_VERSION, upgradeLegacySignatures } from '../src/game/state.ts'
-import { addTrainedCard, ensureCards, equipCard, playerCards } from '../src/game/cards.ts'
+import { addTrainedCard, ensureCards, equipCard, playerCards, recyclePlayerCards, setCardRecycleLock } from '../src/game/cards.ts'
 import { ensurePve } from '../src/game/pve.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
 import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, wageForPlayer, worldForClub, worldSlots, worldWageBill } from '../src/game/world.ts'
@@ -36,7 +36,7 @@ import { aiBuysLeft, noteAIBuy } from '../src/game/transfer-rules.ts'
 import { settleMarket, signClubPlayer } from '../src/game/market.ts'
 import { elevenAITeam, upgradeElevenASide } from '../src/game/eleven.ts'
 import { elevenFormationFor, isLegacyFormation } from '../src/game/data/formations.ts'
-import { startChallengeWithOpponent, startPeakChallenge } from '../src/game/actions.ts'
+import { startChallengeWithOpponent, startPeakChallenge, startTrainingWithSupport } from '../src/game/actions.ts'
 import { awardAISeasonCup, awardSeasonCupChampion, awardSeasonCupMatch } from '../src/game/season-cup-rewards.ts'
 import { seasonCupPlayerStats } from '../src/game/season-cup-stats.ts'
 import { cupCeilingBonus, ensureCupCeilingClaims } from '../src/game/cup-rewards.ts'
@@ -146,6 +146,21 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   const accountStore = new AccountStore(dataDir)
   const db = { accounts: accountStore.accounts }
   const persistAccount = (account: Account) => accountStore.save(account)
+  // 关键操作未确认落盘时，不能通过 GET、SSE 或 Agent 把内存里的结果当作已提交。
+  const pendingAccountCommits = new Map<string, symbol>()
+  async function confirmAccountCommit(account: Account): Promise<boolean> {
+    try {
+      let commit: symbol | undefined
+      while ((commit = pendingAccountCommits.get(account.id))) {
+        await accountStore.flush()
+        // 另一笔提交可能在等待落盘期间开始；只清除刚刚确认的那一笔。
+        if (pendingAccountCommits.get(account.id) === commit) pendingAccountCommits.delete(account.id)
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
   const worldPath = path.join(dataDir, WORLD_FILE)
   const loadedWorld = readJson<Partial<SharedWorld> | null>(worldPath, null)
   const sharedWorld: SharedWorld = {
@@ -1233,6 +1248,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   /** 对手的实时体能只存在服务器；账号存档的公开副本不能带回这些字段。 */
   function publicGame(account: Account): GameState {
     const game = structuredClone(account.game)
+    delete (game as GameState & { recycledCardIds?: string[] }).recycledCardIds
     for (const team of game.aiTeams) for (const player of team.players) {
       delete (player as Partial<Player>).condition
       delete (player as Partial<Player>).energy
@@ -1267,6 +1283,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   }
 
   function broadcast(account: Account, source?: string): void {
+    if (pendingAccountCommits.has(account.id)) return
     const group = clients.get(account.id)
     if (!group) return
     for (const res of group) {
@@ -1846,6 +1863,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const password = String(body.password ?? '')
       const account = db.accounts.find((item) => item.username.toLowerCase() === username)
       if (!account || hashPassword(password, account.salt) !== account.passwordHash) return json(res, 401, { error: '用户名或密码错误' })
+      if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
       touchAccountOnline(account, true)
       const token = createSession(account.id)
       advanceAccount(account)
@@ -1889,6 +1907,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (url.pathname.startsWith('/api/agent/')) {
       const agentAccount = agentAccountFromToken(tokenFromRequest(req))
       if (!agentAccount) return json(res, 401, { error: 'Agent 令牌无效，请在游戏账号面板重新生成' })
+      if (pendingAccountCommits.has(agentAccount.id) && !await confirmAccountCommit(agentAccount)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
       touchAccountOnline(agentAccount)
       // 联机时有教练执教的球队不能从 AI 购买入口买人，和转会页一致。
       const agentOptions: AgentOptions = { isManaged: (clubId) => !!sharedWorld.owners[clubId] }
@@ -1977,6 +1996,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
     const account = accountFromToken(tokenFromRequest(req))
     if (!account) return json(res, 401, { error: '请先登录' })
+    if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
     touchAccountOnline(account)
 
     if (url.pathname === '/api/world/next-season' && req.method === 'POST') {
@@ -2080,6 +2100,45 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return
     }
 
+    if (['/api/cards/recycle', '/api/cards/lock', '/api/training/start'].includes(url.pathname) && req.method === 'POST') {
+      const body = await readJsonBody(req)
+      if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
+      advanceAccount(account)
+      // No await between reading the current account and committing: concurrent requests
+      // are serialized by the event loop. Work on a clone because domain actions may mutate
+      // (and call saveGame) even before returning an error.
+      const game = structuredClone(account.game)
+      let outcome: { ok: boolean; error?: string }
+      if (url.pathname === '/api/cards/recycle') {
+        if (!Array.isArray(body.cardIds) || !body.cardIds.every(id => typeof id === 'string') || !Number.isSafeInteger(body.baseRevision)) return json(res, 400, { error: '球员卡列表或预览版本无效' })
+        if (body.baseRevision !== account.revision) return json(res, 409, { error: '存档已变化，请重新预览球员卡', revision: account.revision, game: publicGame(account) })
+        outcome = recyclePlayerCards(game, body.cardIds as string[])
+        if (outcome.ok) {
+          const privateGame = game as GameState & { recycledCardIds?: string[] }
+          privateGame.recycledCardIds = [...new Set([...(privateGame.recycledCardIds ?? []), ...body.cardIds as string[]])]
+        }
+      } else if (url.pathname === '/api/cards/lock') {
+        if (typeof body.cardId !== 'string' || !body.cardId || typeof body.locked !== 'boolean') return json(res, 400, { error: '球员卡或锁定状态无效' })
+        outcome = setCardRecycleLock(game, body.cardId, body.locked)
+      } else {
+        if (typeof body.playerId !== 'string' || !body.playerId || !Array.isArray(body.bookKeys) || !body.bookKeys.every(key => typeof key === 'string') || typeof body.points !== 'number') return json(res, 400, { error: '培养参数无效' })
+        outcome = startTrainingWithSupport(game, body.playerId, undefined, body.bookKeys as string[], body.points as number, false)
+      }
+      if (!outcome.ok) return json(res, 400, { error: outcome.error, revision: account.revision, game: publicGame(account) })
+      account.game = game
+      account.revision++
+      account.lastUserRevision = account.revision
+      account.updatedAt = now()
+      pendingAccountCommits.set(account.id, Symbol('recycling-commit'))
+      persistAccount(account)
+      // 确认前等待 SQLite 事务：卡片、点数、培养快照和防重账本一起落盘。
+      if (!await confirmAccountCommit(account)) {
+        return json(res, 503, { error: '服务器保存失败，操作状态未确认，请稍后刷新存档检查' })
+      }
+      broadcast(account, String(req.headers['x-fm-client'] ?? '').slice(0, 128))
+      return json(res, 200, { ...outcome, revision: account.revision, game: publicGame(account), serverTime: now() })
+    }
+
     if (url.pathname === '/api/peak/start' && req.method === 'POST') {
       const body = await readJsonBody(req)
       advanceAccount(account)
@@ -2113,6 +2172,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
     if (url.pathname === '/api/game' && req.method === 'PUT') {
       const body = await readJsonBody(req)
+      if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
       advanceAccount(account)
       // 还没刷新的旧页面可能交上来 7 人制的存档：按同样的规则迁移（补出来的人和服务器上的一模一样）。
       if (body.game && typeof body.game === 'object') upgradeElevenASide(body.game as GameState)
@@ -2135,6 +2195,24 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         return
       }
       if (!isGameState(body.game)) return json(res, 400, { error: '无效的游戏存档' })
+      if (!body.game.training || typeof body.game.training !== 'object' || Array.isArray(body.game.training) || Object.values(body.game.training).some(session => session != null && (typeof session !== 'object' || Array.isArray(session)))) return json(res, 400, { error: '无效的培养状态' })
+      // The private ledger lives in game_json so it is committed atomically with the
+      // balance. Never trust a ledger supplied by the client.
+      const previousPrivate = account.game as GameState & { recycledCardIds?: string[] }
+      const incomingPrivate = body.game as GameState & { recycledCardIds?: string[] }
+      const recycled = previousPrivate.recycledCardIds ?? []
+      const recycledIds = new Set(recycled)
+      if ((body.game.cards ?? []).some(card => recycledIds.has(card.id))) return json(res, 409, { error: '存档包含已回收的球员卡，请重新加载', revision: account.revision, game: publicGame(account) })
+      incomingPrivate.recycledCardIds = [...recycled]
+      body.game.trainingPoints = account.game.trainingPoints
+      body.game.cardSeq = Math.max(body.game.cardSeq ?? 0, account.game.cardSeq ?? 0)
+      const oldCards = new Map((account.game.cards ?? []).map(card => [card.id, card]))
+      for (const [id, session] of Object.entries(body.game.training)) {
+        if (!session) continue
+        const previous = account.game.training[id]
+        const same = previous && session.playerId === previous.playerId && session.seed === previous.seed && session.startedAt === previous.startedAt
+        session.qualityBonusPoints = same && [0, 10, 20, 30].includes(previous.qualityBonusPoints ?? 0) ? previous.qualityBonusPoints : 0
+      }
       if (body.game.activeMatch?.preplayed && !account.game.activeMatch) delete body.game.activeMatch
       const peakError = validatePeakSave(account.game, body.game)
       if (peakError) return json(res, 409, { error: peakError, revision: account.revision, game: publicGame(account) })
@@ -2213,6 +2291,16 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       upgradeNames(body.game)
       upgradeStarTraits(body.game)
       upgradeBurstAttr(body.game)
+      // 成品卡属性、技能和锁定状态以服务器为准；普通存档只能改卡名。
+      // 放在旧档升级之后，避免把服务器已经升级的属性再升级一次。
+      // 新培养卡仍来自现有客户端培养流程，完整培养模拟尚不是服务器权威。
+      if (body.game.cards) body.game.cards = body.game.cards.map((card) => {
+        const old = oldCards.get(card.id)
+        if (!old) return card
+        const preserved = { ...old, customName: card.customName }
+        if (card.customName === undefined) delete preserved.customName
+        return preserved
+      })
       economyOf(body.game)
       // 其他教练的球员不能从 AI 购买入口直接转走。
       const incomingGame: GameState = body.game

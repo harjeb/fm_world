@@ -41,7 +41,7 @@ import {
   trainingEventChoice,
   reserveCoachPause,
 } from '../game/actions.ts'
-import type { TrainingActionId } from '../game/training.ts'
+import { TRAINING_POINT_TIERS, type TrainingActionId } from '../game/training.ts'
 import type { TrainingActivityId } from '../game/training-calendar.ts'
 import { autoAssignLineup, autoFillLineup, clearStarter, movePlayer, type LineupTarget } from '../game/squad.ts'
 import {
@@ -60,11 +60,11 @@ import { mainAttrsFor } from '../game/rating.ts'
 import { attrLabel } from '../game/data/attributes.ts'
 import { claimPeakReward } from '../game/peak-reward.ts'
 import { applyPeakBreakthrough } from '../game/peak-milestones.ts'
-import { ensureCards, playerCards } from '../game/cards.ts'
+import { ensureCards, playerCards, recyclePlayerCards, setCardRecycleLock } from '../game/cards.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeStarTraits } from '../game/names.ts'
 import { catchUpSeason, lineupLockState, settleGameConditions, skipToPostseasonEnd } from '../game/season.ts'
 import { gameDateOf } from '../game/calendar.ts'
-import { fetchFriendlyTeam, isOnlineMode } from '../online.ts'
+import { fetchFriendlyTeam, flushOnlineNow, isOnlineMode } from '../online.ts'
 import { advanceLeagueRealtime, leagueDisplayClock, setLeagueClock } from '../game/realtime.ts'
 import { displayClock } from '../game/match/time.ts'
 import { hasSeenLatestChangelog, markChangelogSeen } from '../game/changelog.ts'
@@ -75,7 +75,7 @@ import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPla
 import { minimumBid } from '../game/auction.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
 import { clubNameError, normalizeClubName } from '../game/club-name.ts'
-import { bidOnline, buyFromAIClubOnline, chatState, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, refreshChatOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, startPeakOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline } from '../online.ts'
+import { bidOnline, buyFromAIClubOnline, chatState, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, recycleCardsOnline, refreshChatOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setCardRecycleLockOnline, startPeakOnline, startTrainingOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline } from '../online.ts'
 import { agentHandoffText } from './agent-handoff.ts'
 import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
 import { UNHAPPY_GAME_DAYS } from '../game/transfer-rules.ts'
@@ -95,7 +95,7 @@ import { renderClub } from './screens/club.ts'
 import { renderChatDrawer } from './screens/chat.ts'
 import { renderTransfer } from './screens/transfer.ts'
 import { renderHome } from './screens/home.ts'
-import { renderInventory } from './screens/inventory.ts'
+import { renderInventory, selectedRecycleCards } from './screens/inventory.ts'
 import { parseLineupTarget, renderLineup, selectedSlotTarget } from './screens/lineup.ts'
 import { applyAutoSubAction, applyAutoSubFieldChange, type AutoSubScope } from './auto-sub-editor.ts'
 import { renderMatch } from './screens/match.ts'
@@ -298,6 +298,9 @@ function syncNoticeTimer(): void {
 }
 
 function render(): void {
+  // 回收和扣点等待服务器期间冻结所有交互（包括库存页独立的改名监听器）。
+  app.toggleAttribute('inert', trainingStartPending || cardActionPending)
+  app.setAttribute('aria-busy', String(trainingStartPending || cardActionPending))
   if (ui.screen === 'lineup' && !ui.lineupDraft) ui.lineupDraft = structuredClone(game.lineup)
   if (ui.screen === 'lineup' && !ui.autoSubsDraft) ui.autoSubsDraft = structuredClone(game.autoSubs ?? emptyAutoSubs())
   const selections = new Map([...document.querySelectorAll<HTMLSelectElement>('#match-mentality, #match-out, #match-in')].map((select) => [select.id, select.value]))
@@ -438,6 +441,12 @@ function applyOnlineGame(next: GameState, notice?: string): void {
   const previous = game.activeMatch
   const wasMatch = ui.screen === 'match'
   const clubChanged = next.clubName !== game.clubName || next.season.index !== game.season.index
+  if (clubChanged) {
+    ui.recycleSelectedIds = []
+    ui.recycleConfirm = false
+    ui.trainingPointSpend = 0
+  }
+  if (ui.trainingPointSpend > (next.trainingPoints ?? 0)) ui.trainingPointSpend = 0
   setGame(next)
   announceNewOffers(offersBefore)
   // 服务器存档也写一份本地缓存：刷新时在服务器恢复之前不会先看到旧离线存档。
@@ -501,12 +510,18 @@ async function submitAccount(): Promise<void> {
       ui.bootGate = false
       ui.turnstileToken = ''
       ui.registrationClubId = ''
+      ui.recycleSelectedIds = []
+      ui.recycleConfirm = false
+      ui.trainingPointSpend = 0
       applyOnlineGame(data.game, `已注册并接管 ${data.game.clubName}，注册后不能换队。`)
       return
     }
     const data = await loginOnline(username, password)
     ui.accountOpen = false
     ui.bootGate = false
+    ui.recycleSelectedIds = []
+    ui.recycleConfirm = false
+    ui.trainingPointSpend = 0
     applyOnlineGame(data.game, `已登录 ${data.user.username}，存档已同步。`)
   } catch (error) {
     /* Turnstile token 一次性有效，失败后清空插槽，render() 会重新挂载控件取新 token。 */
@@ -687,6 +702,7 @@ function completeMatch(): void {
 }
 
 function openTraining(playerId: string): void {
+  if (ui.trainingPlayerId !== playerId) ui.trainingPointSpend = 0
   ui.trainingPlayerId = playerId
   ui.trainingTeammateIds = []
   ui.trainingEventReplacements = {}
@@ -701,13 +717,79 @@ function openTraining(playerId: string): void {
   render()
 }
 
-function startTrainingFor(playerId: string): void {
+let trainingStartPending = false
+let cardActionPending = false
+let onlineSessionRequested = false
+let recyclePreviewSnapshot = ''
+let recyclePreviewRevision: number | null = null
+
+/** 联机回收和扣点必须等待服务器；明确选择离线模式才允许离线使用缓存存档。 */
+function sharedActionUnavailable(): boolean {
+  return !!game.shared && (onlineSessionRequested || !!onlineState.user) && !isOnlineMode()
+}
+
+/** 离线回收和扣点只写一次存档；无法落盘时撤销内存改动，不能显示成功。 */
+function commitOfflineTransaction(action: () => { ok: boolean; error?: string }): { ok: boolean; error?: string } {
+  const before = structuredClone(game)
+  try {
+    const result = action()
+    if (!result.ok) { setGame(before); return result }
+    if (saveGame(game)) return result
+    setGame(before)
+    return { ok: false, error: '存档保存失败，操作已撤销；请先检查浏览器存储空间。' }
+  } catch (error) {
+    setGame(before)
+    throw error
+  }
+}
+
+async function beginTraining(playerId: string): Promise<{ ok: boolean; error?: string }> {
+  if (trainingStartPending) return { ok: false, error: '正在开始培养，请稍候' }
+  if (sharedActionUnavailable()) return { ok: false, error: '联机连接已断开，请先重新连接服务器' }
+  const points = ui.trainingPointSpend
+  const books = [...ui.trainingBookIds]
+  trainingStartPending = true
+  syncAutoTraining()
+  try {
+    if (isOnlineMode()) {
+      ui.notice = '服务器正在确认培养，请稍候…'
+      render()
+      await startTrainingOnline(playerId, books, points)
+    } else {
+      const result = commitOfflineTransaction(() => startTrainingWithSupport(game, playerId, undefined, books, points, false))
+      if (!result.ok) return result
+    }
+    ui.trainingPointSpend = 0
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : '无法开始培养' }
+  } finally {
+    trainingStartPending = false
+    syncAutoTraining()
+  }
+}
+
+function trainingTargetDraft(playerId: string): Partial<Record<AttrKey, number>> | undefined {
+  const inputs = document.querySelectorAll<HTMLInputElement>('input[data-auto-target]')
+  if (!inputs.length) return undefined
+  const targets: Partial<Record<AttrKey, number>> = { ...autoTrainingConfig(game, playerId).targets }
+  inputs.forEach((input) => {
+    const key = input.dataset.autoTarget as AttrKey | undefined
+    if (!key) return
+    const value = Number(input.value)
+    targets[key] = Number.isFinite(value) ? Math.round(Math.max(0, Math.min(2000, value))) : 0
+  })
+  return targets
+}
+
+async function startTrainingFor(playerId: string): Promise<void> {
   // 每轮都由系统自动挑 6 名陪练（含门将），不消耗他们的精力。
-  const result = startTrainingWithSupport(game, playerId, undefined, ui.trainingBookIds)
+  const result = await beginTraining(playerId)
   if (!result.ok) {
     showNotice(result.error ?? '无法开始培养')
     return
   }
+  ui.notice = '培养已开始，点数加成仅对本轮生效。'
   openTraining(playerId)
 }
 
@@ -766,7 +848,7 @@ let autoTrainTimer: number | null = null
  */
 function syncAutoTraining(): void {
   const id = ui.trainingPlayerId
-  const active = ui.screen === 'training' && !!id && autoTrainingConfig(game, id).autopilot === true && autoTrainingRunnable(game, id)
+  const active = !trainingStartPending && !cardActionPending && ui.screen === 'training' && !!id && autoTrainingConfig(game, id).autopilot === true && autoTrainingRunnable(game, id)
   if (!active) {
     if (autoTrainTimer !== null) window.clearTimeout(autoTrainTimer)
     autoTrainTimer = null
@@ -920,6 +1002,7 @@ function autoFillLineupDraft(): Lineup {
 }
 
 document.addEventListener('click', async (event) => {
+  if (trainingStartPending || cardActionPending) return
   const target = event.target as HTMLElement
   // 模态框内的点击不能冒泡成遮罩层的“关闭”动作。
   const stopped = target.closest<HTMLElement>('[data-stop="true"]')
@@ -1399,6 +1482,10 @@ document.addEventListener('click', async (event) => {
       break
     case 'account-logout':
       void logoutOnline().then(() => {
+        onlineSessionRequested = false
+        ui.recycleSelectedIds = []
+        ui.recycleConfirm = false
+        ui.trainingPointSpend = 0
         ui.notice = '已退出联机账号，继续使用本地存档。'
         render()
       })
@@ -1428,7 +1515,7 @@ document.addEventListener('click', async (event) => {
       saveGame(game)
       setTeamPickPending(false)
       ui.newGameRequired = false
-      Object.assign(ui, { screen: 'home', trainingPlayerId: null, trainingBookIds: [], trainingTeammateIds: [], peakCardPlayerId: null, peakCardAttr: null, detailPlayerId: null, reviewId: null, lineupDraft: null, lineupSlot: null, autoSubsDraft: null, matchAutoSubsDraft: null, notice: '新游戏已创建。', matchEngine: null, matchPlaying: false, completing: false, coachPanel: false, seasonRound: null, worldDivision: null, worldRound: null, worldFixtureClubId: 'ALL', worldClubId: null, worldPlayerId: null, newGameOpen: false, newGameClubId: null })
+      Object.assign(ui, { screen: 'home', trainingPlayerId: null, trainingPointSpend: 0, recycleSelectedIds: [], recycleConfirm: false, trainingBookIds: [], trainingTeammateIds: [], peakCardPlayerId: null, peakCardAttr: null, detailPlayerId: null, reviewId: null, lineupDraft: null, lineupSlot: null, autoSubsDraft: null, matchAutoSubsDraft: null, notice: '新游戏已创建。', matchEngine: null, matchPlaying: false, completing: false, coachPanel: false, seasonRound: null, worldDivision: null, worldRound: null, worldFixtureClubId: 'ALL', worldClubId: null, worldPlayerId: null, newGameOpen: false, newGameClubId: null })
       maybeOpenChangelog()
       render()
       break
@@ -1461,8 +1548,19 @@ document.addEventListener('click', async (event) => {
       render()
       break
     case 'start-training':
-      if (playerId) startTrainingFor(playerId)
+      if (playerId) await startTrainingFor(playerId)
       break
+    case 'training-points-select': {
+      const points = Number(actionEl.dataset.points)
+      if (playerId && playerId === ui.trainingPlayerId && TRAINING_POINT_TIERS.some((tier) => tier.points === points) && points <= (game.trainingPoints ?? 0)) {
+        // 切换档位会重绘弹窗，先保留细调页尚未提交的目标值。
+        const targets = trainingTargetDraft(playerId)
+        if (targets) setAutoTrainingConfig(game, playerId, { targets, preset: 'custom' })
+        ui.trainingPointSpend = points as 0 | 10 | 20 | 30
+        render()
+      }
+      break
+    }
     case 'open-training':
       if (playerId) openTraining(playerId)
       break
@@ -1550,19 +1648,9 @@ document.addEventListener('click', async (event) => {
     case 'training-auto-confirm': {
       const id = playerId ?? ui.trainingPlayerId
       if (!id) break
-      const targetInputs = document.querySelectorAll<HTMLInputElement>('input[data-auto-target]')
-      if (targetInputs.length > 0) {
-        const targets: Partial<Record<AttrKey, number>> = { ...autoTrainingConfig(game, id).targets }
-        targetInputs.forEach((input) => {
-          const key = input.dataset.autoTarget as AttrKey | undefined
-          if (!key) return
-          const value = Number(input.value)
-          targets[key] = Number.isFinite(value) ? Math.round(Math.max(0, Math.min(2000, value))) : 0
-        })
-        setAutoTrainingConfig(game, id, { targets, preset: 'custom' })
-      }
+      const targets = trainingTargetDraft(id)
       if (!game.training[id] && !game.candidates[id]) {
-        const started = startTrainingWithSupport(game, id, undefined, ui.trainingBookIds)
+        const started = await beginTraining(id)
         if (!started.ok) {
           showNotice(started.error ?? '无法开始培养')
           break
@@ -1572,7 +1660,7 @@ document.addEventListener('click', async (event) => {
         ui.trainingPlayerId = id
         ui.screen = 'training'
       }
-      setAutoTrainingConfig(game, id, { autopilot: true })
+      setAutoTrainingConfig(game, id, { ...(targets ? { targets, preset: 'custom' as const } : {}), autopilot: true })
       ui.autoStrategyOpen = false
       ui.autoStrategyDetail = false
       persist()
@@ -1592,6 +1680,10 @@ document.addEventListener('click', async (event) => {
         render()
         break
       }
+      if (ui.trainingPlayerId !== id) {
+        ui.trainingPointSpend = 0
+        ui.trainingBookIds = trainingBookLoadout(game, id)
+      }
       ui.trainingPlayerId = id
       ui.autoStrategyOpen = true
       ui.autoStrategyDetail = false
@@ -1599,7 +1691,11 @@ document.addEventListener('click', async (event) => {
       break
     }
     case 'auto-strategy-open':
-      if (playerId) ui.trainingPlayerId = playerId
+      if (playerId && ui.trainingPlayerId !== playerId) {
+        ui.trainingPlayerId = playerId
+        ui.trainingPointSpend = 0
+        ui.trainingBookIds = trainingBookLoadout(game, playerId)
+      }
       ui.autoStrategyOpen = true
       ui.autoStrategyDetail = false
       render()
@@ -1649,6 +1745,108 @@ document.addEventListener('click', async (event) => {
     case 'card-equip':
       if (playerId) equipFromUI(playerId, actionEl.dataset.card || null)
       break
+    case 'card-recycle-select-all': {
+      const ids = [...document.querySelectorAll<HTMLInputElement>('input[data-recycle-card]:not(:disabled)')]
+        .map((input) => input.dataset.recycleCard).filter((id): id is string => !!id)
+      ui.recycleSelectedIds = [...new Set([...ui.recycleSelectedIds, ...ids])]
+      ui.recycleConfirm = false
+      render()
+      break
+    }
+    case 'card-recycle-open': {
+      if (sharedActionUnavailable()) { showNotice('联机连接已断开，请先重新连接服务器'); break }
+      if (isOnlineMode()) {
+        cardActionPending = true
+        syncAutoTraining()
+        ui.notice = '正在同步球员卡，请稍候…'
+        render()
+        try {
+          await flushOnlineNow()
+          if (!isOnlineMode() || onlineState.error) throw new Error(onlineState.error || '请先连接服务器')
+        } catch (error) {
+          cardActionPending = false
+          showNotice(error instanceof Error ? error.message : '同步失败，请重试')
+          break
+        }
+        cardActionPending = false
+      }
+      const cards = selectedRecycleCards()
+      ui.recycleSelectedIds = cards.map((card) => card.id)
+      if (!cards.length) { showNotice('请先选择可回收的球员卡。'); break }
+      recyclePreviewSnapshot = JSON.stringify(cards)
+      recyclePreviewRevision = isOnlineMode() ? onlineState.revision : null
+      ui.recycleConfirm = true
+      ui.notice = '请核对回收预览；确认后无法恢复。'
+      render()
+      document.getElementById('recycle-preview-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      break
+    }
+    case 'card-recycle-cancel':
+      ui.recycleConfirm = false
+      render()
+      break
+    case 'card-recycle-lock': {
+      const id = actionEl.dataset.card
+      const locked = actionEl.dataset.locked === 'true'
+      if (!id) break
+      if (sharedActionUnavailable()) { showNotice('联机连接已断开，请先重新连接服务器'); break }
+      cardActionPending = true
+      syncAutoTraining()
+      try {
+        if (isOnlineMode()) {
+          ui.notice = '服务器正在确认锁定状态，请稍候…'
+          render()
+          await setCardRecycleLockOnline(id, locked)
+        }
+        else {
+          const result = commitOfflineTransaction(() => setCardRecycleLock(game, id, locked))
+          if (!result.ok) throw new Error(result.error ?? '操作失败')
+        }
+        if (locked) ui.recycleSelectedIds = ui.recycleSelectedIds.filter((item) => item !== id)
+        ui.recycleConfirm = false
+        ui.notice = locked ? '球员卡已锁定，不能回收或手动删除；挂牌出售成交仍会销毁。' : '球员卡已解锁。'
+      } catch (error) {
+        ui.notice = error instanceof Error ? error.message : '锁定操作失败'
+      } finally {
+        cardActionPending = false
+      }
+      render()
+      break
+    }
+    case 'card-recycle-confirm': {
+      if (!ui.recycleConfirm) break
+      const cards = selectedRecycleCards()
+      const ids = cards.map((card) => card.id)
+      if (!ids.length || JSON.stringify(cards) !== recyclePreviewSnapshot || (isOnlineMode() && recyclePreviewRevision !== onlineState.revision)) {
+        ui.recycleConfirm = false
+        showNotice('球员卡或存档状态已变化，请重新预览后确认。')
+        break
+      }
+      if (sharedActionUnavailable()) { showNotice('联机连接已断开，请先重新连接服务器'); break }
+      cardActionPending = true
+      syncAutoTraining()
+      try {
+        if (isOnlineMode()) {
+          ui.notice = '服务器正在确认回收，请稍候…'
+          render()
+          if (recyclePreviewRevision === null) throw new Error('回收预览已失效，请重新预览。')
+          await recycleCardsOnline(ids, recyclePreviewRevision)
+        } else {
+          const result = commitOfflineTransaction(() => recyclePlayerCards(game, ids))
+          if (!result.ok) throw new Error(result.error ?? '回收失败')
+        }
+        ui.recycleSelectedIds = []
+        ui.recycleConfirm = false
+        ui.notice = `已回收 ${ids.length} 张球员卡，共享培养点余额 ${game.trainingPoints ?? 0}。`
+      } catch (error) {
+        ui.recycleConfirm = false
+        ui.notice = error instanceof Error ? error.message : '回收失败'
+      } finally {
+        cardActionPending = false
+      }
+      render()
+      break
+    }
     case 'card-delete':
       ui.cardDeleteId = actionEl.dataset.card ?? null
       render()
@@ -1939,6 +2137,7 @@ document.addEventListener('click', async (event) => {
       completeMatch()
       break
     case 'boot-online':
+      onlineSessionRequested = true
       ui.bootGate = false
       if (hasOnlineSession()) {
         joinOnline()
@@ -1951,6 +2150,7 @@ document.addEventListener('click', async (event) => {
       break
     case 'boot-offline':
       // 保留令牌，但这次不连服务器：不会建立 remote saver，存档只留在本机。
+      onlineSessionRequested = false
       ui.bootGate = false
       ui.notice = '离线模式：本次不会连接服务器。'
       // 本地存档是系统自动建的、还没自己选过球队：先让玩家挑一支。
@@ -2155,7 +2355,18 @@ document.addEventListener('click', async (event) => {
 })
 
 document.addEventListener('change', (event) => {
+  if (trainingStartPending || cardActionPending) return
   const target = event.target as HTMLSelectElement | HTMLInputElement
+  if (target.dataset.recycleCard !== undefined) {
+    const id = target.dataset.recycleCard
+    if (!id || (target as HTMLInputElement).disabled) return
+    ui.recycleSelectedIds = (target as HTMLInputElement).checked
+      ? [...new Set([...ui.recycleSelectedIds, id])]
+      : ui.recycleSelectedIds.filter((item) => item !== id)
+    ui.recycleConfirm = false
+    render()
+    return
+  }
   if (target.dataset.playerCompareBase !== undefined) {
     if (comparisonCandidates().some((player) => player.id === target.value)) {
       const previous = ui.detailPlayerId
@@ -2300,6 +2511,7 @@ document.addEventListener('change', (event) => {
     return
   }
   if (target.id === 'training-player-select') {
+    ui.trainingPointSpend = 0
     ui.trainingTeammateIds = []
     ui.trainingEventReplacements = {}
     ui.trainingPlayerId = target.value || null
@@ -2339,6 +2551,7 @@ document.addEventListener('change', (event) => {
 })
 
 document.addEventListener('input', (event) => {
+  if (trainingStartPending || cardActionPending) return
   const target = event.target as HTMLInputElement
   if (target.id === 'legend-search') { ui.legendSearch = target.value; render(); return }
   if (target.matches?.('[data-rp-seek]')) {

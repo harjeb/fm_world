@@ -50,6 +50,7 @@ function marketTab(): string {
       <td class="price-cell"><input type="number" class="compact" min="1" max="9007199254740991" step="1" value="${suggestedPrice(game, player)}" aria-label="${esc(player.name)} 的要价" data-club-price="${esc(player.id)}"><button class="btn small" data-action="club-list" data-player="${esc(player.id)}">挂牌</button></td>
     </tr>`).join('')}</tbody></table></div>`
   return `<div class="banner ${open ? 'good' : 'muted'}">${icon('swap', 16)}<b>${game.world ? (open ? '转会窗口开放' : '转会窗口关闭') : '市场开放'}</b><span>仅与本地 NPC 交易，并非玩家之间的市场。${game.world ? '转会窗口：第 1-10 轮、20-30 轮。' : ''}</span></div>
+    <p class="hint">挂牌出售成交后，该球员的全部球员卡都会销毁，锁定的卡也不例外；挂牌前可先回收不需要的卡。</p>
     <div class="grid two">
       <div class="dash-col">
         ${panel(`已挂牌 <small>${market?.listings.length ?? 0}</small>`, listings, { flush: true })}
