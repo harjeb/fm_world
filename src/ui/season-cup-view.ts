@@ -5,23 +5,11 @@ import { seasonCupLeaders, type CupLeaderKind } from '../game/season-cup-stats.t
 import { CUP_DEFS } from '../game/data/cup-config.ts'
 import { buildSeasonCupBracket, type CupBracketNode } from './season-cup-bracket.ts'
 import { clubName, emptyState, pageHead, panel } from './components.ts'
-import { esc } from './format.ts'
+import { cupRoundLabel, esc, kickoffTimeLabel } from './format.ts'
 
 const CUP_ORDER: SeasonCupId[] = ['community', 'league', 'champions', 'cross']
 
 function displayId(id: string, ownId: string): string { return id === ownId ? 'player' : id }
-function kickoff(at: number): string {
-  return new Date(at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
-}
-function roundLabel(round: number, total: number, prelim: boolean): string {
-  if (round === 1 && prelim) return '预选赛'
-  const remaining = total - round
-  if (remaining === 0) return '决赛'
-  if (remaining === 1) return '半决赛'
-  if (remaining === 2) return '四分之一决赛'
-  const teams = 2 ** (remaining + 1)
-  return `${teams} 强`
-}
 function nodeWinner(node: CupBracketNode): string | undefined {
   return node.byeTeam ?? (node.fixture?.played ? node.fixture.winnerId : undefined)
 }
@@ -35,8 +23,8 @@ function bracketCard(game: GameState, cup: SeasonCup, node: CupBracketNode, ownI
   const score = fixture?.played ? fixture.score : undefined
   const replay = fixture?.matchId && game.challengeHistory.some(record => record.id === fixture.matchId)
   const bye = !!node.byeTeam
-  const title = roundLabel(node.round, cup.dates.length, cup.rounds[0].byes.length > 0)
-  return `<article class="sc-card${bye ? ' sc-bye' : ''}" data-cup-node="${esc(node.id)}"><header><span>${esc(title)}</span><time>${esc(kickoff(cup.dates[node.round - 1]))}</time></header>
+  const title = cupRoundLabel(node.round, cup.dates.length, cup.rounds[0].byes.length > 0)
+  return `<article class="sc-card${bye ? ' sc-bye' : ''}" data-cup-node="${esc(node.id)}"><header><span>${esc(title)}</span><time>${esc(kickoffTimeLabel(cup.dates[node.round - 1]))}</time></header>
     ${teamCell(home, ownId, '前轮胜者待定', score?.home, !!fixture?.winnerId && fixture.winnerId === home)}
     ${bye ? '<div class="sc-bye-label">轮空 · 直接晋级</div>' : teamCell(away, ownId, '前轮胜者待定', score?.away, !!fixture?.winnerId && fixture.winnerId === away)}
     ${fixture?.shootout ? `<div class="sc-card-extra">点球 ${fixture.shootout.home} : ${fixture.shootout.away}</div>` : ''}
@@ -48,7 +36,7 @@ function renderBranch(game: GameState, cup: SeasonCup, node: CupBracketNode, own
   return `<div class="sc-branch"><div class="sc-children"><div class="sc-child">${renderBranch(game, cup, node.children[0], ownId)}</div><div class="sc-child">${renderBranch(game, cup, node.children[1], ownId)}</div></div><div class="sc-parent">${card}</div></div>`
 }
 function fixtureList(cup: SeasonCup, ownId: string): string {
-  return cup.rounds.map(round => `<section class="sc-fallback-round"><h3>第 ${round.round} 轮 · ${esc(kickoff(round.kickoffAt))}</h3><div class="rows">${round.byes.map(id => `<div class="row-line">${clubName(displayId(id, ownId), 17)}<span class="muted">轮空</span></div>`).join('')}${round.fixtures.map(fixture => `<div class="row-line">${clubName(displayId(fixture.homeId, ownId), 17)}<b>${fixture.score ? `${fixture.score.home} : ${fixture.score.away}` : 'VS'}</b>${clubName(displayId(fixture.awayId, ownId), 17)}</div>`).join('')}</div></section>`).join('')
+  return cup.rounds.map(round => `<section class="sc-fallback-round"><h3>第 ${round.round} 轮 · ${esc(kickoffTimeLabel(round.kickoffAt))}</h3><div class="rows">${round.byes.map(id => `<div class="row-line">${clubName(displayId(id, ownId), 17)}<span class="muted">轮空</span></div>`).join('')}${round.fixtures.map(fixture => `<div class="row-line">${clubName(displayId(fixture.homeId, ownId), 17)}<b>${fixture.score ? `${fixture.score.home} : ${fixture.score.away}` : 'VS'}</b>${clubName(displayId(fixture.awayId, ownId), 17)}</div>`).join('')}</div></section>`).join('')
 }
 function bracketPanel(game: GameState, cup: SeasonCup, ownId: string, drawSeed: number | undefined): string {
   const root = buildSeasonCupBracket(cup, drawSeed)
@@ -70,7 +58,7 @@ function legacyHistory(game: GameState): string {
   const rows = [...unique.values()].sort((a, b) => b.seasonIndex - a.seasonIndex).map(run => {
     const name = CUP_DEFS.find(def => def.id === run.cupId)?.name ?? run.cupId
     const fixtures = [...(run.groups ?? []).flatMap(group => group.fixtures ?? []), ...(run.rounds ?? []).flatMap(round => round.ties.flatMap(tie => tie.legs))].filter(fixture => fixture.played && fixture.score)
-    return `<details><summary>第 ${run.seasonIndex} 赛季 · ${esc(name)} · ${esc(labels[run.status] ?? run.status)}</summary><div class="rows">${fixtures.map(fixture => `<div class="row-line"><span>${esc(fixture.homeId === 'player' ? game.clubName : run.participants[fixture.homeId]?.name ?? fixture.homeId)} ${fixture.score!.home} : ${fixture.score!.away} ${esc(fixture.awayId === 'player' ? game.clubName : run.participants[fixture.awayId]?.name ?? fixture.awayId)}</span></div>`).join('') || '<p class="hint pad">没有已保存的比赛。</p>'}</div></details>`
+    return `<details><summary>第 ${run.seasonIndex} 赛季 · ${esc(name)} · ${esc(labels[run.status] ?? run.status)}</summary><div class="rows">${fixtures.map(fixture => `<div class="row-line"><span>${fixture.homeId === 'player' ? `<span class="own-name">${esc(game.clubName)}</span>` : esc(run.participants[fixture.homeId]?.name ?? fixture.homeId)} ${fixture.score!.home} : ${fixture.score!.away} ${fixture.awayId === 'player' ? `<span class="own-name">${esc(game.clubName)}</span>` : esc(run.participants[fixture.awayId]?.name ?? fixture.awayId)}</span></div>`).join('') || '<p class="hint pad">没有已保存的比赛。</p>'}</div></details>`
   }).join('')
   return panel('旧版挑战杯历史', `<p class="hint pad">旧赛程已关闭，已获得的奖杯和奖励保留。</p>${rows}`, { flush: true })
 }

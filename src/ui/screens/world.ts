@@ -5,7 +5,7 @@ import { renderClubRankTrendPanel } from '../rank-chart.ts'
 import { inPostseason, nextSeasonCountdown, PLAYER_TEAM_ID } from '../../game/season.ts'
 import { publicWorld, onlineState } from '../../online.ts'
 import { clubRosterPanel, divisionRatings, publicClubFor } from '../club-view.ts'
-import { clubLook, crest, emptyState, fixtureRow, humanMark, icon, leagueTable, pageHead, panel, tag } from '../components.ts'
+import { clubLook, crest, emptyState, fixtureRow, humanMark, icon, leagueTable, ownName, pageHead, panel, tag } from '../components.ts'
 import { esc } from '../format.ts'
 import { WORLD_CLUB_DEFS } from '../../game/data/world-clubs.ts'
 import { game, ui } from '../state.ts'
@@ -55,7 +55,7 @@ function tierButton(world: WorldState, item: DivisionTierMeta, activeId: string)
   return `<button class="tier ${activeId === item.id ? 'active' : ''} ${mine ? 'mine' : ''}" data-world-div="${esc(item.id)}">
     <span class="tier-title"><b>${esc(item.label)}</b>${mine ? tag('你在这里', 'solid') : ''}</span>
     <span class="tier-note">${esc(item.note)}</span>
-    <span class="tier-meta"><span>${played} / ${total} 场</span>${leader ? `<span class="club">${crest({ name: leaderName, color: leader.color }, 15)}<span>${esc(leaderName)}${humanMark(leader.id === ownId ? PLAYER_TEAM_ID : leader.id)} 领跑</span></span>` : ''}</span>
+    <span class="tier-meta"><span>${played} / ${total} 场</span>${leader ? `<span class="club">${crest({ name: leaderName, color: leader.color }, 15)}<span>${ownName(leaderName, leader.id === PLAYER_TEAM_ID || leader.id === ownId)}${humanMark(leader.id === ownId ? PLAYER_TEAM_ID : leader.id)} 领跑</span></span>` : ''}</span>
     ${topScorer || topAssist ? `<span class="tier-leaders">
       ${topScorer ? `<span class="tier-leader"><small>射手</small>${esc(topScorer.name)} <b>${topScorer.goals}</b></span>` : ''}
       ${topAssist ? `<span class="tier-leader"><small>助攻</small>${esc(topAssist.name)} <b>${topAssist.assists}</b></span>` : ''}
@@ -107,7 +107,7 @@ function divisionMatchHistoryPanel(
       : `<div class="fx-list">${clubMatches.slice(0, 6).map((fx) => fixtureRow(fx, { highlightTeamId: validClubFilter, showRound: true })).join('')}</div><p class="hint pad">该球队本赛季尚未产生完赛记录，上方为前 6 轮赛程。</p>`
 
     return panel(
-      `${esc(nameOf(validClubFilter))} · 联赛比赛记录`,
+      `${ownName(nameOf(validClubFilter), validClubFilter === PLAYER_TEAM_ID)} · 联赛比赛记录`,
       `<div class="world-fx-bar">
         <select class="world-fx-select" data-world-fx-club aria-label="按球队筛选比赛记录">${clubOptions}</select>
         <span class="muted small">已完赛 ${playedMatches.length} 场 · ${won}胜 ${drawn}平 ${lost}负</span>
@@ -203,7 +203,7 @@ export function renderWorld(): string {
     ${pageHead({
       kicker: `赛季 ${snapshot?.seasonIndex ?? world.seasonIndex} · ${snapshot?.clubs.length ?? world.clubs.length} 支球队`,
       title: '三级共享世界',
-      sub: `冠军联赛 / 一级联赛 / 二级联赛（南北两区）。当前执教：<b>${esc(game.clubName)}</b> · ${worldTierLabel(playerClub?.tier ?? 'division2')}${playerClub?.conference ? ` · ${playerClub.conference === 'north' ? '北区' : playerClub.conference === 'south' ? '南区' : playerClub.conference}` : ''}。`,
+      sub: `冠军联赛 / 一级联赛 / 二级联赛（南北两区）。当前执教：<b>${ownName(game.clubName)}</b> · ${worldTierLabel(playerClub?.tier ?? 'division2')}${playerClub?.conference ? ` · ${playerClub.conference === 'north' ? '北区' : playerClub.conference === 'south' ? '南区' : playerClub.conference}` : ''}。`,
       actions: `${onlineState.status === 'online' ? '' : '<button class="btn" data-action="new-game">开始本地新游戏</button>'}`,
     })}
     ${inPostseason(game) ? `<div class="banner info">${icon('clock', 18)}<b>赛后休整 · 还剩 ${esc(nextSeasonCountdown(game))}</b><span>升级杯正在进行；所有球队都可以约友谊赛，赛季将在休整窗口结束后自动开始。</span></div>` : ''}
@@ -224,9 +224,9 @@ export function renderWorld(): string {
             <li>${icon('flag', 13)}二级每个赛区的前 3 名进入升级杯：各区第 1 轮空，2/3 名先加赛一轮；出线的人和轮空的球队随机分成两组打循环（瑞士轮），小组第一直接升级，两个小组第二再打一轮，胜者拿到第 3 个升级名额。</li>
             <li>${icon('flag', 13)}赛区数量不影响升级名额：不管开多少个区，二级每个赛季都是 3 队升入一级联赛。</li>
           </ul>
-          ${playoff ? `<p class="small">升级杯：${playoff.promoted.map((id) => esc(clubLabel(id))).join('、') || '进行中'}</p>` : '<p class="hint">常规赛结束后先休整 12 个游戏日踢升级杯，期间可以安排友谊赛。</p>'}
+          ${playoff ? `<p class="small">升级杯：${playoff.promoted.map((id) => ownName(clubLabel(id), clubLabel(id) === game.clubName)).join('、') || '进行中'}</p>` : '<p class="hint">常规赛结束后先休整 12 个游戏日踢升级杯，期间可以安排友谊赛。</p>'}
         `)}
-        ${world.history.length ? panel('历届荣誉', `<div class="rows">${world.history.slice().reverse().slice(0, 5).map((item) => `<div class="row-line"><span class="dim">第 ${item.seasonIndex} 赛季</span><span>冠军 ${esc(item.champion)}</span><span class="muted small">升级 ${item.promotions.length} 队</span></div>`).join('')}</div>`, { flush: true }) : ''}
+        ${world.history.length ? panel('历届荣誉', `<div class="rows">${world.history.slice().reverse().slice(0, 5).map((item) => `<div class="row-line"><span class="dim">第 ${item.seasonIndex} 赛季</span><span>冠军 ${ownName(item.champion, item.champion === game.clubName)}</span><span class="muted small">升级 ${item.promotions.length} 队</span></div>`).join('')}</div>`, { flush: true }) : ''}
         ${panel('球队席位', `
           <p class="hint">新账号只会接管<b>二级联赛</b>的空位；二级满员后服务器自动开一个新赛区（第 3 区、第 4 区……），不会把你塞进一级或冠军联赛。联机账号不能自行重开世界；退出账号后可以创建独立的本地存档。</p>
           <div class="club-chips">${picks.slice(0, 8).map((club) => `<span class="club-chip">${crest({ name: club.name, color: colorOf(club.id) }, 15)}${esc(club.name)}<small>${club.conference === 'north' ? '北区' : '南区'}</small></span>`).join('')}</div>

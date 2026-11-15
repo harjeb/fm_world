@@ -5,7 +5,7 @@ import { buildCupField, buildCupGroups } from '../game/cup.ts'
 import { cupPlayerFixture } from '../game/cup-run.ts'
 import { sortCupTable } from '../game/cup-table.ts'
 import { splitSeed } from '../game/rng.ts'
-import { panel, tag } from './components.ts'
+import { ownName, panel, tag } from './components.ts'
 import { esc } from './format.ts'
 import { pveTeamButton } from './pve-details.ts'
 import { game, ui } from './state.ts'
@@ -20,7 +20,7 @@ function review(fixture: CupFixture): string {
 }
 
 function teamLink(run: CupRun, id: string): string {
-  return id === 'player' ? `<b>${esc(game.clubName)} ${tag('你', 'good')}</b>`
+  return id === 'player' ? `<b class="own-name">${esc(game.clubName)} ${tag('你', 'good')}</b>`
     : pveTeamButton(`cup:${run.cupId}:${id}`, nameOf(run, id))
 }
 
@@ -30,11 +30,11 @@ function fixtureRow(run: CupRun, fixture: CupFixture): string {
 
 function runView(run: CupRun): string {
   const next = cupPlayerFixture(run)
-  const nextText = next ? `${STAGE[run.stage]} · ${nameOf(run, next.fixture.homeId)} vs ${nameOf(run, next.fixture.awayId)}${next.tie?.legs.length === 2 ? ` · 第 ${next.fixture.round} 回合` : ''}` : STATUS[run.status]
+  const nextText = next ? `${STAGE[run.stage]} · ${ownName(nameOf(run, next.fixture.homeId), next.fixture.homeId === 'player')} vs ${ownName(nameOf(run, next.fixture.awayId), next.fixture.awayId === 'player')}${next.tie?.legs.length === 2 ? ` · 第 ${next.fixture.round} 回合` : ''}` : STATUS[run.status]
   const seed = splitSeed(CUP_SEED, `${run.cupId}-${run.seasonIndex}`)
   const rounds = [...(run.rounds ?? [])]
   if (run.knockout && !rounds.some((round) => round.round === run.knockout!.round)) rounds.push(run.knockout)
-  return `<p class="hint pad">第 ${run.seasonIndex} 赛季 · ${esc(nextText)}。小组前 2 出线；两回合不计客场进球，总比分平局才点球。</p>
+  return `<p class="hint pad">第 ${run.seasonIndex} 赛季 · ${nextText}。小组前 2 出线；两回合不计客场进球，总比分平局才点球。</p>
     <div class="cup-groups">${run.groups.map((group) => `<details class="cup-group" ${group.index === run.playerGroupIndex ? 'open' : ''}>
       <summary>${String.fromCharCode(65 + group.index)} 组 ${group.index === run.playerGroupIndex ? '· 你的分组' : ''}</summary>
       <div class="table-scroll"><table class="dt"><thead><tr><th>球队</th><th>场</th><th>胜/平/负</th><th>进:失</th><th>分</th></tr></thead><tbody>
@@ -43,14 +43,14 @@ function runView(run: CupRun): string {
     </details>`).join('')}</div>
     ${rounds.map((round) => panel(STAGE[round.round], `<div class="cup-ties">${round.ties.map((tie) => `<div class="cup-tie">
       ${tie.legs.map((fixture) => fixtureRow(run, fixture)).join('')}
-      ${tie.aggregate ? `<p class="small">总比分（${esc(nameOf(run, tie.legs[0].homeId))} 在前）：<b>${tie.aggregate.home}:${tie.aggregate.away}</b>${tie.shootout ? ` · 点球 ${tie.shootout.home}:${tie.shootout.away}` : ''}</p>` : ''}
-      ${tie.winnerId ? `<p class="small">${round.round === 'final' ? '冠军' : '晋级'}：${esc(nameOf(run, tie.winnerId))}</p>` : ''}
+      ${tie.aggregate ? `<p class="small">总比分（${ownName(nameOf(run, tie.legs[0].homeId), tie.legs[0].homeId === 'player')} 在前）：<b>${tie.aggregate.home}:${tie.aggregate.away}</b>${tie.shootout ? ` · 点球 ${tie.shootout.home}:${tie.shootout.away}` : ''}</p>` : ''}
+      ${tie.winnerId ? `<p class="small">${round.round === 'final' ? '冠军' : '晋级'}：${ownName(nameOf(run, tie.winnerId), tie.winnerId === 'player')}</p>` : ''}
     </div>`).join('')}</div>`, { flush: true })).join('')}`
 }
 
 function preview(cupId: CupId): string {
   const groups = buildCupGroups(cupId, buildCupField(cupId, game), game.season.index)
-  return `<div class="cup-groups">${groups.map((group) => `<section class="cup-group"><h3>${String.fromCharCode(65 + group.index)} 组</h3><ul>${group.teams.map((entry) => `<li>${tag(entry.kind === 'player' ? '你' : entry.kind === 'world' ? '世界' : '随机', entry.kind === 'player' ? 'good' : '')} ${esc(entry.name)}</li>`).join('')}</ul></section>`).join('')}</div><p class="hint pad">对手在赛季开始时确定：随机队每季重新生成，世界队使用季初阵容，本赛季保持不变。每组 4 队单循环，3 轮，按自己的节奏逐场比赛。</p>`
+  return `<div class="cup-groups">${groups.map((group) => `<section class="cup-group"><h3>${String.fromCharCode(65 + group.index)} 组</h3><ul>${group.teams.map((entry) => `<li>${tag(entry.kind === 'player' ? '你' : entry.kind === 'world' ? '世界' : '随机', entry.kind === 'player' ? 'good' : '')} ${ownName(entry.name, entry.kind === 'player')}</li>`).join('')}</ul></section>`).join('')}</div><p class="hint pad">对手在赛季开始时确定：随机队每季重新生成，世界队使用季初阵容，本赛季保持不变。每组 4 队单循环，3 轮，按自己的节奏逐场比赛。</p>`
 }
 
 export function renderCup(): string {

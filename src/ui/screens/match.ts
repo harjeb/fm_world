@@ -10,7 +10,7 @@ import { lineupLockState, PLAYER_TEAM_ID } from '../../game/season.ts'
 import { MAX_SUBS } from '../../game/squad.ts'
 import { isOnlineMode } from '../../online.ts'
 import { renderAutoSubEditor } from '../auto-sub-editor.ts'
-import { clubLook, compareRow, crest, distinctKit, emptyState, icon, meter, panel, posBadge, primaryPosition } from '../components.ts'
+import { clubLook, compareRow, crest, distinctKit, emptyState, icon, meter, ownName, panel, posBadge, primaryPosition } from '../components.ts'
 import { clockText, esc, positionLabel, teamStatusTacticBadge, teamTacticSummary } from '../format.ts'
 import { matchPlanLabel, matchPlanPhaseName } from '../../game/pes/match-plan.ts'
 import { game, ui } from '../state.ts'
@@ -46,7 +46,7 @@ function avgStamina(team: MatchTeamState): number {
   return Math.round((players.reduce((sum, player) => sum + staminaOf(player), 0) / players.length) * 10) / 10
 }
 
-function playerStatusTable(team: MatchTeamState, title: string, color: string): string {
+function playerStatusTable(team: MatchTeamState, title: string, color: string, own = false): string {
   const rows = onPitch(team).map((player) => {
     const marks = [
       player.stats.goals ? `<span class="mark goal">${player.stats.goals} 球</span>` : '',
@@ -55,7 +55,7 @@ function playerStatusTable(team: MatchTeamState, title: string, color: string): 
     ].join('')
     return `<tr data-key="${esc(player.id)}"><td>${posBadge(player.position)}</td><td class="name-cell"><span class="name-plain">${esc(player.name)}</span>${marks}</td><td class="meter-cell">${meter(staminaOf(player))}</td></tr>`
   }).join('')
-  return `<div class="status-team"><div class="status-head"><i class="swatch" style="background:${esc(color)}"></i><b>${esc(title)}</b><span class="muted small">换人 ${team.subsUsed} / ${MAX_SUBS}</span></div><div class="status-sub">${esc(teamStatusTacticBadge(team))}</div><table class="dt plain status-table"><tbody>${rows}</tbody></table></div>`
+  return `<div class="status-team"><div class="status-head"><i class="swatch" style="background:${esc(color)}"></i><b${own ? ' class="own-name"' : ''}>${esc(title)}</b><span class="muted small">换人 ${team.subsUsed} / ${MAX_SUBS}</span></div><div class="status-sub">${esc(teamStatusTacticBadge(team))}</div><table class="dt plain status-table"><tbody>${rows}</tbody></table></div>`
 }
 
 function coachPanel(engine: GameEngine): string {
@@ -134,13 +134,13 @@ export function renderMatch(): string {
   return `
     <div class="match-shell" style="--home:${esc(kits.home)};--away:${esc(kits.away)}">
       <div class="scoreboard">
-        <div class="score-team home">${crest({ name: home.name, color: kits.home }, 42)}<div class="score-team-text"><b>${esc(home.name)}</b><small>${active.context.homeAway === 'home' ? '你' : '对手'}</small></div></div>
+        <div class="score-team home">${crest({ name: home.name, color: kits.home }, 42)}<div class="score-team-text"><b${active.context.homeAway === 'home' ? ' class="own-name"' : ''}>${esc(home.name)}</b><small>${active.context.homeAway === 'home' ? '你' : '对手'}</small></div></div>
         <div class="score-main">
           <b>${state.score.home} : ${state.score.away}</b>
           ${state.shootout ? `<small>点球 ${state.shootout.home} : ${state.shootout.away}</small>` : ''}
           <span class="score-clock">${state.half === 1 ? '上半场' : '下半场'} · <span ${active.context.isLeague || active.preplayed ? 'data-league-clock' : isPesEngine(engine) ? 'data-pes-clock' : ''}>${clockText(matchClock)}</span> / ${clockText(MATCH_DISPLAY_SECONDS)}</span>
         </div>
-        <div class="score-team away"><div class="score-team-text"><b>${esc(away.name)}</b><small>${active.context.homeAway === 'away' ? '你 · ' : ''}${active.context.isLeague ? `联赛第 ${active.context.round} 轮` : active.context.mode === 'cup' ? '杯赛' : active.context.mode === 'peak' ? `巅峰之路 · 第 ${active.context.stage} 关` : active.context.mode === 'legend' ? '传奇挑战' : '友谊赛'}</small></div>${crest({ name: away.name, color: kits.away }, 42)}</div>
+        <div class="score-team away"><div class="score-team-text"><b${active.context.homeAway === 'away' ? ' class="own-name"' : ''}>${esc(away.name)}</b><small>${active.context.homeAway === 'away' ? '你 · ' : ''}${active.context.isLeague ? `联赛第 ${active.context.round} 轮` : active.context.mode === 'cup' ? '杯赛' : active.context.mode === 'peak' ? `巅峰之路 · 第 ${active.context.stage} 关` : active.context.mode === 'legend' ? '传奇挑战' : '友谊赛'}</small></div>${crest({ name: away.name, color: kits.away }, 42)}</div>
       </div>
       <div class="match-controls">
         <div class="seg" role="group" aria-label="球场视图"><button class="${ui.pitchView === 'match' ? 'active' : ''}" data-pitch-view="match">比赛</button><button class="${ui.pitchView === 'tracking' ? 'active' : ''}" data-pitch-view="tracking">战术轨迹</button></div>
@@ -164,7 +164,7 @@ export function renderMatch(): string {
           <div class="pitch-wrap"><canvas id="pitch" width="1200" height="768"></canvas></div>
           <div class="match-sub-grid">
             ${panel('比赛态势', `
-              <div class="cmp-head"><span><i class="swatch cmp-swatch-home"></i>${esc(home.name)}</span><span>${esc(away.name)}<i class="swatch cmp-swatch-away"></i></span></div>
+              <div class="cmp-head"><span><i class="swatch cmp-swatch-home"></i>${ownName(home.name, active.context.homeAway === 'home')}</span><span>${ownName(away.name, active.context.homeAway === 'away')}<i class="swatch cmp-swatch-away"></i></span></div>
               ${compareRow('控球', homePoss, 100 - homePoss, `${homePoss.toFixed(0)}%`, `${(100 - homePoss).toFixed(0)}%`)}
               ${compareRow('射门', homeStats.shots, awayStats.shots)}
               ${compareRow('射正', homeStats.shotsOnTarget, awayStats.shotsOnTarget)}
@@ -172,7 +172,7 @@ export function renderMatch(): string {
               ${compareRow('传球', homeStats.passesCompleted, awayStats.passesCompleted, `${homeStats.passesCompleted}/${homeStats.passes}`, `${awayStats.passesCompleted}/${awayStats.passes}`)}
               ${compareRow('平均体力', avgStamina(home), avgStamina(away), `${avgStamina(home)}%`, `${avgStamina(away)}%`)}
             `)}
-            ${panel('场上球员', `<div class="status-grid">${playerStatusTable(mine, mine.name, mineKit)}${playerStatusTable(theirs, theirs.name, theirKit)}</div>`)}
+            ${panel('场上球员', `<div class="status-grid">${playerStatusTable(mine, mine.name, mineKit, true)}${playerStatusTable(theirs, theirs.name, theirKit)}</div>`)}
           </div>
         </div>
         ${panel('文字直播', `<div class="event-log live commentary-log">${state.commentary ? state.commentary.slice().reverse().map((entry) => renderCommentary(entry, state.durationSeconds)).join('') : state.log.slice().reverse().map((entry) => renderEvent(entry, state.durationSeconds)).join('')}</div>`, { flush: true, className: 'live-panel', aside: `<span class="muted small">${state.commentary ? '全部已发生事件' : '旧存档 · 仅日志'}</span>` })}

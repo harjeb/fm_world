@@ -4,7 +4,7 @@ import { displayClock } from '../../game/match/time.ts'
 import { shotPositionText } from '../../game/match/shooting.ts'
 import { buildReview } from '../../game/review.ts'
 import { PLAYER_TEAM_ID } from '../../game/season.ts'
-import { clubLook, clubName, compareRow, crest, distinctKit, emptyState, icon, pageHead, panel, recordResult, resultPill, tag } from '../components.ts'
+import { clubLook, clubName, compareRow, crest, distinctKit, emptyState, icon, ownName, pageHead, panel, recordResult, resultPill, tag } from '../components.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
 import { clockText, esc, matchModeLabel, pveModeLabel, skillName } from '../format.ts'
 import { tipAttrs } from '../tooltip.ts'
@@ -60,9 +60,9 @@ function renderReplay(record: MatchRecord): string {
   const last = shown?.at(-1)
   return panel('文字播放器', `
     <div class="replay-score">
-      <span class="replay-team">${crest(clubLook(record.homeId), 30)}<b>${esc(record.homeName)}</b></span>
+      <span class="replay-team">${crest(clubLook(record.homeId), 30)}<b>${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)}</b></span>
       <b class="replay-digits">${entries ? (last ? `${last.score.home} : ${last.score.away}` : '0 : 0') : '— : —'}</b>
-      <span class="replay-team away"><b>${esc(record.awayName)}</b>${crest(clubLook(record.awayId), 30)}</span>
+      <span class="replay-team away"><b>${ownName(record.awayName, record.awayId === PLAYER_TEAM_ID)}</b>${crest(clubLook(record.awayId), 30)}</span>
       ${last?.shootoutScore ? `<small class="replay-shootout">点球 ${last.shootoutScore.home} : ${last.shootoutScore.away}</small>` : ''}
     </div>
     <div class="replay-controls">
@@ -114,9 +114,9 @@ function renderRecord(record: MatchRecord): string {
   return `
     ${pageHead({
       kicker: `<button class="link" data-action="back-review">${icon('left', 12)} 返回记录</button><span class="kicker-sep">${record.isLeague ? `联赛第 ${record.round} 轮` : pveModeLabel(record.mode, record.stage)} · 种子 ${record.seed}</span>`,
-      title: `${esc(record.homeName)} vs ${esc(record.awayName)}`,
+      title: `${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)} vs ${ownName(record.awayName, record.awayId === PLAYER_TEAM_ID)}`,
     })}
-    ${record.aggregateScore ? `<p class="banner info">两回合总比分：${esc(record.homeName)} ${record.aggregateScore.home}:${record.aggregateScore.away} ${esc(record.awayName)}${record.shootout ? ` · 点球 ${record.shootout.home}:${record.shootout.away}` : ''}（不计客场进球）</p>` : ''}
+    ${record.aggregateScore ? `<p class="banner info">两回合总比分：${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)} ${record.aggregateScore.home}:${record.aggregateScore.away} ${ownName(record.awayName, record.awayId === PLAYER_TEAM_ID)}${record.shootout ? ` · 点球 ${record.shootout.home}:${record.shootout.away}` : ''}（不计客场进球）</p>` : ''}
     ${renderReplay2D(record)}
     ${renderReplay(record)}
     <details class="review-details"><summary>${icon('review', 15)}展开完整赛后复盘（含最终结果）</summary>
@@ -130,7 +130,7 @@ function renderRecord(record: MatchRecord): string {
         ${renderGoals(record)}
         <div class="grid two">
           ${panel('比赛统计', `
-            <div class="cmp-head"><span><i class="swatch cmp-swatch-home"></i>${esc(record.homeName)}</span><span>${esc(record.awayName)}<i class="swatch cmp-swatch-away"></i></span></div>
+            <div class="cmp-head"><span><i class="swatch cmp-swatch-home"></i>${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)}</span><span>${ownName(record.awayName, record.awayId === PLAYER_TEAM_ID)}<i class="swatch cmp-swatch-away"></i></span></div>
             ${compareRow('控球率', home.possession, away.possession, `${home.possession}%`, `${away.possession}%`)}
             ${compareRow('射门', home.shots, away.shots)}
             ${compareRow('射正', home.shotsOnTarget, away.shotsOnTarget)}

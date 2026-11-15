@@ -16,11 +16,11 @@ import { legendBookLabel } from '../../game/legend-books.ts'
 import { cupTeam } from '../../game/cup-run.ts'
 import { startingCa } from '../../game/pve-strength.ts'
 import { pveContentReady } from '../../game/pve-content.ts'
-import { caHeat, clubName, icon, pageHead, panel, recordResult, resultPill, tag, tile } from '../components.ts'
+import { caHeat, clubName, icon, ownName, pageHead, panel, recordResult, resultPill, tag, tile } from '../components.ts'
 import { aiTeamTacticLabel, countdownText, esc, playerCA } from '../format.ts'
 import { game, ui } from '../state.ts'
 import { conferenceLabel } from '../../game/data/world-clubs.ts'
-import { inPostseason } from '../../game/season.ts'
+import { inPostseason, PLAYER_TEAM_ID } from '../../game/season.ts'
 import { isOnlineMode, onlineState, serverNow } from '../../online.ts'
 import { DEFAULT_FORMATION, FORMATIONS } from '../../game/data/formations.ts'
 import { coreNames, pveRoster, pveTeamButton } from '../pve-details.ts'
@@ -35,7 +35,7 @@ const MODE_SUB = {
 }
 
 function recordsPanel(records: MatchRecord[], title = '挑战记录'): string {
-  return panel(`${title} <small>${records.length}</small>`, records.length ? `<div class="rows">${records.slice(0, 30).map((record) => `<button class="row-btn result-row" data-action="open-review" data-record="${esc(record.id)}">${resultPill(recordResult(record.result))}<span class="result-teams">${esc(record.homeName)} <b>${record.score.home}:${record.score.away}</b> ${esc(record.awayName)}${record.shootout ? ` <small>点球 ${record.shootout.home}:${record.shootout.away}</small>` : ''}</span>${icon('right', 12)}</button>`).join('')}</div>` : '<p class="muted pad">还没有挑战记录。</p>', { flush: true })
+  return panel(`${title} <small>${records.length}</small>`, records.length ? `<div class="rows">${records.slice(0, 30).map((record) => `<button class="row-btn result-row" data-action="open-review" data-record="${esc(record.id)}">${resultPill(recordResult(record.result))}<span class="result-teams">${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)} <b>${record.score.home}:${record.score.away}</b> ${ownName(record.awayName, record.awayId === PLAYER_TEAM_ID)}${record.shootout ? ` <small>点球 ${record.shootout.home}:${record.shootout.away}</small>` : ''}</span>${icon('right', 12)}</button>`).join('')}</div>` : '<p class="muted pad">还没有挑战记录。</p>', { flush: true })
 }
 
 function renderFriendly(): string {

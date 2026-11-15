@@ -75,6 +75,8 @@ describe('总览下一轮预告', () => {
     onlineState.status = 'online'
     const html = renderHome()
     expect(html).toContain('社区杯 · 第 1 轮')
+    expect(html).toContain('>社区杯</span>')
+    expect(html).toContain('11/09 18:00')
     expect(html).toContain('下一轮预告')
     expect(nextMatchCountdown(game, cupAt - 60 * 60_000)).toBe('1 小时 0 分')
     expect(lineupLockState(game, cupAt - 30 * 60_000 - 1).locked).toBe(false)

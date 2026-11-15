@@ -67,6 +67,21 @@ export function countdownText(ms: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
 
+/** 比赛开赛时间（北京时间）：11/14 20:00。 */
+export function kickoffTimeLabel(at: number): string {
+  return new Date(at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
+/** 杯赛轮次名称：预选赛 / 16 强 / 1/4 决赛 / 半决赛 / 决赛。 */
+export function cupRoundLabel(round: number, total: number, prelim: boolean): string {
+  if (round === 1 && prelim) return '预选赛'
+  const remaining = total - round
+  if (remaining <= 0) return '决赛'
+  if (remaining === 1) return '半决赛'
+  if (remaining === 2) return '四分之一决赛'
+  return `${2 ** (remaining + 1)} 强`
+}
+
 export function shortName(name: string): string {
   return name.split('·').pop() || name
 }

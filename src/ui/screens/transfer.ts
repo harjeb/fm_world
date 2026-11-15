@@ -9,7 +9,7 @@ import { traitNameOf } from '../../game/data/star-traits.ts'
 import { SQUAD_LIMIT, aiTransferOffers, bestMarketValue, freeAgentAsking, saleChance, suggestedPrice, transferWindowOpen } from '../../game/market.ts'
 import { isOnMarketToday } from '../../game/market-window.ts'
 import { initialDisplayCA } from '../../game/rating.ts'
-import { caHeat, clubName, countryLabel, emptyState, icon, pageHead, panel, posBadge, primaryPosition, tag, traitLabel } from '../components.ts'
+import { caHeat, clubName, countryLabel, emptyState, icon, ownName, pageHead, panel, posBadge, primaryPosition, tag, traitLabel } from '../components.ts'
 import { countdownText, esc } from '../format.ts'
 import { isOnlineMode, marketState, onlineState, publicWorld, serverNow } from '../../online.ts'
 import { game, ui, type TransferTab } from '../state.ts'
@@ -110,7 +110,7 @@ function auctionTab(): string {
       <td class="num"><button class="btn small" data-action="auction-bid" data-player="${esc(player.id)}" data-amount="${opening}" ${canTrade && available >= opening && game.roster.length < 25 ? '' : 'disabled'}>出价</button></td>
     </tr>`
   }).join('')
-  const logRows = marketState.log.slice(0, 8).map((item) => `<li>${item.club ? `<b>${esc(item.club)}</b> 以 ${item.amount.toLocaleString()} 签下 ${esc(item.playerName)}` : `${esc(item.playerName)} 流拍，回到市场`}</li>`).join('')
+  const logRows = marketState.log.slice(0, 8).map((item) => `<li>${item.club ? `<b>${ownName(item.club, item.club === game.clubName)}</b> 以 ${item.amount.toLocaleString()} 签下 ${esc(item.playerName)}` : `${esc(item.playerName)} 流拍，回到市场`}</li>`).join('')
   return `
     <p class="hint">${icon('clock', 13)} 第一口出价开始 ${AUCTION_DURATION_MS / 3_600_000} 小时倒计时，全服可见；最后 ${AUCTION_EXTEND_MS / 60_000} 分钟内有人跟价，倒计时重新回到 ${AUCTION_EXTEND_MS / 60_000} 分钟。跟价每次至少加 5%，并交出价 2%（至少 1,000）的手续费，手续费不退还。</p>
     ${running.length ? panel(`竞拍中 <small>${running.length}</small>`, `<div class="table-scroll"><table class="dt auction-table"><thead><tr><th>位置</th><th>球员</th><th class="num">龄</th><th class="num">原始 CA</th><th>特性</th><th class="num">当前价</th><th>领先</th><th class="num">倒计时</th><th class="num">出价</th></tr></thead><tbody>${auctionRows}</tbody></table></div>`, { flush: true }) : ''}

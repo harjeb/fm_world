@@ -6,7 +6,7 @@ import { isOnlineMode } from '../../online.ts'
 import { BASE_ROUND_INCOME, economyOf, FACILITIES, facilityLevel, facilityRoundIncome, facilityStageChance, facilityStageInLevel, facilityUpgradeCost, GOAL_INCOME_BONUS, LEAGUE_WIN_BONUS, MAX_FACILITY_LEVEL, MAX_FACILITY_STAGE, projectedRoundIncome, STAGES_PER_LEVEL, type FacilityId } from '../../game/economy.ts'
 import { CATEGORY_BONUS_PER_LEVEL, STADIUM_BONUS_PER_LEVEL } from '../../game/training.ts'
 import { bestMarketValue, transferWindowOpen } from '../../game/market.ts'
-import { caHeat, icon, pageHead, panel, posBadge, primaryPosition, tag, tile } from '../components.ts'
+import { caHeat, icon, ownName, pageHead, panel, posBadge, primaryPosition, tag, tile } from '../components.ts'
 import { esc, playerCA } from '../format.ts'
 import type { IconName } from '../icons.ts'
 import { game, ui, type ClubTab } from '../state.ts'
@@ -99,7 +99,7 @@ function historyTab(): string {
       <td class="num">${row ? `${row.won} / ${row.drawn} / ${row.lost}` : '—'}</td>
       <td class="num">${row ? `${row.gf} : ${row.ga}` : '—'}</td>
       <td class="num strong">${row?.points ?? '—'}</td>
-      <td>${season.finished ? esc(clubNameOf(season.champion)) : '<span class="muted">—</span>'}</td>
+      <td>${season.finished ? ownName(clubNameOf(season.champion), season.champion === PLAYER_TEAM_ID) : '<span class="muted">—</span>'}</td>
       <td>${badges}</td>
     </tr>`
   }).reverse().join('')
@@ -216,7 +216,7 @@ export function renderClub(): string {
   const net = income - wagesDue
   const body = ui.clubTab === 'contracts' ? contractsTab() : ui.clubTab === 'history' ? historyTab() : facilitiesTab()
   return `
-    ${pageHead({ kicker: '俱乐部', title: esc(game.clubName) })}
+    ${pageHead({ kicker: '俱乐部', title: ownName(game.clubName) })}
     ${renameRow()}
     <div class="kpi-row club-kpis">
       ${tile('余额', economy.balance.toLocaleString())}

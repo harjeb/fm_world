@@ -1,6 +1,6 @@
 import { CHAT_HISTORY_LIMIT, CHAT_MAX_LENGTH, sanitizeChatColor } from '../../game/chat.ts'
 import { chatState, isOnlineMode, onlineState, serverNow } from '../../online.ts'
-import { crest } from '../components.ts'
+import { crest, ownName } from '../components.ts'
 import { icon } from '../icons.ts'
 import { esc } from '../format.ts'
 import { ui } from '../state.ts'
@@ -40,8 +40,8 @@ export function renderChatDrawer(): string {
               const mine = msg.accountId === me
               const color = sanitizeChatColor(msg.clubColor)
               const clubNode = msg.clubId
-                ? `<button class="link chat-club" data-club-open="${esc(msg.clubId)}" title="查看球队名单">${esc(msg.clubName)}</button>`
-                : `<b class="chat-club-plain">${esc(msg.clubName)}</b>`
+                ? `<button class="link chat-club" data-club-open="${esc(msg.clubId)}" title="查看球队名单">${ownName(msg.clubName, mine)}</button>`
+                : `<b class="chat-club-plain">${ownName(msg.clubName, mine)}</b>`
               return `<div class="chat-msg ${mine ? 'mine' : ''}" data-key="${esc(msg.id)}">
                 ${crest({ name: msg.clubName, color }, 26)}
                 <div class="chat-msg-body">

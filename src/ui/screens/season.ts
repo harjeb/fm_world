@@ -1,4 +1,4 @@
-import { PLAYER_TEAM_ID, currentRoundFixtures, inPostseason, matchdayCountdown, nextMatchCountdown, nextSeasonCountdown, playerFixture, teamName } from '../../game/season.ts'
+import { PLAYER_TEAM_ID, currentRoundFixtures, inPostseason, matchdayCountdown, nextMatchCountdown, nextSeasonCountdown, playerFixture, roundKickoffAt, teamName } from '../../game/season.ts'
 import { computeTeamRankTrend } from '../../game/standings-history.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
 import { clubRatings } from '../../game/club-rating.ts'
@@ -6,8 +6,8 @@ import { leaderPanels } from '../leaderboard.ts'
 import { renderRankTrendChart } from '../rank-chart.ts'
 import { gameDateOf } from '../../game/calendar.ts'
 import { isOnlineMode, onlineKickoffPending, serverNow } from '../../online.ts'
-import { clubLook, clubName, crest, emptyState, fixtureRow, icon, leagueTable, pageHead, panel, teamForm, resultPill, tag, type FormResult } from '../components.ts'
-import { esc } from '../format.ts'
+import { clubLook, clubName, crest, emptyState, fixtureRow, icon, leagueTable, ownName, pageHead, panel, teamForm, resultPill, tag, type FormResult } from '../components.ts'
+import { cupRoundLabel, esc, kickoffTimeLabel } from '../format.ts'
 import { game, ui } from '../state.ts'
 
 function tierNote(): string {
@@ -17,27 +17,84 @@ function tierNote(): string {
   return ''
 }
 
-function myFixtures(): string {
-  const season = game.season
-  const mine = season.fixtures.filter((fixture) => fixture.isPlayer).sort((a, b) => a.round - b.round)
-  const anchor = mine.findIndex((fixture) => fixture.round >= season.round)
-  const start = Math.max(0, (anchor < 0 ? mine.length : anchor) - 3)
-  const shown = mine.slice(start, start + 9)
-  if (shown.length === 0) return '<p class="muted pad">没有你的赛程。</p>'
-  return `<div class="table-scroll"><table class="dt"><tbody>${shown.map((fixture) => {
+type MyFixtureRow = {
+  key: string
+  kickoffAt: number
+  competition: string
+  competitionTone: string
+  roundLabel: string
+  home: boolean
+  opponent: string
+  played: boolean
+  score?: { home: number; away: number }
+}
+
+/** 我的联赛赛程：开赛时间跟赛季日历走，杯赛日的联赛顺延也会反映在 kickoffAt 上。 */
+function myLeagueFixtures(): MyFixtureRow[] {
+  return game.season.fixtures.filter((fixture) => fixture.isPlayer).map((fixture) => {
     const home = fixture.homeId === PLAYER_TEAM_ID
-    const opponent = home ? fixture.awayId : fixture.homeId
+    return {
+      key: `league-${fixture.round}`,
+      kickoffAt: roundKickoffAt(game, fixture.round),
+      competition: '联赛',
+      competitionTone: '',
+      roundLabel: `第 ${fixture.round} 轮`,
+      home,
+      opponent: home ? fixture.awayId : fixture.homeId,
+      played: fixture.played,
+      score: fixture.score,
+    }
+  })
+}
+
+/** 我的赛季杯赛：只在杯赛已公布且属于当前赛季时合并进赛程。 */
+function myCupFixtures(): MyFixtureRow[] {
+  const world = game.world
+  const cups = world?.seasonCups
+  if (!world || !cups || world.seasonCupMode !== 1 || cups.seasonIndex !== game.season.index) return []
+  const ownId = world.clubs.find((club) => club.id === PLAYER_TEAM_ID)?.squadKey ?? PLAYER_TEAM_ID
+  return cups.cups.flatMap((cup) => {
+    const prelim = (cup.rounds[0]?.byes.length ?? 0) > 0
+    return cup.rounds.flatMap((round) => round.fixtures
+      .filter((fixture) => fixture.homeId === ownId || fixture.awayId === ownId)
+      .map((fixture) => {
+        const home = fixture.homeId === ownId
+        return {
+          key: fixture.id,
+          kickoffAt: Number.isFinite(fixture.kickoffAt) ? fixture.kickoffAt : cup.dates[round.round - 1] ?? 0,
+          competition: cup.name,
+          competitionTone: 'info',
+          roundLabel: cupRoundLabel(round.round, cup.dates.length, prelim),
+          home,
+          opponent: home ? fixture.awayId : fixture.homeId,
+          played: fixture.played,
+          score: fixture.score,
+        }
+      }))
+  })
+}
+
+function myFixtures(): string {
+  const rows = [...myLeagueFixtures(), ...myCupFixtures()]
+    .sort((a, b) => a.kickoffAt - b.kickoffAt || a.key.localeCompare(b.key, 'en'))
+  if (rows.length === 0) return '<p class="muted pad">没有你的赛程。</p>'
+  const next = rows.findIndex((row) => !row.played)
+  const anchor = next >= 0 ? next : rows.length - 1
+  const start = Math.max(0, Math.min(anchor - 3, rows.length - 9))
+  const shown = rows.slice(start, start + 9)
+  return `<div class="table-scroll"><table class="dt my-fixtures"><thead><tr><th>开赛</th><th>赛事</th><th>主客</th><th>对手</th><th class="num">结果</th></tr></thead><tbody>${shown.map((fixture) => {
     let result = ''
     if (fixture.played && fixture.score) {
-      const mineScore = home ? fixture.score.home : fixture.score.away
-      const theirs = home ? fixture.score.away : fixture.score.home
+      const mineScore = fixture.home ? fixture.score.home : fixture.score.away
+      const theirs = fixture.home ? fixture.score.away : fixture.score.home
       const outcome: FormResult = mineScore > theirs ? 'W' : mineScore < theirs ? 'L' : 'D'
       result = `${resultPill(outcome)} <b class="num-text">${fixture.score.home}:${fixture.score.away}</b>`
     }
-    return `<tr class="${fixture.round === season.round ? 'me' : ''}">
-      <td class="num dim">${fixture.round}</td>
-      <td class="dim">${home ? '主' : '客'}</td>
-      <td>${clubName(opponent)}</td>
+    return `<tr class="${fixture.key === rows[anchor]?.key ? 'me' : ''}">
+      <td class="num-text dim">${esc(kickoffTimeLabel(fixture.kickoffAt))}</td>
+      <td>${tag(esc(fixture.competition), fixture.competitionTone)} <small class="muted">${esc(fixture.roundLabel)}</small></td>
+      <td class="dim">${fixture.home ? '主' : '客'}</td>
+      <td>${clubName(fixture.opponent)}</td>
       <td class="num">${result || '<span class="muted small">未赛</span>'}</td>
     </tr>`
   }).join('')}</tbody></table></div>`
@@ -73,7 +130,7 @@ function myRankTrendPanel(divisionLabel: string): string {
       clubNames: names,
     }),
     {
-      aside: `${crest(look, 16)}<span>${esc(game.clubName)}</span>${tag(esc(divisionLabel))}`,
+      aside: `${crest(look, 16)}<span>${ownName(game.clubName)}</span>${tag(esc(divisionLabel))}`,
     },
   )
 }
@@ -104,7 +161,7 @@ export function renderSeason(): string {
       sub: `20 队双循环：每天北京时间 12:00、20:00 各踢一轮${game.world?.seasonCups ? '；杯赛日晚上联赛顺延到 22:00' : ''}，一个赛季约 19 天；联赛允许平局，比赛显示 90 分钟（现实约 10 分钟）。${season.finished ? '' : `距下一轮自动结算：${esc(matchdayCountdown(game))}。`}${tierNote()}`,
       actions,
     })}
-    ${season.finished ? `<div class="banner ${inPostseason(game) ? 'info' : 'good'}">${icon(inPostseason(game) ? 'clock' : 'star', 18)}<b>${inPostseason(game) ? `赛后休整 · 还剩 ${esc(nextSeasonCountdown(game))}` : '赛季结束'}</b><span>冠军：${esc(teamName(game, season.champion ?? ''))} · 你的最终排名：第 ${season.playerFinish ?? '—'} 名${inPostseason(game) ? ' · 休整期间可以约友谊赛，升级杯正在进行' : ''}</span></div>` : ''}
+    ${season.finished ? `<div class="banner ${inPostseason(game) ? 'info' : 'good'}">${icon(inPostseason(game) ? 'clock' : 'star', 18)}<b>${inPostseason(game) ? `赛后休整 · 还剩 ${esc(nextSeasonCountdown(game))}` : '赛季结束'}</b><span>冠军：${ownName(teamName(game, season.champion ?? ''), season.champion === PLAYER_TEAM_ID)} · 你的最终排名：第 ${season.playerFinish ?? '—'} 名${inPostseason(game) ? ' · 休整期间可以约友谊赛，升级杯正在进行' : ''}</span></div>` : ''}
     <div class="grid season-grid">
       ${panel('积分榜', leagueTable(season.table, { tier: season.tier, fixtures: season.fixtures, ratings: clubRatings(game) }), { flush: true })}
       <div class="dash-col">
@@ -117,7 +174,7 @@ export function renderSeason(): string {
             <button class="btn small ghost" data-action="season-round" data-delta="1" ${viewRound >= lastRound ? 'disabled' : ''} aria-label="下一轮">${icon('right', 13)}</button>
           </div>`,
         })}
-        ${panel('我的赛程', myFixtures(), { flush: true, aside: `<span class="muted small">近况 ${teamForm(PLAYER_TEAM_ID, season.fixtures).length} 场</span>` })}
+        ${panel('我的赛程', myFixtures(), { flush: true, aside: `<span class="muted small">北京时间 · 联赛近况 ${teamForm(PLAYER_TEAM_ID, season.fixtures).length} 场</span>` })}
       </div>
     </div>
     ${myRankTrendPanel(division)}

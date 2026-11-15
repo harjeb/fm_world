@@ -12,7 +12,7 @@ import { displayClock, LEAGUE_REALTIME_SECONDS, MATCH_DISPLAY_SECONDS } from '..
 import { PLAYER_TEAM_ID } from '../game/season.ts'
 import { fetchMatchReplay } from '../online.ts'
 import { chaseReplayClock, paintReplay, replayBannerActive, resetReplayPaint } from './pes-pitch.ts'
-import { clubLook, crest, distinctKit, icon, panel } from './components.ts'
+import { clubLook, crest, distinctKit, icon, ownName, panel } from './components.ts'
 import { clockText, esc } from './format.ts'
 import { ui } from './state.ts'
 
@@ -234,9 +234,9 @@ export function renderReplay2D(record: MatchRecord): string {
   const feed = (sim.state.commentary ?? []).slice(-FEED_LINES).reverse()
   return panel(title, `
     <div class="replay-score">
-      <span class="replay-team">${crest(clubLook(record.homeId), 30)}<b>${esc(record.homeName)}</b></span>
+      <span class="replay-team">${crest(clubLook(record.homeId), 30)}<b>${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)}</b></span>
       <span class="rp-digits"><b class="replay-digits" data-rp-score>${sim.state.score.home} : ${sim.state.score.away}</b><small><span data-rp-clock>${clockText(displayOf(sim))}</span> / ${clockText(MATCH_DISPLAY_SECONDS)}</small></span>
-      <span class="replay-team away"><b>${esc(record.awayName)}</b>${crest(clubLook(record.awayId), 30)}</span>
+      <span class="replay-team away"><b>${ownName(record.awayName, record.awayId === PLAYER_TEAM_ID)}</b>${crest(clubLook(record.awayId), 30)}</span>
     </div>
     <div class="pitch-wrap"><canvas id="replay-pitch" width="1200" height="768"></canvas></div>
     <div class="replay-controls rp-controls">

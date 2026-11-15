@@ -5,7 +5,7 @@ import { gameDateOf } from '../../game/calendar.ts'
 import { APP_VERSION } from '../../game/changelog.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
 import { chatState, isOnlineMode, marketState, onlineKickoffPending, onlineState, serverNow } from '../../online.ts'
-import { clubLook, crest } from '../components.ts'
+import { clubLook, crest, ownName } from '../components.ts'
 import { countdownText, esc } from '../format.ts'
 import { leadingBid } from '../../game/auction.ts'
 import { icon, type IconName } from '../icons.ts'
@@ -68,7 +68,7 @@ export function renderSidebar(): string {
   return `<aside class="sidebar" style="--club:${esc(look.color)}">
     <button class="side-club" data-action="go-home" title="回到总览">
       ${crest(look, 38)}
-      <span class="side-club-text"><b>${esc(game.clubName)}</b><small>${esc(divisionText())}</small></span>
+      <span class="side-club-text"><b>${ownName(game.clubName)}</b><small>${esc(divisionText())}</small></span>
     </button>
     <nav class="side-nav" aria-label="主导航">
       ${game.activeMatch ? `<button class="nav-item live ${ui.screen === 'match' ? 'active' : ''}" data-nav="match">${icon('live', 18)}<span class="nav-label">比赛<span class="nav-extra">进行中</span></span></button>` : ''}
@@ -173,10 +173,10 @@ export function renderMarketTicker(): string {
     ...auctions.map((auction) => {
       const lead = leadingBid(auction)
       const raises = auction.bids.length - 1
-      return `<span class="ticker-item live">${icon('coin', 13)}<b>${esc(lead.club)}</b> 出价 <b class="num">${lead.amount.toLocaleString()}</b> 竞拍 <b>${esc(auction.playerName)}</b>${raises > 0 ? ` · 已跟价 ${raises} 次` : ''} · 剩余 <span class="countdown" data-countdown-end="${auction.endsAt}">${countdownText(auction.endsAt - now)}</span></span>`
+      return `<span class="ticker-item live">${icon('coin', 13)}<b>${ownName(lead.club, lead.club === game.clubName)}</b> 出价 <b class="num">${lead.amount.toLocaleString()}</b> 竞拍 <b>${esc(auction.playerName)}</b>${raises > 0 ? ` · 已跟价 ${raises} 次` : ''} · 剩余 <span class="countdown" data-countdown-end="${auction.endsAt}">${countdownText(auction.endsAt - now)}</span></span>`
     }),
     ...deals.map((item) => item.club
-      ? `<span class="ticker-item deal">${icon('check', 13)}<b>${esc(item.club)}</b> 以 <b class="num">${item.amount.toLocaleString()}</b> 签下了 <b>${esc(item.playerName)}</b></span>`
+      ? `<span class="ticker-item deal">${icon('check', 13)}<b>${ownName(item.club, item.club === game.clubName)}</b> 以 <b class="num">${item.amount.toLocaleString()}</b> 签下了 <b>${esc(item.playerName)}</b></span>`
       : `<span class="ticker-item muted">${esc(item.playerName)} 流拍，回到自由市场</span>`),
   ]
   if (!items.length) return ''
