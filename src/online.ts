@@ -535,6 +535,24 @@ export async function leagueActionOnline(body: Record<string, unknown>): Promise
   return onlineGameAction('/api/match/action', body)
 }
 
+/** 巅峰次数由服务器原子扣除，避免多设备重复使用。 */
+export async function startPeakOnline(stage: number): Promise<GameState> {
+  try {
+    return await onlineGameAction('/api/peak/start', { stage })
+  } catch (error) {
+    // 其他设备可能已经消耗次数，失败后拉回权威状态以更新页面。
+    try {
+      const current = await requestJson<{ game: GameState; revision: number }>('/api/game')
+      if (current.revision >= onlineState.revision) {
+        onlineState.revision = current.revision
+        remoteGameHandler?.(current.game)
+        notify()
+      }
+    } catch { /* 保留原始错误 */ }
+    throw error
+  }
+}
+
 /** 联机改俱乐部名字：服务器检查字数和重名，成功后全服看到的新名字一起更新。 */
 export async function renameClubOnline(name: string): Promise<GameState> {
   const game = await onlineGameAction('/api/club/rename', { name })

@@ -1,0 +1,215 @@
+import type { SeasonState, SeasonTableRow, TierId, WorldState } from './types.ts'
+import { computeWorldTable } from './world.ts'
+import { derivedRng, splitSeed } from './rng.ts'
+import { GAME_DAY_MS, kickoffAtForRound, roundsKickedOff } from './calendar.ts'
+
+export type SeasonCupId = 'community' | 'league' | 'champions' | 'cross'
+export type SeasonCupFixture = {
+  id: string
+  cupId: SeasonCupId
+  round: number
+  homeId: string
+  awayId: string
+  kickoffAt: number
+  played: boolean
+  score?: { home: number; away: number }
+  shootout?: { home: number; away: number }
+  winnerId?: string
+  matchId?: string
+  /** 只记录已公布赛事的数据；点球大战不计。 */
+  scorers?: import('./types.ts').Fixture['scorers']
+  assisters?: import('./types.ts').Fixture['assisters']
+  playerStats?: SeasonCupPlayerStat[]
+}
+export type SeasonCupPlayerStat = {
+  playerId: string
+  teamId: string
+  name: string
+  minutes: number
+  shots?: number
+  tackles?: number
+  saves?: number
+}
+export type SeasonCupRound = { round: number; kickoffAt: number; byes: string[]; fixtures: SeasonCupFixture[] }
+export type SeasonCup = {
+  id: SeasonCupId
+  name: string
+  entrants: string[]
+  dates: number[]
+  rounds: SeasonCupRound[]
+  championId?: string
+}
+export type SeasonCups = {
+  version: 1
+  seasonIndex: number
+  qualificationRound: number
+  createdAt: number
+  /** 公开的抽签种子，只确定签表来源，不包含比赛结果。 */
+  drawSeed?: number
+  /** 已检查并补齐旧版公布比赛的 AI 参赛/冠军奖励。 */
+  aiRewardVersion?: 1
+  /** 当前赛季需要顺延的联赛轮次。 */
+  delayedLeagueRounds: number[]
+  cups: SeasonCup[]
+}
+
+type Standing = { id: string; tier: TierId; rank: number; row: SeasonTableRow; divisionId: string }
+const HOUR = 60 * 60_000
+const DELAY = 2 * HOUR
+export const SEASON_CUP_QUALIFICATION_ROUND = 6
+export const SEASON_CUP_NAMES: Record<SeasonCupId, string> = { community: '社区杯', league: '联盟杯', champions: '冠军杯', cross: '星联杯' }
+
+/** 按已公布的完整轮次重新计算，不能用某个分区尚未公布的临时榜。 */
+export function completedWorldRound(world: WorldState): number {
+  if (!world.divisions.length) return 0
+  let complete = 0
+  for (let round = 1; round <= 38; round++) {
+    if (!world.divisions.every(division => {
+      const fixtures = division.fixtures.filter(fixture => fixture.round === round)
+      return fixtures.length > 0 && fixtures.every(fixture => fixture.played && !!fixture.score)
+    })) break
+    complete = round
+  }
+  return complete
+}
+
+function standings(world: WorldState, round: number): Standing[] {
+  const names = new Map(world.clubs.map(club => [club.id, club.name]))
+  return world.divisions.flatMap(division => {
+    const tier = division.tier
+    if (!tier || !division.divisionId || !division.clubIds) return []
+    const rows = computeWorldTable(division.clubIds, division.fixtures.filter(fixture => fixture.round <= round), names)
+    return rows.map((row, index) => ({ id: row.teamId, tier, rank: index + 1, row, divisionId: division.divisionId! }))
+  })
+}
+
+/** 各区同名次按场均成绩排序，最后用稳定 ID 消除服务端/客户端差异。 */
+function compareStanding(a: Standing, b: Standing): number {
+  const tierRank: Record<TierId, number> = { champions: 0, division1: 1, division2: 2 }
+  const value = (row: SeasonTableRow, read: (r: SeasonTableRow) => number) => read(row) / Math.max(1, row.played)
+  return tierRank[a.tier] - tierRank[b.tier] || a.rank - b.rank
+    || value(b.row, r => r.points) - value(a.row, r => r.points)
+    || value(b.row, r => r.gf - r.ga) - value(a.row, r => r.gf - r.ga)
+    || value(b.row, r => r.gf) - value(a.row, r => r.gf)
+    || a.id.localeCompare(b.id, 'en')
+}
+
+export function seasonCupEntrants(world: WorldState, round: number): Record<SeasonCupId, string[]> {
+  const rows = standings(world, round)
+  const champions = rows.filter(row => row.tier === 'champions').sort(compareStanding)
+  const league = rows.filter(row => row.tier === 'division1').sort(compareStanding)
+  const community = rows.filter(row => row.tier === 'division2' && row.rank <= 8).sort(compareStanding)
+  // 32 队固定席位：顶级全员、一级前 8，再按各赛区名次逐层分配至多 4 席。
+  // 赛区超过四个时，按已公布成绩决定哪些同名次球队入围，不伪造额外名额。
+  const lower = rows.filter(row => row.tier === 'division2').sort(compareStanding)
+  const cross = [...champions, ...league.filter(row => row.rank <= 8), ...lower.slice(0, 4)]
+  const ids = (list: Standing[]) => list.map(row => row.id)
+  return { community: ids(community), league: ids(league), champions: ids(champions), cross: ids(cross) }
+}
+
+const roundCount = (teams: number): number => teams >= 2 ? Math.ceil(Math.log2(teams)) : 0
+export function shuffleSeasonCupTeams<T>(input: readonly T[], seed: number, cupId: SeasonCupId, round: number): T[] {
+  const result = [...input]
+  const rng = derivedRng(seed, `season-cup-${cupId}-${round}`)
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = rng.int(i + 1)
+    ;[result[i], result[j]] = [result[j], result[i]]
+  }
+  return result
+}
+
+/** 只生成当前轮；未来对阵等待前轮公布后再生成。 */
+function makeRound(cup: Pick<SeasonCup, 'id' | 'dates'>, seasonIndex: number, number: number, players: string[], seed: number): SeasonCupRound {
+  const power = 2 ** Math.floor(Math.log2(players.length))
+  const byeCount = players.length === power ? 0 : 2 * power - players.length
+  const byes = players.slice(0, byeCount)
+  const playing = shuffleSeasonCupTeams(players.slice(byeCount), seed, cup.id, number)
+  const kickoffAt = cup.dates[number - 1]
+  const fixtures: SeasonCupFixture[] = []
+  for (let i = 0; i < playing.length; i += 2) {
+    fixtures.push({ id: `sc-${seasonIndex}-${cup.id}-${number}-${i / 2 + 1}`, cupId: cup.id, round: number, homeId: playing[i], awayId: playing[i + 1], kickoffAt, played: false })
+  }
+  return { round: number, kickoffAt, byes, fixtures }
+}
+
+/** 已经排定的联赛时间优先，旧存档无字段才回退原始日历。 */
+export function seasonRoundKickoff(season: SeasonState, round: number): number {
+  const fixture = season.fixtures.find(item => item.round === round && Number.isFinite(item.kickoffAt))
+  return fixture?.kickoffAt ?? kickoffAtForRound(season.startedAt, round, season.clockShift)
+}
+
+/** 按持久化的有效开球时间计算轮次；旧赛季仍走原有日历。 */
+export function worldRoundsKickedOff(world: WorldState, now: number): number {
+  if (!world.seasonCups || world.seasonCups.seasonIndex !== world.seasonIndex) return roundsKickedOff(world.seasonStartedAt, now, world.clockShift)
+  const season = world.divisions[0]
+  if (!season) return 0
+  let count = 0
+  for (let round = 1; round <= 38; round++) {
+    if (seasonRoundKickoff(season, round) > now) break
+    count = round
+  }
+  return count
+}
+
+/** 生成完整方案但不修改世界；调用方验证队列后一次性提交。 */
+export function planSeasonCups(world: WorldState, seed: number, now: number): SeasonCups | undefined {
+  if (world.seasonCups || !Number.isFinite(now)) return undefined
+  if (completedWorldRound(world) < SEASON_CUP_QUALIFICATION_ROUND) return undefined
+  // 即使赛季已踢到第十轮，也以用户确认的第六轮完整结果确定资格。
+  const qualificationRound = SEASON_CUP_QUALIFICATION_ROUND
+  const entrants = seasonCupEntrants(world, qualificationRound)
+  if ((Object.keys(SEASON_CUP_NAMES) as SeasonCupId[]).some(id => entrants[id].length < 2 || new Set(entrants[id]).size !== entrants[id].length)) return undefined
+  const tierRounds = Math.max(roundCount(entrants.community.length), roundCount(entrants.league.length), roundCount(entrants.champions.length))
+  const crossRounds = roundCount(entrants.cross.length)
+  const totalDays = tierRounds + crossRounds
+  const division = world.divisions[0]
+  if (!division) return undefined
+  const candidates: { round: number; leagueAt: number; cupAt: number }[] = []
+  for (let round = qualificationRound + 1; round <= 38; round++) {
+    const leagueAt = seasonRoundKickoff(division, round)
+    const localHour = new Date(leagueAt + 8 * HOUR).getUTCHours()
+    if (localHour !== 20 || leagueAt - DELAY < now + 24 * HOUR) continue
+    const peers = world.divisions.flatMap(item => item.fixtures.filter(fixture => fixture.round === round))
+    if (!peers.length || peers.some(fixture => fixture.played || fixture.kickoffAt !== leagueAt)) continue
+    candidates.push({ round, leagueAt, cupAt: leagueAt - DELAY })
+  }
+  if (candidates.length < totalDays) return undefined
+  const selected = candidates.slice(0, totalDays)
+  const tierDays: number[] = [], crossDays: number[] = []
+  for (const day of selected) {
+    if (tierDays.length < tierRounds && (tierDays.length <= crossDays.length || crossDays.length >= crossRounds)) tierDays.push(day.cupAt)
+    else crossDays.push(day.cupAt)
+  }
+  const cups = (Object.keys(SEASON_CUP_NAMES) as SeasonCupId[]).map(id => {
+    const dates = (id === 'cross' ? crossDays : tierDays).slice(0, roundCount(entrants[id].length))
+    const cup: SeasonCup = { id, name: SEASON_CUP_NAMES[id], entrants: entrants[id], dates, rounds: [] }
+    cup.rounds.push(makeRound(cup, world.seasonIndex, 1, cup.entrants, seed))
+    return cup
+  })
+  return { version: 1, seasonIndex: world.seasonIndex, qualificationRound, createdAt: now, drawSeed: seed, delayedLeagueRounds: selected.map(day => day.round), cups }
+}
+
+/** 应在锁定任何计划内联赛之前调用；不更改比赛 ID 或已经踢完的轮次。 */
+export function applySeasonCupPlan(world: WorldState, plan: SeasonCups): void {
+  if (world.seasonCups || plan.seasonIndex !== world.seasonIndex) throw new Error('杯赛计划与赛季不一致')
+  const rounds = new Set(plan.delayedLeagueRounds)
+  for (const division of world.divisions) for (const fixture of division.fixtures) {
+    if (rounds.has(fixture.round) && (fixture.played || !Number.isFinite(fixture.kickoffAt))) throw new Error('不能修改已赛或缺少开球时间的联赛')
+  }
+  for (const division of world.divisions) for (const fixture of division.fixtures) if (rounds.has(fixture.round)) {
+    fixture.kickoffAt! += DELAY
+    fixture.gameDay = Math.max(0, Math.floor((fixture.kickoffAt! - division.startedAt) / GAME_DAY_MS))
+  }
+  world.seasonCups = structuredClone(plan)
+}
+
+/** 本轮全部公开后产生下一轮；仅赛事发布者可调用。 */
+export function advanceSeasonCup(cup: SeasonCup, seasonIndex: number, seed: number): void {
+  if (cup.championId) return
+  const current = cup.rounds.at(-1)
+  if (!current || current.fixtures.some(fixture => !fixture.played || !fixture.winnerId)) return
+  const winners = [...current.byes, ...current.fixtures.map(fixture => fixture.winnerId!)]
+  if (winners.length === 1) { cup.championId = winners[0]; return }
+  if (!cup.dates[current.round]) throw new Error('杯赛缺少下一轮时间')
+  cup.rounds.push(makeRound(cup, seasonIndex, current.round + 1, winners, seed))
+}

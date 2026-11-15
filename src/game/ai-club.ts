@@ -4,7 +4,8 @@ import { AVERAGE_ROUND_GAME_DAYS } from './calendar.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 import { playerMarketValue } from './pricing.ts'
 import { isOnMarketToday } from './market-window.ts'
-import { attrMax } from './scale.ts'
+import { attrHardLimit, attrMax, isMainAttr } from './scale.ts'
+import { cupCeilingBonusFromClaims } from './cup-rewards.ts'
 import { ALL_ATTRIBUTES, type AICard, type AIClubState, type AITeam, type AttrKey, type Attributes, type FacilityId, type GameState, type Player, type TierId, type WorldClub, type WorldState } from './types.ts'
 import { FULL_SQUAD, refreshAILineup } from './squad.ts'
 import { cachedOwnerlessTeams } from './world.ts'
@@ -160,9 +161,9 @@ function cardOf(state: AIClubState, slot: number, base: Player): AICard {
   return card
 }
 
-function clampAttrs(attrs: Attributes, gk: boolean): void {
+function clampAttrs(attrs: Attributes, gk: boolean, clubBonus = 0): void {
   for (const key of ALL_ATTRIBUTES) {
-    const max = attrMax(key, gk)
+    const max = clubBonus > 0 && isMainAttr(key, gk) ? attrHardLimit(key, gk) : attrMax(key, gk)
     if (!Number.isFinite(attrs[key])) attrs[key] = 0
     if (attrs[key] > max) attrs[key] = max
     if (attrs[key] < 0) attrs[key] = 0
@@ -187,7 +188,7 @@ function equipSlot(state: AIClubState, players: Player[], slot: number): boolean
   const current = playerCa(player)
   if (card.rating > current + 0.5) {
     for (const key of ALL_ATTRIBUTES) player.attrs[key] = card.attrs[key] ?? player.attrs[key]
-    clampAttrs(player.attrs, player.positions.GK > 0)
+    clampAttrs(player.attrs, player.positions.GK > 0, cupCeilingBonusFromClaims(state.cupCeilingClaims))
     return true
   }
   if (current > card.rating + 0.5) state.cards[String(slot)] = { rating: current, attrs: { ...player.attrs }, owner: ownerOf(player) }
@@ -299,7 +300,7 @@ export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | '
     if (!base) break
     const card = cardOf(state, slot, base)
     // 真实培养：从原始属性开始跑完当季培养时段（30 / 40 / 44）和事件，产出这一轮的候选属性。
-    const trainedPlayer = simulateAITrainingRound(base, splitSeed(seed, `program-${state.trained}-${slot}`), state.economy, seasonIndex)
+    const trainedPlayer = simulateAITrainingRound(base, splitSeed(seed, `program-${state.trained}-${slot}`), state.economy, seasonIndex, cupCeilingBonusFromClaims(state.cupCeilingClaims))
     state.trained += 1
     trained += 1
     const rating = playerCa(trainedPlayer)

@@ -545,6 +545,12 @@ export function expandWorldConference(world: WorldState, seed: number): { confer
   world.clubs.push(...created)
   const divisionId = divisionIdForTier('division2', conference)
   const division = buildWorldDivision(world, divisionId, splitSeed(seed, `zone-${zoneNo}`), world.seasonStartedAt, world.seasonIndex)
+  // 扩区后的联赛必须继承全服已经公布的顺延时间。
+  const prior = world.divisions[0]
+  if (world.seasonCups && prior) for (const fixture of division.fixtures) {
+    const reference = prior.fixtures.find(item => item.round === fixture.round)
+    if (reference) { fixture.kickoffAt = reference.kickoffAt; fixture.gameDay = reference.gameDay }
+  }
   world.divisions.push(division)
   return { conference, divisionId }
 }
@@ -1269,6 +1275,10 @@ export function advanceWorldSeason(game: GameState, now = Date.now(), protectedC
   // 赛季按日历排期开始，而不是等到有人点“下一赛季”：赛后那 12 个游戏日照样留给附加赛。新赛季接在上赛季结束处，游戏内日期直接跳到下一年 11/01。
   const scheduledStart = seasonEndAt(world.seasonStartedAt, world.clockShift)
   const previousCalendarStart = world.calendarStartAt ?? world.seasonStartedAt
+  if (world.seasonCups) {
+    ;(world.seasonCupHistory ??= []).push(world.seasonCups)
+    delete world.seasonCups
+  }
   world.seasonIndex++
   world.seasonStartedAt = Math.min(now, scheduledStart) > 0 ? scheduledStart : now
   const nextCalendarStart = calendarStartForSeason(world.seasonStartedAt, world.seasonIndex)

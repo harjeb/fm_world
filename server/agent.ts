@@ -362,6 +362,7 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
   const slots = lineupSlots(game.roster, game.lineup)
   return {
     club: { name: game.clubName, seed: game.seed, version: game.version },
+    seasonCups: game.world?.seasonCups ?? null,
     season: {
       index: game.season.index,
       round: game.season.round,

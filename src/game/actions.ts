@@ -16,6 +16,7 @@ import { advanceSeasonRound, finishActiveMatch, skipToMatchday, startChallenge, 
 import { cachedOwnerlessTeams } from './world.ts'
 import { legendTeamById } from './legend.ts'
 import { PEAK_STAGE_COUNT, buildPeakTeam } from './peak.ts'
+import { nextPeakAttempt, peakDailyStatus, recordPeakAttempt } from './peak-attempts.ts'
 import { ensurePve } from './pve.ts'
 import { cupPlayerFixture, cupTeam, enterCup } from './cup-run.ts'
 import type { CupId } from './data/cup-config.ts'
@@ -906,7 +907,7 @@ export function startLegendChallenge(game: GameState, legendId: string, now = Da
   return { ok: result.ok, error: result.error }
 }
 
-/** 巅峰之路：只能打当前关；对手由全局冻结表提供。 */
+/** 巅峰之路：可以重打已通关或挑战当前关；对手固定，比赛种子每次独立。 */
 export function startPeakChallenge(game: GameState, stage: number, now = Date.now()): { ok: boolean; error?: string } {
   const error = validateAutoSubPlan(game.roster, game.lineup, game.autoSubs ?? emptyAutoSubs())[0]
   if (error) return { ok: false, error: `自动换人规则无效：${error}` }
@@ -914,12 +915,17 @@ export function startPeakChallenge(game: GameState, stage: number, now = Date.no
   const target = stage
   ensurePve(game)
   const cleared = game.pve?.peak.cleared ?? 0
-  if (target !== cleared + 1) return { ok: false, error: `只能挑战第 ${cleared + 1} 关` }
   if (target < 1 || target > PEAK_STAGE_COUNT) return { ok: false, error: '关卡不存在' }
+  if (target > cleared + 1) return { ok: false, error: `只能挑战已通关或当前第 ${cleared + 1} 关` }
+  const quota = peakDailyStatus(game, now)
+  if (quota.remaining <= 0) return { ok: false, error: '本游戏日巅峰挑战次数已用完（每天 3 次），请在下个游戏日再来' }
   const ai = buildPeakTeam(target)
-  const seed = splitSeed(game.seed, `peak-match-${target}`)
-  const result = startChallengeAgainstTeam(game, ai, seed, now, 'peak', target, `${target}-${game.challengeHistory.length}`)
-  if (result.ok) saveGame(game)
+  const attempt = nextPeakAttempt(game)
+  const result = startChallengeAgainstTeam(game, ai, attempt.seed, now, 'peak', target, attempt.recordKey)
+  if (result.ok) {
+    recordPeakAttempt(game, now, attempt.number)
+    saveGame(game)
+  }
   return { ok: result.ok, error: result.error }
 }
 

@@ -24,7 +24,7 @@ export type NegotiationDraft = {
 import type { TrainingActionId } from '../game/training.ts'
 import type { TrainingActivityId } from '../game/training-calendar.ts'
 
-export type Screen = 'club' | 'transfer' | 'home' | 'academy' | 'inventory' | 'training' | 'lineup' | 'season' | 'world' | 'challenge' | 'review' | 'match'
+export type Screen = 'club' | 'transfer' | 'home' | 'academy' | 'inventory' | 'training' | 'lineup' | 'season' | 'cups' | 'world' | 'challenge' | 'review' | 'match'
 export type ClubTab = 'facilities' | 'contracts' | 'history'
 export type TransferTab = 'market' | 'free' | 'ai' | 'offers'
 export type SquadSortKey = 'pos' | 'name' | 'age' | 'ca' | 'condition' | 'energy' | 'value' | `attr${number}`
@@ -53,6 +53,8 @@ export type UIState = {
   /** 正在确认删除的球员卡。 */
   cardDeleteId: string | null
   seasonRound: number | null
+  /** 正式赛季杯赛选中的赛事标签。 */
+  seasonCupTab: import('../game/season-cups.ts').SeasonCupId
   /** 挑战页当前模式。 */
   challengeMode: ChallengeMode
   /** 传奇挑战档位筛选；默认先看 B 档，所有档位均可自由切换。 */
@@ -144,7 +146,7 @@ export type UIState = {
   newGamePreview: { seed: number; clubs: ClubPreview[] } | null
 }
 
-const SAVE_SCREEN: Screen[] = ['club', 'transfer', 'home', 'academy', 'inventory', 'training', 'lineup', 'season', 'world', 'challenge', 'review', 'match']
+const SAVE_SCREEN: Screen[] = ['club', 'transfer', 'home', 'academy', 'inventory', 'training', 'lineup', 'season', 'cups', 'world', 'challenge', 'review', 'match']
 
 const saved = loadGame()
 /** 当前存档。其他模块通过 live binding 读到最新值，替换时用 setGame。 */
@@ -180,6 +182,7 @@ export const ui: UIState = {
   inventorySort: 'new',
   cardDeleteId: null,
   seasonRound: null,
+  seasonCupTab: 'community',
   challengeMode: 'friendly',
   legendTier: 'B',
   legendSearch: '',

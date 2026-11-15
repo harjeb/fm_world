@@ -75,7 +75,7 @@ import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPla
 import { minimumBid } from '../game/auction.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
 import { clubNameError, normalizeClubName } from '../game/club-name.ts'
-import { bidOnline, buyFromAIClubOnline, chatState, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, refreshChatOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline } from '../online.ts'
+import { bidOnline, buyFromAIClubOnline, chatState, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, refreshChatOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, startPeakOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline } from '../online.ts'
 import { agentHandoffText } from './agent-handoff.ts'
 import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
 import { UNHAPPY_GAME_DAYS } from '../game/transfer-rules.ts'
@@ -108,6 +108,8 @@ import { renderSeason } from './screens/season.ts'
 import { renderMarketTicker, renderSidebar, renderTopbar } from './screens/shell.ts'
 import { buildTrainingRequest, renderAutoStrategyOverlay, renderTraining } from './screens/training.ts'
 import { renderWorld } from './screens/world.ts'
+import { renderSeasonCups } from './season-cup-view.ts'
+import { returnToChallengeAfterWin } from './match-completion.ts'
 import { latestPlayedRound } from '../game/standings-history.ts'
 
 const app = document.getElementById('app')!
@@ -233,14 +235,14 @@ function go(screen: Screen): void {
   ui.lineupSlot = null
   ui.screen = screen
   if (screen === 'season') ui.seasonRound = null
-  if (screen === 'world') void refreshPublicWorld()
+  if (screen === 'world' || screen === 'cups') void refreshPublicWorld()
   if (screen === 'lineup') {
     ui.lineupDraft = structuredClone(game.lineup)
     ui.autoSubsDraft = structuredClone(game.autoSubs ?? emptyAutoSubs())
   }
   if (screen === 'match') {
     ui.matchEngine = restoreActiveEngine(game)
-    ui.matchPlaying = !!ui.matchEngine && !ui.matchEngine.state.finished && !game.activeMatch?.context.isLeague
+    ui.matchPlaying = !!ui.matchEngine && !ui.matchEngine.state.finished && !game.activeMatch?.context.isLeague && !game.activeMatch?.preplayed
     ui.completing = false
   }
   persist()
@@ -265,6 +267,8 @@ function renderScreen(): string {
       return renderLineup()
     case 'season':
       return renderSeason()
+    case 'cups':
+      return renderSeasonCups(game, ui.seasonCupTab)
     case 'world':
       return renderWorld()
     case 'challenge':
@@ -335,7 +339,7 @@ function render(): void {
   if (ui.screen === 'match') {
     drawPitch()
     ensureTimer()
-    if (!game.activeMatch?.context.isLeague && ui.matchEngine?.state.finished && !ui.matchPlaying && !pitchPlaybackPending() && !ui.completing) {
+    if (!game.activeMatch?.context.isLeague && !game.activeMatch?.preplayed && ui.matchEngine?.state.finished && !ui.matchPlaying && !pitchPlaybackPending() && !ui.completing) {
       window.setTimeout(() => completeMatch(), 0)
     }
   } else {
@@ -397,7 +401,9 @@ function mountTurnstile(): void {
 }
 
 function openFinishedLeague(previous: NonNullable<GameState['activeMatch']>): void {
-  const record = game.matchHistory.find((item) => item.round === previous.context.round)
+  const record = previous.preplayed && previous.context.mode === 'cup'
+    ? game.challengeHistory.find(item => item.cupFixtureId === previous.context.cupFixtureId)
+    : game.matchHistory.find(item => item.round === previous.context.round)
   if (ui.screen !== 'match') return
   // 直播已经结束但战报还没到（极端情况下公布晚了）：别停在空的比赛页，回首页等公布。
   if (!record) {
@@ -412,7 +418,7 @@ function openFinishedLeague(previous: NonNullable<GameState['activeMatch']>): vo
   ui.coachPanel = false
   // 单机：联赛比赛按现实时间走完，同样把这一轮的市场补充做掉。
   if (record.isLeague && !isOnlineMode()) refreshClubMarket(game, record.round ?? game.season.round)
-  ui.notice = '联赛比赛已结束。'
+  ui.notice = previous.context.mode === 'cup' ? '杯赛比赛已结束。' : '联赛比赛已结束。'
 }
 
 let lastOnlineCacheAt = 0
@@ -447,7 +453,7 @@ function applyOnlineGame(next: GameState, notice?: string): void {
   upgradeStarTraits(game)
   upgradeBurstAttr(game)
   if (wasMatch && game.activeMatch) ui.matchEngine = restoreActiveEngine(game)
-  else if (previous?.context.isLeague && !game.activeMatch) openFinishedLeague(previous)
+  else if ((previous?.context.isLeague || previous?.preplayed) && !game.activeMatch) openFinishedLeague(previous!)
   if (notice) ui.notice = notice
   maybeOpenChangelog()
   render()
@@ -664,11 +670,13 @@ function completeMatch(): void {
   if (record) {
     // 单机：一轮结束后，各队的边缘球员会进入自由市场（联机市场由服务器维护）。
     if (record.isLeague && !isOnlineMode()) refreshClubMarket(game, record.round ?? game.season.round)
-    resetReplay(record.id)
-    replay.index = (record.commentary ?? record.keyEvents).length
-    ui.reviewId = record.id
-    ui.screen = 'review'
-    ui.notice = '比赛结束，文字回放已就绪。'
+    if (!returnToChallengeAfterWin(ui, record)) {
+      resetReplay(record.id)
+      replay.index = (record.commentary ?? record.keyEvents).length
+      ui.reviewId = record.id
+      ui.screen = 'review'
+      ui.notice = '比赛结束，文字回放已就绪。'
+    }
   } else {
     ui.notice = '比赛尚未结束，无法记录。'
     ui.screen = 'match'
@@ -931,6 +939,13 @@ document.addEventListener('click', async (event) => {
   const clubTab = target.closest<HTMLElement>('[data-club-tab]')
   if (clubTab?.dataset.clubTab) {
     ui.clubTab = clubTab.dataset.clubTab as ClubTab
+    render()
+    return
+  }
+  const seasonCupTab = target.closest<HTMLElement>('[data-season-cup-tab]')
+  if (seasonCupTab?.dataset.seasonCupTab) {
+    const id = seasonCupTab.dataset.seasonCupTab
+    if (id === 'community' || id === 'league' || id === 'champions' || id === 'cross') ui.seasonCupTab = id
     render()
     return
   }
@@ -1847,8 +1862,22 @@ document.addEventListener('click', async (event) => {
     }
     case 'start-peak-stage': {
       const stage = Number(actionEl.dataset.stage)
-      if (!Number.isFinite(stage)) break
-      openFriendly(startPeakChallenge(game, stage))
+      if (!Number.isFinite(stage) || ui.completing) break
+      if (!isOnlineMode()) {
+        openFriendly(startPeakChallenge(game, stage))
+        break
+      }
+      ui.completing = true
+      render()
+      try {
+        await startPeakOnline(stage)
+        openFriendly({ ok: true })
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : '无法开始巅峰挑战')
+      } finally {
+        ui.completing = false
+        render()
+      }
       break
     }
     case 'use-peak-card': {
@@ -1896,7 +1925,7 @@ document.addEventListener('click', async (event) => {
       break
     }
     case 'match-toggle':
-      if (!ui.matchEngine || game.activeMatch?.context.isLeague) break
+      if (!ui.matchEngine || game.activeMatch?.context.isLeague || game.activeMatch?.preplayed) break
       if (ui.matchEngine.state.finished) completeMatch()
       else {
         ui.matchPlaying = !ui.matchPlaying
@@ -1905,7 +1934,7 @@ document.addEventListener('click', async (event) => {
       }
       break
     case 'match-skip':
-      if (!ui.matchEngine || game.activeMatch?.context.isLeague) break
+      if (!ui.matchEngine || game.activeMatch?.context.isLeague || game.activeMatch?.preplayed) break
       ui.matchEngine.simulate()
       completeMatch()
       break
@@ -1930,6 +1959,7 @@ document.addEventListener('click', async (event) => {
       render()
       break
     case 'match-coach':
+      if (game.activeMatch?.preplayed) break
       if (game.activeMatch?.context.isLeague) {
         ui.coachPanel = !ui.coachPanel
         ui.matchAutoSubsDraft = ui.coachPanel && ui.matchEngine
@@ -1961,6 +1991,7 @@ document.addEventListener('click', async (event) => {
       render()
       break
     case 'match-tactics-apply':
+      if (game.activeMatch?.preplayed) break
       if (ui.matchEngine) {
         const mentality = (document.getElementById('match-mentality') as HTMLSelectElement | null)?.value as MatchMentality
         if (game.activeMatch?.context.isLeague && isOnlineMode()) {
@@ -1984,6 +2015,7 @@ document.addEventListener('click', async (event) => {
       }
       break
     case 'match-sub': {
+      if (game.activeMatch?.preplayed) break
       if (!ui.matchEngine) break
       const out = (document.getElementById('match-out') as HTMLSelectElement | null)?.value
       const input = (document.getElementById('match-in') as HTMLSelectElement | null)?.value
@@ -2010,6 +2042,7 @@ document.addEventListener('click', async (event) => {
       break
     }
     case 'match-autosubs-apply': {
+      if (game.activeMatch?.preplayed) break
       if (!ui.matchEngine || !game.activeMatch) break
       const draft = getAutoSubDraft('match')
       if (!draft) break
@@ -2431,7 +2464,7 @@ function autoAdvanceSeason(): void {
 
 function tickRealtimeLeague(): void {
   const active = game.activeMatch
-  if (!active?.context.isLeague) return
+  if (!active || (!active.context.isLeague && !active.preplayed)) return
   // 服务器预先算好的回放：浏览器自己按时钟追，比分、数据条和文字直播每秒跟着画面刷新一次。
   if (active.preplayed) {
     if (ui.screen === 'match') render()
@@ -2452,7 +2485,7 @@ function tickRealtimeLeague(): void {
 
 window.addEventListener('beforeunload', () => {
   if (ui.screen) game.ui = { screen: ui.screen }
-  if (ui.screen === 'match' && ui.matchEngine && game.activeMatch && !game.activeMatch.context.isLeague) game.activeMatch.engineState = ui.matchEngine.serialize()
+  if (ui.screen === 'match' && ui.matchEngine && game.activeMatch && !game.activeMatch.context.isLeague && !game.activeMatch.preplayed) game.activeMatch.engineState = ui.matchEngine.serialize()
   saveGame(game)
 })
 
@@ -2471,14 +2504,17 @@ window.setInterval(tickRealtimeLeague, 1000)
 // 竞拍倒计时每秒走，不用整页重绘。
 window.setInterval(() => {
   for (const element of document.querySelectorAll<HTMLElement>('[data-countdown-end]')) {
-    const left = Number(element.dataset.countdownEnd) - serverNow()
+    const clock = element.closest('[data-peak-reset-at]') && !isOnlineMode() ? Date.now() : serverNow()
+    const left = Number(element.dataset.countdownEnd) - clock
     element.textContent = countdownText(left)
     element.classList.toggle('urgent', left < 60_000)
   }
+  const peakReset = document.querySelector<HTMLElement>('[data-peak-reset-at]')
+  if (ui.screen === 'challenge' && peakReset && Number(peakReset.dataset.peakResetAt) <= (isOnlineMode() ? serverNow() : Date.now())) render()
 }, 1000)
 window.setInterval(autoAdvanceSeason, 30_000)
 window.setInterval(() => { if (ui.screen !== 'match') render() }, 30_000)
-window.setInterval(() => { if (ui.screen === 'world') void refreshPublicWorld() }, 120_000)
+window.setInterval(() => { if (ui.screen === 'world' || ui.screen === 'cups') void refreshPublicWorld() }, 120_000)
 installTooltips()
 autoAdvanceSeason()
 render()

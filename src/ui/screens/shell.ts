@@ -39,6 +39,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: '赛事',
     items: [
       { id: 'season', label: '赛季', icon: 'season' },
+      { id: 'cups', label: '杯赛', icon: 'badge' },
       { id: 'challenge', label: '挑战', icon: 'challenge' },
       { id: 'review', label: '复盘', icon: 'review' },
       { id: 'world', label: '世界', icon: 'world' },
@@ -73,7 +74,7 @@ export function renderSidebar(): string {
       ${game.activeMatch ? `<button class="nav-item live ${ui.screen === 'match' ? 'active' : ''}" data-nav="match">${icon('live', 18)}<span class="nav-label">比赛<span class="nav-extra">进行中</span></span></button>` : ''}
       ${NAV_GROUPS.map((group) => `
         ${group.label ? `<div class="nav-group">${group.label}</div>` : ''}
-        ${group.items.map((item) => {
+        ${group.items.filter(item => item.id !== 'cups' || game.world?.seasonCupMode === 1).map((item) => {
           const alert = item.alert?.() ?? 0
           const count = alert || (item.badge?.() ?? 0)
           const badge = alert

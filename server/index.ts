@@ -23,6 +23,8 @@ const app = createAppServer({
   dataDir: process.env.FM_DATA_DIR ?? 'data',
   staticDir: process.env.FM_STATIC_DIR ?? 'dist',
   tickMs: Number(process.env.FM_TICK_MS ?? 30_000),
+  // 默认启用正式赛季杯赛；运维可在发生故障时设置 0 停止新赛季排期。
+  seasonCups: process.env.FM_SEASON_CUPS !== '0',
   registration: registration === 'invite' && !inviteCode ? 'closed' : registration,
   inviteCode,
   turnstileSecret: process.env.FM_TURNSTILE_SECRET?.trim(),

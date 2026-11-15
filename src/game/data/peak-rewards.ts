@@ -20,3 +20,14 @@ export const PEAK_MILESTONES: PeakMilestone[] = [
 ]
 
 export const PEAK_MILESTONE_BY_STAGE = new Map(PEAK_MILESTONES.map((reward) => [reward.stage, reward]))
+
+/** 每十关原有金币/球迷分成十份，整数余数优先分给该段前面的关卡。特殊奖励仍在原里程碑。 */
+export function peakStageReward(stage: number): PeakMilestone | undefined {
+  if (!Number.isInteger(stage) || stage < 1 || stage > 100) return undefined
+  const end = Math.ceil(stage / 10) * 10
+  const milestone = PEAK_MILESTONE_BY_STAGE.get(end)
+  if (!milestone) return undefined
+  const index = stage - (end - 10)
+  const amount = Math.floor(milestone.amount / 10) + (index <= milestone.amount % 10 ? 1 : 0)
+  return { stage, kind: milestone.kind, amount, ...(stage === end && milestone.breakthroughCards ? { breakthroughCards: milestone.breakthroughCards } : {}) }
+}

@@ -1,6 +1,6 @@
 import type { GameState } from './types.ts'
 import { economyOf, MAX_FANS } from './economy.ts'
-import { PEAK_MILESTONE_BY_STAGE, PEAK_MILESTONES } from './data/peak-rewards.ts'
+import { PEAK_MILESTONE_BY_STAGE, PEAK_MILESTONES, peakStageReward } from './data/peak-rewards.ts'
 import { attrHardLimit, mainAttrsFor } from './rating.ts'
 
 function ensurePeakRewardState(game: GameState): boolean {
@@ -17,34 +17,62 @@ function ensurePeakRewardState(game: GameState): boolean {
   return changed
 }
 
-function grant(game: GameState, stage: number): boolean {
-  const reward = PEAK_MILESTONE_BY_STAGE.get(stage)
-  const pve = game.pve?.peak
-  if (!reward || !pve || pve.claimedMilestones!.includes(stage)) return false
+function applyReward(game: GameState, reward: { kind: 'money' | 'fans'; amount: number; breakthroughCards?: number }): void {
   const economy = economyOf(game)
   if (reward.kind === 'money') economy.balance += reward.amount
   else economy.fans = Math.min(MAX_FANS, economy.fans + reward.amount)
-  if (reward.breakthroughCards) pve.breakthroughCards = (pve.breakthroughCards ?? 0) + reward.breakthroughCards
-  pve.claimedMilestones!.push(stage)
+  if (reward.breakthroughCards) game.pve!.peak.breakthroughCards = (game.pve!.peak.breakthroughCards ?? 0) + reward.breakthroughCards
+}
+
+function grantStage(game: GameState, stage: number): boolean {
+  const reward = peakStageReward(stage)
+  const peak = game.pve?.peak
+  if (!reward || !peak || peak.claimedStageRewards!.includes(stage)) return false
+  // 旧里程碑可能已发过突破卡，即使账本被修复也不能再发。
+  applyReward(game, peak.claimedMilestones!.includes(stage) ? { ...reward, breakthroughCards: undefined } : reward)
+  peak.claimedStageRewards!.push(stage)
+  if (PEAK_MILESTONE_BY_STAGE.has(stage) && !peak.claimedMilestones!.includes(stage)) peak.claimedMilestones!.push(stage)
   return true
 }
 
-/** 首次通关里程碑时发奖；重复通关不重复发。 */
+/** 首次通关各关时发奖；重打不重复发放。 */
 export function awardPeakMilestone(game: GameState, stage: number): boolean {
-  ensurePeakRewardState(game)
-  return grant(game, stage)
+  const peak = game.pve?.peak
+  if (!peak) return false
+  if (peak.stageRewardVersion !== 2 || !Array.isArray(peak.claimedStageRewards)) ensurePeakMilestones(game)
+  return grantStage(game, stage)
 }
 
-/** 旧存档补发：已经超过里程碑但还没有领取记录的，补一次。 */
+/**
+ * 旧存档迁移：先按旧规则补齐已通关但未领的整十关；整段视为已发，
+ * 仅对当前未满十关的已通关部分补发拆分奖励。迁移后只按逐关账本补发。
+ */
 export function ensurePeakMilestones(game: GameState): boolean {
-  const pve = game.pve?.peak
-  if (!pve) return false
+  const peak = game.pve?.peak
+  if (!peak) return false
   let changed = ensurePeakRewardState(game)
-  for (const reward of PEAK_MILESTONES) {
-    if (pve.cleared >= reward.stage && !pve.claimedMilestones!.includes(reward.stage)) {
-      if (grant(game, reward.stage)) changed = true
-    }
+  if (peak.stageRewardVersion === 2 && !Array.isArray(peak.claimedStageRewards)) {
+    // 新版账本损坏时保守标记已通关，不把已领过的奖励再发一次。
+    peak.claimedStageRewards = Array.from({ length: Math.max(0, Math.min(100, peak.cleared)) }, (_, index) => index + 1)
+    changed = true
   }
+  if (peak.stageRewardVersion !== 2) {
+    // 旧版本曾对已过关但漏标记的里程碑补发整笔，先沿用这一规则。
+    for (const reward of PEAK_MILESTONES) {
+      if (peak.cleared >= reward.stage && !peak.claimedMilestones!.includes(reward.stage)) {
+        applyReward(game, reward)
+        peak.claimedMilestones!.push(reward.stage)
+      }
+    }
+    const covered = new Set<number>()
+    for (const end of peak.claimedMilestones!) if (PEAK_MILESTONE_BY_STAGE.has(end)) {
+      for (let stage = end - 9; stage <= end; stage++) covered.add(stage)
+    }
+    peak.claimedStageRewards = [...covered].sort((a, b) => a - b)
+    peak.stageRewardVersion = 2
+    changed = true
+  }
+  for (let stage = 1; stage <= peak.cleared; stage++) if (grantStage(game, stage)) changed = true
   return changed
 }
 

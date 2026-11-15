@@ -385,6 +385,11 @@ export type WorldState = {
   starAges: Record<string, number>
   promotionPlayoff?: PromotionPlayoff
   lastPromotionPlayoff?: PromotionPlayoff
+  /** 正式杯赛系统已启用；第 6 轮以前赛程可能尚未生成。 */
+  seasonCupMode?: 1
+  /** 全世界共享的正式赛季杯赛（旧赛季缺省）。 */
+  seasonCups?: import('./season-cups.ts').SeasonCups
+  seasonCupHistory?: import('./season-cups.ts').SeasonCups[]
   history: WorldSeasonSummary[]
   /** 赛程日历版本：2 = 一天两轮（北京时间 12:00、20:00）。 */
   kickoffSchedule?: number
@@ -1053,6 +1058,8 @@ export type TrophyRecord = {
   finalShootout?: { home: number; away: number }
   /** 首次夺冠时发放的俱乐部主属性上限奖励。 */
   ceilingBonus?: number
+  /** 本届额外夺冠金币（不含每场参赛金）。 */
+  goldPrize?: number
   matchId?: string
 }
 
@@ -1070,9 +1077,17 @@ export type PveState = {
   peak: {
     cleared: number
     history: PvePeakHistoryEntry[]
+    /** 开赛时消耗的游戏日次数；旧存档缺省表示尚未记录。 */
+    dailyAttempts?: { day: number; count: number }
+    /** 所有巅峰比赛共用的递增开赛序号，用于不重复的种子和战报 ID。 */
+    attemptCounter?: number
     reward50?: PvePeakReward
-    /** 已领取的里程碑关卡（只发一次）。 */
+    /** 旧版已领取的整十关奖励；新版也保留其特殊奖励的去重标记。 */
     claimedMilestones?: number[]
+    /** 每关奖励迁移版本；2 表示采用分关奖励。 */
+    stageRewardVersion?: 2
+    /** 已发放或由旧里程碑覆盖的关卡，保证重试和迁移不重复。 */
+    claimedStageRewards?: number[]
     /** 单属性上限 +100 的突破卡库存。 */
     breakthroughCards?: number
   }
@@ -1082,6 +1097,10 @@ export type PveState = {
   cupHistory?: CupRun[]
   /** 已获得的俱乐部奖杯上限加成，每种杯赛只计一次。 */
   cupCeilingClaims?: Partial<Record<string, true>>
+  /** 正式杯赛金币发放账本：按比赛或赛季/杯赛去重。 */
+  seasonCupGoldClaims?: Record<string, number>
+  /** 已检查旧版已公布比赛并补发过杯赛奖金。 */
+  seasonCupGoldVersion?: 1
   /** Ceiling migration version; 3 preserves ambiguous legacy ceilings and repairs v2 deductions. */
   cupCeilingVersion?: number
   /** 旧版已直接修改的上限原始值备份；旧档有转会或截断时可追溯。 */
@@ -1181,6 +1200,9 @@ export type AIClubState = {
   signings: Player[]
   trained: number
   upgrades: number
+  /** 电脑球队的正式杯赛金币和永久上限加成账本。 */
+  seasonCupGoldClaims?: Record<string, number>
+  cupCeilingClaims?: Partial<Record<string, true>>
   /** 还没兑现的设施升级名额（按轮累计的小数）；二级慢、顶级快。 */
   upgradeProgress?: number
   /** 这个赛季已经买进几个人（竞拍、签自由球员、挖人），每赛季最多 5 人。 */
@@ -1205,7 +1227,7 @@ export type MatchContext = {
   /** 挑战赛：满状态入场，不生成新的伤病；默认所有非联赛比赛。 */
   noInjuries?: boolean
   shootoutOffset?: { home: number; away: number }
-  /** 记录 id 的去重键；比赛种子仍用 seed（巅峰重试时对手/结果不变）。 */
+  /** 战报 ID 的去重键；比赛结果由本次 seed 决定。 */
   recordKey?: string | number
   round?: number
   opponentId: string

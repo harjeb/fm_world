@@ -124,7 +124,7 @@ export function renderMatch(): string {
   const awayStats = state.stats.away
   const active = game.activeMatch
   const kits = matchKits(engine)
-  const matchClock = active.context.isLeague ? leagueDisplayClock(active) : displayClock(state.clock, state.durationSeconds)
+  const matchClock = active.context.isLeague || active.preplayed ? leagueDisplayClock(active) : displayClock(state.clock, state.durationSeconds)
   const mine = active.context.homeAway === 'home' ? home : away
   const theirs = active.context.homeAway === 'home' ? away : home
   const mineKit = active.context.homeAway === 'home' ? kits.home : kits.away
@@ -138,7 +138,7 @@ export function renderMatch(): string {
         <div class="score-main">
           <b>${state.score.home} : ${state.score.away}</b>
           ${state.shootout ? `<small>点球 ${state.shootout.home} : ${state.shootout.away}</small>` : ''}
-          <span class="score-clock">${state.half === 1 ? '上半场' : '下半场'} · <span ${active.context.isLeague ? 'data-league-clock' : isPesEngine(engine) ? 'data-pes-clock' : ''}>${clockText(matchClock)}</span> / ${clockText(MATCH_DISPLAY_SECONDS)}</span>
+          <span class="score-clock">${state.half === 1 ? '上半场' : '下半场'} · <span ${active.context.isLeague || active.preplayed ? 'data-league-clock' : isPesEngine(engine) ? 'data-pes-clock' : ''}>${clockText(matchClock)}</span> / ${clockText(MATCH_DISPLAY_SECONDS)}</span>
         </div>
         <div class="score-team away"><div class="score-team-text"><b>${esc(away.name)}</b><small>${active.context.homeAway === 'away' ? '你 · ' : ''}${active.context.isLeague ? `联赛第 ${active.context.round} 轮` : active.context.mode === 'cup' ? '杯赛' : active.context.mode === 'peak' ? `巅峰之路 · 第 ${active.context.stage} 关` : active.context.mode === 'legend' ? '传奇挑战' : '友谊赛'}</small></div>${crest({ name: away.name, color: kits.away }, 42)}</div>
       </div>
@@ -148,7 +148,7 @@ export function renderMatch(): string {
           ? `<span class="tag gold">计划：${esc(matchPlanLabel(mine.matchPlan))}${matchPlanPhaseName(mine.activePlanPhase) ? ` · ${esc(matchPlanPhaseName(mine.activePlanPhase))}` : ''}</span>`
           : ''}
         ${active.preplayed
-          ? '<span class="muted small">联赛直播：阵容已在开赛前 30 分钟锁定，按现实时间回放整场（约 10 分钟），不可暂停、加速或跳过；结束后才公布比分和战报。</span>'
+          ? `<span class="muted small">${active.context.mode === 'cup' ? '杯赛' : '联赛'}直播：阵容已在开赛前 30 分钟锁定，按现实时间回放整场（约 10 分钟），不可暂停、加速或跳过；结束后才公布比分和战报。</span>`
           : active.context.isLeague
           ? `<span class="muted small">联赛按现实时间进行，不可暂停、加速或跳过。</span><button class="btn small ${ui.coachPanel ? 'active' : ''}" data-action="match-coach">${icon('coach', 13)}教练调整</button>`
           : `<span class="muted small steps">${state.step} ${isPesEngine(engine) ? '次判定' : '步'} · 种子 ${active.context.seed}</span>
@@ -158,7 +158,7 @@ export function renderMatch(): string {
             <button class="btn small ${ui.coachPanel ? 'active' : ''}" data-action="match-coach" ${ui.coachPanel || active.coachPausesLeft > 0 ? '' : 'disabled'}>${icon('coach', 13)}${ui.coachPanel ? '收起调整' : `教练暂停（${active.coachPausesLeft}）`}</button>`}
         ${active.context.isLeague ? `<span class="muted small steps">${state.step} ${isPesEngine(engine) ? '次判定' : '步'} · 种子 ${active.context.seed}</span>` : ''}
       </div>
-      ${ui.coachPanel ? coachPanel(engine) : ''}
+      ${ui.coachPanel && !active.preplayed ? coachPanel(engine) : ''}
       <div class="match-grid">
         <div class="match-main">
           <div class="pitch-wrap"><canvas id="pitch" width="1200" height="768"></canvas></div>

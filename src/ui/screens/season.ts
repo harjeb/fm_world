@@ -101,7 +101,7 @@ export function renderSeason(): string {
     ${pageHead({
       kicker: `第 ${season.index} 赛季 · ${esc(division)}`,
       title: season.finished ? '赛季结束' : `第 ${season.round} / 38 轮`,
-      sub: `20 队双循环：每天北京时间 12:00、20:00 各踢一轮，一个赛季约 19 天；联赛允许平局，比赛显示 90 分钟（现实约 10 分钟）。${season.finished ? '' : `距下一轮自动结算：${esc(matchdayCountdown(game))}。`}${tierNote()}`,
+      sub: `20 队双循环：每天北京时间 12:00、20:00 各踢一轮${game.world?.seasonCups ? '；杯赛日晚上联赛顺延到 22:00' : ''}，一个赛季约 19 天；联赛允许平局，比赛显示 90 分钟（现实约 10 分钟）。${season.finished ? '' : `距下一轮自动结算：${esc(matchdayCountdown(game))}。`}${tierNote()}`,
       actions,
     })}
     ${season.finished ? `<div class="banner ${inPostseason(game) ? 'info' : 'good'}">${icon(inPostseason(game) ? 'clock' : 'star', 18)}<b>${inPostseason(game) ? `赛后休整 · 还剩 ${esc(nextSeasonCountdown(game))}` : '赛季结束'}</b><span>冠军：${esc(teamName(game, season.champion ?? ''))} · 你的最终排名：第 ${season.playerFinish ?? '—'} 名${inPostseason(game) ? ' · 休整期间可以约友谊赛，升级杯正在进行' : ''}</span></div>` : ''}
@@ -121,6 +121,7 @@ export function renderSeason(): string {
       </div>
     </div>
     ${myRankTrendPanel(division)}
+    ${game.world?.seasonCupMode === 1 ? `<div class="btn-row pad"><button class="btn" data-nav="cups">${icon('badge', 14)} 查看赛季杯赛对阵与排行</button></div>` : ''}
     <div class="grid season-bottom">
       ${leaderPanels(season, { limit: 8 })}
     </div>

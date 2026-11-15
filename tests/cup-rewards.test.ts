@@ -26,7 +26,7 @@ describe('杯赛冠军俱乐部上限奖励', () => {
         expect(after[p][a] - before[p][a]).toBeCloseTo(450, 5)
       }
     }
-    expect(CUP_CEILING_BONUS).toEqual({ community: 100, league: 150, champions: 200 })
+    expect(CUP_CEILING_BONUS).toEqual({ community: 100, league: 150, champions: 200, cross: 250 })
   })
 
   it('上限被硬顶在 2000，不会超过道具硬上限', () => {

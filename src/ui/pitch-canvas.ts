@@ -45,7 +45,7 @@ function reducedMotion(): boolean {
 /** 比赛正在走：联赛一直走，友谊赛没暂停就走。这时画面持续刷新。 */
 function isLive(_engine: GameEngine): boolean {
   if (reducedMotion()) return false
-  return !!game.activeMatch?.context.isLeague || ui.matchPlaying
+  return !!game.activeMatch?.context.isLeague || !!game.activeMatch?.preplayed || ui.matchPlaying
 }
 
 /** 属性评分 + 当前体能 → 这名球员这一帧的运动能力。 */
@@ -337,7 +337,7 @@ export function drawPitch(): void {
   const now = performance.now()
   const state = engine.state
   const key = `${game.activeMatch?.startedAt}|${state.seed}|${state.teams.map((team) => team.id).join('|')}`
-  const isLeague = !!game.activeMatch?.context.isLeague
+  const isLeague = !!game.activeMatch?.context.isLeague || !!game.activeMatch?.preplayed
   const planKey = JSON.stringify([state.instructions, state.teams.map((team) => [team.mentality, team.tactics])])
   const first = key !== view.key || !view.playback || state.step < view.step
   // 教练只改变未来计划。已确认的传射仍须播完，不能因同一步调整而跳到引擎终点。

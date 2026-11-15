@@ -7,7 +7,7 @@
  * - 玩家也可随时通过顶栏版本号按钮重新打开查看。
  */
 
-export const APP_VERSION = 'v0.4.7'
+export const APP_VERSION = 'v0.4.12'
 export const CHANGELOG_STORAGE_KEY = 'fm-world-changelog-seen'
 
 export type ChangelogItem = {
@@ -26,6 +26,62 @@ export type ChangelogRelease = {
 }
 
 export const CHANGELOG_RELEASES: readonly ChangelogRelease[] = [
+  {
+    version: 'v0.4.12',
+    date: '2026-11-15',
+    headline: '杯赛对阵树与参赛奖励',
+    summary: '新增独立杯赛页和淘汰赛对阵树，每场参赛获得金币，冠军获得额外奖励。',
+    items: [
+      { badge: '杯赛页面', tone: 'good', title: '切换杯赛签表与数据排行', desc: '四项杯赛独立标签展示队徽、教练标记、淘汰树、射手、助攻、射门、抢断和扑救排行；跨级赛事命名为星联杯。' },
+      { badge: '赛事奖励', tone: 'gold', title: '参赛金币与冠军奖励', desc: '每场双方都有参赛金币，夺冠额外获得金币；首次夺得每种杯赛解锁俱乐部主属性上限，同名旧杯赛加成不重复。' },
+    ],
+  },
+  {
+    version: 'v0.4.11',
+    date: '2026-11-14',
+    headline: '赛季杯赛',
+    summary: '社区杯、联盟杯、冠军杯和跨级杯纳入全服赛季赛程。',
+    items: [
+      { badge: '参赛资格', tone: 'good', title: '按第 6 轮积分榜确定资格', desc: '社区杯由各二级赛区前 8 参加；联盟杯、冠军杯对应各级全部球队；跨级杯包含顶级全员及低级别前列球队。' },
+      { badge: '赛季赛程', tone: 'gold', title: '杯赛日晚上联赛顺延至 22:00', desc: '杯赛 18:00 开球，赛前 30 分钟锁阵；杯赛消耗体能并产生伤病，可在赛季页查看对阵和结果。' },
+    ],
+  },
+  {
+    version: 'v0.4.10',
+    date: '2026-11-14',
+    headline: '挑战返回与赛程预告',
+    summary: '挑战胜利后留在挑战页，总览优先显示下一轮预告。',
+    items: [
+      { badge: '挑战', tone: 'good', title: '胜利后返回挑战页', desc: '巅峰、传奇和友谊挑战胜利后返回对应挑战模式，战报仍可从挑战记录查看。' },
+      { badge: '赛程', tone: 'gold', title: '总览突出下一轮', desc: '总览优先显示下一场联赛及开赛倒计时，最近一轮结果改为下方的紧凑栏。' },
+    ],
+  },
+  {
+    version: 'v0.4.9',
+    date: '2026-11-14',
+    headline: '巅峰之路逐关奖励',
+    summary: '原每十关的金币或球迷平均分配到每关，总奖励保持不变。',
+    items: [
+      { badge: '逐关奖励', tone: 'good', title: '每关首次通关都有奖励', desc: '金币和球迷按原十关总额平均拆分；突破卡、彩色技能书和第 50 关全明星选人仍在原关卡获得。' },
+      { badge: '旧档兼容', tone: 'gold', title: '已领取的奖励不会重复', desc: '旧版已领里程碑不再重复发放，尚未领里程碑的已通关部分按逐关额度补发。' },
+    ],
+  },
+  {
+    version: 'v0.4.8',
+    date: '2026-11-14',
+    headline: '巅峰之路奖励与挑战修复',
+    summary: '查看每关和里程碑奖励；每个游戏日最多挑战三次，每次重新模拟。',
+    items: [
+      {
+        badge: '关卡奖励', tone: 'gold', title: '预览每关与里程碑奖励',
+        desc: '巅峰之路展示金币、球迷、突破卡、全明星选人和彩色技能书；可重打已通关关卡，首次通关奖励不会重复发放。',
+      },
+      {
+        badge: '挑战次数', tone: 'good', title: '每个游戏日三次，重试重新模拟',
+        desc: '所有关卡共用每游戏日 3 次，开赛时消耗；对手保持固定，每次比赛采用独立种子。联机由服务器管理次数。',
+      },
+    ],
+  },
   {
     version: 'v0.4.7',
     date: '2026-11-14',

@@ -99,7 +99,7 @@ function reducedMotion(): boolean {
 
 /** 比赛正在走：联赛一直走，友谊赛没暂停就走。 */
 function isLive(): boolean {
-  return ui.screen === 'match' && (!!game.activeMatch?.context.isLeague || ui.matchPlaying)
+  return ui.screen === 'match' && (!!game.activeMatch?.context.isLeague || !!game.activeMatch?.preplayed || ui.matchPlaying)
 }
 
 function keyOf(engine: PesEngine): string {
@@ -180,7 +180,7 @@ function prepare(engine: PesEngine): PesEngine {
     clearView()
     pv.key = key
   }
-  if (!game.activeMatch?.context.isLeague) {
+  if (!game.activeMatch?.context.isLeague && !game.activeMatch?.preplayed) {
     // 第一次接手这场比赛：已有的文字直播不再弹横幅
     if (!pv.sim) pv.logSeen = engine.state.log.length
     pv.sim = engine
@@ -580,7 +580,7 @@ function frame(now: number): void {
     pv.last = 0
     return
   }
-  const isLeague = !!game.activeMatch?.context.isLeague
+  const isLeague = !!game.activeMatch?.context.isLeague || !!game.activeMatch?.preplayed
   let sim = prepare(engine)
   const dt = pv.last ? Math.min(0.1, Math.max(0, (now - pv.last) / 1000)) : 0
   pv.last = now

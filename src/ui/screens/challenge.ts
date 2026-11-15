@@ -6,6 +6,9 @@ import { LEGEND_TEAMS } from '../../game/data/legend-teams.ts'
 import { legendTeamById } from '../../game/legend.ts'
 import { PEAK_STAGE_COUNT, peakStageDef, buildPeakTeam } from '../../game/peak.ts'
 import { PEAK_REWARD_STAGE, peakRewardReady } from '../../game/peak-reward.ts'
+import { PEAK_DAILY_LIMIT, peakDailyStatus } from '../../game/peak-attempts.ts'
+import { peakStageReward } from '../../game/data/peak-rewards.ts'
+import { peakSkillForStage } from '../../game/data/peak-skills.ts'
 import { SQUAD_LIMIT } from '../../game/market.ts'
 import { legendRecordOf } from '../../game/pve.ts'
 import { legendSkillForTeam } from '../../game/data/legend-skills.ts'
@@ -14,14 +17,14 @@ import { cupTeam } from '../../game/cup-run.ts'
 import { startingCa } from '../../game/pve-strength.ts'
 import { pveContentReady } from '../../game/pve-content.ts'
 import { caHeat, clubName, icon, pageHead, panel, recordResult, resultPill, tag, tile } from '../components.ts'
-import { aiTeamTacticLabel, esc, playerCA } from '../format.ts'
+import { aiTeamTacticLabel, countdownText, esc, playerCA } from '../format.ts'
 import { game, ui } from '../state.ts'
 import { conferenceLabel } from '../../game/data/world-clubs.ts'
 import { inPostseason } from '../../game/season.ts'
-import { onlineState } from '../../online.ts'
+import { isOnlineMode, onlineState, serverNow } from '../../online.ts'
 import { DEFAULT_FORMATION, FORMATIONS } from '../../game/data/formations.ts'
-import { renderCup } from '../cup-view.ts'
 import { coreNames, pveRoster, pveTeamButton } from '../pve-details.ts'
+import { renderCup } from '../cup-view.ts'
 
 const MODE_LABEL = { friendly: '友谊赛', legend: '传奇挑战', cup: '杯赛挑战', peak: '巅峰之路' }
 const MODE_SUB = {
@@ -111,21 +114,49 @@ function peakBreakthroughPanel(): string {
     <button class="btn primary" data-action="use-peak-card" ${game.activeMatch ? 'disabled' : ''}>使用 1 张</button>`, { flush: true })
 }
 
+function peakRewardText(stage: number): string {
+  const parts: string[] = []
+  const reward = peakStageReward(stage)
+  if (reward) {
+    parts.push(reward.kind === 'money' ? `金币 ${reward.amount.toLocaleString()}` : `球迷 +${reward.amount.toLocaleString()}`)
+    if (reward.breakthroughCards) parts.push(`属性突破卡 ×${reward.breakthroughCards}`)
+  }
+  if (stage === PEAK_REWARD_STAGE) parts.push('从全明星名单中任选 1 人加入')
+  const skill = peakSkillForStage(stage)
+  if (skill) parts.push(`彩色技能书「${skill.name}」`)
+  return parts.join(' · ')
+}
+
+function peakRewardsPanel(stage: number, cleared: number): string {
+  const stages = Array.from({ length: PEAK_STAGE_COUNT }, (_, index) => index + 1)
+  const status = stage === PEAK_REWARD_STAGE && stage <= cleared && !game.pve?.peak.reward50
+    ? '已通关，金币已发放；请在下方选择全明星球员。首次奖励不会重复发放。'
+    : stage <= cleared ? '已通关，首次奖励不会重复发放' : '首次通关时自动发放（第 50 关球员需手动选择）'
+  const choices = stages.map(n => `<button class="row-btn" data-peak-preview="${n}"><b>第 ${n} 关</b><span>${esc(peakRewardText(n))}</span><small>${n <= cleared ? '已通关' : '未通关'}</small></button>`).join('')
+  return panel(`第 ${stage} 关奖励`, `<div class="pad"><b>${esc(peakRewardText(stage))}</b><p class="hint">${esc(status)}</p></div><details class="pad"><summary>查看全部关卡奖励</summary><div class="rows">${choices}</div></details>`, { flush: true })
+}
+
 function renderPeak(): string {
-  const cleared = game.pve?.peak.cleared ?? 0, done = cleared >= 100
-  const current = Math.min(100, cleared + 1)
+  const cleared = game.pve?.peak.cleared ?? 0, done = cleared >= PEAK_STAGE_COUNT
+  const current = Math.min(PEAK_STAGE_COUNT, cleared + 1)
   const selected = ui.peakPreviewStage ?? current
-  const stage = Math.max(1, Math.min(100, selected))
+  const stage = Math.max(1, Math.min(PEAK_STAGE_COUNT, selected))
   const def = peakStageDef(stage), team = buildPeakTeam(stage)
-  const canPlay = !done && stage === current
+  const canPlay = stage <= cleared + 1
+  const replay = stage <= cleared
+  const now = isOnlineMode() ? serverNow() : Date.now()
+  const quota = peakDailyStatus(game, now)
+  const disabled = !canPlay || !!game.activeMatch || !!ui.completing || quota.remaining <= 0
   const kindLabel = def.kind === 'national' ? '世界杯国家队' : def.kind === 'special' ? '动漫全明星' : '生成队'
-  return `<div class="kpi-row">${tile('已通关', `${cleared} / ${PEAK_STAGE_COUNT}`)}${tile('当前关', done ? '全部完成' : String(current))}${tile('浏览关卡', String(stage))}${tile('首发平均 CA', String(Math.round(startingCa(team))))}</div>
-    ${panel('进度 · 点击任意关卡预览', `<div class="peak-track" aria-label="巅峰之路关卡">${Array.from({ length: 100 }, (_, i) => `<button class="peak-cell ${i < cleared ? 'done' : ''} ${i + 1 === current && !done ? 'current' : ''} ${i >= 80 ? 'national' : ''}" data-peak-preview="${i + 1}" aria-label="第 ${i + 1} 关${i < cleared ? '，已通关' : i + 1 === current ? '，当前关' : '，未解锁'}" aria-pressed="${i + 1 === stage}">${i + 1}</button>`).join('')}</div><p class="hint pad">绿色已通关，高亮为当前关；81–100 关为世界杯国家队。只能挑战当前关，但可以预览全部关卡。</p>`, { flush: true })}
+  return `<div class="kpi-row">${tile('已通关', `${cleared} / ${PEAK_STAGE_COUNT}`)}${tile('当前关', done ? '全部完成' : String(current))}${tile('本游戏日剩余', `${quota.remaining} / ${PEAK_DAILY_LIMIT}`)}${tile('首发平均 CA', String(Math.round(startingCa(team))))}</div>
+    <p class="hint pad" data-peak-reset-at="${quota.resetAt}">每个游戏日（现实 6 小时）最多挑战 ${PEAK_DAILY_LIMIT} 次；开赛即消耗，胜负及重打均计入。下次重置：<span class="countdown" data-countdown-end="${quota.resetAt}">${esc(countdownText(quota.resetAt - now))}</span>。</p>
+    ${panel('进度 · 点击任意关卡预览', `<div class="peak-track" aria-label="巅峰之路关卡">${Array.from({ length: 100 }, (_, i) => `<button class="peak-cell ${i < cleared ? 'done' : ''} ${i + 1 === current && !done ? 'current' : ''} ${i >= 80 ? 'national' : ''}" data-peak-preview="${i + 1}" aria-label="第 ${i + 1} 关${i < cleared ? '，已通关' : i + 1 === current ? '，当前关' : '，未解锁'}" aria-pressed="${i + 1 === stage}">${i + 1}</button>`).join('')}</div><p class="hint pad">绿色已通关，高亮为当前关；81–100 关为世界杯国家队。可重打已通关关卡或挑战当前关，其余关卡只能预览。</p>`, { flush: true })}
+    ${peakRewardsPanel(stage, cleared)}
     ${peakRewardPanel()}
     ${peakBreakthroughPanel()}
-    ${panel(done ? '100 关全部通关 · 对手预览' : canPlay ? '当前对手' : '关卡预览', `<div class="peak-current"><div class="peak-stage-no">第 ${stage} 关</div><div class="peak-stage-main"><b>${esc(team.name)}</b><span>${kindLabel} · ${team.formationId} · ${esc(aiTeamTacticLabel(team))}</span><span>核心：${esc(coreNames(team))}</span></div><div class="peak-stage-ca"><span>目标 CA ${def.targetCa}</span><b>${startingCa(team).toFixed(0)}</b></div>${pveTeamButton(`peak:${stage}`)}<button class="btn" data-action="start-peak-stage" data-stage="${stage}" ${!canPlay || game.activeMatch ? 'disabled' : ''}>${canPlay ? '挑战' : '仅预览'}</button></div>`, { flush: true })}
+    ${panel(replay ? '已通关对手' : canPlay ? '当前对手' : '关卡预览', `<div class="peak-current"><div class="peak-stage-no">第 ${stage} 关</div><div class="peak-stage-main"><b>${esc(team.name)}</b><span>${kindLabel} · ${team.formationId} · ${esc(aiTeamTacticLabel(team))}</span><span>核心：${esc(coreNames(team))}</span></div><div class="peak-stage-ca"><span>目标 CA ${def.targetCa}</span><b>${startingCa(team).toFixed(0)}</b></div>${pveTeamButton(`peak:${stage}`)}<button class="btn" data-action="start-peak-stage" data-stage="${stage}" ${disabled ? 'disabled' : ''}>${!canPlay ? '仅预览' : quota.remaining <= 0 ? '次数已用完' : replay ? '重打' : '挑战'}</button></div>`, { flush: true })}
     ${recordsPanel(game.challengeHistory.filter((record) => record.mode === 'peak'), '最近闯关')}
-    <p class="hint pad">对手固定，胜利推进下一关；失败可重试。调整阵容、战术不会受关卡预览影响。</p>`
+    <p class="hint pad">每关对手固定，每次开赛重新模拟；获胜推进当前关，重打不重复发首次通关奖励。调整阵容、战术不会受关卡预览影响。</p>`
 }
 
 function selectedRoster(): string {
@@ -142,10 +173,12 @@ function selectedRoster(): string {
 }
 
 export function renderChallenge(): string {
-  const mode = ui.challengeMode
+  // 只有正式赛季杯赛已经启用时才替换旧入口，避免功能未开放期间隐藏现有杯赛。
+  const seasonCupsEnabled = game.world?.seasonCupMode === 1
+  const mode = seasonCupsEnabled && ui.challengeMode === 'cup' ? 'friendly' : ui.challengeMode
   const loaded = mode === 'friendly' || pveContentReady()
   const body = !loaded ? '<p class="banner info" role="status">正在加载固定球队数据，请稍候…</p>' : mode === 'friendly' ? renderFriendly() : mode === 'legend' ? renderLegend() : mode === 'cup' ? renderCup() : renderPeak()
   return `${pageHead({ kicker: '挑战 · 纯 PvE', title: MODE_LABEL[mode], sub: MODE_SUB[mode] })}
-    <div class="seg challenge-mode-tabs" aria-label="挑战模式">${(Object.keys(MODE_LABEL) as (keyof typeof MODE_LABEL)[]).map((key) => `<button data-challenge-mode="${key}" class="${key === mode ? 'active' : ''}">${MODE_LABEL[key]}</button>`).join('')}</div>
+    <div class="seg challenge-mode-tabs" aria-label="挑战模式">${(Object.keys(MODE_LABEL) as (keyof typeof MODE_LABEL)[]).filter(key => !seasonCupsEnabled || key !== 'cup').map((key) => `<button data-challenge-mode="${key}" class="${key === mode ? 'active' : ''}">${MODE_LABEL[key]}</button>`).join('')}</div>
     ${body}${loaded ? selectedRoster() : ''}`
 }

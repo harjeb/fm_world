@@ -1,25 +1,33 @@
 import type { CupId } from './data/cup-config.ts'
+import type { SeasonCupId } from './season-cups.ts'
+import { SEASON_CUP_REWARDS } from './data/season-cup-rewards.ts'
 import type { Attributes, GameState, Player, TrainingSession } from './types.ts'
 import { createPlayerFromSeed, seedById } from './data/players.ts'
 import { normalizeCeilings } from './data/attr-profile.ts'
 import { legendValue } from './legend-bonus.ts'
 import { attrHardLimit, mainAttrsFor } from './scale.ts'
 
-/** 每种奖杯只生效一次；三种奖杯可以叠加。 */
-export const CUP_CEILING_BONUS: Record<CupId, number> = {
-  community: 100,
-  league: 150,
-  champions: 200,
+/** 每种奖杯只生效一次；旧挑战杯和同名赛季杯共用一次加成。 */
+export const CUP_CEILING_BONUS: Record<SeasonCupId, number> = {
+  community: SEASON_CUP_REWARDS.community.ceiling,
+  league: SEASON_CUP_REWARDS.league.ceiling,
+  champions: SEASON_CUP_REWARDS.champions.ceiling,
+  cross: SEASON_CUP_REWARDS.cross.ceiling,
 }
 
-const CUP_IDS: CupId[] = ['community', 'league', 'champions']
+const LEGACY_CUP_IDS: CupId[] = ['community', 'league', 'champions']
+const CUP_IDS: SeasonCupId[] = [...LEGACY_CUP_IDS, 'cross']
+
+export function cupCeilingBonusFromClaims(claims?: Partial<Record<string, true>>): number {
+  return CUP_IDS.reduce((sum, id) => sum + (claims?.[id] ? CUP_CEILING_BONUS[id] : 0), 0)
+}
 const CLUB_CEILING_VERSION = 3
 
 /** 当前俱乐部所有已解锁奖杯的上限加成，不依赖球员何时入队。 */
 export function cupCeilingBonus(game: Pick<GameState, 'pve'>): number {
   const pve = game.pve
   if (!pve) return 0
-  return CUP_IDS.reduce((sum, id) => sum + (pve.cupCeilingClaims?.[id] ? CUP_CEILING_BONUS[id] : 0), 0)
+  return cupCeilingBonusFromClaims(pve.cupCeilingClaims)
 }
 
 /**
@@ -58,7 +66,7 @@ export function syncCupCeilingSessions(game: GameState): boolean {
 }
 
 /** 发放俱乐部永久加成；同一杯赛重复夺冠不会叠加。 */
-export function applyCupCeilingReward(game: GameState, cupId: CupId): number {
+export function applyCupCeilingReward(game: GameState, cupId: SeasonCupId): number {
   if (!game.pve || !Object.hasOwn(CUP_CEILING_BONUS, cupId)) return 0
   const claims = (game.pve.cupCeilingClaims ??= {})
   if (claims[cupId]) return 0
@@ -113,7 +121,7 @@ function restoreVersionTwo(player: Player, backup: Attributes | undefined, possi
 /** Unknown roster history is preserved; never deduct a guessed reward from personal ceilings. */
 function migrateLegacyCeilings(game: GameState, legacyClaims: Partial<Record<string, true>>): void {
   const pve = game.pve!
-  const ids = CUP_IDS.filter(id => legacyClaims[id] === true)
+  const ids = LEGACY_CUP_IDS.filter(id => legacyClaims[id] === true)
   const amount = ids.reduce((sum, id) => sum + CUP_CEILING_BONUS[id], 0)
   if (!amount) return
   const possibleBonuses = ids.reduce((values, id) => [...values, ...values.map(value => value + CUP_CEILING_BONUS[id])], [0])
@@ -148,10 +156,12 @@ export function ensureCupCeilingClaims(game: GameState): boolean {
     changed = true
   }
   for (const trophy of pve.trophies ?? []) {
-    const cupId = trophy.cupId as CupId
+    const official = trophy.cupId.startsWith('season-')
+    const cupId = (official ? trophy.cupId.slice('season-'.length) : trophy.cupId) as SeasonCupId
     if (!Object.hasOwn(CUP_CEILING_BONUS, cupId)) continue
     if (pve.cupCeilingClaims[cupId]) {
-      if (!trophy.ceilingBonus) {
+      // 赛季杯后续夺冠只发金币，不要把旧的首次上限奖励标到每座奖杯上。
+      if (!official && !trophy.ceilingBonus) {
         trophy.ceilingBonus = CUP_CEILING_BONUS[cupId]
         changed = true
       }

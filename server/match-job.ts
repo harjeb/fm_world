@@ -9,6 +9,7 @@ import { facilityLevel } from '../src/game/economy.ts'
 import { LOGIC_MATCH_SECONDS, matchRealSeconds } from '../src/game/match/time.ts'
 import { matchConditionLoss } from '../src/game/condition.ts'
 import { matchPlanConditionFactor } from '../src/game/pes/match-plan.ts'
+import type { SeasonCupId } from '../src/game/season-cups.ts'
 
 export type MatchBook = {
   injuries: Record<string, number>
@@ -17,6 +18,8 @@ export type MatchBook = {
   appearances: Record<string, number[]>
   conditionAt: Record<string, number>
   chemistry?: Chemistry
+  /** 正式杯赛的纪律记录按赛事隔离，不能混进联赛停赛。 */
+  cupDiscipline?: Partial<Record<SeasonCupId, { suspensions: Record<string, Suspension>; yellowCounts: Record<string, number> }>>
 }
 export const emptyMatchBook = (): MatchBook => ({ injuries: {}, suspensions: {}, yellowCounts: {}, appearances: {}, conditionAt: {}, chemistry: {} })
 
@@ -28,6 +31,8 @@ export type LockedTeam = {
   suspended: string[]
   medical: number
   tacticsStage?: number
+  /** 锁定时的教练账号，用于避免中途接管重复获得历史战报/荣誉。 */
+  coachId?: string
   /** 锁定时这支队能发挥几成（欠薪 0.5）；没有这一项按 1 算。 */
   performance?: number
   /** 没有教练的电脑球队：体能低于 80 的先休息。有教练的按教练排的阵容。 */
@@ -40,6 +45,8 @@ export type MatchJob = {
   season: number
   divisionId: string
   round: number
+  /** 缺省为旧版联赛任务；正式杯赛使用独立赛事与对阵 ID。 */
+  competition?: { kind: 'seasonCup'; cupId: SeasonCupId; fixtureId: string }
   kickoffAt: number
   lockedAt: number
   seed: number
@@ -55,7 +62,7 @@ export type MatchJobResult = {
    */
   initialState?: MatchState
   record: MatchRecord
-  fixture: Pick<Fixture, 'score' | 'matchId' | 'scorers' | 'assisters' | 'autoSimulated'>
+  fixture: Pick<Fixture, 'score' | 'shootout' | 'matchId' | 'scorers' | 'assisters' | 'autoSimulated'>
   injuries: Record<string, number>
   conditionLoss: Record<string, number>
   appearances: Record<string, number>
@@ -64,6 +71,11 @@ export type MatchJobResult = {
 
 export function matchJobId(season: number, divisionId: string, fixture: Pick<Fixture, 'round' | 'homeId' | 'awayId'>): string {
   return `q-${crypto.createHash('sha256').update(JSON.stringify([season, divisionId, fixture.round, fixture.homeId, fixture.awayId])).digest('hex')}`
+}
+
+/** 与旧联赛 ID 分离；相同杯赛对阵重试时仍使用同一任务。 */
+export function seasonCupJobId(season: number, cupId: SeasonCupId, fixtureId: string): string {
+  return `q-${crypto.createHash('sha256').update(JSON.stringify(['seasonCup', season, cupId, fixtureId])).digest('hex')}`
 }
 
 /** 纯计算：只读锁定快照，不访问账号、共享世界、网络或真实时钟。 */
@@ -87,10 +99,11 @@ export function computeMatchJob(job: MatchJob): MatchJobResult {
   // 至少一方有教练：开球后要把整场当直播放给教练看，必须用和画面同一个的 PES 引擎。
   // 两支电脑球队互踢没人看，沿用便宜的整步引擎，只要赛果。
   const live = !job.home.ai || !job.away.ai
+  const knockout = job.competition?.kind === 'seasonCup'
   const home = input(job.home), away = input(job.away)
   const engine: GameEngine = live
-    ? new PesEngine({ seed: job.seed, home, away, knockout: false, durationSeconds: LOGIC_MATCH_SECONDS, offside: true })
-    : new MatchEngine({ seed: job.seed, home, away, knockout: false, durationSeconds: LOGIC_MATCH_SECONDS, offside: true, recordPlayback: false, rulesVersion: 2 })
+    ? new PesEngine({ seed: job.seed, home, away, knockout, durationSeconds: LOGIC_MATCH_SECONDS, offside: true })
+    : new MatchEngine({ seed: job.seed, home, away, knockout, durationSeconds: LOGIC_MATCH_SECONDS, offside: true, recordPlayback: false, rulesVersion: 2 })
   prepareMatchInjuries(engine.state, { ...job.home.injuries, ...job.away.injuries }, job.kickoffAt)
   const initialState = live ? engine.serialize() : undefined
   const state = engine.simulate()
@@ -106,7 +119,8 @@ export function computeMatchJob(job: MatchJob): MatchJobResult {
     injuries[injury.personId] = Math.max(injuries[injury.personId] ?? 0, until)
   }
   const record = createMatchRecord({ season: { index: job.season }, lineup: job.home.team.lineup }, state, {
-    isLeague: true, round: job.round, opponentId: job.away.team.id, opponentName: job.away.team.name,
+    isLeague: !knockout, ...(job.competition ? { mode: 'cup' as const, cupId: `season-${job.competition.cupId}`, cupFixtureId: job.competition.fixtureId } : {}),
+    round: job.round, opponentId: job.away.team.id, opponentName: job.away.team.name,
     seed: job.seed, homeAway: 'home', durationSeconds: LOGIC_MATCH_SECONDS,
   })
   record.id = job.id
@@ -123,7 +137,7 @@ export function computeMatchJob(job: MatchJob): MatchJobResult {
     appearances[id] = Math.round(stat.minutes)
   }
   const cards = state.log.flatMap((entry) => entry.card && entry.playerId ? [{ card: entry.card, playerId: entry.playerId }] : [])
-  return { id: job.id, ...(initialState ? { initialState } : {}), record, fixture: { score: { ...record.score }, matchId: job.id, ...fixtureScorers(state), autoSimulated: true }, injuries, conditionLoss, appearances, cards }
+  return { id: job.id, ...(initialState ? { initialState } : {}), record, fixture: { score: { ...record.score }, ...(record.shootout ? { shootout: { ...record.shootout } } : {}), matchId: job.id, ...fixtureScorers(state), autoSimulated: true }, injuries, conditionLoss, appearances, cards }
 }
 
 /** 同一个全服战报映射给双方教练，各自看到自己的球队 ID、阵容和胜负。 */
@@ -137,6 +151,9 @@ export function recordForClub(job: MatchJob, result: MatchJobResult, clubId: str
   if (result.initialState) record.hasReplay = true
   const scored = home ? record.score.home : record.score.away
   const conceded = home ? record.score.away : record.score.home
-  record.result = scored > conceded ? 'win' : scored < conceded ? 'loss' : 'draw'
+  const playerShootout = home ? record.shootout?.home : record.shootout?.away
+  const opponentShootout = home ? record.shootout?.away : record.shootout?.home
+  record.result = scored > conceded ? 'win' : scored < conceded ? 'loss'
+    : playerShootout !== undefined && opponentShootout !== undefined ? (playerShootout > opponentShootout ? 'win' : 'loss') : 'draw'
   return record
 }

@@ -3,7 +3,7 @@ import { loadPveContent } from '../src/game/pve-content.ts'
 beforeAll(loadPveContent)
 import { renderChallenge } from '../src/ui/screens/challenge.ts'
 import { game, ui } from '../src/ui/state.ts'
-import { enterCup } from '../src/game/cup-run.ts'
+import { peakDailyStatus } from '../src/game/peak-attempts.ts'
 
 describe('挑战页面', () => {
   it('传奇挑战默认筛选 B 档，所有档位都可以直接开战', () => {
@@ -24,25 +24,59 @@ describe('挑战页面', () => {
     expect(sPlus).toContain('data-team="barcelona-2010-11"')
     expect(sPlus).not.toContain('data-team="aston-villa-1981-82"')
   })
-  it('四种模式都能渲染', () => {
+  it('杯赛未启用时保留旧挑战入口，启用后移到赛季页', () => {
     for (const mode of ['friendly', 'legend', 'cup', 'peak'] as const) {
       ui.challengeMode = mode
       ui.cupPreviewId = null
       const html = renderChallenge()
       expect(html.length).toBeGreaterThan(100)
       expect(html).toContain('挑战')
+      expect(html).toContain('data-challenge-mode="cup"')
     }
   })
 
-  it('报名后的杯赛小组赛可渲染', () => {
-    const result = enterCup(game, 'community')
-    expect(result.ok, result.error).toBe(true)
-    ui.challengeMode = 'cup'
-    ui.cupPreviewId = 'community'
-    const html = renderChallenge()
-    expect(html).toContain('小组赛')
-    expect(html).toContain('继续比赛')
-    expect(html).toContain('你')
+  it('巅峰展示关卡奖励与每日次数，重打不能重复领奖', () => {
+    const peak = structuredClone(game.pve!.peak)
+    const previousActive = game.activeMatch
+    try {
+      game.activeMatch = undefined
+      game.pve!.peak.cleared = 30
+      game.pve!.peak.dailyAttempts = { day: peakDailyStatus(game).day, count: 3 }
+      ui.challengeMode = 'peak'
+      ui.peakPreviewStage = 30
+      const html = renderChallenge()
+      expect(html).toContain('本游戏日剩余')
+      expect(html).toContain('0 / 3')
+      expect(html).toContain('现实 6 小时')
+      expect(html).toContain('次数已用完')
+      expect(html).toContain('金币 50,000')
+      expect(html).toContain('属性突破卡 ×1')
+      expect(html).toContain('首次奖励不会重复发放')
+      expect(html).toContain('从全明星名单中任选 1 人加入')
+      expect(html).toContain('彩色技能书「射手直觉」')
+      expect(html).toContain('第 85 关')
+      ui.peakPreviewStage = 1
+      expect(renderChallenge()).toContain('金币 30,000')
+      ui.peakPreviewStage = 32
+      expect(renderChallenge()).toContain('仅预览')
+    } finally {
+      game.pve!.peak = peak
+      game.activeMatch = previousActive
+      ui.peakPreviewStage = null
+    }
+  })
+
+  it('正式赛季杯赛启用后，旧杯赛挑战入口隐藏', () => {
+    const world = game.world
+    try {
+      game.world!.seasonCupMode = 1
+      ui.challengeMode = 'friendly'
+      const html = renderChallenge()
+      expect(html).not.toContain('data-challenge-mode="cup"')
+      expect(html).toContain('data-challenge-mode="peak"')
+    } finally {
+      if (world) delete world.seasonCupMode
+    }
   })
 
   it('通关第 50 关后显示全明星奖励选择', () => {
@@ -74,17 +108,12 @@ describe('挑战页面', () => {
     ui.legendSearch = ''
   })
 
-  it('传奇档位筛选和杯赛分组预览可渲染', () => {
+  it('传奇档位筛选可渲染', () => {
     ui.challengeMode = 'legend'
     ui.legendTier = 'S+'
     const legend = renderChallenge()
     expect(legend).toContain('S+')
     expect(legend).toContain('传奇球队')
 
-    ui.challengeMode = 'cup'
-    ui.cupPreviewId = 'league'
-    const cup = renderChallenge()
-    expect(cup).toContain('A 组')
-    expect(cup).toContain('随机')
   })
 })

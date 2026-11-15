@@ -488,6 +488,14 @@ h3:first-child { margin-top: 0; }
 .nm-live b { font-size: 16px; font-weight: 600; }
 .nm-live .ico { color: var(--accent); }
 .nm-live .btn .ico { color: inherit; }
+.nm-stack { display: flex; flex: 1; min-width: 0; flex-direction: column; }
+.nm-recent { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; width: 100%; padding: 8px 20px; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--text-2); font: inherit; font-size: 12px; text-align: left; }
+button.nm-recent { cursor: pointer; }
+button.nm-recent:hover { background: var(--raised); }
+.nm-recent b { color: var(--text); font-family: var(--font-num); }
+.nm-recent-label { color: var(--text-3); }
+.nm-recent small { margin-left: auto; color: var(--text-3); }
+.nm-center .nm-meta { white-space: normal; text-align: center; }
 
 .msg { align-items: flex-start; }
 .msg .ico { margin-top: 2px; }
@@ -1476,6 +1484,40 @@ circle.pm-5 { fill: var(--h6); }
 .peak-stage-ca { display: flex; flex-direction: column; align-items: flex-end; font-size: 12px; }
 .peak-stage-ca b { font-family: var(--font-num); font-size: 20px; }
 .peak-current.done { color: var(--good); }
+
+/* 赛季杯赛：横向可滚动淘汰树，球队队徽和执教人像复用联赛组件。 */
+.sc-tabs { flex-wrap: wrap; margin-bottom: 14px; }
+.sc-summary { display: flex; flex-wrap: wrap; gap: 12px 24px; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised); font-size: 13px; }
+.sc-summary span { color: var(--text-2); }
+.sc-summary b { color: var(--text); }
+.sc-tree-viewport { overflow: auto; padding: 18px 16px; max-height: 76vh; }
+.sc-tree { display: inline-flex; min-width: max-content; align-items: center; }
+.sc-branch { display: flex; align-items: center; }
+.sc-children { position: relative; display: flex; flex-direction: column; justify-content: center; padding-right: 28px; }
+.sc-child { position: relative; padding: 5px 0; }
+.sc-child::after { content: ''; position: absolute; right: -14px; top: 50%; width: 14px; border-top: 1px solid var(--line-2); }
+.sc-child::before { content: ''; position: absolute; right: -14px; border-right: 1px solid var(--line-2); }
+.sc-child:first-child::before { top: 50%; bottom: 0; }
+.sc-child:last-child::before { top: 0; bottom: 50%; }
+.sc-parent { position: relative; }
+.sc-parent::before { content: ''; position: absolute; left: -14px; top: 50%; width: 14px; border-top: 1px solid var(--line-2); }
+.sc-card { width: 220px; min-height: 82px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--raised); }
+.sc-card header { display: flex; justify-content: space-between; gap: 5px; margin-bottom: 4px; color: var(--text-3); font-size: 10px; }
+.sc-card time { white-space: nowrap; }
+.sc-team { display: flex; align-items: center; gap: 5px; min-height: 25px; }
+.sc-team .club { flex: 1; min-width: 0; text-align: left; }
+.sc-team .club-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-team.is-winner { color: var(--good); font-weight: 600; }
+.sc-score { margin-left: auto; font-family: var(--font-num); }
+.sc-pending, .sc-bye-label, .sc-card-extra { color: var(--text-3); font-size: 11px; }
+.sc-card-extra { display: block; padding-top: 3px; }
+.sc-bye { border-style: dashed; }
+.sc-leader-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
+.sc-leader-club { min-width: 0; max-width: 45%; overflow: hidden; }
+.sc-leader-club .club-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-fallback-round { padding: 8px 12px; }
+.sc-fallback-round h3 { font-size: 13px; }
+@media (max-width: 700px) { .sc-card { width: 185px; } .sc-tree-viewport { max-height: 65vh; padding: 12px 8px; } }
 @media (max-width: 900px) {
   .cup-cards { grid-template-columns: 1fr; }
   .cup-groups { grid-template-columns: 1fr; }

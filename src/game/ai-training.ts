@@ -82,7 +82,7 @@ function chooseEvent(session: TrainingSession, event: EventDef, weights: Map<Att
  * AI 没有陪练/导师，选项目按“招牌属性优先、其余主属性兜底”的自动策略，
  * 事件按期望成长选；体力进入失败率区间时自动休息。最终仍受球员自己的 PA 上限约束。
  */
-export function simulateAITrainingSession(base: Player, seed: number, economy: FacilityStages, seasonIndex = 1): TrainingSession {
+export function simulateAITrainingSession(base: Player, seed: number, economy: FacilityStages, seasonIndex = 1, cupCeilingBonus = 0): TrainingSession {
   const session = createTrainingSession(untrainedPlayer(base), seed, {
     stadium: economy.stadium,
     academy: economy.academy,
@@ -92,6 +92,7 @@ export function simulateAITrainingSession(base: Player, seed: number, economy: F
     psychology: economy.psychology,
     tactics: economy.tactics,
   }, 1, undefined, trainingActionsForSeason(seasonIndex))
+  session.cupCeilingBonus = Math.max(0, cupCeilingBonus)
   const weights = weightsFor(base)
   for (let step = 0; step < 200 && !session.completed; step++) {
     if (session.pendingEventId) {
@@ -114,8 +115,8 @@ export function simulateAITrainingSession(base: Player, seed: number, economy: F
   return session
 }
 
-export function simulateAITrainingRound(base: Player, seed: number, economy: FacilityStages, seasonIndex = 1): Player {
-  return simulateAITrainingSession(base, seed, economy, seasonIndex).candidate
+export function simulateAITrainingRound(base: Player, seed: number, economy: FacilityStages, seasonIndex = 1, cupCeilingBonus = 0): Player {
+  return simulateAITrainingSession(base, seed, economy, seasonIndex, cupCeilingBonus).candidate
 }
 
 export function aiTrainingGain(base: Player, trained: Player): number {

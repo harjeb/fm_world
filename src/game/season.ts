@@ -12,6 +12,7 @@ import { refreshLocalFreeMarket } from './free-market.ts'
 import { awardSeasonPrize } from './economy.ts'
 import { squadLimitError } from './market.ts'
 import { AVERAGE_ROUND_GAME_DAYS, GAME_DAY_MS, KICKOFF_SCHEDULE, calendarStartForSeason, latestKickoffAt, elapsedGameDays, gameDayOfRound, kickoffAtForRound, seasonEndAt, roundsKickedOff, roundGapGameDays } from './calendar.ts'
+import { seasonRoundKickoff, worldRoundsKickedOff } from './season-cups.ts'
 import { recordMatchInjuries } from './injury.ts'
 import { applyPveResult, ensurePve } from './pve.ts'
 import { awardRoundIncome, economyOf } from './economy.ts'
@@ -227,7 +228,8 @@ export function isRoundComplete(game: GameState, round = game.season.round): boo
 
 export function dueRound(game: GameState, now = Date.now()): number {
   // 已经开过球的轮数（每天北京时间 12:00、20:00 各一轮）；赛季开始到第一轮开赛之间也算第 1 轮。
-  return Math.min(ROUNDS + 1, Math.max(1, roundsKickedOff(game.season.startedAt, now, game.season.clockShift)))
+  const played = game.world?.seasonCups ? worldRoundsKickedOff(game.world, now) : roundsKickedOff(game.season.startedAt, now, game.season.clockShift)
+  return Math.min(ROUNDS + 1, Math.max(1, played))
 }
 
 export function seasonDay(game: GameState, now = Date.now()): number {
@@ -235,7 +237,7 @@ export function seasonDay(game: GameState, now = Date.now()): number {
 }
 
 export function roundKickoffAt(game: GameState, round = game.season.round): number {
-  return kickoffAtForRound(game.season.startedAt, round, game.season.clockShift)
+  return game.world?.seasonCups ? seasonRoundKickoff(game.season, round) : kickoffAtForRound(game.season.startedAt, round, game.season.clockShift)
 }
 
 /** 当前轮的结算时刻，也就是下一轮开赛的时刻。 */
@@ -572,7 +574,13 @@ export function nextMatchCountdown(game: GameState, now = Date.now()): string {
   if (game.shared) {
     const future = game.season.fixtures.filter((fixture) => fixture.isPlayer && !fixture.played && roundKickoffAt(game, fixture.round) > now)
       .sort((a, b) => a.round - b.round)[0]
-    if (future) return shortCountdown(roundKickoffAt(game, future.round) - now)
+    const leagueAt = future ? roundKickoffAt(game, future.round) : Infinity
+    const clubId = game.world?.clubs.find(club => club.id === 'player')?.squadKey
+    const cupAt = clubId ? game.world?.seasonCups?.cups.flatMap(cup => cup.rounds.flatMap(round => round.fixtures))
+      .filter(fixture => !fixture.played && fixture.kickoffAt > now && (fixture.homeId === clubId || fixture.awayId === clubId))
+      .map(fixture => fixture.kickoffAt).sort((a, b) => a - b)[0] : undefined
+    const next = Math.min(leagueAt, cupAt ?? Infinity)
+    if (Number.isFinite(next)) return shortCountdown(next - now)
     return game.season.finished ? '赛季结束' : '结果结算中'
   }
   const fixture = playerFixture(game, game.season.round)
@@ -596,10 +604,19 @@ export function lineupLockState(game: GameState, now = Date.now()): { locked: bo
   if (game.shared) {
     const future = game.season.fixtures.filter((fixture) => fixture.isPlayer && !fixture.played && roundKickoffAt(game, fixture.round) > now)
       .sort((a, b) => a.round - b.round)[0]
-    const kickoffAt = roundKickoffAt(game, future?.round ?? Math.min(ROUNDS, game.season.round + 1))
+    const leagueAt = future ? roundKickoffAt(game, future.round) : undefined
+    const clubId = game.world?.clubs.find(club => club.id === 'player')?.squadKey
+    const cupAt = clubId ? game.world?.seasonCups?.cups.flatMap(cup => cup.rounds.flatMap(round => round.fixtures))
+      .filter(fixture => !fixture.played && fixture.kickoffAt > now && (fixture.homeId === clubId || fixture.awayId === clubId))
+      .map(fixture => fixture.kickoffAt).sort((a, b) => a - b)[0] : undefined
+    const kickoffAt = Math.min(leagueAt ?? Infinity, cupAt ?? Infinity)
+    if (!Number.isFinite(kickoffAt)) {
+      const next = roundKickoffAt(game, Math.min(ROUNDS, game.season.round + 1))
+      return { locked: false, lockAt: next - LINEUP_LOCK_MS, kickoffAt: next }
+    }
     const lockAt = kickoffAt - LINEUP_LOCK_MS
     // 已开球的场次输入已经持久化；即使重启恢复时尚在排队，也能准备下一场。
-    return { locked: !!future && now >= lockAt, lockAt, kickoffAt }
+    return { locked: now >= lockAt, lockAt, kickoffAt }
   }
   const current = playerFixture(game, game.season.round)
   if (current && !current.played) {
