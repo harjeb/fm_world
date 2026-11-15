@@ -201,6 +201,8 @@ export function mergeSignings(state: AIClubState, players: Player[]): Player[] {
   const squad = [...players]
   const pending = [...state.signings].sort((a, b) => playerCa(b) - playerCa(a)).slice(0, AI_SIGNING_LIMIT)
   for (const signing of pending) {
+    // 当季名单可能已经并入这笔签约，重建球队时不能重复添加同一名球员。
+    if (squad.some((player) => player.id === signing.id)) continue
     if (squad.length < AI_SQUAD_LIMIT) {
       squad.push(signing)
       continue

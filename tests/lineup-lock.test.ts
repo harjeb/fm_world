@@ -79,11 +79,19 @@ describe('开赛前 30 分钟锁阵容', () => {
     const loaded = await (await fetch(`${base}/api/game`, { headers: auth })).json() as { game: GameState; revision: number }
     expect(loaded.game.season.round).toBe(2)
     expect(playerFixture(loaded.game, 2)!.played).toBe(true)
+    loaded.game.autoSubs = { timed: [], staminaBelow: null, onInjury: false, preMatchStaminaBelow: 75 }
+    const configured = await fetch(`${base}/api/game`, { method: 'PUT', headers: auth, body: JSON.stringify({ game: loaded.game, baseRevision: loaded.revision }) })
+    expect(configured.status).toBe(200)
 
     // 第 3 轮开赛前 10 分钟：阵容锁定
     clock = kickoff(3) - 10 * minute
     const lockedGame = await (await fetch(`${base}/api/game`, { headers: auth })).json() as { game: GameState; revision: number }
     expect(lineupLockState(lockedGame.game, clock).locked).toBe(true)
+    expect(lockedGame.game.autoSubs?.preMatchStaminaBelow).toBe(75)
+    const changedPlan = structuredClone(lockedGame.game)
+    changedPlan.autoSubs!.preMatchStaminaBelow = 50
+    const rejectedPlan = await fetch(`${base}/api/game`, { method: 'PUT', headers: auth, body: JSON.stringify({ game: changedPlan, baseRevision: lockedGame.revision }) })
+    expect(rejectedPlan.status).toBe(409)
     const changed = structuredClone(lockedGame.game)
     changed.lineup.starters[0].playerId = changed.lineup.bench[0]
     const rejected = await fetch(`${base}/api/game`, { method: 'PUT', headers: auth, body: JSON.stringify({ game: changed, baseRevision: lockedGame.revision }) })

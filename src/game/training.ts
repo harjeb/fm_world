@@ -7,6 +7,7 @@ import type {
   GameState,
   Player,
   Position,
+  DetailedPosition,
   TrainingSession,
   TrainingExchange,
   SkillId,
@@ -27,6 +28,7 @@ import { legendMultiplier, legendValue } from './legend-bonus.ts'
 import { partnerAssignment, trainingDate, trainingLowMood, trainingOptions, type TrainingActivityId } from './training-calendar.ts'
 import { ROLES } from './data/roles.ts'
 import { mainAttrsFor } from './scale.ts'
+import { DETAILED_TO_POSITION, POSITION_TO_DETAILED, detailedPositionValue, isDetailedPosition, readDetailedPositions } from './detailed-positions.ts'
 
 export const BASE_TRAINING_DAYS = 15
 export const SEASON2_BONUS_DAYS = 5
@@ -75,15 +77,42 @@ const ROUTE_CHAIN: Record<string, string> = {
 export type TrainingActionId = 'drill' | 'combo' | 'match' | 'position' | 'rest' | 'mentor' | 'protection' | 'inherit'
 
 export type TrainingRequest =
-  | { kind: 'activity'; activityId: TrainingActivityId; teammateIds?: string[]; position?: Position; mentorId?: string; skill?: SkillId; replaceSkill?: SkillId }
+  | { kind: 'activity'; activityId: TrainingActivityId; teammateIds?: string[]; position?: Position | DetailedPosition; detailed?: boolean; mentorId?: string; skill?: SkillId; replaceSkill?: SkillId }
   | { kind: 'drill'; attr: AttrKey; teammateIds?: string[] }
   | { kind: 'combo'; focus: 'attack' | 'defense'; teammateIds?: string[] }
   | { kind: 'match'; teammateIds?: string[] }
-  | { kind: 'position'; position: Position }
+  | { kind: 'position'; position: Position | DetailedPosition; detailed?: boolean }
   | { kind: 'rest' }
   | { kind: 'mentor' }
   | { kind: 'protection'; focus: 'prevention' | 'resilience' }
   | { kind: 'inherit'; mentorId: string; skill: SkillId; replaceSkill?: SkillId }
+
+/** GK and ST are shared identifiers: requests keep their legacy coarse semantics. */
+function trainingPositionValue(player: Player, pos: Position | DetailedPosition, detailed = false): number {
+  if (pos === 'ST' && detailed) return detailedPositionValue(player, pos)
+  return pos === 'CB' || pos === 'W' || pos === 'CM' || pos === 'GK' || pos === 'ST'
+    ? player.positions[pos] : detailedPositionValue(player, pos)
+}
+
+function setTrainingPosition(player: Player, pos: Position | DetailedPosition, value: number, detailed = false): void {
+  if (pos === 'ST' && detailed) {
+    player.detailedPositions = { ...readDetailedPositions(player), ST: value }
+    player.positions = { ...player.positions, ST: Math.max(player.positions.ST, value) }
+  } else if (pos === 'CB' || pos === 'W' || pos === 'CM' || pos === 'GK' || pos === 'ST') {
+    if (player.detailedPositions) {
+      player.detailedPositions = readDetailedPositions(player)
+      const delta = value - player.positions[pos]
+      for (const detail of POSITION_TO_DETAILED[pos]) {
+        player.detailedPositions[detail] = Math.max(0, Math.min(100, player.detailedPositions[detail]! + delta))
+      }
+    }
+    player.positions = { ...player.positions, [pos]: value }
+  } else {
+    player.detailedPositions = { ...readDetailedPositions(player), [pos]: value }
+    const coarse = DETAILED_TO_POSITION[pos]
+    player.positions = { ...player.positions, [coarse]: Math.max(player.positions[coarse], value) }
+  }
+}
 
 export type TrainingPlan = {
   kind: TrainingActionId | 'activity'
@@ -154,6 +183,8 @@ export function createTrainingSession(player: Player, seed: number, snapshot: Tr
     attrs: { ...player.attrs },
     ceilings: { ...player.ceilings },
     positions: { ...player.positions },
+    detailedPositions: player.detailedPositions && { ...player.detailedPositions },
+    baseDetailedPositions: player.baseDetailedPositions && { ...player.baseDetailedPositions },
     personality: { ...player.personality },
     baseAttrs: { ...player.baseAttrs },
     basePositions: { ...player.basePositions },
@@ -429,7 +460,7 @@ export function planTraining(session: TrainingSession, request: TrainingRequest,
     if (request.kind !== 'activity') return emptyPlan('课程', '请选择当前时段提供的课程。', before)
     const activity = trainingOptions(session).find(item => item.id === request.activityId)
     if (!activity) return emptyPlan('课程', '当前时段没有提供该课程。', before)
-    const legacy: TrainingRequest | undefined = activity.id === 'position' ? { kind: 'position', position: request.position! } :
+    const legacy: TrainingRequest | undefined = activity.id === 'position' ? { kind: 'position', position: request.position!, detailed: request.detailed } :
       activity.id === 'prevention' || activity.id === 'resilience' ? { kind: 'protection', focus: activity.id } :
       activity.id === 'rest' ? { kind: 'rest' } : activity.id === 'mentor' ? { kind: 'mentor' } :
       activity.id === 'match' || activity.id === 'exchange' ? { kind: 'match' } : undefined
@@ -570,13 +601,13 @@ function planLegacyTraining(session: TrainingSession, request: Exclude<TrainingR
   if (request.kind === 'position') {
     const player = session.candidate
     const pos = request.position
-    if (!['GK', 'CB', 'W', 'CM', 'ST'].includes(pos)) return emptyPlan('位置训练', '无效的位置。', before)
+    if ((!isDetailedPosition(pos) && !['CB', 'W', 'CM'].includes(pos)) || (request.detailed && !isDetailedPosition(pos))) return emptyPlan('位置训练', '无效的位置。', before)
     if (!isGk && pos === 'GK') return emptyPlan('位置训练', '外场球员不能转职门将。', before)
     if (isGk && pos !== 'GK') return emptyPlan('位置训练', '首版门将不能转职外场。', before)
-    if (player.positions[pos] >= 100) return emptyPlan('位置训练', `${pos} 熟练度已达 100。`, before)
+    if (trainingPositionValue(player, pos, request.detailed) >= 100) return emptyPlan('位置训练', `${pos} 熟练度已达 100。`, before)
     const rng = actionRng(session, nextAction, `position-${pos}`)
     const adaptability = player.personality.adaptability
-    const current = player.positions[pos]
+    const current = trainingPositionValue(player, pos, request.detailed)
     const amount = current <= 0 ? 35 + adaptability * 0.15 : 6 + adaptability / 18 + rng.int(3)
     return {
       kind: 'position',
@@ -778,9 +809,9 @@ export function performTrainingAction(session: TrainingSession, request: Trainin
     const id = request.activityId
     if (id === 'position') {
       const pos = request.position!
-      const current = session.candidate.positions[pos]
+      const current = trainingPositionValue(session.candidate, pos, request.detailed)
       const amount = current <= 0 ? 35 + session.candidate.personality.adaptability * 0.15 : 6 + session.candidate.personality.adaptability / 18 + actionRng(session, session.action + 1, `position-${pos}`).int(3)
-      session.candidate.positions = { ...session.candidate.positions, [pos]: Math.min(100, current + amount) }
+      setTrainingPosition(session.candidate, pos, Math.min(100, current + amount), request.detailed)
       plan.text += ` 熟练度 ${Math.round(current)} → ${Math.round(Math.min(100, current + amount))}。`
     } else if (id === 'prevention' || id === 'resilience') {
       session.candidate.skills = [...session.candidate.skills, id === 'prevention' ? 'injury_prevention' : 'injury_resilience']
@@ -828,9 +859,9 @@ export function performTrainingAction(session: TrainingSession, request: Trainin
     })
   } else if (request.kind === 'position') {
     const pos = request.position
-    const current = session.candidate.positions[pos]
+    const current = trainingPositionValue(session.candidate, pos, request.detailed)
     const amount = current <= 0 ? 35 + session.candidate.personality.adaptability * 0.15 : 6 + session.candidate.personality.adaptability / 18 + actionRng(session, session.action + 1, `position-${pos}`).int(3)
-    session.candidate.positions = { ...session.candidate.positions, [pos]: Math.min(100, current + amount) }
+    setTrainingPosition(session.candidate, pos, Math.min(100, current + amount), request.detailed)
     session.log.push({
       action: session.action + 1,
       week: weekOfAction(session.action + 1),
@@ -1072,8 +1103,7 @@ function applyEventEffect(session: TrainingSession, effect: EventEffect): { gain
   if (effect.position) {
     const pos = effect.position.pos
     const current = session.candidate.positions[pos]
-    if (current <= 0) session.candidate.positions[pos] = Math.max(35, effect.position.amount)
-    else session.candidate.positions[pos] = Math.min(100, current + effect.position.amount)
+    setTrainingPosition(session.candidate, pos, current <= 0 ? Math.min(100, Math.max(35, effect.position.amount)) : Math.min(100, current + effect.position.amount))
   }
   if (effect.route) {
     if (session.routeId && session.routeId !== effect.route.id) {

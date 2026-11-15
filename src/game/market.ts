@@ -5,7 +5,7 @@ import { playerMarketValue } from './pricing.ts'
 export { VALUE_AT_CA_205, VALUE_GROWTH_PER_CA, VALUE_CAP, playerMarketValue } from './pricing.ts'
 import { FULL_SQUAD, MIN_SQUAD, autoFillLineup, repairLineup, validateLineup } from './squad.ts'
 import { assessRelease, releaseChance, releaseRoll, type ReleaseAssessment } from './transfer-rules.ts'
-import { wageForPlayer } from './world.ts'
+import { wageForPlayer, worldTransferTeams } from './world.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 import { closeFinishedTraining, destroyPlayerCards, untrainedPlayer } from './cards.ts'
 import { negotiationDemands, negotiationFailure, negotiationRoll, negotiationTerms, type NegotiationAnswers, type NegotiationDemands } from './negotiation.ts'
@@ -310,7 +310,10 @@ export function signClubPlayer(
   completeSigning(game, player, offer)
   // 卖人的钱进对方账本（单机；联机由服务器记到共享账本）。
   const seller = game.aiClubs?.[clubId]
-  if (seller) seller.economy.balance += offer
+  if (seller) {
+    seller.economy.balance += offer
+    seller.signings = seller.signings.filter((item) => item.id !== playerId)
+  }
   team.players = team.players.filter((item) => item.id !== playerId)
   team.starPlayerIds = team.starPlayerIds.filter((id) => id !== playerId)
   team.playerNames = team.playerNames.filter((name) => name !== player.name)
@@ -318,7 +321,27 @@ export function signClubPlayer(
   if (worldClub) worldClub.starPlayerIds = worldClub.starPlayerIds.filter((id) => id !== playerId)
   const repaired = repairLineup(team.players, team.lineup)
   if (validateLineup(team.players, repaired.lineup).valid) team.lineup = repaired.lineup
+  if (game.world?.transferTeams?.[clubId]) game.world.transferTeams[clubId] = team
   return { ...result, club }
+}
+
+/** 单机跨赛区买人；复用俱乐部谈判，成功时仅保存卖方快照。 */
+export function signWorldClubPlayer(game: GameState, teamId: string, playerId: string, offer: number, answers: NegotiationAnswers): NegotiationOutcome {
+  if (game.roster.some((player) => player.id === playerId)) return fail('球员已在球队')
+  if (game.aiTeams.some((team) => team.id === teamId)) return signClubPlayer(game, teamId, playerId, offer, answers)
+  if (!game.world || game.shared) return fail('球员不在该球队')
+  const team = worldTransferTeams(game).find((item) => item.id === teamId)
+  if (!team || !team.players.some((player) => player.id === playerId)) return fail('球员不在该球队')
+  const copy = structuredClone(team)
+  const original = game.aiTeams
+  try {
+    game.aiTeams = [...original, copy]
+    const result = signClubPlayer(game, teamId, playerId, offer, answers)
+    if (result.ok) (game.world.transferTeams ??= {})[teamId] = copy
+    return result
+  } finally {
+    game.aiTeams = original
+  }
 }
 
 /** 直接按底价成交（跳过谈判）：AI 和内部流程用。 */

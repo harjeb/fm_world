@@ -171,6 +171,7 @@ export function renderAutoSubEditor(options: {
     .join('')
 
   return `<div class="auto-sub-editor" data-as-root="${scope}">
+    ${scope === 'lineup' ? `<div class="auto-sub-rules"><label class="field-inline" for="auto-sub-pre-match-stamina"><span>赛前轮换：体能低于</span><select id="auto-sub-pre-match-stamina" class="compact" data-as-scope="lineup" data-as-field="preMatchStaminaBelow" ${dis}><option value="" ${plan.preMatchStaminaBelow == null ? 'selected' : ''}>关闭</option>${Array.from({ length: 99 }, (_, i) => i + 1).map((value) => `<option value="${value}" ${plan.preMatchStaminaBelow === value ? 'selected' : ''}>${value}%</option>`).join('')}</select></label></div>` : ''}
     <div class="auto-sub-rules">
       <label class="field-inline" for="${staminaId}"><span>全局体力低于</span><select id="${staminaId}" class="compact" data-as-scope="${scope}" data-as-field="staminaBelow" ${dis}><option value="">关闭</option>${Array.from({ length: 99 }, (_, i) => i + 1)
         .map((value) => `<option value="${value}" ${plan.staminaBelow === value ? 'selected' : ''}>${value}%</option>`)
@@ -275,10 +276,20 @@ export function applyAutoSubFieldChange(
       || target.dataset.autoSubIn !== undefined)
   if (!rawScope && !isLegacyLineup) return null
   const scope: AutoSubScope = rawScope === 'match' ? 'match' : 'lineup'
+  if (target.dataset.asField === 'preMatchStaminaBelow' && (rawScope !== 'lineup' || target.disabled)) return null
   const plan = getDraft(scope)
   if (!plan) return null
 
   const field = target.dataset.asField
+  if (field === 'preMatchStaminaBelow') {
+    if (target.value === '') plan.preMatchStaminaBelow = null
+    else {
+      const value = Number(target.value)
+      if (!Number.isInteger(value) || value < 1 || value > 99) return null
+      plan.preMatchStaminaBelow = value
+    }
+    return scope
+  }
   if (field === 'staminaBelow' || target.id === 'auto-sub-stamina') {
     plan.staminaBelow = target.value ? Number(target.value) : null
     return scope

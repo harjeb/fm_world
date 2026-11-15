@@ -1,4 +1,5 @@
-import type { Player, Position, SkillId, TrainingLogEntry, TrainingSession } from '../../game/types.ts'
+import type { DetailedPosition, Player, Position, SkillId, TrainingLogEntry, TrainingSession } from '../../game/types.ts'
+import { DETAILED_POSITIONS, DETAILED_POSITION_LABELS, detailedPositionValue, isDetailedPosition } from '../../game/detailed-positions.ts'
 import { eventById, ROUTE_LABELS } from '../../game/data/events.ts'
 import { POSITION_LABELS } from '../../game/data/attributes.ts'
 import { SKILLS, basicSkillsFor, canLearnSkill, skillCategory } from '../../game/data/skills.ts'
@@ -17,6 +18,7 @@ import { keyAttrsOf } from '../../game/data/key-attrs.ts'
 import { activityColor, attrColor, attributeRadar, attrHeat, caHeat, cardName, cardSelect, icon, mainAttrs, meter, pageHead, panel, posBadge, primaryPosition, skillGroups, tag, tile, traitLabel } from '../components.ts'
 import { attrLabel, attrValue, caDelta, displayEventHint, esc, gainText, pct, playerCA, positionLabel, skillName, trainingLogText } from '../format.ts'
 import { game, ui } from '../state.ts'
+import { filterTrainingBookIds } from '../training-books.ts'
 
 const DAY_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 
@@ -43,14 +45,14 @@ export function buildTrainingRequest(): TrainingRequest {
         kind: 'activity',
         activityId: ui.trainingActivity,
         ...(activity.group ? { teammateIds } : {}),
-        ...(activity.parameters === 'position' ? { position: ui.trainingPosition } : {}),
+        ...(activity.parameters === 'position' ? { position: ui.trainingPosition, detailed: true } : {}),
       }
     }
   }
   if (ui.trainingKind === 'drill') return { kind: 'drill', attr: ui.trainingAttr, teammateIds }
   if (ui.trainingKind === 'combo') return { kind: 'combo', focus: ui.trainingCombo, teammateIds }
   if (ui.trainingKind === 'match') return { kind: 'match', teammateIds }
-  if (ui.trainingKind === 'position') return { kind: 'position', position: ui.trainingPosition }
+  if (ui.trainingKind === 'position') return { kind: 'position', position: ui.trainingPosition, detailed: true }
   if (ui.trainingKind === 'rest') return { kind: 'rest' }
   if (ui.trainingKind === 'protection') return { kind: 'protection', focus: ui.trainingProtection }
   return { kind: 'mentor' }
@@ -295,10 +297,14 @@ function attrCompareTable(current: Player, candidate: Player): string {
 }
 
 function bookPicker(player: Player): string {
-  const books = game.legendBooks ?? []
-  const selected = new Set(ui.trainingBookIds)
   const base = { ...player, ...baseBuild(player) }
+  const basic = basicSkillsFor(base)
+  const basicIds = new Set<string>(basic)
+  const books = (game.legendBooks ?? []).filter((book) => !basicIds.has(book.id))
+  ui.trainingBookIds = filterTrainingBookIds(player, ui.trainingBookIds)
+  const selected = new Set(ui.trainingBookIds)
   const saved = trainingBookLoadout(game, player.id)
+  const hiddenSaved = filterTrainingBookIds(player, saved).length !== saved.length
   const dirty = saved.length !== selected.size || saved.some((key) => !selected.has(key))
   const rows = books.map((book) => {
     const key = bookKey(book)
@@ -311,12 +317,10 @@ function bookPicker(player: Player): string {
       <span><span class="book-option-head">${tag(esc(bookTierLabel(book.tier)), `skill-${book.tier}`)} <b>${esc(bookName(book.id))}</b></span><small>${esc(SKILLS[book.id]?.desc ?? '')} ${esc(skillEffectText(book.id, book.tier))}</small><small class="muted">要求 ${esc(bookRequirementText(book))} · 起点成功率 ${Math.round(bookLearnChance(base, book) * 100)}%${esc(reason)}</small></span>
     </label>`
   }).join('')
-  const basic = basicSkillsFor(base)
   const basicList = `<details class="training-basic-skills"><summary>本位置基础技能池（${basic.length} 项）</summary><div class="rows">${basic.map((id) => `<div class="row-line"><span><b>${esc(SKILLS[id].name)}</b> ${base.skills.includes(id) ? '<small class="muted">已掌握</small>' : ''}<small class="muted"> · ${esc(SKILLS[id].desc)} ${esc(skillEffectText(id, 'silver'))}</small></span></div>`).join('')}</div></details>`
   const missing = [...selected].filter((key) => !books.some((book) => bookKey(book) === key)).map((key) => `<label class="check-field muted"><input type="checkbox" data-training-book="${esc(key)}" checked><span>已不在库存：${esc(key)}（请取消选择）</span></label>`).join('')
-  const body = books.length || missing
-    ? `<div class="check-grid">${rows}${missing}</div><div class="btn-row pad"><button class="btn small" data-action="training-books-save" data-player="${esc(player.id)}">保存当前配置</button><span class="muted small">${dirty ? '有未保存的修改；开始培养时也会保存' : '已保存，按球员分别记住'}</span></div>`
-    : `<p class="muted pad">还没有技能书（支持银、金、彩多种稀有度）。联赛比赛场上球员会随机掉落技能书，传奇挑战与巅峰之路也能获得。 <button class="link" data-nav="challenge">前往挑战 ${icon('right', 12)}</button></p>`
+  const empty = (game.legendBooks ?? []).length ? '没有可显示的技能卡。' : `还没有技能书（支持银、金、彩多种稀有度）。联赛比赛场上球员会随机掉落技能书，传奇挑战与巅峰之路也能获得。 <button class="link" data-nav="challenge">前往挑战 ${icon('right', 12)}</button>`
+  const body = `${hiddenSaved ? '<p class="hint pad" role="status">旧配置中的本位置基础技能卡已从选择中移除，库存不受影响；请保存配置，或开始培养时保存。</p>' : ''}${books.length || missing ? `<div class="check-grid">${rows}${missing}</div>` : `<p class="muted pad">${empty}</p>`}${books.length || missing || dirty ? `<div class="btn-row pad"><button class="btn small" data-action="training-books-save" data-player="${esc(player.id)}">保存当前配置</button><span class="muted small">${dirty ? '有未保存的修改；开始培养时也会保存' : '已保存，按球员分别记住'}</span></div>` : ''}`
   const rarities = `<span class="tag-row">${tag('银书', 'skill-silver')}${tag('金书', 'skill-gold')}${tag('彩书', 'skill-rainbow')}</span>`
   return panel(`装备技能卡 <small>${selected.size} / ${MAX_BOOKS}</small>`, `${basicList}${body}`, { flush: true, className: 'book-slot-panel', aside: rarities })
 }
@@ -533,19 +537,19 @@ function teammatePicker(teammates: Player[]): string {
   </div>`
 }
 
-function pickTrainablePosition(session: TrainingSession, isGk: boolean, current: Position): Position {
+function pickTrainablePosition(session: TrainingSession, isGk: boolean, current: Position | DetailedPosition): DetailedPosition {
   if (isGk) return 'GK'
-  const choices: Position[] = ['CB', 'W', 'CM', 'ST']
-  if (choices.includes(current) && session.candidate.positions[current] < 100) return current
-  return choices.find((pos) => session.candidate.positions[pos] < 100) ?? (choices.includes(current) ? current : 'CM')
+  const choices: readonly DetailedPosition[] = DETAILED_POSITIONS.filter(pos => pos !== 'GK')
+  if (isDetailedPosition(current) && choices.includes(current) && detailedPositionValue(session.candidate, current) < 100) return current
+  return choices.find(pos => detailedPositionValue(session.candidate, pos) < 100) ?? 'MC'
 }
 
 function positionField(session: TrainingSession, isGk: boolean): string {
-  const choices = (isGk ? ['GK'] : ['CB', 'W', 'CM', 'ST']) as Position[]
+  const choices = DETAILED_POSITIONS.filter(pos => isGk ? pos === 'GK' : pos !== 'GK')
   return `<div class="form-row"><label for="training-position">位置</label><select id="training-position">${choices.map((pos) => {
-    const val = Math.round(session.candidate.positions[pos])
+    const val = Math.round(detailedPositionValue(session.candidate, pos))
     const maxed = val >= 100
-    return `<option value="${pos}" ${ui.trainingPosition === pos ? 'selected' : ''} ${maxed ? 'disabled' : ''}>${positionLabel(pos)} · 当前 ${val}${maxed ? '（已满）' : ''}</option>`
+    return `<option value="${pos}" ${ui.trainingPosition === pos ? 'selected' : ''} ${maxed ? 'disabled' : ''}>${DETAILED_POSITION_LABELS[pos]}（${pos}）· 当前 ${val}${maxed ? '（已满）' : ''}</option>`
   }).join('')}</select></div>`
 }
 

@@ -48,16 +48,18 @@ const tacticsSchema = z.object({
 const autoSubsSchema = z.object({
   timed: z.array(z.object({ atMinute: z.number().gt(0).lt(90), outId: z.string(), inId: z.string() })).max(5)
     .describe('指定首发换下和替补换上的比赛分钟数（0-90），达到后在事件边界执行'),
-  staminaBelow: z.number().min(1).max(99).nullable().describe('体力百分比低于此值时换人；null 为关闭'),
+  staminaBelow: z.number().min(1).max(99).nullable().describe('比赛中体力百分比低于此值时换人；null 为关闭'),
+  preMatchStaminaBelow: z.number().min(1).max(99).nullable().optional().describe('赛前按预计开球体能轮换低于此值的首发；null 或省略为关闭，不消耗比赛换人次数'),
   onInjury: z.boolean().describe('发生比赛内伤病时自动换人'),
 })
 
+const trainingPositionSchema = z.enum(['GK', 'CB', 'W', 'CM', 'ST', 'DL', 'DC', 'DR', 'WBL', 'WBR', 'DM', 'ML', 'MC', 'MR', 'AML', 'AMC', 'AMR'])
 const trainingRequestSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('activity'), activityId: z.string().min(1), teammateIds: z.array(z.string().min(1)).optional(), position: z.enum(['GK', 'CB', 'W', 'CM', 'ST']).optional(), mentorId: z.string().min(1).optional(), skill: z.string().min(1).optional() }).strict(),
+  z.object({ kind: z.literal('activity'), activityId: z.string().min(1), teammateIds: z.array(z.string().min(1)).optional(), position: trainingPositionSchema.optional(), detailed: z.boolean().optional(), mentorId: z.string().min(1).optional(), skill: z.string().min(1).optional() }).strict(),
   z.object({ kind: z.literal('drill'), attr: z.string().describe('主属性英文名，如 passing / shooting / tackling / speed'), teammateIds: z.array(z.string().min(1)).optional() }).strict(),
   z.object({ kind: z.literal('combo'), focus: z.enum(['attack', 'defense']), teammateIds: z.array(z.string().min(1)).optional() }).strict(),
   z.object({ kind: z.literal('match'), teammateIds: z.array(z.string().min(1)).optional() }).strict(),
-  z.object({ kind: z.literal('position'), position: z.enum(['GK', 'CB', 'W', 'CM', 'ST']) }),
+  z.object({ kind: z.literal('position'), position: trainingPositionSchema, detailed: z.boolean().optional() }),
   z.object({ kind: z.literal('rest') }),
   z.object({ kind: z.literal('mentor') }),
   z.object({ kind: z.literal('protection'), focus: z.enum(['prevention', 'resilience']) }),
@@ -115,13 +117,13 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
   const goalSchema = z.enum(['title', 'promotion', 'top-half', 'survival']).optional().describe('承诺的赛季目标：title 争冠/升级、promotion 冲击上游（默认）、top-half 稳居中游、survival 保级为主')
   const roleSchema = z.enum(['star', 'first-team', 'rotation']).optional().describe('承诺的队内定位：star 绝对主力、first-team 常规首发（默认）、rotation 轮换替补')
 
-  register('preview_signing', '预览谈判', '向本联赛 AI 球队买人前预览，不写入存档：俱乐部这关（主力/轮换/冷板凳、年龄、最近 20 场出场、要求的溢价、点头概率）和球员这关（想听的目标/定位、想去的球队、最低联赛级别、点头概率），chance 是两关相乘。年轻主力是非卖品（asking 为 null）。', {
+  register('preview_signing', '预览谈判', '向世界各赛区 AI 球队买人前预览，不写入存档：俱乐部这关（主力/轮换/冷板凳、年龄、最近 20 场出场、要求的溢价、点头概率）和球员这关（想听的目标/定位、想去的球队、最低联赛级别、点头概率），chance 是两关相乘。年轻主力是非卖品（asking 为 null）。', {
     teamId: z.string().min(1), playerId: z.string().min(1),
     offer: z.number().int().positive().safe().optional().describe('报价总额；不填按底价'),
     goal: goalSchema, role: roleSchema,
   }, (args) => action('preview_signing', args))
 
-  register('sign_club_player', '谈判买人', '向本联赛 AI 球队报价买人（转会窗口开放时）：俱乐部按放人规则、球员按个人诉求，两关都过才成交；报价不能低于俱乐部要价。同一份报价和承诺的结果固定，换报价或承诺才重新判定。', {
+  register('sign_club_player', '谈判买人', '向世界各赛区 AI 球队报价买人（转会窗口开放时，不含其他玩家执教的球队）：俱乐部按放人规则、球员按个人诉求，两关都过才成交；报价不能低于俱乐部要价。同一份报价和承诺的结果固定，换报价或承诺才重新判定。', {
     teamId: z.string().min(1), playerId: z.string().min(1),
     offer: z.number().int().positive().safe().describe('报价总额，不能低于底价'),
     goal: goalSchema, role: roleSchema,
@@ -154,7 +156,7 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     autoSubs: autoSubsSchema.optional().describe('可同时提交与新阵容匹配的自动换人计划'),
   }, (args) => action('set_lineup', args))
 
-  register('set_auto_subs', '设置赛前自动换人', '设置比赛分钟、体力阈值和受伤自动换人；新计划从下一场比赛生效，自动和手动共用 5 次额度。', {
+  register('set_auto_subs', '设置自动换人', '可选赛前低体能轮换，以及比赛内定时、体力和受伤自动换人；场内自动与手动共用 5 次额度。', {
     plan: autoSubsSchema,
   }, (args) => action('set_auto_subs', args))
 

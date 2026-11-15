@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
 import { renderPlayerComparison, type CompareTab } from '../src/ui/screens/player-comparison.ts'
+import { positionMap } from '../src/ui/components.ts'
 
 const players = () => createInitialGame(710).roster
 
@@ -20,6 +21,16 @@ describe('球员对比', () => {
     for (const tab of ['overview', 'attributes', 'stats', 'positions']) expect(html).toContain(`data-player-compare-tab="${tab}"`)
     expect(html).toContain('pc-shape-first')
     expect(html).toContain('pc-shape-second')
+  })
+  it('shows independent detailed position values on profile and comparison', () => {
+    const [a, b] = players()
+    a.detailedPositions = { DL: 91, DR: 13 }
+    const profile = positionMap(a)
+    expect(profile).toContain('左后卫 91')
+    expect(profile).toContain('右后卫 13')
+    const comparison = renderPlayerComparison(a, b, [b], 'positions')
+    expect(comparison).toContain('<th>左后卫</th><td>91</td>')
+    expect(comparison).toContain('<th>右后卫</th><td>13</td>')
   })
   it('supports no selection, self comparison, and a selected player absent from candidates', () => {
     const [a, b] = players()

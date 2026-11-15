@@ -73,8 +73,8 @@ export function publicClubFor(world: WorldState | undefined, id: string): WorldP
     conference: club.conference,
     formationId: club.formationId,
     facilities: id === PLAYER_TEAM_ID ? undefined : publicFacilityStages(game.aiClubs?.[id]?.economy),
-    players: roster.map(({ id: playerId, name, enName, country, era, age, foot, height, positions, attrs, baseAttrs, traitId, skills, skillTiers }) => ({
-      id: playerId, name, enName, country, era, age, foot, height, positions,
+    players: roster.map(({ id: playerId, name, enName, country, era, age, foot, height, positions, detailedPositions, attrs, baseAttrs, traitId, skills, skillTiers }) => ({
+      id: playerId, name, enName, country, era, age, foot, height, positions, detailedPositions,
       attrs: Object.fromEntries(mainAttrsFor(positions.GK > 0).map((key) => [key, attrs[key]])),
       traitId, skills, skillTiers, ca: playerCA({ attrs, positions }),
       baseCa: baseAttrs ? playerCA({ attrs: baseAttrs, positions }) : undefined,

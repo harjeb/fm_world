@@ -1,5 +1,7 @@
 import { ATTR_GROUPS, ATTR_META, POSITION_LABELS } from '../../game/data/attributes.ts'
 import { attrRating } from '../../game/scale.ts'
+import { DETAILED_POSITIONS, DETAILED_POSITION_LABELS, detailedPositionValue } from '../../game/detailed-positions.ts'
+import type { DetailedPosition } from '../../game/types.ts'
 import { GK_ATTRIBUTES, POSITIONS, type AttrKey, type Player, type Position } from '../../game/types.ts'
 import { bestMarketValue } from '../../game/market.ts'
 import { marketState } from '../../online.ts'
@@ -37,9 +39,9 @@ function identity(p: Player | undefined, side: string): string {
   return `<article class="pc-identity"><div class="pc-avatar ${side}" aria-hidden="true">${esc(positionName(p).slice(0, 1))}</div><div><span class="pc-eyebrow">${side === 'pc-first' ? '球员' : '对比球员'}</span><h2>${esc(p.name)}</h2><p>${esc(positionName(p))} · ${esc(countryLabel(p))} · ${p.age == null ? '年龄未知' : `${esc(number(p.age))}岁`}</p><small>估值 ${value ? value.toLocaleString() : '—'} · ${esc(contract)}</small></div></article>`
 }
 
-const spots: Record<Position, [number, number]> = { GK: [50, 88], CB: [50, 70], W: [18, 43], CM: [50, 44], ST: [50, 16] }
+const spots: Record<DetailedPosition, [number, number]> = { GK: [50, 96], DL: [18, 78], DC: [50, 78], DR: [82, 78], WBL: [18, 66], WBR: [82, 66], DM: [50, 66], ML: [18, 53], MC: [50, 53], MR: [82, 53], AML: [18, 37], AMC: [50, 37], AMR: [82, 37], ST: [50, 20] }
 function pitch(p?: Player): string {
-  return `<svg class="pc-pitch" viewBox="0 0 100 110" role="img" aria-label="位置分布"><rect x="2" y="2" width="96" height="106" rx="2"/><path d="M2 55H98 M35 2V16H65V2 M35 108V94H65V108"/><circle cx="50" cy="55" r="12"/>${POSITIONS.map(pos => { const [x, y] = spots[pos]; const value = p?.positions[pos] ?? 0; const tier = value >= 85 ? 5 : value >= 65 ? 4 : value >= 40 ? 3 : value > 0 ? 2 : 1; return `<circle class="pc-spot pc-spot-${tier}" cx="${x}" cy="${y}" r="5"><title>${POSITION_LABELS[pos]}：${p ? esc(number(value)) : '—'}</title></circle>` }).join('')}</svg>`
+  return `<svg class="pc-pitch" viewBox="0 0 100 110" role="img" aria-label="位置分布"><rect x="2" y="2" width="96" height="106" rx="2"/><path d="M2 55H98 M35 2V16H65V2 M35 108V94H65V108"/><circle cx="50" cy="55" r="12"/>${DETAILED_POSITIONS.map(pos => { const [x, y] = spots[pos]; const value = p ? detailedPositionValue(p, pos) : 0; const tier = value >= 85 ? 5 : value >= 65 ? 4 : value >= 40 ? 3 : value > 0 ? 2 : 1; return `<circle class="pc-spot pc-spot-${tier}" cx="${x}" cy="${y}" r="4"><title>${DETAILED_POSITION_LABELS[pos]}：${p ? esc(number(value)) : '—'}</title></circle>` }).join('')}</svg>`
 }
 
 function radar(p: Player, other?: Player): string {
@@ -88,7 +90,7 @@ function attributeTable(p: Player, other?: Player): string {
   return `<p class="pc-muted">显示与球员档案一致的属性原始值；主属性和其他属性采用不同量纲。外场球员门将属性不适用。</p>${ATTR_GROUPS.map(group => `<section class="pc-group"><h3>${group.name}</h3><div class="pc-table-wrap"><table class="pc-table"><thead><tr><th>属性</th><th>球员</th><th>对比球员</th></tr></thead><tbody>${group.attrs.map(key => `<tr><th>${esc(ATTR_META[key].label)}</th><td>${raw(p, key)}</td><td>${raw(other, key)}</td></tr>`).join('')}</tbody></table></div></section>`).join('')}`
 }
 function positionsTable(p: Player, other?: Player): string {
-  return `<p class="pc-muted">显示球员的位置熟练度原始值；球场上由灰、红、黄、绿到青色表示熟练度由低到高。</p><div class="pc-position-pair"><div>${pitch(p)}<p>${esc(p.name)} · ${esc(positionName(p))}</p></div><div>${pitch(other)}<p>${other ? `${esc(other.name)} · ${esc(positionName(other))}` : '未选择球员'}</p></div></div><table class="pc-table"><thead><tr><th>位置</th><th>球员</th><th>对比球员</th></tr></thead><tbody>${POSITIONS.map(pos => `<tr><th>${POSITION_LABELS[pos]}</th><td>${number(p.positions[pos])}</td><td>${other ? number(other.positions[pos]) : '—'}</td></tr>`).join('')}</tbody></table>`
+  return `<p class="pc-muted">显示球员的位置熟练度原始值；球场上由灰、红、黄、绿到青色表示熟练度由低到高。</p><div class="pc-position-pair"><div>${pitch(p)}<p>${esc(p.name)} · ${esc(positionName(p))}</p></div><div>${pitch(other)}<p>${other ? `${esc(other.name)} · ${esc(positionName(other))}` : '未选择球员'}</p></div></div><table class="pc-table"><thead><tr><th>位置</th><th>球员</th><th>对比球员</th></tr></thead><tbody>${DETAILED_POSITIONS.map(pos => `<tr><th>${DETAILED_POSITION_LABELS[pos]}</th><td>${number(detailedPositionValue(p, pos))}</td><td>${other ? number(detailedPositionValue(other, pos)) : '—'}</td></tr>`).join('')}</tbody></table>`
 }
 function overview(p: Player, other?: Player): string {
   return `<div class="pc-overview-cards">${[p, other].map(target => {

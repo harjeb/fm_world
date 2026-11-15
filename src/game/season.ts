@@ -1,6 +1,6 @@
 import type { AITeam, Fixture, GameState, MatchContext, MatchRecord, SeasonState, SeasonTableRow } from './types.ts'
 import { splitSeed } from './rng.ts'
-import { buildMatchEngineForGame, createMatchRecord, fixtureScorers, simulateAIvsAIState } from './match/setup.ts'
+import { buildMatchEngineForGame, createMatchRecord, fixtureScorers, preparePlayerMatch, simulateAIvsAIState } from './match/setup.ts'
 import type { GameEngine } from './pes/engine.ts'
 import { ENERGY_RECOVERY_PER_GAME_DAY } from './training.ts'
 import { RECENT_MATCHES } from './transfer-rules.ts'
@@ -423,11 +423,14 @@ export function simulateFixture(game: GameState, fixture: Fixture, auto = false,
     homeAway: fixture.homeId === PLAYER_TEAM_ID ? 'home' : 'away',
     durationSeconds: LEAGUE_MATCH_SECONDS,
   }
-  const engine = buildMatchEngineForGame(game, context, homeAI ?? awayAI!, now, suspendedPlayerIds(game), auto ? 2 : undefined)
+  // 旧补赛流程由调用方结算体能；启用赛前轮换时，直接调用本函数也必须按开球时的体能判断。
+  if (game.autoSubs?.preMatchStaminaBelow != null) settleGameConditions(game, now)
+  const prepared = preparePlayerMatch(game, context, now)
+  const engine = buildMatchEngineForGame(game, context, homeAI ?? awayAI!, now, suspendedPlayerIds(game), auto ? 2 : undefined, prepared)
   const state = engine.simulate()
   recordMatchInjuries(game, state, now, auto)
   if (game.world) recordMatchDiscipline(game, state)
-  const record = createMatchRecord(game, state, context)
+  const record = createMatchRecord({ season: game.season, lineup: prepared.lineup }, state, context)
   recordMatchChemistry(game, record.playerStats, now, game.season.gameDayMs)
   if (auto) record.autoSimulated = true
   fixture.played = true
@@ -672,14 +675,15 @@ export function startLeagueMatch(game: GameState, now = Date.now()): { ok: boole
     durationSeconds: LEAGUE_MATCH_SECONDS,
     offside: true,
   }
-  // 开球前把休息恢复的体能结算到现在。
+  // 开球前把休息恢复的体能结算到现在，再生成本场阵容，不改变保存的默认阵容。
   settleGameConditions(game, now)
-  const engine = buildMatchEngineForGame(game, context, ai, now)
+  const prepared = preparePlayerMatch(game, context, now)
+  const engine = buildMatchEngineForGame(game, context, ai, now, undefined, undefined, prepared)
   game.activeMatch = {
     context,
     engineState: engine.serialize(),
     instructions: [],
-    lineup: structuredClone(game.lineup),
+    lineup: structuredClone(prepared.lineup),
     startedAt: now,
     coachPausesLeft: 3,
   }
@@ -764,7 +768,7 @@ export function finishActiveMatch(game: GameState, engine: GameEngine, now = Dat
   if (!state.finished) return null
   economyOf(game)
   if (active.context.isLeague) recordMatchInjuries(game, state, active.startedAt, true)
-  const record = createMatchRecord(game, state, active.context)
+  const record = createMatchRecord({ season: game.season, lineup: active.lineup ?? game.lineup }, state, active.context)
   recordMatchChemistry(game, record.playerStats, now, game.season.gameDayMs)
   // 只有联赛扣体能：挑战里的比赛（友谊赛、单场挑战、世界挑战）都不扣。
   if (active.context.isLeague) applyMatchConditions(game, record.playerStats, state.teams)

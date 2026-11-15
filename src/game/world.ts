@@ -18,7 +18,7 @@ import { PLAYER_SEEDS, createPlayerFromSeed, seedById } from './data/players.ts'
 import { LEGACY_SQUAD_SIZE, buildNameBook, createRandomPlayer, randomSquadPositionTemplate, type SquadName } from './data/random-players.ts'
 import { DIVISION_IDS, WORLD_CLUB_DEFS, conferenceLabel, conferenceOfDivision, divisionIdForTier, type WorldClubDef } from './data/world-clubs.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION } from './names.ts'
-import { FULL_SQUAD, MIN_SQUAD, autoFillLineup, validateLineup } from './squad.ts'
+import { FULL_SQUAD, MIN_SQUAD, autoFillLineup, repairLineup, validateLineup } from './squad.ts'
 import { applyAITacticsToLineup } from './ai-tactics.ts'
 import { equipAICards, mergeSignings, seedAIClubs } from './ai-club.ts'
 import { caOf } from './ca.ts'
@@ -364,7 +364,7 @@ export function buildWorldDivisionTeams(
   if (!division?.clubIds) throw new Error('联赛分区不存在')
   const clubIds = division.clubIds
   const book = nameBook(seed, world.seasonIndex, [...(playerTeam?.roster ?? []), ...(playerTeam?.reserved ?? [])])
-  const teams = clubIds.map((id) => teamFromClub(world, clubById(world, id), seed, playerTeam, book, aiClubs))
+  const teams = clubIds.map((id) => world.transferTeams?.[id] ?? teamFromClub(world, clubById(world, id), seed, playerTeam, book, aiClubs))
   const player = teams.find((team) => team.isPlayer)
   if (!player) throw new Error('玩家球队不在当前联赛')
   return { playerTeam: player, aiTeams: teams.filter((team) => !team.isPlayer) }
@@ -455,6 +455,48 @@ export function previewD2Clubs(seed: number): ClubPreview[] {
   })
 }
 
+const transferCache = new WeakMap<GameState, { world: WorldState; season: number; count: number; clubs: GameState['aiClubs']; teams: Record<string, AITeam> }>()
+
+/** 单机世界转会名单；本赛区和已修改的卖方始终优先。 */
+export function worldTransferTeams(game: GameState): AITeam[] {
+  const world = game.world
+  if (!world || game.shared) return game.aiTeams
+  let cached = transferCache.get(game)
+  if (!cached || cached.world !== world || cached.season !== world.seasonIndex || cached.count !== world.clubs.length || cached.clubs !== game.aiClubs) {
+    cached = { world, season: world.seasonIndex, count: world.clubs.length, clubs: game.aiClubs, teams: buildOwnerlessTeams(world, game.seed) }
+    transferCache.set(game, cached)
+  }
+  const result: AITeam[] = []
+  const seen = new Set([...game.roster, ...game.freeStars, ...(game.market?.listings.map((listing) => listing.player) ?? [])].map((p) => p.id))
+  const local = new Map(game.aiTeams.map((team) => [team.id, team]))
+  // 权威名单先占用 ID，生成名单不能与之冲突。
+  const clubs = world.clubs.filter((club) => !club.isPlayer && club.id !== 'player')
+  clubs.sort((a, b) => Number(!!local.get(b.id) || !!world.transferTeams?.[b.id]) - Number(!!local.get(a.id) || !!world.transferTeams?.[a.id]))
+  for (const club of clubs) {
+    const localTeam = local.get(club.id)
+    const saved = world.transferTeams?.[club.id]
+    let team = localTeam ?? saved ?? cached.teams[club.id]
+    if (!team) continue
+    if (!localTeam && game.aiClubs?.[club.id]) {
+      // 电脑球队按轮签人/培养；名单快照仍需合并实时账本，但不能在渲染时修改存档。
+      team = structuredClone(team)
+      team.players = mergeSignings(game.aiClubs[club.id], team.players)
+      equipAICards(structuredClone(game.aiClubs[club.id]), team.players)
+      team.lineup = repairLineup(team.players, team.lineup).lineup
+    }
+    const authoritative = !!localTeam || !!saved
+    const players = team.players.filter((p) => !seen.has(p.id) && (authoritative || !team.starPlayerIds.includes(p.id) || club.starPlayerIds.includes(p.id)))
+    for (const p of players) seen.add(p.id)
+    if (players.length === team.players.length) result.push(team)
+    else {
+      const ids = new Set(players.map((p) => p.id))
+      const lineup = repairLineup(players, team.lineup).lineup
+      result.push({ ...team, players, lineup, starPlayerIds: team.starPlayerIds.filter((id) => ids.has(id)), playerNames: team.playerNames.filter((name) => players.some((p) => p.name === name)) })
+    }
+  }
+  return result
+}
+
 const ownerlessCache = new Map<string, { clubCount: number; teams: Record<string, AITeam> }>()
 
 /**
@@ -464,11 +506,11 @@ const ownerlessCache = new Map<string, { clubCount: number; teams: Record<string
 export function cachedOwnerlessTeams(world: WorldState, seed: number, aiClubs?: Record<string, AIClubState>): Record<string, AITeam> {
   const key = `${seed}|${world.seasonIndex}|${world.clubs.length}|${aiClubs ? Object.keys(aiClubs).length : 0}`
   const hit = ownerlessCache.get(key)
-  if (hit) return hit.teams
+  if (hit) return world.transferTeams ? { ...hit.teams, ...world.transferTeams } : hit.teams
   const teams = buildOwnerlessTeams(world, seed, aiClubs)
   if (ownerlessCache.size >= 4) ownerlessCache.clear()
   ownerlessCache.set(key, { clubCount: world.clubs.length, teams })
-  return teams
+  return world.transferTeams ? { ...teams, ...world.transferTeams } : teams
 }
 
 /** 为服务器世界生成全部球队的同一套球员名单；同一赛季只生成一次并持久化。 */
@@ -913,8 +955,8 @@ function simulatePlayoffMatch(
   const home = clubById(world, homeId)
   const away = clubById(world, awayId)
   const playerTeam = homeId === 'player' ? { roster: game.roster, lineup: game.lineup } : awayId === 'player' ? { roster: game.roster, lineup: game.lineup } : undefined
-  const h = homeId === 'player' ? teamFromClub(world, home, splitSeed(world.seasonStartedAt, `playoff-${homeId}`), playerTeam) : game.aiTeams.find((team) => team.id === homeId) ?? teamFromClub(world, home, splitSeed(world.seasonStartedAt, `playoff-${homeId}`))
-  const a = awayId === 'player' ? teamFromClub(world, away, splitSeed(world.seasonStartedAt, `playoff-${awayId}`), playerTeam) : game.aiTeams.find((team) => team.id === awayId) ?? teamFromClub(world, away, splitSeed(world.seasonStartedAt, `playoff-${awayId}`))
+  const h = homeId === 'player' ? teamFromClub(world, home, splitSeed(world.seasonStartedAt, `playoff-${homeId}`), playerTeam) : game.aiTeams.find((team) => team.id === homeId) ?? world.transferTeams?.[homeId] ?? teamFromClub(world, home, splitSeed(world.seasonStartedAt, `playoff-${homeId}`))
+  const a = awayId === 'player' ? teamFromClub(world, away, splitSeed(world.seasonStartedAt, `playoff-${awayId}`), playerTeam) : game.aiTeams.find((team) => team.id === awayId) ?? world.transferTeams?.[awayId] ?? teamFromClub(world, away, splitSeed(world.seasonStartedAt, `playoff-${awayId}`))
   const state = simulateAIvsAIState(h, a, splitSeed(game.seed, `playoff-${world.seasonIndex}-${stage}-${homeId}-${awayId}`))
   const score = { home: state.score.home, away: state.score.away }
   let shootout: { home: number; away: number } | undefined
@@ -1173,6 +1215,7 @@ function makeRegen(player: Player): Player {
   delete regen.baseSkills
   delete regen.baseSkillTiers
   regen.basePositions = { ...regen.positions }
+  regen.baseDetailedPositions = regen.detailedPositions && { ...regen.detailedPositions }
   regen.basePersonality = { ...regen.personality }
   for (const key of Object.keys(regen.attrs) as (keyof typeof regen.attrs)[]) {
     regen.attrs[key] = Math.round(regen.attrs[key] * 0.62 * 10) / 10
@@ -1279,6 +1322,8 @@ export function advanceWorldSeason(game: GameState, now = Date.now(), protectedC
     ;(world.seasonCupHistory ??= []).push(world.seasonCups)
     delete world.seasonCups
   }
+  // 跨赛区卖方快照只代表上一赛季；新赛季按现有世界数据重新生成，已签走的球星不会留在原队。
+  delete world.transferTeams
   world.seasonIndex++
   world.seasonStartedAt = Math.min(now, scheduledStart) > 0 ? scheduledStart : now
   const nextCalendarStart = calendarStartForSeason(world.seasonStartedAt, world.seasonIndex)

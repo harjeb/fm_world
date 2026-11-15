@@ -9,7 +9,9 @@ import { PesEngine, type GameEngine } from '../pes/engine.ts'
 import { cloneInstructions, instructionsFromLegacyTactics, legacyTacticsFromInstructions } from '../pes/tactics.ts'
 import { aiNeedsRotation, aiRotatedLineup, autoFillLineup, computeLineupFamiliarity, validateLineup } from '../squad.ts'
 import { applyAITacticsToLineup, defaultAIAutoSubs, defaultAITacticsStage } from '../ai-tactics.ts'
-import { prepareMatchInjuries } from '../injury.ts'
+import { injuryUntil, prepareMatchInjuries } from '../injury.ts'
+import { suspendedPlayerIds } from '../discipline.ts'
+import { rotatePreMatch } from '../pre-match-rotation.ts'
 import { LOGIC_MATCH_SECONDS } from './time.ts'
 import { matchPerformanceOf } from '../economy.ts'
 import { performanceRating } from './performance.ts'
@@ -260,7 +262,15 @@ function playersAtFullCondition(players: Player[]): Player[] {
   return players.map((player) => ({ ...player, condition: 100 }))
 }
 
-export function buildMatchEngineForGame(game: GameState, context: MatchContext, ai: AITeam, now = Date.now(), suspended?: Set<string>, rulesVersion?: number): GameEngine {
+/** 联赛按开球前已结算的体能轮换；挑战赛本来就是满体能，不需要轮换。 */
+export function preparePlayerMatch(game: GameState, context: MatchContext, now: number): ReturnType<typeof rotatePreMatch> {
+  if (!context.isLeague || game.autoSubs?.preMatchStaminaBelow == null) return { lineup: game.lineup, autoSubs: game.autoSubs, changes: [] }
+  const unavailable = suspendedPlayerIds(game)
+  for (const player of game.roster) if (injuryUntil(game, player, now) !== null) unavailable.add(player.id)
+  return rotatePreMatch(game.roster, game.lineup, game.autoSubs, unavailable)
+}
+
+export function buildMatchEngineForGame(game: GameState, context: MatchContext, ai: AITeam, now = Date.now(), suspended?: Set<string>, rulesVersion?: number, prepared = preparePlayerMatch(game, context, now)): GameEngine {
   // 欠薪：一线队在比赛里只能发挥一半（见 economy.ts）。
   const challenge = !context.isLeague
   const baseRoster = playersAtPerformance(game.roster, matchPerformanceOf(game))
@@ -269,7 +279,7 @@ export function buildMatchEngineForGame(game: GameState, context: MatchContext, 
 
   const playerInput = teamInputFromLineup(
     roster,
-    game.lineup,
+    prepared.lineup,
     {
       id: 'player',
       name: game.clubName,
@@ -278,7 +288,7 @@ export function buildMatchEngineForGame(game: GameState, context: MatchContext, 
     },
     { tacticsStage: game.economy?.tactics ?? 1 },
   )
-  if (game.autoSubs) playerInput.autoSubs = structuredClone(game.autoSubs)
+  if (prepared.autoSubs) playerInput.autoSubs = structuredClone(prepared.autoSubs)
   // 对手是电脑球队：体能低于 80 的先休息，并按俱乐部战术室阶段（或阵容强度估算）计算战术熟练度。
   const aiClubTactics = game.aiClubs?.[ai.id]?.economy.tactics
   const aiInput = teamInputFromAI(ai, suspended, { rotate: true, tacticsStage: aiClubTactics })

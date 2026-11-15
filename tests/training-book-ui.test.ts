@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { renderTraining } from '../src/ui/screens/training.ts'
 import { createTrainingSession } from '../src/game/training.ts'
 import { game, ui } from '../src/ui/state.ts'
+import { basicSkillsFor } from '../src/game/data/skills.ts'
+import { trainingBookLoadout } from '../src/ui/training-books.ts'
+import { bookKey } from '../src/game/legend-learning.ts'
 
 describe('培养技能书槽 UI', () => {
   it('开始培养前在培养面板下方醒目展示技能书槽，支持多种稀有度并去掉冗余说明', () => {
@@ -38,6 +41,46 @@ describe('培养技能书槽 UI', () => {
     expect(bookPanelStart).toBeGreaterThan(html.indexOf('培养起点：原始属性'))
     const between = html.slice(gridTwoStart, bookPanelStart)
     expect(between).toContain('</div>')
+  })
+
+  it('按技能 ID 隐藏本位置基础池各档位，旧配置过滤并提示未保存，不修改库存', () => {
+    const player = game.roster.find((item) => item.positions.GK === 0)!
+    const basic = basicSkillsFor(player)[0]
+    const other = basicSkillsFor({ positions: { GK: 1, CB: 0, W: 0, CM: 0, ST: 0 } })[0]
+    const books = [
+      { id: basic, tier: 'silver' as const }, { id: basic, tier: 'gold' as const }, { id: basic, tier: 'rainbow' as const },
+      { id: other, tier: 'silver' as const }, { id: 'lg_drill_master' as const, tier: 'rainbow' as const },
+    ]
+    game.legendBooks = books
+    game.trainingBooksByPlayer = { ...game.trainingBooksByPlayer, [player.id]: [bookKey(books[0]), bookKey(books[3])] }
+    ui.trainingPlayerId = player.id
+    ui.trainingBookIds = trainingBookLoadout(game, player.id)
+    expect(ui.trainingBookIds).toEqual([bookKey(books[3])])
+    const html = renderTraining()
+    for (const book of books.slice(0, 3)) expect(html).not.toContain(`data-training-book="${bookKey(book)}"`)
+    expect(html).toContain(`data-training-book="${bookKey(books[3])}"`)
+    expect(html).toContain(`data-training-book="${bookKey(books[4])}"`)
+    expect(html).toContain('旧配置中的本位置基础技能卡已从选择中移除')
+    expect(html).toContain('未保存的修改')
+    expect(game.legendBooks).toEqual(books)
+    expect(game.trainingBooksByPlayer[player.id]).toEqual([bookKey(books[0]), bookKey(books[3])])
+    delete game.trainingBooksByPlayer[player.id]
+  })
+
+  it('旧配置仅含已不在库存的基础技能卡时仍提示并可保存空配置', () => {
+    const player = game.roster.find((item) => item.positions.GK > 0)!
+    const key = `${basicSkillsFor(player)[0]}:gold`
+    game.legendBooks = []
+    game.trainingBooksByPlayer = { ...game.trainingBooksByPlayer, [player.id]: [key] }
+    ui.trainingPlayerId = player.id
+    ui.trainingBookIds = trainingBookLoadout(game, player.id)
+    const html = renderTraining()
+    expect(ui.trainingBookIds).toEqual([])
+    expect(html).toContain('旧配置中的本位置基础技能卡已从选择中移除')
+    expect(html).toContain('未保存的修改')
+    expect(html).toContain('保存当前配置')
+    expect(html).not.toContain(`data-training-book="${key}"`)
+    delete game.trainingBooksByPlayer[player.id]
   })
 
   it('没书时显示多稀有度提示与入口；查看培养中书名与稀有度标签', () => {

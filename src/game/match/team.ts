@@ -6,6 +6,7 @@ import { attrRating } from '../scale.ts'
 import { personKey } from '../injury.ts'
 import { customSpotFor } from '../squad.ts'
 import { FORMATIONS } from '../data/formations.ts'
+import { detailedPositionForSlot } from '../detailed-positions.ts'
 import { cloneInstructions, instructionsFromLegacyTactics } from '../pes/tactics.ts'
 
 export const PITCH_LENGTH = 100
@@ -53,6 +54,7 @@ export function toMatchPlayer(player: Player, side: MatchSide, role: MatchPlayer
     side,
     attrs,
     positions: { ...player.positions },
+    ...(player.detailedPositions ? { detailedPositions: { ...player.detailedPositions } } : {}),
     skills: [...player.skills],
     skillTiers: { ...player.skillTiers },
     traitId: player.traitId,
@@ -80,6 +82,7 @@ export function buildMatchTeam(input: MatchTeamInput, side: MatchSide): MatchTea
     const slot = formation.slots.find((item) => item.id === starter.slotId)
     const position = slot?.position ?? 'CM'
     const mp = toMatchPlayer(starter.player, side, starter.role, starter.slotId, position)
+    if (slot) mp.detailedPosition = detailedPositionForSlot(slot)
     mp.stats.onMinute = 0
     mp.stats.staminaLeft = Math.round((mp.stamina / Math.max(1, mp.maxStamina)) * 100)
     // 玩家自己摆的位置优先（见 squad.rememberLineupPositions）；没摆过就用阵型默认坐标。

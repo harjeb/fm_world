@@ -4,6 +4,7 @@ import type { AttrKey, BaseTraitId } from '../types.ts'
 import { MAIN_ATTR_SCALE, MAX_ATTR_RATING } from '../scale.ts'
 import { TRAITS } from '../data/skills.ts'
 import { effectiveAttr } from '../ca.ts'
+import { detailedPositionValue } from '../detailed-positions.ts'
 import { chemistryKey } from '../chemistry.ts'
 import { derivedRng } from '../rng.ts'
 import { legendMultiplier } from '../legend-bonus.ts'
@@ -36,7 +37,7 @@ export class MatchRatings {
   eff(player: MatchPlayerState, key: Parameters<typeof effectiveAttr>[3], ctx: MatchEventContext = {}): number {
     const ratio = player.stamina / Math.max(1, player.maxStamina)
     const gk = player.position === 'GK'
-    let value = effectiveAttr(player.attrs, ratio, player.positions[player.position], key, gk)
+    let value = effectiveAttr(player.attrs, ratio, player.detailedPosition ? detailedPositionValue(player, player.detailedPosition) : player.positions[player.position], key, gk)
     const star = STAR_TRAITS[player.traitId]
     if (star?.kind === 'attr' && star.attr === key && this.traitConditionMet(player, star.when, ctx) && this.traitRoll(player, 'attr', star.chance)) value += star.bonus / MAIN_ATTR_SCALE
     if (star?.kind === 'hotStreak' && key === 'shooting') value += (star.bonus / MAIN_ATTR_SCALE) * player.stats.goals

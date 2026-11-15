@@ -1,5 +1,6 @@
 import type { Lineup, Player, Position, RoleId } from '../../game/types.ts'
 import { playerCards } from '../../game/cards.ts'
+import { DETAILED_POSITIONS, DETAILED_POSITION_LABELS, DETAILED_TO_POSITION, detailedPositionValue, slotPositionValue } from '../../game/detailed-positions.ts'
 import { setLineup } from '../../game/actions.ts'
 import { FORMATIONS, FORMATION_LIST, type FormationDef, type FormationSlot } from '../../game/data/formations.ts'
 import { ROLES, ROLES_BY_POSITION, roleFit } from '../../game/data/roles.ts'
@@ -40,7 +41,7 @@ import {
 import { MATCH_PLANS, MATCH_PLAN_GROUPS, isMatchPlanId, type MatchPlanId } from '../../game/pes/match-plan.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
 import { RATING_STOPS, boardMarkings, boardSpot, boardSpotFromPercent, caHeat, cardSelect, clampSpot, clubLook, fitHeat, formBars, heatLegend, icon, injuryLabel, inkOn, meter, pageHead, panel, pick, posBadge, primaryPosition, tag } from '../components.ts'
-import { esc, lineupStyleLabel, pct, playerCA, positionLabel, shortName } from '../format.ts'
+import { esc, lineupStyleLabel, pct, playerCA, positionClass, positionLabel, shortName } from '../format.ts'
 import { morph } from '../morph.ts'
 import { renderAutoSubEditor } from '../auto-sub-editor.ts'
 import { game, ui } from '../state.ts'
@@ -74,8 +75,8 @@ function playerOf(id: string | undefined): Player | undefined {
   return id ? game.roster.find((player) => player.id === id) : undefined
 }
 
-function effectiveFit(player: Player, role: RoleId, position: Position): number {
-  return roleFit(player.attrs, role, player.positions.GK > 0) * positionMultiplier(player.positions[position])
+function effectiveFit(player: Player, role: RoleId, position: Position, slot?: FormationSlot): number {
+  return roleFit(player.attrs, role, player.positions.GK > 0) * positionMultiplier(slot ? slotPositionValue(player, slot) : player.positions[position])
 }
 
 function validSelection(formation: FormationDef): string | null {
@@ -131,10 +132,10 @@ function fitnessHeart(value: number): string {
 }
 
 function slotPlayerOptions(slot: FormationSlot, role: RoleId, draft: Lineup, formation: FormationDef, currentId: string | undefined): string {
-  const candidates = [...game.roster].sort((a, b) => effectiveFit(b, role, slot.position) - effectiveFit(a, role, slot.position))
+  const candidates = [...game.roster].sort((a, b) => effectiveFit(b, role, slot.position, slot) - effectiveFit(a, role, slot.position, slot))
   return `<option value="" ${currentId ? '' : 'selected'}>— 未安排 —</option>${candidates.map((player) => {
     const place = player.id === currentId ? '' : placeOf(player.id, draft, formation)
-    return `<option value="${esc(player.id)}" ${player.id === currentId ? 'selected' : ''}>${esc(player.name)} · 熟练 ${Math.round(player.positions[slot.position])} · 有效 ${effectiveFit(player, role, slot.position).toFixed(1)}${place ? ` · 现${esc(place)}` : ''}${statusNote(player)}</option>`
+    return `<option value="${esc(player.id)}" ${player.id === currentId ? 'selected' : ''}>${esc(player.name)} · 熟练 ${Math.round(slotPositionValue(player, slot))} · 有效 ${effectiveFit(player, role, slot.position, slot).toFixed(1)}${place ? ` · 现${esc(place)}` : ''}${statusNote(player)}</option>`
   }).join('')}`
 }
 
@@ -146,11 +147,11 @@ function slotCard(slot: FormationSlot, draft: Lineup, formation: FormationDef, s
   const { left, top } = boardSpot(spot.x, spot.y)
   const custom = !!draft.customPositions?.[slot.id]
   const role = starter?.role ?? slot.defaultRole
-  const warn = player && (player.positions[slot.position] < PLAYABLE_PROFICIENCY || injuryUntil(game, player) || game.suspensions?.[player.id])
+  const warn = player && (slotPositionValue(player, slot) < PLAYABLE_PROFICIENCY || injuryUntil(game, player) || game.suspensions?.[player.id])
   const selected = selectedId === slot.id
   const hint = `${slot.label}：拖动圆点把球员摆到任意位置（松手保存）；选中后用方向键微调；点击圆点在右侧球员表里选人`
   return `<div class="slot ${selected ? 'selected' : ''} ${player ? '' : 'vacant'} ${warn ? 'warn' : ''} ${custom ? 'custom-pos' : ''}" style="left:${left.toFixed(1)}%;top:${top.toFixed(1)}%" data-drop="${slotTarget(slot.id)}" data-key="${slot.id}">
-    <div class="slot-dot" role="button" tabindex="0" aria-pressed="${selected}" data-pos-slot="${slot.id}" data-action="lineup-slot" data-slot="${slot.id}" ${player ? `style="background:${esc(color)};color:${inkOn(color)}"` : ''} aria-label="${esc(hint)}" title="${esc(hint)}">${player ? effectiveFit(player, role, slot.position).toFixed(0) : icon('plus', 13)}</div>
+    <div class="slot-dot" role="button" tabindex="0" aria-pressed="${selected}" data-pos-slot="${slot.id}" data-action="lineup-slot" data-slot="${slot.id}" ${player ? `style="background:${esc(color)};color:${inkOn(color)}"` : ''} aria-label="${esc(hint)}" title="${esc(hint)}">${player ? effectiveFit(player, role, slot.position, slot).toFixed(0) : icon('plus', 13)}</div>
     ${player ? pick(esc(ROLES[role]?.label ?? ''), `<select data-lineup-role="${slot.id}" aria-label="${esc(slot.label)}职责">${roleOptions(slot.position, role)}</select>`, 'slot-role') : ''}
     ${pick(esc(player ? shortName(player.name) : slot.label), `<select data-slot-player="${slot.id}" aria-label="${esc(slot.label)}球员">${slotPlayerOptions(slot, role, draft, formation, player?.id)}</select>`, 'slot-player')}
   </div>`
@@ -276,9 +277,9 @@ function tacticsBar(draft: Lineup, formation: FormationDef): string {
     <div class="seg" role="group" aria-label="阵型">${FORMATION_LIST.map((item) => `<button class="${draft.formationId === item.id ? 'active' : ''}" data-action="lineup-formation" data-formation="${item.id}" title="${esc(item.desc)}">${esc(item.label)}</button>`).join('')}</div>
     <div class="tac-stats">
       <div class="tac-stat" ${tipAttrs('战术执行度', '由首发位置熟练度、战术意识（决断·配合）和俱乐部战术研究室阶段共同决定。数值越高，高位压迫、就地反抢和防线协同的执行越到位。')}><span>战术执行</span>${meter(familiarity)}</div>
-      <div class="tac-stat"><span>位置熟练</span>${meter(average(starters.map(({ player, slot }) => player.positions[slot.position])))}</div>
+      <div class="tac-stat"><span>位置熟练</span>${meter(average(starters.map(({ player, slot }) => slotPositionValue(player, slot))))}</div>
       <div class="tac-stat"><span>首发体能</span>${meter(average(starters.map(({ player }) => player.condition ?? 100)))}</div>
-      <div class="tac-stat"><span>平均有效</span>${fitHeat(average(starters.map(({ player, slot, role }) => effectiveFit(player, role, slot.position))))}</div>
+      <div class="tac-stat"><span>平均有效</span>${fitHeat(average(starters.map(({ player, slot, role }) => effectiveFit(player, role, slot.position, slot))))}</div>
       <div class="tac-stat"><span>平均 CA</span>${caHeat(average(starters.map(({ player }) => playerCA(player))))}</div>
     </div>
   </header>`
@@ -333,19 +334,19 @@ function notesSection(draft: Lineup): string {
 
 /* ---------- 球员表 ---------- */
 
-type RowInfo = { position: Position; fit: number; proficiency: number }
+type RowInfo = { position: Position; label: string; fit: number; proficiency: number }
 
 /** 选中了首发位置时，全表按这个位置算熟练和有效，方便比较候选。 */
 function rowInfo(player: Player, draft: Lineup, formation: FormationDef, selected: FormationSlot | null): RowInfo {
   if (selected) {
     const role = draft.starters.find((item) => item.slotId === selected.id)?.role ?? selected.defaultRole
-    return { position: selected.position, fit: effectiveFit(player, role, selected.position), proficiency: player.positions[selected.position] }
+    return { position: selected.position, label: selected.label, fit: effectiveFit(player, role, selected.position, selected), proficiency: slotPositionValue(player, selected) }
   }
   const starter = draft.starters.find((item) => item.playerId === player.id)
   const slot = starter && formation.slots.find((item) => item.id === starter.slotId)
-  if (starter && slot) return { position: slot.position, fit: effectiveFit(player, starter.role, slot.position), proficiency: player.positions[slot.position] }
+  if (starter && slot) return { position: slot.position, label: slot.label, fit: effectiveFit(player, starter.role, slot.position, slot), proficiency: slotPositionValue(player, slot) }
   const position = primaryPosition(player)
-  return { position, fit: bestRoleForPlayer(player, position).fit, proficiency: player.positions[position] }
+  return { position, label: positionLabel(position), fit: bestRoleForPlayer(player, position).fit, proficiency: player.positions[position] }
 }
 
 function moveOptions(player: Player, draft: Lineup, formation: FormationDef): string {
@@ -353,7 +354,7 @@ function moveOptions(player: Player, draft: Lineup, formation: FormationDef): st
   const benchAt = draft.bench.indexOf(player.id)
   const slots = formation.slots.map((slot) => {
     const other = playerOf(draft.starters.find((item) => item.slotId === slot.id)?.playerId)
-    return `<option value="${slotTarget(slot.id)}" ${here === slot.id ? 'selected' : ''}>${esc(slot.label)} · 熟练 ${Math.round(player.positions[slot.position])}${other && other.id !== player.id ? ` · 换下 ${esc(other.name)}` : ''}</option>`
+    return `<option value="${slotTarget(slot.id)}" ${here === slot.id ? 'selected' : ''}>${esc(slot.label)} · 熟练 ${Math.round(slotPositionValue(player, slot))}${other && other.id !== player.id ? ` · 换下 ${esc(other.name)}` : ''}</option>`
   }).join('')
   // 替补席和未入选都没有固定位置，按这名球员最擅长的位置给熟练度，选人时好比较。
   const own = primaryPosition(player)
@@ -377,19 +378,19 @@ function playerRow(player: Player, draft: Lineup, formation: FormationDef, selec
   const isPicked = selectedId !== null && (placement.slot?.id === selectedId || (placement.benchIndex !== undefined && benchSlotId(placement.benchIndex) === selectedId))
   const assignable = selectedId !== null && !isPicked
   const dropTarget = placement.slot ? slotTarget(placement.slot.id) : placement.benchIndex !== undefined ? benchTarget(placement.benchIndex) : 'reserve'
-  const positions = (['GK', 'CB', 'W', 'CM', 'ST'] as Position[]).filter((pos) => player.positions[pos] >= PLAYABLE_PROFICIENCY).sort((a, b) => player.positions[b] - player.positions[a])
+  const positions = DETAILED_POSITIONS.filter((pos) => detailedPositionValue(player, pos) >= PLAYABLE_PROFICIENCY).sort((a, b) => detailedPositionValue(player, b) - detailedPositionValue(player, a))
   const winRate = form.apps > 0 ? pct(form.wins / form.apps) : '—'
   return `<tr class="${isPicked ? 'me' : ''} ${assignable ? 'clickable' : ''}" data-key="${esc(player.id)}" data-drop="${dropTarget}" ${assignable ? `tabindex="0" data-action="lineup-assign" data-player="${esc(player.id)}"` : ''}>
     <td class="t-place ${placement.slot || placement.benchIndex !== undefined ? '' : 'reserve'}">${pick(`${posBadge(placement.slot?.position ?? primaryPosition(player))}<span>${esc(placeLabel)}</span>`, `<select data-move-player="${esc(player.id)}" aria-label="${esc(player.name)}的位置">${moveOptions(player, draft, formation)}</select>`)}</td>
     <td class="name-cell t-name"><span class="grip" draggable="true" data-drag-player="${esc(player.id)}" title="拖到球场或替补席">${icon('grip', 13)}</span><button class="name-btn" data-action="detail" data-player="${esc(player.id)}">${esc(player.name)}</button>${playerFlags(player)}</td>
-    <td class="num t-prof" title="${positionLabel(info.position)}熟练度 ${Math.round(info.proficiency)} / 100，属性折损 ${pct(1 - positionMultiplier(info.proficiency))}">${proficiencyBar(info.proficiency)}</td>
+    <td class="num t-prof" title="${esc(info.label)}熟练度 ${Math.round(info.proficiency)} / 100，属性折损 ${pct(1 - positionMultiplier(info.proficiency))}">${proficiencyBar(info.proficiency)}</td>
     <td class="num t-cond" title="体能 ${Math.round(player.condition ?? 100)} / 100，比赛开始时映射为初始体力">${fitnessHeart(player.condition ?? 100)}</td>
     <td class="num strong">${fitHeat(info.fit)}</td>
     <td class="num">${caHeat(playerCA(player))}</td>
     <td class="t-role">${placement.slot && placement.role ? pick(esc(ROLES[placement.role]?.label ?? ''), `<select data-lineup-role="${placement.slot.id}" aria-label="${esc(placement.slot.label)}职责">${roleOptions(placement.slot.position, placement.role)}</select>`) : '<span class="muted">—</span>'}</td>
     <td class="t-card">${cardCell(player)}</td>
     <td class="t-form">${formBars(form)}</td>
-    <td><span class="pos-list">${positions.map((pos) => `<span title="${positionLabel(pos)} 熟练 ${Math.round(player.positions[pos])}">${posBadge(pos)}</span>`).join('')}</span></td>
+    <td><span class="pos-list">${positions.map((pos) => `<span title="${DETAILED_POSITION_LABELS[pos]} 熟练 ${Math.round(detailedPositionValue(player, pos))}"><span class="pos ${positionClass(DETAILED_TO_POSITION[pos])}">${pos}</span></span>`).join('')}</span></td>
     <td class="num dim">${form.apps || '—'}</td>
     <td class="num dim">${form.apps ? form.goals : '—'}</td>
     <td class="num dim">${winRate}</td>
@@ -486,6 +487,7 @@ function autoSubPanel(draft: Lineup, onlineLock = false): string {
   const ruleCount = autoSubs.timed.length + (autoSubs.conditionRules?.length ?? 0)
   return panel('自动换人设置', `
     ${renderAutoSubEditor({ scope: 'lineup', plan: autoSubs, formationId: draft.formationId, starters, bench, disabled: onlineLock })}
+    <p class="hint">赛前轮换独立于场内自动换人：联机在赛前 30 分钟锁定阵容，按预计开球体能判断，只有体能低于阈值才轮换。只从健康、未停赛、位置熟练且体力达标的替补中挑选；不消耗场内换人次数，只影响本场，不覆盖保存的阵容。针对指定球员的赛中规则可能因轮换在本场失效。适用于联赛及正式杯赛；挑战赛满体能，不会触发。</p>
     <p class="hint">修改后请点击顶部「保存阵容」生效；比赛进行中也可在「教练调整」里随时修改本场设置。手动与自动共用 ${MAX_SUBS} 次换人名额，按受伤、定时、条件规则、全局体力顺序处理。受伤与体力规则只挑学过该位置且未受伤的替补，体力触发还要求替补体力不低于阈值，避免刚换上又立即被换下。红牌停赛 2 场，累计 3 张黄牌停赛 1 场。伤病跟着球员走，换卡不变；恢复前带伤比赛能力下降 30%，不影响精力和培养。</p>
   `, { aside: `<span class="muted small">${ruleCount ? `已配 ${ruleCount} 条规则` : '支持按位置/体力智能换人'}</span>` })
 }

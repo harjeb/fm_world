@@ -64,12 +64,21 @@ describe('联机赛季杯赛', () => {
     const headers = (token: string) => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' })
     const load = async (token: string) => (await (await fetch(`${base}/api/game`, { headers: headers(token) })).json()) as { game: GameState; revision: number }
     const stale = await load(home.token)
+    const agentToken = (await (await fetch(`${base}/api/agent/token`, { method: 'POST', headers: headers(home.token) })).json() as { token: string }).token
+    const agentHeaders = headers(agentToken)
+    const agentPlan = { timed: [], staminaBelow: null, onInjury: false, preMatchStaminaBelow: 75 }
+    const configured = await fetch(`${base}/api/agent/action`, { method: 'POST', headers: agentHeaders, body: JSON.stringify({ action: 'set_auto_subs', plan: agentPlan }) })
+    expect(configured.status).toBe(200)
     // 模拟尚未收到杯赛赛程的旧页面；锁阵仍以服务器世界为准。
     delete stale.game.world!.seasonCups
     stale.game.lineup.tactics.tempo = stale.game.lineup.tactics.tempo === 'fast' ? 'slow' : 'fast'
     clock = cupAt - 30 * 60_000
     const lockedSave = await fetch(`${base}/api/game`, { method: 'PUT', headers: headers(home.token), body: JSON.stringify({ game: stale.game, baseRevision: stale.revision }) })
     expect(lockedSave.status).toBe(409)
+    const lockedAgent = await fetch(`${base}/api/agent/action`, { method: 'POST', headers: agentHeaders, body: JSON.stringify({ action: 'set_auto_subs', plan: { ...agentPlan, preMatchStaminaBelow: 50 } }) })
+    expect(lockedAgent.status).toBe(400)
+    expect((await lockedAgent.json()).error).toContain('阵容已锁定')
+    expect((await load(home.token)).game.autoSubs?.preMatchStaminaBelow).toBe(75)
     for (let i = 0; i < 40; i++) await app.runMatchQueue()
     let one = await load(home.token), two = await load(away.token)
     const fixtures = one.game.world!.seasonCups!.cups.flatMap(cup => cup.rounds.flatMap(round => round.fixtures))

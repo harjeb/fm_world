@@ -1,4 +1,4 @@
-import type { AttrKey, AutoSubPlan, GameState, Lineup, Position, SkillId } from '../game/types.ts'
+import type { AttrKey, AutoSubPlan, DetailedPosition, GameState, Lineup, Position, SkillId } from '../game/types.ts'
 import { loadGame, saveGame, setTeamPickPending } from '../game/state.ts'
 import { createWorldGame, type ClubPreview } from '../game/world.ts'
 import { ensurePve } from '../game/pve.ts'
@@ -41,6 +41,7 @@ export type UIState = {
   /** 「从 AI 球队买人」的筛选和翻页。 */
   aiBuyTeam: string
   aiBuyPos: string
+  aiBuySearch: string
   aiBuyPage: number
   academySearch: string
   academyPos: Position | 'ALL'
@@ -89,7 +90,7 @@ export type UIState = {
   trainingTeammateIds: string[]
   trainingAttr: AttrKey
   trainingCombo: 'attack' | 'defense'
-  trainingPosition: Position
+  trainingPosition: Position | DetailedPosition
   trainingProtection: 'prevention' | 'resilience'
   /** 赛后每个学习选项各自选定的替换技能。 */
   trainingEventReplacements: Record<string, SkillId>
@@ -176,6 +177,7 @@ export const ui: UIState = {
   clubPage: 0,
   aiBuyTeam: 'ALL',
   aiBuyPos: 'ALL',
+  aiBuySearch: '',
   aiBuyPage: 0,
   academySearch: '',
   academyPos: 'ALL',

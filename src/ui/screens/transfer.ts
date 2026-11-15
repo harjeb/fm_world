@@ -6,12 +6,13 @@ import { economyOf } from '../../game/economy.ts'
 import { AUCTION_DURATION_MS, AUCTION_EXTEND_MS, auctionRaiseFee, committedFunds, leadingBid, minimumBid } from '../../game/auction.ts'
 import { traitEffectText } from '../../game/data/skill-effects.ts'
 import { traitNameOf } from '../../game/data/star-traits.ts'
-import { SQUAD_LIMIT, aiTransferOffers, bestMarketValue, freeAgentAsking, saleChance, suggestedPrice, transferWindowOpen } from '../../game/market.ts'
+import { SQUAD_LIMIT, aiTransferOffers, bestMarketValue, freeAgentAsking, saleChance, sellerSquadError, suggestedPrice, transferWindowOpen } from '../../game/market.ts'
+import { worldTransferTeams } from '../../game/world.ts'
 import { isOnMarketToday } from '../../game/market-window.ts'
 import { initialDisplayCA } from '../../game/rating.ts'
 import { caHeat, clubName, countryLabel, emptyState, icon, ownName, pageHead, panel, posBadge, primaryPosition, tag, traitLabel } from '../components.ts'
 import { countdownText, esc } from '../format.ts'
-import { isOnlineMode, marketState, onlineState, publicWorld, serverNow } from '../../online.ts'
+import { aiTransferMarket, isOnlineMode, marketState, onlineState, serverNow } from '../../online.ts'
 import { game, ui, type TransferTab } from '../state.ts'
 
 const TABS: { id: TransferTab; label: string }[] = [
@@ -24,7 +25,7 @@ const TABS: { id: TransferTab; label: string }[] = [
 const STATUS_TONE: Record<SquadStatus, string> = { key: 'good', rotation: 'info', fringe: '' }
 const pctText = (share: number) => `${Math.round(share * 100)}%`
 
-function nameCell(player: Player): string {
+function nameCell(player: Pick<Player, 'id' | 'name' | 'enName'>): string {
   return `<td class="name-cell"><button class="name-btn" data-action="detail" data-player="${esc(player.id)}">${esc(player.name)}</button><small>${esc(player.enName)}</small></td>`
 }
 
@@ -169,40 +170,48 @@ function freeTab(): string {
   `, { flush: true })
 }
 
-/** 从 AI 球队买人：本联赛 AI 球队的全部球员，带俱乐部态度和要价，可按球队 / 位置筛选。 */
+/** 全世界 AI 球队：联机读取服务器权威快照，单机按世界名单生成。 */
 function aiTab(): string {
   const open = transferWindowOpen(game)
-  const managed = (clubId: string) => isOnlineMode() && !!publicWorld?.clubs.find((club) => club.id === clubId)?.managed
-  const all = aiTransferOffers(game, managed)
+  const online = isOnlineMode()
+  const all = online
+    ? aiTransferMarket.offers.map((item) => ({ team: { id: item.teamId, name: item.teamName }, player: item.player, asking: item.asking, terms: item.terms, blocked: item.blocked, ca: item.player.ca }))
+    : aiTransferOffers({ ...game, aiTeams: worldTransferTeams(game) }).map((item) => ({ ...item, blocked: sellerSquadError(item.team, item.player), ca: initialDisplayCA(item.player) }))
   const teams = [...new Map(all.map((item) => [item.team.id, item.team.name])).entries()]
+  const search = ui.aiBuySearch.trim().toLowerCase()
   const rows = all
-    .filter((item) => (ui.aiBuyTeam === 'ALL' || item.team.id === ui.aiBuyTeam) && (ui.aiBuyPos === 'ALL' || primaryPosition(item.player) === ui.aiBuyPos))
-    .sort((a, b) => initialDisplayCA(b.player) - initialDisplayCA(a.player))
+    .filter((item) => (ui.aiBuyTeam === 'ALL' || item.team.id === ui.aiBuyTeam) && (ui.aiBuyPos === 'ALL' || primaryPosition(item.player) === ui.aiBuyPos)
+      && (!search || [item.player.name, item.player.enName, item.player.country, item.team.name].some((value) => value?.toLowerCase().includes(search))))
+    .sort((a, b) => b.ca - a.ca)
   const pageSize = 20
   const pages = Math.max(1, Math.ceil(rows.length / pageSize))
   ui.aiBuyPage = Math.min(ui.aiBuyPage, pages - 1)
-  const body = rows.slice(ui.aiBuyPage * pageSize, ui.aiBuyPage * pageSize + pageSize).map(({ team, player, asking, terms }) => `<tr data-key="${esc(player.id)}">
+  const body = rows.slice(ui.aiBuyPage * pageSize, ui.aiBuyPage * pageSize + pageSize).map(({ team, player, asking, terms, blocked, ca }) => `<tr data-key="${esc(player.id)}">
       <td>${clubName(team.id, 14)}</td>
       <td>${posBadge(primaryPosition(player))}</td>
       ${nameCell(player)}
       <td class="num">${player.age ?? 24}</td>
-      <td class="num strong">${caHeat(initialDisplayCA(player))}</td>
+      <td class="num strong">${caHeat(ca)}</td>
       <td>${tag(SQUAD_STATUS_LABELS[terms.status], STATUS_TONE[terms.status])}</td>
       <td class="num" title="${terms.recorded >= 5 ? `最近 ${terms.recorded} 场的出场时间` : '记录不足 5 场，按阵容角色估算'}">${pctText(terms.minutesShare)}${terms.recorded >= 5 ? '' : '<small class="muted">*</small>'}</td>
       <td class="num dim">${terms.value.toLocaleString()}</td>
       <td class="num">${asking === null ? tag('非卖品', 'bad') : asking.toLocaleString()}</td>
-      <td class="num"><button class="btn small" data-action="club-buy-ai" data-team="${esc(team.id)}" data-player="${esc(player.id)}" ${!open || asking === null || game.activeMatch ? 'disabled' : ''}>谈判</button></td>
+      <td class="num"><button class="btn small" data-action="club-buy-ai" data-team="${esc(team.id)}" data-player="${esc(player.id)}" ${blocked ? `title="${esc(blocked)}"` : ''} ${!open || asking === null || blocked || game.activeMatch ? 'disabled' : ''}>谈判</button></td>
     </tr>`).join('')
   const teamOptions = ['<option value="ALL">全部球队</option>', ...teams.map(([id, name]) => `<option value="${esc(id)}" ${ui.aiBuyTeam === id ? 'selected' : ''}>${esc(name)}</option>`)].join('')
   const posOptions = [['ALL', '全部位置'], ['GK', '门将'], ['CB', '中卫'], ['W', '边路'], ['CM', '中场'], ['ST', '前锋']].map(([id, label]) => `<option value="${id}" ${ui.aiBuyPos === id ? 'selected' : ''}>${label}</option>`).join('')
   return `<div class="banner ${open ? 'good' : 'muted'}">${icon('swap', 16)}<b>${open ? '转会窗口开放' : '转会窗口关闭'}</b><span>转会窗口：第 1-10 轮、20-30 轮。俱乐部按主力 / 年龄 / 最近 20 场出场 / 你给的溢价决定放不放人，球员本人还要看你的承诺。</span></div>
-    ${panel(`本联赛 AI 球队 <small>${rows.length} 人</small>`, `
+    ${panel(`全世界 AI 球队 <small>${rows.length} 人</small>`, `
       <div class="toolbar in-panel">
+        <input id="ai-buy-search" class="compact" placeholder="搜索球员 / 球队 / 国家" value="${esc(ui.aiBuySearch)}">
         <select id="ai-buy-team" class="compact">${teamOptions}</select>
         <select id="ai-buy-pos" class="compact">${posOptions}</select>
+        ${online ? `<button class="btn small" data-action="ai-buy-refresh" ${aiTransferMarket.loading ? 'disabled' : ''}>${aiTransferMarket.loading ? '加载中…' : '刷新名单'}</button>` : ''}
         <span class="muted small">近 20 场 = 出场时间占比（* 为按阵容角色估算） · 余额 ${economyOf(game).balance.toLocaleString()}</span>
       </div>
-      ${body ? `<div class="table-scroll"><table class="dt"><thead><tr><th>球队</th><th>位置</th><th>球员</th><th class="num">龄</th><th class="num">原始 CA</th><th>地位</th><th class="num">近 20 场</th><th class="num">身价</th><th class="num">俱乐部要价</th><th></th></tr></thead><tbody>${body}</tbody></table></div>` : emptyState('没有符合条件的球员。')}
+      ${aiTransferMarket.error && online ? `<p class="warn-text pad">${esc(aiTransferMarket.error)}，请刷新重试。</p>` : ''}
+      ${!online && game.shared ? '<p class="hint pad">当前使用联机存档的离线缓存，只含本赛区球队；连接服务器后可查看全世界 AI 球员。</p>' : ''}
+      ${body ? `<div class="table-scroll"><table class="dt"><thead><tr><th>球队</th><th>位置</th><th>球员</th><th class="num">龄</th><th class="num">原始 CA</th><th>地位</th><th class="num">近 20 场</th><th class="num">身价</th><th class="num">俱乐部要价</th><th></th></tr></thead><tbody>${body}</tbody></table></div>` : emptyState(online && aiTransferMarket.loading ? '正在加载全世界 AI 球员…' : '没有符合条件的球员。')}
       <div class="pager"><button class="btn small" data-action="ai-buy-prev" ${ui.aiBuyPage === 0 ? 'disabled' : ''}>${icon('left', 13)}上一页</button><span class="muted small">${ui.aiBuyPage + 1} / ${pages}</span><button class="btn small" data-action="ai-buy-next" data-pages="${pages}" ${ui.aiBuyPage >= pages - 1 ? 'disabled' : ''}>下一页${icon('right', 13)}</button></div>
     `, { flush: true })}`
 }

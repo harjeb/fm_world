@@ -1,6 +1,8 @@
 import type { AttrKey, Attributes, Fixture, Player, Position, SeasonTableRow, SkillId, TierId, TraitId } from '../game/types.ts'
 import { POSITIONS, type PlayerCard } from '../game/types.ts'
 import { cardDisplayName, playerCards } from '../game/cards.ts'
+import { DETAILED_POSITIONS, DETAILED_POSITION_LABELS, detailedPositionValue } from '../game/detailed-positions.ts'
+import type { DetailedPosition } from '../game/types.ts'
 import { ATTR_META } from '../game/data/attributes.ts'
 import { ROUTE_LABELS } from '../game/data/events.ts'
 import { skillEffectText, skillTierNote, traitEffectText } from '../game/data/skill-effects.ts'
@@ -11,12 +13,13 @@ import { injuryUntil } from '../game/injury.ts'
 import { attrRating, initialDisplayCA, mainAttrsFor } from '../game/rating.ts'
 import { isMainAttr } from '../game/scale.ts'
 import { PLAYER_TEAM_ID, teamName } from '../game/season.ts'
+import { worldTransferTeams } from '../game/world.ts'
 import { latestRoundRankChanges } from '../game/standings-history.ts'
 import { isOnlineMode, marketState, publicWorld } from '../online.ts'
 import { esc, playerCA, positionClass, positionLabel, skillName, traitName } from './format.ts'
 import { tipAttrs } from './tooltip.ts'
 import { icon } from './icons.ts'
-import { game } from './state.ts'
+import { game, ui } from './state.ts'
 
 /* ---------- 俱乐部外观 ---------- */
 
@@ -304,6 +307,9 @@ export function findAnyPlayer(id: string): Player | undefined {
     ?? game.freeStars.find((player) => player.id === id)
     ?? marketState.pool.find((player) => player.id === id)
     ?? game.aiTeams.flatMap((team) => team.players).find((player) => player.id === id)
+    ?? (!isOnlineMode() && ui.screen === 'transfer' && ui.transferTab === 'ai'
+      ? worldTransferTeams(game).flatMap((team) => team.players).find((player) => player.id === id)
+      : undefined)
 }
 
 /* ---------- 布局件 ---------- */
@@ -487,12 +493,11 @@ export function attributeRadar(player: { attrs: Partial<Attributes>; positions: 
   </svg>`
 }
 
-const POSITION_SPOTS: Record<Position, [number, number][]> = {
-  ST: [[50, 15]],
-  W: [[17, 36], [83, 36]],
-  CM: [[50, 50]],
-  CB: [[50, 74]],
-  GK: [[50, 92]],
+const POSITION_SPOTS: Record<DetailedPosition, [number, number]> = {
+  GK: [50, 92], DL: [16, 77], DC: [50, 77], DR: [84, 77],
+  WBL: [16, 64], DM: [50, 64], WBR: [84, 64],
+  ML: [16, 51], MC: [50, 51], MR: [84, 51],
+  AML: [16, 37], AMC: [50, 37], AMR: [84, 37], ST: [50, 20],
 }
 
 function proficiencyTier(value: number): number {
@@ -500,15 +505,15 @@ function proficiencyTier(value: number): number {
 }
 
 /** 位置熟练度图：擅长 85+ / 熟练 65+ / 客串 40+ / 生疏 1+ / 未学会 0。 */
-export function positionMap(player: Pick<Player, 'positions'>): string {
-  const gk = player.positions.GK > 0
-  const relevant = POSITIONS.filter((pos) => (gk ? pos === 'GK' : pos !== 'GK'))
-  const markers = relevant.flatMap((pos) => POSITION_SPOTS[pos].map(([x, y]) => {
-    const value = Math.round(player.positions[pos])
-    return `<g transform="translate(${x} ${y * 1.3})"><circle r="9" class="pm-dot pm-${proficiencyTier(player.positions[pos])}"/><text y="3" text-anchor="middle" class="pm-value">${value}</text><text y="16.5" text-anchor="middle" class="pm-label">${positionLabel(pos)}</text></g>`
-  })).join('')
+export function positionMap(player: Pick<Player, 'positions' | 'detailedPositions'>): string {
+  const markers = DETAILED_POSITIONS.map((pos) => {
+    const [x, y] = POSITION_SPOTS[pos]
+    const value = Math.round(detailedPositionValue(player, pos))
+    return `<g transform="translate(${x} ${y * 1.3})"><title>${DETAILED_POSITION_LABELS[pos]} ${value}</title><circle r="6" class="pm-dot pm-${proficiencyTier(value)}"/><text y="2" text-anchor="middle" class="pm-value">${value}</text><text y="10" text-anchor="middle" class="pm-label">${pos}</text></g>`
+  }).join('')
   const tiers: [number, string][] = [[5, '擅长'], [4, '熟练'], [3, '客串'], [2, '生疏'], [1, '未学']]
   return `<div class="pos-map">
+    ${player.detailedPositions ? '' : '<p class="muted small">旧位置数据按原大位置继承；培养后可分别提升细分位置。</p>'}
     <svg viewBox="0 0 100 130" role="img" aria-label="位置熟练度">
       <rect x="1" y="1" width="98" height="128" rx="2" class="pm-pitch"/>
       <line x1="1" y1="65" x2="99" y2="65" class="pm-line"/>

@@ -1,5 +1,6 @@
 import type { FormationId, Lineup, Player, Position, RoleId, Tactics, TacticPreset, TierId } from './types.ts'
 import { applyAITacticsToLineup } from './ai-tactics.ts'
+import { slotPositionValue } from './detailed-positions.ts'
 import { FORMATIONS, type FormationSlot } from './data/formations.ts'
 import { ROLES, ROLES_BY_POSITION, roleFit, rolesForSlot } from './data/roles.ts'
 import { PLAYABLE_PROFICIENCY, caOf, positionMultiplier } from './ca.ts'
@@ -39,12 +40,13 @@ export function playerById(roster: Player[], id: string): Player | undefined {
   return roster.find((player) => player.id === id)
 }
 
-export function bestRoleForPlayer(player: Player, position: Position, slot?: { position: Position; x: number }): { role: RoleId; fit: number } {
+export function bestRoleForPlayer(player: Player, position: Position, slot?: { position: Position; x: number; id?: string; label?: string }): { role: RoleId; fit: number } {
   const roles = slot ? rolesForSlot(slot) : ROLES_BY_POSITION[position]
   let best = roles[0]
   let bestFit = -1
   for (const role of roles) {
-    const fit = roleFit(player.attrs, role, player.positions.GK > 0) * positionMultiplier(player.positions[position])
+    const proficiency = slot?.id && slot.label ? slotPositionValue(player, { id: slot.id, position: slot.position, label: slot.label }) : player.positions[position]
+    const fit = roleFit(player.attrs, role, player.positions.GK > 0) * positionMultiplier(proficiency)
     if (fit > bestFit) {
       bestFit = fit
       best = role
@@ -70,9 +72,9 @@ export function autoFillLineup(
     let bestScore = -Infinity
     // 优先用学过这个位置的球员；实在没有，才让别的位置顶上（熟练度 0，属性折损最多）。
     const free = roster.filter((player) => !used.has(player.id))
-    const learned = free.filter((player) => player.positions[slot.position] >= PLAYABLE_PROFICIENCY)
+    const learned = free.filter((player) => slotPositionValue(player, slot) >= PLAYABLE_PROFICIENCY)
     for (const player of learned.length ? learned : free) {
-      const multiplier = positionMultiplier(player.positions[slot.position])
+      const multiplier = positionMultiplier(slotPositionValue(player, slot))
       for (const role of rolesForSlot(slot)) {
         const score = roleFit(player.attrs, role, player.positions.GK > 0) * multiplier
         if (score > bestScore) {
@@ -151,11 +153,11 @@ export type AutoAssignContext = {
 }
 
 /** 一名球员放在某个位置、担任某个职责的得分：CA 和职责适配度各占一部分，再乘位置熟练度。 */
-function assignScore(player: Player, position: Position, role: RoleId, staminaWeight: number, context: AutoAssignContext): number {
+function assignScore(player: Player, slot: FormationSlot, role: RoleId, staminaWeight: number, context: AutoAssignContext): number {
   const gk = player.positions.GK > 0
   const fit = roleFit(player.attrs, role, gk)
   const ca = caOf(player.attrs, gk) / 5
-  let score = (0.6 * fit + 0.4 * ca) * positionMultiplier(player.positions[position])
+  let score = (0.6 * fit + 0.4 * ca) * positionMultiplier(slotPositionValue(player, slot))
   const condition = assignCondition(player, context)
   score *= 1 - staminaWeight + (staminaWeight * condition) / 100
   if (context.injured?.(player)) score *= 0.7
@@ -163,11 +165,10 @@ function assignScore(player: Player, position: Position, role: RoleId, staminaWe
 }
 
 function bestRoleFor(player: Player, slot: FormationSlot, staminaWeight: number, context: AutoAssignContext): { role: RoleId; score: number } {
-  const position = slot.position
   let best = slot.defaultRole
   let bestScore = -Infinity
   for (const role of rolesForSlot(slot)) {
-    const score = assignScore(player, position, role, staminaWeight, context)
+    const score = assignScore(player, slot, role, staminaWeight, context)
     if (score > bestScore) {
       bestScore = score
       best = role
@@ -177,12 +178,12 @@ function bestRoleFor(player: Player, slot: FormationSlot, staminaWeight: number,
 }
 
 /** 一个位置的候选人：排除伤停，优先用可踢这个位置的（熟练度 ≥ 80），实在没有才让别的位置顶上。 */
-function candidatesFor(free: Player[], position: Position, context: AutoAssignContext): Player[] {
+function candidatesFor(free: Player[], slot: FormationSlot, context: AutoAssignContext): Player[] {
   // 受伤的人不能被自动填充选中；宁可留空让玩家手动处理，也不静默把伤员排进首发。
   const healthy = free.filter((player) => !context.injured?.(player))
   if (!healthy.length) return []
   const available = healthy.filter((player) => !context.suspended?.(player))
-  const learned = available.filter((player) => player.positions[position] >= PLAYABLE_PROFICIENCY)
+  const learned = available.filter((player) => slotPositionValue(player, slot) >= PLAYABLE_PROFICIENCY)
   return learned.length ? learned : available
 }
 
@@ -239,7 +240,7 @@ export function autoAssignLineup(
     if (starters.some((starter) => starter.slotId === slot.id)) continue
     const free = roster.filter((player) => !used.has(player.id))
     // 部分轮换先补伤停 / 空缺，再做有名额限制的体能轮换；没有当前阵容时才以最强阵容为基准。
-    const chosen = chooseAssignedPlayer(candidatesFor(free, slot.position, context), slot, mode === 'full' || keepCurrent, context)
+    const chosen = chooseAssignedPlayer(candidatesFor(free, slot, context), slot, mode === 'full' || keepCurrent, context)
     if (chosen) {
       used.add(chosen.player.id)
       starters.push({ slotId: slot.id, playerId: chosen.player.id, role: chosen.role })
@@ -279,7 +280,7 @@ function rotateTiredStarters(
   for (const item of tired) {
     if (rotated >= target) break
     const free = roster.filter((player) => !used.has(player.id) && assignCondition(player, context) > assignCondition(item.player, context))
-    const pool = candidatesFor(free, item.slot.position, context).filter((player) => player.positions[item.slot.position] >= PLAYABLE_PROFICIENCY)
+    const pool = candidatesFor(free, item.slot, context).filter((player) => slotPositionValue(player, item.slot) >= PLAYABLE_PROFICIENCY)
     const chosen = chooseAssignedPlayer(pool, item.slot, true, context)
     if (!chosen) continue
     used.delete(item.player.id)
@@ -518,7 +519,7 @@ export function validateLineup(roster: Player[], lineup: Lineup): LineupValidati
     if (slot.position === 'GK') gkCount++
     // 任何人都能踢任何位置，代价是按熟练度折损属性。
     if (slot.position === 'GK' && player.positions.GK <= 0) warnings.push(`${player.name} 不是门将，几乎扑不到球`)
-    else if (player.positions[slot.position] < 65) warnings.push(`${player.name} 在 ${slot.label} 的熟练度仅 ${Math.round(player.positions[slot.position])}，属性会明显折损`)
+    else if (slotPositionValue(player, slot) < 65) warnings.push(`${player.name} 在 ${slot.label} 的熟练度仅 ${Math.round(slotPositionValue(player, slot))}，属性会明显折损`)
   }
   if (gkCount !== 1) errors.push('阵容必须且只能有 1 名合法门将')
   if (formation) {
@@ -568,7 +569,7 @@ export function computeLineupFamiliarity(roster: Player[], lineup: Lineup, tacti
     const player = starter ? playerById(roster, starter.playerId) : undefined
     if (!player) continue
     const gk = player.positions.GK > 0
-    profSum += Math.min(1, Math.max(0, player.positions[slot.position] / 100))
+    profSum += Math.min(1, Math.max(0, slotPositionValue(player, slot) / 100))
     const dec = attrRating('decisions', player.attrs.decisions, gk)
     const tw = attrRating('teamwork', player.attrs.teamwork, gk)
     iqSum += Math.min(1, Math.max(0, (dec + tw) / 200))
@@ -667,7 +668,7 @@ export function lineupSlots(roster: Player[], lineup: Lineup): LineupSlotView[] 
     const starter = lineup.starters.find((entry) => entry.slotId === slot.id)
     const player = starter ? playerById(roster, starter.playerId) ?? null : null
     const role = starter?.role ?? slot.defaultRole
-    const prof = player ? player.positions[slot.position] : 0
+    const prof = player ? slotPositionValue(player, slot) : 0
     return {
       slotId: slot.id,
       position: slot.position,
@@ -750,13 +751,13 @@ export function aiRotatedLineup(players: Player[], formationId: FormationId, tac
     const healthy = injured?.size ? free.filter((player) => !injured.has(player.id)) : free
     const freshHealthy = healthy.filter(restedEnough)
     const fresh = free.filter(restedEnough)
-    const learned = (list: Player[]) => list.filter((player) => player.positions[slot.position] >= PLAYABLE_PROFICIENCY)
+    const learned = (list: Player[]) => list.filter((player) => slotPositionValue(player, slot) >= PLAYABLE_PROFICIENCY)
     const pool = [learned(freshHealthy), learned(healthy), freshHealthy, healthy, learned(fresh), learned(free), fresh, free].find((list) => list.length) ?? []
     let bestPlayer: Player | null = null
     let bestRole: RoleId = slot.defaultRole
     let bestScore = -Infinity
     for (const player of pool) {
-      const multiplier = positionMultiplier(player.positions[slot.position])
+      const multiplier = positionMultiplier(slotPositionValue(player, slot))
       for (const role of rolesForSlot(slot)) {
         const score = roleFit(player.attrs, role, player.positions.GK > 0) * multiplier
         if (score > bestScore) {

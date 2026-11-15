@@ -1,7 +1,8 @@
-import type { AttrKey, AutoTrainingPresetId, GameState, Lineup, MatchMentality, Player, Position, RoleId, SkillId, Tactics } from '../game/types.ts'
+import type { AttrKey, AutoTrainingPresetId, DetailedPosition, GameState, Lineup, MatchMentality, Player, Position, RoleId, SkillId, Tactics } from '../game/types.ts'
 import { cacheGameLocally, clearSave, saveGame, setTeamPickPending, teamPickPending, upgradeLegacySignatures } from '../game/state.ts'
-import { createWorldGame, previewD2Clubs } from '../game/world.ts'
+import { createWorldGame, previewD2Clubs, worldTransferTeams } from '../game/world.ts'
 import { friendlyStepMs } from './match-timing.ts'
+import { filterTrainingBookIds, trainingBookLoadout } from './training-books.ts'
 import {
   applyAutoTrainingPreset,
   autoPresetLabel,
@@ -21,7 +22,6 @@ import {
   restoreActiveEngine,
   setAutoTrainingConfig,
   setTrainingBookLoadout,
-  trainingBookLoadout,
   setLineup,
   simulateSeasonRound,
   startLeague,
@@ -71,15 +71,15 @@ import { hasSeenLatestChangelog, markChangelogSeen } from '../game/changelog.ts'
 import { emptyAutoSubs } from '../game/match/management.ts'
 import { payWageArrears, upgradeFacility, type FacilityId } from '../game/economy.ts'
 import { leadingBid, type Auction, type AuctionResult } from '../game/auction.ts'
-import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPlayer, playerMarketValue, refreshClubMarket, releasePlayer, renewContract, signClubPlayer, signFreeAgent } from '../game/market.ts'
+import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPlayer, playerMarketValue, refreshClubMarket, releasePlayer, renewContract, signWorldClubPlayer, signFreeAgent } from '../game/market.ts'
 import { minimumBid } from '../game/auction.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
 import { clubNameError, normalizeClubName } from '../game/club-name.ts'
-import { bidOnline, buyFromAIClubOnline, chatState, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, recycleCardsOnline, refreshChatOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setCardRecycleLockOnline, startPeakOnline, startTrainingOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline } from '../online.ts'
+import { aiTransferMarket, bidOnline, buyFromAIClubOnline, chatState, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, recycleCardsOnline, refreshAITransferMarket, refreshChatOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setCardRecycleLockOnline, startPeakOnline, startTrainingOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline } from '../online.ts'
 import { agentHandoffText } from './agent-handoff.ts'
 import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
 import { UNHAPPY_GAME_DAYS } from '../game/transfer-rules.ts'
-import { cardName } from './components.ts'
+import { cardName, findAnyPlayer } from './components.ts'
 import { clockText, countdownText, esc, pct } from './format.ts'
 import { icon } from './icons.ts'
 import { morph } from './morph.ts'
@@ -95,7 +95,7 @@ import { renderClub } from './screens/club.ts'
 import { renderChatDrawer } from './screens/chat.ts'
 import { renderTransfer } from './screens/transfer.ts'
 import { renderHome } from './screens/home.ts'
-import { renderInventory, selectedRecycleCards } from './screens/inventory.ts'
+import { recyclableCards, renderInventory, selectedRecycleCards } from './screens/inventory.ts'
 import { parseLineupTarget, renderLineup, selectedSlotTarget } from './screens/lineup.ts'
 import { applyAutoSubAction, applyAutoSubFieldChange, type AutoSubScope } from './auto-sub-editor.ts'
 import { renderMatch } from './screens/match.ts'
@@ -236,6 +236,7 @@ function go(screen: Screen): void {
   ui.screen = screen
   if (screen === 'season') ui.seasonRound = null
   if (screen === 'world' || screen === 'cups') void refreshPublicWorld()
+  if (screen === 'transfer' && ui.transferTab === 'ai' && isOnlineMode()) void refreshAITransferMarket()
   if (screen === 'lineup') {
     ui.lineupDraft = structuredClone(game.lineup)
     ui.autoSubsDraft = structuredClone(game.autoSubs ?? emptyAutoSubs())
@@ -747,7 +748,12 @@ async function beginTraining(playerId: string): Promise<{ ok: boolean; error?: s
   if (trainingStartPending) return { ok: false, error: '正在开始培养，请稍候' }
   if (sharedActionUnavailable()) return { ok: false, error: '联机连接已断开，请先重新连接服务器' }
   const points = ui.trainingPointSpend
-  const books = [...ui.trainingBookIds]
+  const player = game.roster.find((item) => item.id === playerId)
+  const books = player ? filterTrainingBookIds(player, ui.trainingBookIds) : [...ui.trainingBookIds]
+  if (books.length !== ui.trainingBookIds.length) {
+    ui.trainingBookIds = books
+    return { ok: false, error: '已移除本位置基础技能池中的技能卡，请检查配置后重新开始培养。' }
+  }
   trainingStartPending = true
   syncAutoTraining()
   try {
@@ -947,18 +953,25 @@ function applyLineup(): void {
 
 /** 打开谈判弹窗：底价、估值和默认报价都在这里算好。 */
 function openNegotiation(kind: 'free' | 'club' | 'bid', playerId: string, clubId?: string): void {
+  if (kind === 'club' && isOnlineMode()) {
+    const quote = aiTransferMarket.offers.find((item) => item.teamId === clubId && item.player.id === playerId)
+    if (!quote || quote.asking === null || quote.blocked) { showNotice(quote?.blocked ?? '球员已不在转会名单，请刷新。'); return }
+    ui.negotiation = { kind, playerId, clubId, asking: quote.asking, value: quote.terms.value, offer: quote.asking, goal: 'promotion', role: 'first-team' }
+    render()
+    return
+  }
   const player = kind === 'bid'
     ? marketState.pool.find((item) => item.id === playerId)
     : kind === 'free'
       ? game.freeStars.find((item) => item.id === playerId)
-      : game.aiTeams.find((team) => team.id === clubId)?.players.find((item) => item.id === playerId)
+      : worldTransferTeams(game).find((team) => team.id === clubId)?.players.find((item) => item.id === playerId)
   if (!player) {
     showNotice('找不到这名球员。')
     return
   }
-  const value = Math.max(1, Math.round(playerMarketValue(player)))
+  const value = Math.max(1, Math.round(kind === 'club' ? bestMarketValue(game, player) : playerMarketValue(player)))
   const auction = kind === 'bid' ? marketState.auctions.find((item) => item.playerId === playerId) : undefined
-  const team = kind === 'club' ? game.aiTeams.find((item) => item.id === clubId) : undefined
+  const team = kind === 'club' ? worldTransferTeams(game).find((item) => item.id === clubId) : undefined
   const clubTerms = team ? clubSaleTerms(game, team, player) : undefined
   if (kind === 'club' && clubTerms?.asking == null) {
     showNotice(`${player.name} 是非卖品：${clubTerms?.reasons[0] ?? '俱乐部不卖'}`)
@@ -1016,6 +1029,7 @@ document.addEventListener('click', async (event) => {
   if (transferTab?.dataset.transferTab) {
     ui.transferTab = transferTab.dataset.transferTab as TransferTab
     ui.clubPage = 0
+    if (ui.transferTab === 'ai' && isOnlineMode()) void refreshAITransferMarket()
     render()
     return
   }
@@ -1255,6 +1269,9 @@ document.addEventListener('click', async (event) => {
       ui.clubPage = Math.max(0, ui.clubPage + (action === 'club-next' ? 1 : -1))
       render()
       break
+    case 'ai-buy-refresh':
+      if (isOnlineMode()) void refreshAITransferMarket()
+      break
     case 'ai-buy-prev':
     case 'ai-buy-next':
       ui.aiBuyPage = Math.max(0, ui.aiBuyPage + (action === 'ai-buy-next' ? 1 : -1))
@@ -1337,8 +1354,9 @@ document.addEventListener('click', async (event) => {
     case 'nego-confirm': {
       const draft = ui.negotiation
       if (!draft) break
-      const player = [...game.roster, ...game.freeStars, ...game.aiTeams.flatMap((team) => team.players), ...marketState.pool].find((item) => item.id === draft.playerId)
-      if (!player) { ui.negotiation = null; render(); break }
+      const player = findAnyPlayer(draft.playerId) ?? aiTransferMarket.offers.find((item) => item.teamId === draft.clubId && item.player.id === draft.playerId)?.player
+      if (!player) { ui.negotiation = null; showNotice('球员已不在转会名单，请刷新。'); break }
+      if (draft.kind === 'club' && sharedActionUnavailable()) { draft.message = '联机连接已断开，请先重新连接服务器。'; render(); break }
       if (draft.kind === 'bid') {
         try {
           await bidOnline(draft.playerId, draft.offer)
@@ -1358,6 +1376,7 @@ document.addEventListener('click', async (event) => {
           ui.lineupDraft = null
           ui.autoSubsDraft = null
           applyOnlineGame(next, `谈成了：${player.name} 加盟，花费 ${draft.offer.toLocaleString()}。`)
+          void refreshAITransferMarket()
         } catch (error) {
           draft.message = error instanceof Error ? error.message : '谈判失败'
           render()
@@ -1366,7 +1385,7 @@ document.addEventListener('click', async (event) => {
       }
       const result = draft.kind === 'free'
         ? signFreeAgent(game, draft.playerId, draft.offer, { goal: draft.goal, role: draft.role })
-        : signClubPlayer(game, draft.clubId ?? '', draft.playerId, draft.offer, { goal: draft.goal, role: draft.role })
+        : signWorldClubPlayer(game, draft.clubId ?? '', draft.playerId, draft.offer, { goal: draft.goal, role: draft.role })
       if (result.ok) {
         ui.negotiation = null
         ui.lineupDraft = null
@@ -1567,6 +1586,8 @@ document.addEventListener('click', async (event) => {
     case 'training-books-save': {
       const id = playerId ?? ui.trainingPlayerId
       if (!id) break
+      const player = game.roster.find((item) => item.id === id)
+      if (player) ui.trainingBookIds = filterTrainingBookIds(player, ui.trainingBookIds)
       const result = setTrainingBookLoadout(game, id, ui.trainingBookIds)
       if (!result.ok) { showNotice(result.error ?? '无法保存技能卡配置'); break }
       ui.notice = '技能卡配置已保存，下次培养也会使用。'
@@ -1753,8 +1774,10 @@ document.addEventListener('click', async (event) => {
       render()
       break
     }
+    case 'card-recycle-all':
     case 'card-recycle-open': {
       if (sharedActionUnavailable()) { showNotice('联机连接已断开，请先重新连接服务器'); break }
+      ui.recycleConfirm = false
       if (isOnlineMode()) {
         cardActionPending = true
         syncAutoTraining()
@@ -1770,9 +1793,10 @@ document.addEventListener('click', async (event) => {
         }
         cardActionPending = false
       }
-      const cards = selectedRecycleCards()
+      // 联机同步后再确定全库存清单；后续确认只提交预览过的卡。
+      const cards = action === 'card-recycle-all' ? recyclableCards() : selectedRecycleCards()
       ui.recycleSelectedIds = cards.map((card) => card.id)
-      if (!cards.length) { showNotice('请先选择可回收的球员卡。'); break }
+      if (!cards.length) { showNotice(action === 'card-recycle-all' ? '没有可回收的球员卡。' : '请先选择可回收的球员卡。'); break }
       recyclePreviewSnapshot = JSON.stringify(cards)
       recyclePreviewRevision = isOnlineMode() ? onlineState.revision : null
       ui.recycleConfirm = true
@@ -2527,7 +2551,7 @@ document.addEventListener('change', (event) => {
     return
   }
   if (target.id === 'training-position') {
-    ui.trainingPosition = target.value as Position
+    ui.trainingPosition = target.value as DetailedPosition
     render()
     return
   }
@@ -2564,6 +2588,11 @@ document.addEventListener('input', (event) => {
   }
   if (target.id === 'inventory-search') {
     ui.inventorySearch = target.value
+    render()
+  }
+  if (target.id === 'ai-buy-search') {
+    ui.aiBuySearch = target.value
+    ui.aiBuyPage = 0
     render()
   }
 })

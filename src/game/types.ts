@@ -32,6 +32,10 @@ export const POSITIONS = ['GK', 'CB', 'W', 'CM', 'ST'] as const
 export type Position = (typeof POSITIONS)[number]
 export type PositionTable = Record<Position, number>
 
+export type DetailedPosition = 'GK' | 'DL' | 'DC' | 'DR' | 'WBL' | 'WBR' | 'DM' | 'ML' | 'MC' | 'MR' | 'AML' | 'AMC' | 'AMR' | 'ST'
+/** Missing entries fall back to the corresponding coarse position. */
+export type DetailedPositionTable = Partial<Record<DetailedPosition, number>>
+
 export type Foot = 'L' | 'R' | 'B'
 
 export type RoleId =
@@ -240,6 +244,7 @@ export type Player = {
   ceilings: Attributes
   pa: number
   positions: PositionTable
+  detailedPositions?: DetailedPositionTable
   personality: Personality
   traitId: TraitId
   style: StyleId
@@ -251,6 +256,7 @@ export type Player = {
   history?: TrainingLogEntry[]
   baseAttrs: Attributes
   basePositions: PositionTable
+  baseDetailedPositions?: DetailedPositionTable
   basePersonality: Personality
   /** 第一次换上球员卡时记下的原始技能；此前 skills 本身就是原始技能。 */
   baseSkills?: SkillId[]
@@ -317,6 +323,7 @@ export type PlayerCard = {
   createdAt: number
   attrs: Attributes
   positions: PositionTable
+  detailedPositions?: DetailedPositionTable
   personality: Personality
   skills: SkillId[]
   skillTiers?: Partial<Record<SkillId, SkillTier>>
@@ -385,6 +392,8 @@ export type WorldState = {
   playerDivisionId: string
   /** 所有真实球星的年龄，按 player.id。 */
   starAges: Record<string, number>
+  /** 单机跨赛区转会后卖方的持久化快照。 */
+  transferTeams?: Record<string, AITeam>
   promotionPlayoff?: PromotionPlayoff
   lastPromotionPlayoff?: PromotionPlayoff
   /** 正式杯赛系统已启用；第 6 轮以前赛程可能尚未生成。 */
@@ -432,6 +441,8 @@ export type AutoSubConditionRule = {
 export type AutoSubPlan = {
   timed: { atMinute?: number; /** 旧档字段：按旧 10 分钟比赛秒数解释，新计划使用 atMinute。 */ atSeconds?: number; outId: string; inId: string }[]
   staminaBelow: number | null
+  /** 赛前轮换体能阈值；缺省或 null 关闭。 */
+  preMatchStaminaBelow?: number | null
   /** 全局体力换人生效位置（缺省代表全部 5 个位置，兼容旧存档）。 */
   staminaPositions?: Position[]
   /** 全局体力换人最早生效分钟（0–89.9，缺省 0）。 */

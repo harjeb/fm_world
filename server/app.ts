@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { createInitialGame, GAME_VERSION, upgradeLegacySignatures } from '../src/game/state.ts'
-import { addTrainedCard, ensureCards, equipCard, playerCards, recyclePlayerCards, setCardRecycleLock } from '../src/game/cards.ts'
+import { addTrainedCard, ensureCards, equipCard, playerCards, recyclePlayerCards, setCardRecycleLock, untrainedPlayer } from '../src/game/cards.ts'
 import { ensurePve } from '../src/game/pve.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
 import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, wageForPlayer, worldForClub, worldSlots, worldWageBill } from '../src/game/world.ts'
@@ -28,12 +28,12 @@ import { lineupRating } from '../src/game/club-rating.ts'
 import { AI_SQUAD_LIMIT, advanceAIClub, aiBidFor, createAIClub, playerValue, recordAISigning, seedAIClubs } from '../src/game/ai-club.ts'
 import { agentView, applyAgentAction, playerView, type AgentOptions } from './agent.ts'
 import { clubNameError, normalizeClubName } from '../src/game/club-name.ts'
-import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../src/game/negotiation.ts'
+import { negotiationDemands, SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../src/game/negotiation.ts'
 import { aiPoachRound, expireOffers, generateAIOffers, respondToOffer, type MarketClub } from '../src/game/transfers.ts'
 import { marketDayOf, refreshFreeMarket } from '../src/game/free-market.ts'
 import { migrateGameSchedule, migrateWorldSchedule } from '../src/game/schedule.ts'
 import { aiBuysLeft, noteAIBuy } from '../src/game/transfer-rules.ts'
-import { settleMarket, signClubPlayer } from '../src/game/market.ts'
+import { aiTransferOffers, sellerSquadError, settleMarket, signClubPlayer } from '../src/game/market.ts'
 import { elevenAITeam, upgradeElevenASide } from '../src/game/eleven.ts'
 import { elevenFormationFor, isLegacyFormation } from '../src/game/data/formations.ts'
 import { startChallengeWithOpponent, startPeakChallenge, startTrainingWithSupport } from '../src/game/actions.ts'
@@ -796,11 +796,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     return { stadium: economy.stadium, academy: economy.academy, medical: economy.medical, shop: economy.shop, sponsor: economy.sponsor, psychology: economy.psychology, tactics: economy.tactics }
   }
   function publicPlayer(player: Player) {
-    const { id, name, enName, country, era, age, foot, height, positions, attrs, baseAttrs, traitId, skills, skillTiers } = player
+    const { id, name, enName, country, era, age, foot, height, positions, detailedPositions, attrs, baseAttrs, traitId, skills, skillTiers } = player
     const visible = Object.fromEntries(mainAttrsFor(positions.GK > 0).map((key) => [key, attrs[key]]))
     // ca 是现在装备的那张卡；baseCa 是没练过的原始属性，两者之差就是卡带来的提升。
     const baseCa = baseAttrs ? displayCA(caOf(baseAttrs, positions.GK > 0)) : undefined
-    return { id, name, enName, country, era, age, foot, height, positions, attrs: visible, traitId, skills, skillTiers, ca: displayCA(caOf(attrs, positions.GK > 0)), baseCa }
+    return { id, name, enName, country, era, age, foot, height, positions, detailedPositions, attrs: visible, traitId, skills, skillTiers, ca: displayCA(caOf(attrs, positions.GK > 0)), baseCa }
   }
   // 清理旧版新账号准备期并补齐真实在线时间戳。
   for (const account of db.accounts) {
@@ -1115,6 +1115,21 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (changed) persistWorld()
   }
 
+  function transferSnapshot(account: Account): GameState {
+    // 报价和预览只读；不复制整份全世界名单，成交时再单独克隆卖家。
+    const validClubs = new Set(sharedWorld.world.clubs.map((club) => club.id))
+    const aiTeams = Object.entries(sharedWorld.teams ?? {}).filter(([id]) => !sharedWorld.owners[id] && validClubs.has(id)).map(([, team]) => team)
+    return { ...account.game, aiTeams, appearances: sharedWorld.matchBook!.appearances }
+  }
+
+  function transferOffers(account: Account) {
+    const game = transferSnapshot(account)
+    return aiTransferOffers(game).map(({ team, player, asking, terms }) => ({
+      teamId: team.id, teamName: team.name, player: publicPlayer(untrainedPlayer(player)), asking, terms,
+      blocked: sellerSquadError(team, player), demands: negotiationDemands(game, player),
+    }))
+  }
+
   type ServerReply = { status: number; payload: Record<string, unknown> }
 
   /**
@@ -1128,13 +1143,34 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const role = String(body.role ?? 'first-team') as SquadRole
     if (!Object.hasOwn(SEASON_GOAL_LABELS, goal) || !Object.hasOwn(SQUAD_ROLE_LABELS, role)) return { status: 400, payload: { ok: false, error: '无效的赛季目标或队内定位' } }
     const offer = Number(body.offer)
-    const previousRoster = new Set(account.game.roster.map((player) => player.id))
+    const playerId = String(body.playerId ?? '')
+    const canonical = sharedWorld.teams?.[teamId]
+    // 本地列表可能落后于共享世界：不能凭旧名单再次购买已经转走的球员。
+    if (!sharedWorld.world.clubs.some(club => club.id === teamId) || !canonical?.players.some((player) => player.id === playerId) || db.accounts.some(other => other.game.roster.some(player => player.id === playerId))) {
+      return { status: 400, payload: { ok: false, error: '球员不在该球队' } }
+    }
     const previousTeams = account.game.aiTeams
-    const result = signClubPlayer(account.game, teamId, String(body.playerId ?? ''), offer, { goal, role })
+    const staged = structuredClone(account.game)
+    staged.aiTeams = [structuredClone(canonical)]
+    staged.appearances = sharedWorld.matchBook!.appearances
+    // 卖家收入由共享账本统一入账，不能同时修改账号里的 AI 账本副本。
+    const aiClubs = staged.aiClubs
+    staged.aiClubs = undefined
+    const result = signClubPlayer(staged, teamId, playerId, offer, { goal, role })
+    staged.aiClubs = aiClubs
     if (result.ok) {
-      commitAiSignings(previousRoster, previousTeams, account.game)
+      const updated = staged.aiTeams.find(team => team.id === teamId)!
+      staged.aiTeams = previousTeams.map(team => team.id === teamId ? structuredClone(updated) : team)
+      staged.appearances = account.game.appearances
+      account.game = staged
+      sharedWorld.teams![teamId] = structuredClone(updated)
+      const worldClub = sharedWorld.world.clubs.find(club => club.id === teamId)
+      if (worldClub) worldClub.starPlayerIds = [...updated.starPlayerIds]
       const seller = sharedWorld.aiClubs?.[teamId]
-      if (seller) seller.economy.balance += offer
+      if (seller) {
+        seller.economy.balance += offer
+        seller.signings = seller.signings.filter((item) => item.id !== playerId)
+      }
       persistWorld()
       publishClub(account)
       account.revision++
@@ -1910,7 +1946,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (pendingAccountCommits.has(agentAccount.id) && !await confirmAccountCommit(agentAccount)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
       touchAccountOnline(agentAccount)
       // 联机时有教练执教的球队不能从 AI 购买入口买人，和转会页一致。
-      const agentOptions: AgentOptions = { isManaged: (clubId) => !!sharedWorld.owners[clubId] }
+      const agentOptions: AgentOptions = { isManaged: (clubId) => !!sharedWorld.owners[clubId], transferGame: () => transferSnapshot(agentAccount) }
       const agentState = () => withSharedMarket(agentView(agentAccount.game, now(), agentOptions), agentAccount)
       if (url.pathname === '/api/agent/state' && req.method === 'GET') {
         advanceAccount(agentAccount)
@@ -1933,6 +1969,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
           return
         }
         if (body.action === 'start_league' || body.action === 'simulate_round') return json(res, 400, { error: '联赛由服务器提前排队计算、开球 10 分钟后统一公布，不能手动开赛或模拟' })
+        if (['auto_lineup', 'set_lineup', 'set_auto_subs'].includes(String(body.action)) && officialLineupLocked(agentAccount, now())) {
+          return json(res, 400, { ok: false, error: '阵容已锁定：开赛前 30 分钟内不能修改，比赛由服务器自动结算', revision: agentAccount.revision, game: agentState() })
+        }
         if (body.action === 'buy_free_agent') return json(res, 400, { error: '联机时自由球员要竞拍，请用 bid_free_agent 出价' })
         if (body.action === 'bid_free_agent') {
           const bid = bidFor(agentAccount, body.playerId, body.amount)
@@ -1974,7 +2013,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
           const found = friendlyTeamFor(agentAccount, String(body.clubId ?? ''))
           outcome = 'error' in found ? { ok: false, error: found.error } : startChallengeWithOpponent(agentAccount.game, found.team, now())
         } else {
-          outcome = applyAgentAction(agentAccount.game, body, now(), agentOptions)
+          outcome = applyAgentAction(body.action === 'preview_signing' ? transferSnapshot(agentAccount) : agentAccount.game, body, now(), agentOptions)
         }
         if (outcome.ok) commitAiSignings(previousRoster, previousTeams, agentAccount.game)
         if (outcome.ok && !['get_player', 'get_match', 'preview_training', 'preview_signing'].includes(String(body.action))) {
@@ -2027,6 +2066,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     /** 旧客户端入口保留明确报错；浏览器和 Agent 都不能在注册后换队。 */
     if (url.pathname === '/api/world/choose-club' && req.method === 'POST') {
       return json(res, 400, { error: '注册完成后不允许换队，球队只能在注册时选择' })
+    }
+
+    if (url.pathname === '/api/transfer/ai-offers' && req.method === 'GET') {
+      advanceAccount(account)
+      return json(res, 200, { offers: transferOffers(account) })
     }
 
     if (url.pathname === '/api/transfer/ai-buy' && req.method === 'POST') {
@@ -2309,7 +2353,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         return json(res, 400, { error: '不能从其他玩家执教的球队直接买人' })
       }
       // 从 AI 球队买人必须走 /api/transfer/ai-buy（要过俱乐部的放人规则），普通保存不能直接把人加进来。
-      const canonicalAI = new Set(account.game.aiTeams.flatMap((team) => sharedWorld.teams?.[team.id]?.players.map((player) => player.id) ?? []))
+      const canonicalAI = new Set(Object.values(sharedWorld.teams ?? {}).flatMap((team) => team.players.map((player) => player.id)))
       if (incomingGame.roster.some((player) => canonicalAI.has(player.id) && !previousRoster.has(player.id))) {
         return json(res, 400, { error: '从 AI 球队买人请通过转会谈判（页面可能需要刷新）', revision: account.revision, game: publicGame(account) })
       }

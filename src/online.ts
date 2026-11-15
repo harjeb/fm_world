@@ -1,6 +1,8 @@
 import type { Auction, AuctionResult } from './game/auction.ts'
 import { CHAT_HISTORY_LIMIT, appendChatMessage, isValidChatMessage, type ChatMessage, type ChatSseMessage } from './game/chat.ts'
 import type { AITeam, Attributes, FacilityId, GameState, Player, SeasonTableRow, Fixture, TierId, ConferenceId } from './game/types.ts'
+import type { ReleaseAssessment } from './game/transfer-rules.ts'
+import type { NegotiationDemands } from './game/negotiation.ts'
 import { setRemoteSaver, saveGame } from './game/state.ts'
 import { dueRound } from './game/season.ts'
 
@@ -26,7 +28,20 @@ export const onlineState: {
 }
 
 /** 全服自由市场。只有联机时有内容；单机还是用存档里的 freeStars。 */
-export type WorldPublicPlayer = Pick<Player, 'id' | 'name' | 'enName' | 'country' | 'era' | 'age' | 'foot' | 'height' | 'positions' | 'traitId' | 'skills' | 'skillTiers'> & { attrs: Partial<Attributes>; ca: number; baseCa?: number }
+export type WorldPublicPlayer = Pick<Player, 'id' | 'name' | 'enName' | 'country' | 'era' | 'age' | 'foot' | 'height' | 'positions' | 'detailedPositions' | 'traitId' | 'skills' | 'skillTiers'> & { attrs: Partial<Attributes>; ca: number; baseCa?: number }
+export type AITransferOffer = {
+  teamId: string
+  teamName: string
+  player: WorldPublicPlayer
+  asking: number | null
+  terms: ReleaseAssessment
+  blocked: string | null
+  demands: NegotiationDemands
+}
+
+/** 市场列表是临时公开快照，不加入账号的本赛区赛程或保存数据。 */
+export const aiTransferMarket: { offers: AITransferOffer[]; loading: boolean; loaded: boolean; error: string } = { offers: [], loading: false, loaded: false, error: '' }
+let aiTransferRequest = 0
 export type WorldPublicClub = Pick<AITeam, 'id' | 'name' | 'color' | 'formationId'> & { tier: TierId; conference?: ConferenceId; managed?: boolean; /** 教练已超过 3 天未上线，当前由 AI 临时接管。 */ aiTakeover?: boolean; /** RANK：首发 CA 之和。 */ rating?: number; players: WorldPublicPlayer[]; /** 设施阶段（1–25）；电脑球队公开，玩家管理的球队不公开。 */ facilities?: Partial<Record<FacilityId, number>> }
 export type WorldPublicSnapshot = {
   seasonIndex: number
@@ -197,6 +212,32 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T
 }
 
+function clearAITransferMarket(): void {
+  aiTransferRequest++
+  Object.assign(aiTransferMarket, { offers: [], loading: false, loaded: false, error: '' })
+}
+
+/** 重新读取全世界 AI 报价；交易时服务器仍会复核球队、球员和价格。 */
+export async function refreshAITransferMarket(): Promise<void> {
+  if (!isOnlineMode()) return
+  const request = ++aiTransferRequest
+  const user = onlineState.user?.id
+  aiTransferMarket.loading = true
+  aiTransferMarket.error = ''
+  notify()
+  try {
+    const data = await requestJson<{ offers: AITransferOffer[] }>('/api/transfer/ai-offers')
+    if (request !== aiTransferRequest || !isOnlineMode() || onlineState.user?.id !== user) return
+    aiTransferMarket.offers = data.offers
+    aiTransferMarket.loaded = true
+  } catch (error) {
+    if (request !== aiTransferRequest) return
+    aiTransferMarket.error = error instanceof Error ? error.message : '市场加载失败'
+  } finally {
+    if (request === aiTransferRequest) { aiTransferMarket.loading = false; notify() }
+  }
+}
+
 /** 赛后 2D 重看：开球时的引擎初始状态（只给参赛的教练，比赛公布之后才有）。 */
 export async function fetchMatchReplay(matchId: string): Promise<{ engineState: unknown; homeAway: 'home' | 'away'; durationSeconds: number }> {
   return requestJson(`/api/match/replay?id=${encodeURIComponent(matchId)}`)
@@ -250,6 +291,7 @@ export async function logoutOnline(): Promise<void> {
   onlineState.revision = 0
   onlineState.error = ''
   Object.assign(marketState, { pool: [], auctions: [], log: [], version: 0 })
+  clearAITransferMarket()
   Object.assign(chatState, { messages: [], unread: 0, sending: false })
   ++publicWorldRequest
   publicWorld = null
@@ -285,6 +327,7 @@ async function restoreSession(): Promise<GameState | null> {
 }
 
 function acceptSession(data: AuthResponse): void {
+  clearAITransferMarket()
   setToken(data.token)
   onlineState.user = data.user
   onlineState.revision = data.revision

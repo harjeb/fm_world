@@ -329,6 +329,7 @@ export class PesGame {
       role: out.role,
       slotId: out.slotId,
       position: out.position,
+      detailedPosition: out.detailedPosition,
       x: out.x,
       y: out.y,
       stamina: inPlayer.stamina,

@@ -1,4 +1,5 @@
-import type { AttrKey, EventDef, FormationId, GameState, Lineup, PlayerCard, Position, RoleId, Tactics, TrainingAutoConfig, TrainingSession } from '../src/game/types.ts'
+import type { AttrKey, DetailedPosition, EventDef, FormationId, GameState, Lineup, PlayerCard, Position, RoleId, Tactics, TrainingAutoConfig, TrainingSession } from '../src/game/types.ts'
+import { isDetailedPosition, readDetailedPositions } from '../src/game/detailed-positions.ts'
 import type { TrainingRequest } from '../src/game/training.ts'
 import { trainingDate, trainingOptions, type TrainingActivityId } from '../src/game/training-calendar.ts'
 import type { SkillId } from '../src/game/types.ts'
@@ -77,7 +78,7 @@ import { displayEventHint, trainingLogText } from '../src/ui/format.ts'
 export type AgentOutcome = { ok: boolean; error?: string; result?: unknown }
 
 /** 服务器提供的共享世界信息：联机时有教练执教的球队不能直接买人（和转会页一致）。 */
-export type AgentOptions = { isManaged?: (clubId: string) => boolean }
+export type AgentOptions = { isManaged?: (clubId: string) => boolean; transferGame?: () => GameState }
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
@@ -110,6 +111,7 @@ function cardView(card: PlayerCard, game: GameState) {
     ca: displayCA(caOf(card.attrs, gk)),
     attrs,
     positions: card.positions,
+    detailedPositions: readDetailedPositions(card),
     personality: card.personality,
     skills: card.skills,
     skillTiers: card.skillTiers ?? {},
@@ -140,6 +142,7 @@ export function playerView(player: GameState['roster'][number], game: GameState,
     ca: displayCA(caOf(player.attrs, isGk)),
     initialCA: initialDisplayCA(player),
     positions: player.positions,
+    detailedPositions: readDetailedPositions(player),
     ...visibleAttrs(player),
     personality: player.personality,
     traitId: player.traitId,
@@ -384,7 +387,7 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
       transferWindowOpen: transferWindowOpen(game),
       /** 和转会页“从 AI 球队买人”同一份列表；用 preview_signing / sign_club_player 谈判。 */
       // 交易只转移原始球员，列表不展示对方装备卡的 CA / 属性 / 技能；非卖品 asking 为 null。
-      clubOffers: aiTransferOffers(game, options.isManaged).map(({ team, player, asking, terms }) => ({
+      clubOffers: aiTransferOffers(options.transferGame?.() ?? game, options.isManaged).map(({ team, player, asking, terms }) => ({
         teamId: team.id, teamName: team.name, player: playerView(untrainedPlayer(player), game, now), asking,
         status: terms.status, ageBand: terms.ageBand, minutesShare: Math.round(terms.minutesShare * 100) / 100, requiredPremium: terms.requiredPremium,
       })),
@@ -473,15 +476,18 @@ function parseTrainingRequest(value: unknown): TrainingRequest | null {
   if (request.teammateIds !== undefined && kind !== 'drill' && kind !== 'combo' && kind !== 'match' && kind !== 'activity') return null
   const teammates = request.teammateIds === undefined ? {} : { teammateIds: request.teammateIds as string[] }
   if (kind === 'activity') {
-    if (!Object.keys(request).every(key => ['kind', 'activityId', 'teammateIds', 'position', 'mentorId', 'skill', 'replaceSkill'].includes(key))) return null
+    if (!Object.keys(request).every(key => ['kind', 'activityId', 'teammateIds', 'position', 'detailed', 'mentorId', 'skill', 'replaceSkill'].includes(key))) return null
     const activityId = text(request.activityId)
     if (!activityId.trim()) return null
-    if (request.position !== undefined && !(POSITIONS as readonly string[]).includes(text(request.position))) return null
+    if (request.detailed !== undefined && typeof request.detailed !== 'boolean') return null
+    if (request.position !== undefined && !isDetailedPosition(request.position) && !(POSITIONS as readonly string[]).includes(text(request.position))) return null
+    if (request.detailed === true && request.position !== undefined && !isDetailedPosition(request.position)) return null
     if (request.mentorId !== undefined && !text(request.mentorId).trim()) return null
     if (request.skill !== undefined && !Object.hasOwn(SKILLS, text(request.skill))) return null
     if (request.replaceSkill !== undefined && !Object.hasOwn(SKILLS, text(request.replaceSkill))) return null
     return { kind, activityId: activityId as TrainingActivityId, ...teammates,
-      ...(request.position === undefined ? {} : { position: request.position as Position }),
+      ...(request.position === undefined ? {} : { position: request.position as Position | DetailedPosition }),
+      ...(request.detailed === undefined ? {} : { detailed: request.detailed as boolean }),
       ...(request.mentorId === undefined ? {} : { mentorId: request.mentorId as string }),
       ...(request.skill === undefined ? {} : { skill: request.skill as SkillId }),
       ...(request.replaceSkill === undefined ? {} : { replaceSkill: request.replaceSkill as SkillId }) }
@@ -497,7 +503,11 @@ function parseTrainingRequest(value: unknown): TrainingRequest | null {
   if (kind === 'match') return Object.keys(request).every(key => key === 'kind' || key === 'teammateIds') ? { kind, ...teammates } : null
   if (kind === 'position') {
     const position = text(request.position)
-    return (POSITIONS as readonly string[]).includes(position) ? { kind, position: position as Position } : null
+    if (request.detailed !== undefined && typeof request.detailed !== 'boolean') return null
+    if (request.detailed === true && !isDetailedPosition(position)) return null
+    return isDetailedPosition(position) || (POSITIONS as readonly string[]).includes(position)
+      ? { kind, position: position as Position | DetailedPosition, ...(request.detailed === undefined ? {} : { detailed: request.detailed as boolean }) }
+      : null
   }
   if (kind === 'protection') {
     const focus = text(request.focus)

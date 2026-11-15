@@ -244,6 +244,7 @@ function baseCardPlayer(player: Player): Player {
     ...player,
     attrs: { ...(player.baseAttrs ?? player.attrs) },
     positions: { ...(player.basePositions ?? player.positions) },
+    detailedPositions: player.baseDetailedPositions ? { ...player.baseDetailedPositions } : (player.version === 0 && !player.equippedCardId && player.detailedPositions ? { ...player.detailedPositions } : undefined),
     personality: { ...(player.basePersonality ?? player.personality) },
     skills: [...(player.baseSkills ?? player.skills)],
     skillTiers: player.baseSkillTiers ?? player.skillTiers,

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { ELEVEN_SQUAD_SIZE } from '../src/game/eleven.ts'
-import { createWorldGame, payWorldWages, d2ClubChoices, createOwnerlessWorld, createWorldGameFromWorld, advanceOwnerlessWorld } from '../src/game/world.ts'
+import { createWorldGame, payWorldWages, d2ClubChoices, createOwnerlessWorld, createWorldGameFromWorld, advanceOwnerlessWorld, worldTransferTeams } from '../src/game/world.ts'
 import { startLeagueMatch, startNextSeason, updateSeasonTable } from '../src/game/season.ts'
 import { seasonEndAt, seasonStartForRound } from '../src/game/calendar.ts'
-import { buyFreeAgent, joinRoster, releasePlayer, renewContract, transferWindowOpen, playerMarketValue } from '../src/game/market.ts'
+import { aiTransferOffers, buyFreeAgent, joinRoster, releasePlayer, renewContract, sellerSquadError, signWorldClubPlayer, transferWindowOpen, playerMarketValue } from '../src/game/market.ts'
+import { negotiationDemands } from '../src/game/negotiation.ts'
 import { isOnMarketToday } from '../src/game/market-window.ts'
 import { economyOf } from '../src/game/economy.ts'
 import { recordMatchDiscipline, serveSuspensions } from '../src/game/discipline.ts'
@@ -74,6 +75,24 @@ describe('三级共享世界', () => {
     expect(game.seasonHistory?.length).toBe(1)
   })
 
+  it('跨区签人后换季重建卖方，球员不会在别队复活', () => {
+    const game = createWorldGame(20241107)
+    economyOf(game).balance = 1_000_000_000
+    const local = new Set(game.aiTeams.map(team => team.id))
+    const offer = aiTransferOffers({ ...game, aiTeams: worldTransferTeams(game) }).find(item => {
+      const demands = negotiationDemands(game, item.player)
+      return !local.has(item.team.id) && item.asking && !sellerSquadError(item.team, item.player) && (item.player.age ?? 24) < 34 && !demands.minTier && !demands.wantsClubId
+    })!
+    expect(offer).toBeDefined()
+    expect(signWorldClubPlayer(game, offer.team.id, offer.player.id, 100_000_000, { goal: 'title', role: 'star' }).ok).toBe(true)
+    expect(game.world!.transferTeams?.[offer.team.id]).toBeDefined()
+    finishSeason(game)
+    expect(next(game).ok).toBe(true)
+    expect(game.world!.transferTeams).toBeUndefined()
+    expect(game.roster.some(player => player.id === offer.player.id)).toBe(true)
+    expect(worldTransferTeams(game).some(team => team.players.some(player => player.id === offer.player.id))).toBe(false)
+  })
+
   it('共享世界快照可按当前轮次接管球队，并保留已赛结果', () => {
     const startedAt = seasonStartForRound(Date.now(), 2) // 第 2 轮刚开球
     const ownerless = createOwnerlessWorld(1, startedAt)
@@ -105,6 +124,8 @@ describe('三级共享世界', () => {
     joinRoster(game, star)
     const name = star.name
     star.age = 40
+    star.detailedPositions = { DL: 17, DR: 89 }
+    star.baseDetailedPositions = { DL: 91, DR: 22 }
     finishSeason(game)
     expect(next(game).ok).toBe(true)
     expect(game.roster.some((player) => player.id === star.id)).toBe(false)
@@ -112,6 +133,7 @@ describe('三级共享世界', () => {
     expect(regen).toBeDefined()
     expect(regen!.generation).toBe((star.generation ?? 0) + 1)
     expect(regen!.starKey).toBe(star.starKey)
+    expect(regen!.baseDetailedPositions).toEqual(regen!.detailedPositions)
   })
 
   it('合同、续约、解约、转会窗口与工资', () => {

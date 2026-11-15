@@ -14,7 +14,7 @@ import { CA_MAX } from './scale.ts'
  */
 
 /** 一张卡决定的全部字段。 */
-type Build = Pick<Player, 'attrs' | 'positions' | 'personality' | 'skills' | 'skillTiers' | 'history' | 'version'>
+type Build = Pick<Player, 'attrs' | 'positions' | 'detailedPositions' | 'personality' | 'skills' | 'skillTiers' | 'history' | 'version'>
 
 export type CardOutcome = { ok: boolean; error?: string }
 
@@ -27,6 +27,7 @@ function cloneBuild(source: Build): Build {
   return {
     attrs: { ...source.attrs },
     positions: { ...source.positions },
+    detailedPositions: source.detailedPositions && { ...source.detailedPositions },
     personality: { ...source.personality },
     skills: [...source.skills],
     skillTiers: source.skillTiers && { ...source.skillTiers },
@@ -173,6 +174,7 @@ export function baseBuild(player: Player): Build {
   return {
     attrs: { ...player.baseAttrs },
     positions: { ...player.basePositions },
+    detailedPositions: (player.baseDetailedPositions ?? (untouched ? player.detailedPositions : undefined)) && { ...(player.baseDetailedPositions ?? player.detailedPositions) },
     personality: { ...player.basePersonality },
     skills: [...skills],
     skillTiers: Object.fromEntries(skills.flatMap((skill) => (tiers?.[skill] ? [[skill, tiers[skill]]] : []))),
@@ -190,12 +192,14 @@ export function untrainedPlayer(player: Player): Player {
 
 function wear(player: Player, build: Build, cardId: string | null): void {
   if (!player.equippedCardId && player.version === 0) {
+    player.baseDetailedPositions = player.detailedPositions && { ...player.detailedPositions }
     player.baseSkills = [...player.skills]
     player.baseSkillTiers = { ...player.skillTiers }
   }
   const copy = cloneBuild(build)
   player.attrs = copy.attrs
   player.positions = copy.positions
+  player.detailedPositions = copy.detailedPositions
   player.personality = copy.personality
   player.skills = copy.skills
   player.skillTiers = copy.skillTiers

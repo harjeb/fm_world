@@ -353,6 +353,15 @@ describe('联机：向 AI 球队买人走服务器', () => {
     const sneaked = await fetch(`${base}/api/game`, { method: 'PUT', headers, body: JSON.stringify({ game: sneak, baseRevision: current.revision }) })
     expect(sneaked.status).toBe(400)
 
+    // 别赛区同样属于共享世界，不能绕过谈判从普通存档偷人。
+    const shared = JSON.parse(fs.readFileSync(path.join(dataDir, 'world.json'), 'utf8')) as { teams: Record<string, { players: GameState['roster'] }> }
+    const localIds = new Set(current.game.aiTeams.map((team) => team.id))
+    const foreign = Object.entries(shared.teams).find(([id]) => !localIds.has(id) && id !== current.game.world?.clubs.find((club) => club.id === 'player')?.squadKey)![1]
+    const crossDivisionSneak = structuredClone(current.game)
+    crossDivisionSneak.roster.push(structuredClone(foreign.players[0]))
+    const crossDivisionSave = await fetch(`${base}/api/game`, { method: 'PUT', headers, body: JSON.stringify({ game: crossDivisionSneak, baseRevision: current.revision }) })
+    expect(crossDivisionSave.status).toBe(400)
+
     const balance = economyOf(current.game).balance
     const { teamId, player, offer } = easyTarget(current.game, balance)
     const bought = await fetch(`${base}/api/transfer/ai-buy`, { method: 'POST', headers, body: JSON.stringify({ teamId, playerId: player.id, offer, goal: 'title', role: 'star' }) })
@@ -362,5 +371,7 @@ describe('联机：向 AI 球队买人走服务器', () => {
     expect(economyOf(body.game).balance).toBe(balance - offer)
     const world = await (await fetch(`${base}/api/world/teams`, { headers })).json() as { clubs: { id: string; players: { id: string }[] }[] }
     expect(world.clubs.find((club) => club.id === teamId)!.players.some((item) => item.id === player.id)).toBe(false)
+    const duplicate = await fetch(`${base}/api/transfer/ai-buy`, { method: 'POST', headers, body: JSON.stringify({ teamId, playerId: player.id, offer, goal: 'title', role: 'star' }) })
+    expect(duplicate.status).toBe(400)
   })
 })

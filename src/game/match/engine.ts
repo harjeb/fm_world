@@ -2903,6 +2903,7 @@ export class MatchEngine {
       role: out.role,
       slotId: out.slotId,
       position: out.position,
+      detailedPosition: out.detailedPosition,
       x: out.x,
       y: out.y,
       stamina: inPlayer.stamina,

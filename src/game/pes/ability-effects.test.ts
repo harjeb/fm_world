@@ -58,6 +58,26 @@ describe('effective PES motion abilities', () => {
     expect(q.ab).toEqual(abilityOf(p.attrs))
   })
 
+  it('uses left and right back proficiency for initial motion and after substitution', () => {
+    const init = options()
+    const lb = init.home.starters.find(s => s.slotId === 'lb')!
+    const rb = init.home.starters.find(s => s.slotId === 'rb')!
+    lb.player.detailedPositions = { DL: 0, DR: 100 }
+    rb.player.detailedPositions = { DL: 0, DR: 100 }
+    const incoming = init.home.bench[0]
+    incoming.detailedPositions = { DL: 100, DR: 0 }
+    const g = new PesGame(init)
+    const left = g.state.teams[0].players.find(p => p.slotId === 'lb')!
+    const right = g.state.teams[0].players.find(p => p.slotId === 'rb')!
+    const ratings = new MotionRatings(() => g.state, () => g.state.durationSeconds)
+    expect(ratings.eff(left, 'speed')).toBeLessThan(ratings.eff(right, 'speed'))
+    const sub = g.availableBench('home').find(p => p.sourceId === incoming.id)!
+    expect(g.substitute(left.id, sub.id).ok).toBe(true)
+    const replacement = g.state.teams[0].players.find(p => p.slotId === 'lb')!
+    expect(replacement.detailedPosition).toBe('DL')
+    expect(ratings.eff(replacement, 'speed')).toBeGreaterThan(ratings.eff(left, 'speed'))
+  })
+
   it('applies initial injury independently of position proficiency', () => {
     const init = options()
     const healthy = new PesGame(init)

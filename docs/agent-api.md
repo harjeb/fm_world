@@ -66,6 +66,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
     "plan": {
       "timed": [{ "atMinute": 30, "outId": "首发球员ID", "inId": "替补球员ID" }],
       "staminaBelow": 60,
+      "preMatchStaminaBelow": 75,
       "staminaPositions": ["W", "CM", "ST"],
       "staminaMinMinute": 55,
       "preferBy": "proficiency",
@@ -82,7 +83,9 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
     }
   }
   ```
-  `timed` 最多 5 条，`atMinute` 为比赛显示分钟（大于 0、小于 90），指定的首发和替补须属于当前阵容，不能重复使用同一人。旧存档的 `atSeconds` 仍按旧 10 分钟比赛尺度兼容读取，新调用请使用 `atMinute`。`staminaBelow` 为 1–99 的百分比，严格低于时启用，`null` 为关闭；可选 `staminaPositions`（`GK / CB / W / CM / ST` 子集）限制全局体力换人只替换指定位置（例如不换门将和中卫），可选 `staminaMinMinute`（0–89）限制最早触发分钟，可选 `preferBy`（`"proficiency"` 位置熟练优先 / `"stamina"` 充沛体力优先 / `"ca"` 综合能力优先）。可选 `conditionRules`（最多 5 条）按 `targetKind`（`"any" | "position" | "slot" | "player"`）、`targetValue`、`staminaBelow`、可选 `minMinute`、可选 `scoreState`（`"any" | "leading" | "drawing" | "trailing" | "not_leading"`）以及可选指定替补 `inId` 触发。按伤病、定时、条件规则、全局体力顺序处理，自动与手动共用 5 次。设置仅影响下一场，`state.autoSubs` 是下场计划、`activeMatch.autoSubs` 是本场剩余计划。旧档默认关闭。
+  `timed` 最多 5 条，`atMinute` 为比赛显示分钟（大于 0、小于 90），指定的首发和替补须属于当前阵容，不能重复使用同一人。旧存档的 `atSeconds` 仍按旧 10 分钟比赛尺度兼容读取，新调用请使用 `atMinute`。`staminaBelow` 为 1–99 的百分比，严格低于时启用，`null` 为关闭；可选 `staminaPositions`（`GK / CB / W / CM / ST` 子集）限制全局体力换人只替换指定位置（例如不换门将和中卫），可选 `staminaMinMinute`（0–89）限制最早触发分钟，可选 `preferBy`（`"proficiency"` 位置熟练优先 / `"stamina"` 充沛体力优先 / `"ca"` 综合能力优先）。可选 `conditionRules`（最多 5 条）按 `targetKind`（`"any" | "position" | "slot" | "player"`）、`targetValue`、`staminaBelow`、可选 `minMinute`、可选 `scoreState`（`"any" | "leading" | "drawing" | "trailing" | "not_leading"`）以及可选指定替补 `inId` 触发。按伤病、定时、条件规则、全局体力顺序处理，自动与手动共用 5 次。设置作为后续比赛的默认计划，`state.autoSubs` 是默认计划、`activeMatch.autoSubs` 是本场剩余计划。旧档默认关闭。
+
+  可选 `preMatchStaminaBelow`（1–99，`null` 或省略为关闭）独立控制赛前轮换。联机联赛及正式杯赛在开球前 30 分钟锁定时，按预计开球体能替换低于阈值的首发；仅从替补席选择健康、未停赛、该位置熟练且体能不低于阈值的球员。无合适替补则保留原首发。单机联赛在开球时执行；挑战赛满体能，不轮换。赛前轮换不消耗场内 5 次换人额度，只影响本场，不改保存阵容；因此失去适用球员的定时或条件规则本场会跳过，原计划保留。
 
 ### 培养
 
@@ -99,7 +102,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 - `training_action` — 执行一次训练行动。
   - `playerId`
   - 新日历 `request`: `{ "kind": "activity", "activityId": "选项ID", "teammateIds": ["球员ID"], "position": "CM" }`；除 `kind` 和 `activityId` 外均可省略，参数按选项要求填写，队友仅用于允许组队的活动。
-  - 旧课程 `request`: `{ "kind": "drill", "attr": "passing" }`、`{ "kind": "combo", "focus": "attack" | "defense" }`、`{ "kind": "position", "position": "GK" | "CB" | "W" | "CM" | "ST" }`、`{ "kind": "match" }`、`{ "kind": "rest" }` 或 `{ "kind": "mentor" }`
+  - 旧课程 `request`: `{ "kind": "drill", "attr": "passing" }`、`{ "kind": "combo", "focus": "attack" | "defense" }`、`{ "kind": "position", "position": "DL", "detailed": true }`、`{ "kind": "match" }`、`{ "kind": "rest" }` 或 `{ "kind": "mentor" }`。位置训练支持细分 `GK / DL / DC / DR / WBL / WBR / DM / ML / MC / MR / AML / AMC / AMR / ST`；使用 `detailed: true` 明确训练细分位置（尤其 `ST`），旧 `CB / W / CM / ST` 请求不带该字段仍按原规则处理。新日历的 `activityId: "position"` 同样接受细分位置和 `detailed: true`。球员、培养候选和球员卡的 `detailedPositions` 提供细分熟练度，旧档缺失项回退对应粗位置。
 - `training_event_choice` — 处理训练事件。
   - `playerId`
   - `optionId`: 来自 `state.trainingSessions[].pendingEvent.options[].id`
@@ -159,7 +162,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 - `bid_free_agent` — `playerId`、`amount`：竞拍自由球员。自由市场全服共用，`market.freeAgents[].price` 是这名球员现在至少要出的价。第一个出价开始 **1 小时**倒计时，全服可见；每次跟价至少加 5%；**最后 10 分钟内**有人跟价，倒计时重新回到 10 分钟（离结束还早时跟价不改倒计时）；时间到时最高价者得。跟价要交**手续费**：出价的 2%，至少 1,000，出价成功时立即从余额扣除，**不退还**（开拍的第一口不收）；余额必须够「出价 + 手续费」。领先的出价占用余额。`market.auctions` 列出正在进行的竞拍（当前价、领先球队、剩余秒数），`market.recentDeals` 是最近 8 条成交 / 流拍记录（`club` 为 `null` 表示流拍）。电脑球队也会参与竞拍：同位置明显更强、价格远低于阵容均价或人手不足时才会跟价，出价上限是估值乘所在级别系数，并且永远留着底钱，不会为了抬价乱加。
 - `list_player` — `playerId`、`price`：正的安全整数价格，且不得高于球员估值（买家只按估值折价收购；建议价 = 估值 × 0.9，按建议价挂牌必定成交）；挂牌还受阵容、训练和比赛规则限制。
 - `cancel_listing` — `playerId`：取消挂牌并将球员放回阵容。
-- `preview_signing` — 向 AI 球队买人前预览，不写入存档。可以谈 `state.market.clubOffers` 里的球员（本联赛所有没有教练执教的 AI 球队的全部球员，和转会页「从 AI 球队买人」同一份名单），每人带 `status`（`key` 主力 / `rotation` 轮换 / `fringe` 冷板凳）、`ageBand`、`minutesShare`（最近 20 场出场时间占比）、`requiredPremium` 和俱乐部要价 `asking`（非卖品为 `null`）。
+- `preview_signing` — 向 AI 球队买人前预览，不写入存档。可以谈 `state.market.clubOffers` 里的球员（世界各赛区所有没有教练执教的 AI 球队的球员，和转会页「从 AI 球队买人」同一份名单），每人带 `status`（`key` 主力 / `rotation` 轮换 / `fringe` 冷板凳）、`ageBand`、`minutesShare`（最近 20 场出场时间占比）、`requiredPremium` 和俱乐部要价 `asking`（非卖品为 `null`）。
 
   俱乐部放人规则：年轻主力（24 岁及以下）是非卖品，除非最近出场不到 35%；当打之年（25–28 岁）的主力至少多给 50%，29 岁及以上的主力至少多给 30%；轮换球员要多给 10% + 30% × 出场占比（年轻的再加 10%）；冷板凳（出场不到 15%）多给 5% 就能谈。达到要价后溢价越多越容易点头（冷板凳最容易）。对方阵容只剩 18 人或门将不足 2 人时不放人。出场时间来自最近 20 场联赛记录，不足 5 场时按阵容角色估算。
   - `teamId`、`playerId`

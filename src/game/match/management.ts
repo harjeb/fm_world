@@ -12,6 +12,7 @@ import type {
 import { POSITIONS } from '../types.ts'
 import { matchPlayerCa } from '../ai-tactics.ts'
 import { FORMATIONS } from '../data/formations.ts'
+import { detailedPositionValue } from '../detailed-positions.ts'
 import type { MatchPlayerState, MatchTeamState } from './types.ts'
 import { MATCH_DISPLAY_SECONDS } from './time.ts'
 import { MAX_SUBS } from '../squad.ts'
@@ -40,6 +41,7 @@ export const AUTO_SUB_PREFER_LABELS: Record<AutoSubPreferBy, string> = {
 const VALID_PLAN_KEYS = new Set([
   'timed',
   'staminaBelow',
+  'preMatchStaminaBelow',
   'staminaPositions',
   'staminaMinMinute',
   'preferBy',
@@ -67,6 +69,9 @@ function validateSharedPlanFields(p: Record<string, unknown>, errors: string[]):
   if (typeof p.onInjury !== 'boolean') errors.push('onInjury 必须是布尔值')
   if (p.staminaBelow !== null && (typeof p.staminaBelow !== 'number' || !Number.isFinite(p.staminaBelow) || p.staminaBelow < 1 || p.staminaBelow > 99)) {
     errors.push('体力阈值必须为 null 或 1-99')
+  }
+  if (p.preMatchStaminaBelow !== undefined && p.preMatchStaminaBelow !== null && (typeof p.preMatchStaminaBelow !== 'number' || !Number.isFinite(p.preMatchStaminaBelow) || p.preMatchStaminaBelow < 1 || p.preMatchStaminaBelow > 99)) {
+    errors.push('赛前体力阈值必须为 null 或 1-99')
   }
   if (p.staminaPositions !== undefined) {
     if (!Array.isArray(p.staminaPositions)) {
@@ -269,10 +274,11 @@ function pickBestBench(
   minStaminaPct: number | null,
   preferBy: AutoSubPreferBy = 'proficiency',
 ): MatchPlayerState | undefined {
+  const proficiency = (p: MatchPlayerState) => out.detailedPosition ? detailedPositionValue(p, out.detailedPosition) : p.positions[out.position]
   const candidates = bench.filter(
     (p) =>
       !p.injured
-      && p.positions[out.position] > 0
+      && proficiency(p) > 0
       && (minStaminaPct === null || (p.stamina / Math.max(1, p.maxStamina)) * 100 >= minStaminaPct),
   )
   candidates.sort((a, b) => {
@@ -283,7 +289,7 @@ function pickBestBench(
       const diff = matchPlayerCa(b) - matchPlayerCa(a)
       if (Math.abs(diff) > 1e-6) return diff
     }
-    return b.positions[out.position] - a.positions[out.position]
+    return proficiency(b) - proficiency(a)
   })
   return candidates[0]
 }

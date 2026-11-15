@@ -3,6 +3,8 @@ import type {
   AttrKey,
   Attributes,
   CommentaryEntry,
+  DetailedPosition,
+  DetailedPositionTable,
   FailureReason,
   FormationId,
   GoalDetail,
@@ -37,6 +39,8 @@ export type MatchPlayerState = {
   side: MatchSide
   attrs: Attributes
   positions: Record<Position, number>
+  detailedPositions?: DetailedPositionTable
+  detailedPosition?: DetailedPosition
   skills: SkillId[]
   skillTiers?: Partial<Record<SkillId, 'silver' | 'gold' | 'rainbow'>>
   traitId: TraitId

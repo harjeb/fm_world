@@ -2,6 +2,7 @@ import type { AttrKey, TrainingSession } from './types.ts'
 import { derivedRng } from './rng.ts'
 import { isGoalkeeper } from './ca.ts'
 import { canLearnSkill } from './data/skills.ts'
+import { DETAILED_POSITIONS, detailedPositionValue } from './detailed-positions.ts'
 
 export type TrainingActivityId =
   | 'exchange'
@@ -151,7 +152,8 @@ export function isSpecialActivityAvailable(session: TrainingSession, item: Train
   if (item.id === 'resilience') return canLearnSkill(candidate.skills, 'injury_resilience')
   if (item.id === 'position') {
     const positions = isGoalkeeper(candidate) ? (['GK'] as const) : (['CB', 'W', 'CM', 'ST'] as const)
-    return positions.some((pos) => candidate.positions[pos] < 100)
+    return positions.some((pos) => candidate.positions[pos] < 100) ||
+      DETAILED_POSITIONS.some(pos => pos !== 'GK' && !isGoalkeeper(candidate) && detailedPositionValue(candidate, pos) < 100)
   }
   return true
 }

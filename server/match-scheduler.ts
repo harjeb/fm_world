@@ -9,6 +9,8 @@ import { LINEUP_LOCK_MS } from '../src/game/season.ts'
 import { LEAGUE_REALTIME_MS } from '../src/game/match/time.ts'
 import { RECENT_MATCHES } from '../src/game/transfer-rules.ts'
 import { settleCondition } from '../src/game/condition.ts'
+import { injuryUntil } from '../src/game/injury.ts'
+import { repairSuspendedLineup, rotatePreMatch } from '../src/game/pre-match-rotation.ts'
 import { aiMatchLineup } from '../src/game/match/setup.ts'
 import { chemistrySnapshot, pruneChemistry, recordMatchChemistry } from '../src/game/chemistry.ts'
 import { MatchQueue } from './match-queue.ts'
@@ -88,6 +90,8 @@ export class MatchScheduler {
         if (locked.ai || locked.aiTakeover) {
           const injured = new Set(Object.entries(locked.injuries).filter(([, until]) => until > kickoffAt).map(([id]) => id))
           locked.team.lineup = aiMatchLineup(locked.team, new Set(locked.suspended), true, injured)
+        } else {
+          this.rotateCoached(locked, kickoffAt)
         }
         locked.chemistry = chemistrySnapshot(this.shared.matchBook!.chemistry, [...locked.team.lineup.starters.map(p => p.playerId), ...locked.team.lineup.bench], kickoffAt, job.gameDayMs)
       }
@@ -141,8 +145,9 @@ export class MatchScheduler {
         if (fixture.played) continue
         const id = seasonCupJobId(world.seasonIndex, cup.id, fixture.id)
         if (this.queue.entries.has(id)) continue
-        const home = this.teamFor(fixture.homeId), away = this.teamFor(fixture.awayId)
-        if (!home || !away) continue
+        const sourceHome = this.teamFor(fixture.homeId), sourceAway = this.teamFor(fixture.awayId)
+        if (!sourceHome || !sourceAway) continue
+        const home = structuredClone(sourceHome), away = structuredClone(sourceAway)
         const discipline = this.shared.matchBook!.cupDiscipline?.[cup.id]
         for (const locked of [home, away]) {
           locked.suspended = Object.entries(discipline?.suspensions ?? {}).filter(([, ban]) => ban.matches > 0 && ban.atRound <= round.round).map(([playerId]) => playerId)
@@ -150,6 +155,8 @@ export class MatchScheduler {
           if (locked.ai || locked.aiTakeover) {
             const injured = new Set(Object.entries(locked.injuries).filter(([, until]) => until > round.kickoffAt).map(([playerId]) => playerId))
             locked.team.lineup = aiMatchLineup(locked.team, new Set(locked.suspended), true, injured)
+          } else {
+            this.rotateCoached(locked, round.kickoffAt)
           }
           locked.chemistry = chemistrySnapshot(this.shared.matchBook!.chemistry, [...locked.team.lineup.starters.map(player => player.playerId), ...locked.team.lineup.bench], round.kickoffAt, world.divisions[0].gameDayMs)
         }
@@ -163,6 +170,21 @@ export class MatchScheduler {
         this.queue.enqueue(job)
       }
     }
+  }
+
+  private rotateCoached(locked: LockedTeam, kickoffAt: number): void {
+    const threshold = locked.autoSubs?.preMatchStaminaBelow
+    if (typeof threshold !== 'number' || !Number.isFinite(threshold) || threshold < 1 || threshold > 99) return
+    const suspended = new Set(locked.suspended)
+    const unavailable = new Set(suspended)
+    for (const player of locked.team.players) {
+      if (injuryUntil(locked, player, kickoffAt) !== null) unavailable.add(player.id)
+    }
+    // 比赛引擎会剔除停赛球员。提前修复本场名单，避免建队时重排其他首发并丢失战术配置。
+    const lineup = repairSuspendedLineup(locked.team.players, locked.team.lineup, suspended, unavailable)
+    const rotated = rotatePreMatch(locked.team.players, lineup, locked.autoSubs, unavailable)
+    locked.team.lineup = rotated.lineup
+    locked.autoSubs = rotated.autoSubs
   }
 
   private publishCupDue(now: number): boolean {

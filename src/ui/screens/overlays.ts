@@ -4,11 +4,11 @@ import { bestMarketValue } from '../../game/market.ts'
 import { equippedCard, playerCards, untrainedPlayer } from '../../game/cards.ts'
 import { attrRating, initialDisplayCA, mainAttrsFor } from '../../game/rating.ts'
 import { MAIN_FIELD_ATTRS, MAIN_GK_ATTRS } from '../../game/scale.ts'
-import type { ClubPreview } from '../../game/world.ts'
-import { marketState, onlineState, publicConfig, registrationClubs } from '../../online.ts'
+import { worldTransferTeams, type ClubPreview } from '../../game/world.ts'
+import { aiTransferMarket, isOnlineMode, marketState, onlineState, publicConfig, registrationClubs } from '../../online.ts'
 import { AUCTION_EXTEND_MS, auctionRaiseFee } from '../../game/auction.ts'
 import { previewClubSigning } from '../../game/market.ts'
-import { SQUAD_STATUS_LABELS } from '../../game/transfer-rules.ts'
+import { releaseChance, SQUAD_STATUS_LABELS } from '../../game/transfer-rules.ts'
 import { economyOf } from '../../game/economy.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, TIER_LABELS, negotiationDemands, negotiationTerms, type SeasonGoal, type SquadRole } from '../../game/negotiation.ts'
 import { CA_STOPS, attrHeadCell, attributeRadar, attrHeat, caHeat, cardName, cardRoute, countryLabel, crest, eraLabel, findAnyPlayer, heatLegend, icon, injuryLabel, mainAttrs, meter, positionMap, posBadge, primaryPosition, skillGroups, skillTag, tag, traitLabel } from '../components.ts'
@@ -18,6 +18,7 @@ import { careerStats, fixtureTotals, isOwnPlayer, seasonStats } from '../../game
 import { APP_VERSION, CHANGELOG_RELEASES } from '../../game/changelog.ts'
 import { chemistryPartners } from '../chemistry.ts'
 import { comparisonCandidates, renderPlayerComparison } from './player-comparison.ts'
+import { publicPlayerPanel } from '../club-view.ts'
 import { renderPlayerPerformance } from './player-performance.ts'
 
 function cardRows(player: Player): string {
@@ -68,6 +69,10 @@ function detailNavigation(): string {
 
 export function renderDetailOverlay(): string {
   if (!ui.detailPlayerId) return ''
+  // 联机转会名单以服务器报价为准；即使本赛区缓存里也有同一名球员，也不能显示过期的装备卡属性。
+  const offered = isOnlineMode() && ui.screen === 'transfer' && ui.transferTab === 'ai' && !game.roster.some((item) => item.id === ui.detailPlayerId)
+    ? aiTransferMarket.offers.find((item) => item.player.id === ui.detailPlayerId)?.player : undefined
+  if (offered) return `<div class="overlay" data-action="close-detail"><div class="modal profile" data-stop="true" role="dialog" aria-modal="true" aria-label="${esc(offered.name)} 球员详情"><button class="modal-close" data-action="close-detail" aria-label="关闭">${icon('close', 16)}</button><h1>${esc(offered.name)} <small>${esc(offered.enName)}</small></h1><p class="hint">转会预览：展示球员的原始属性，不含球员卡。</p>${publicPlayerPanel(offered)}</div></div>`
   const source = findAnyPlayer(ui.detailPlayerId)
   if (!source) return ''
   const owned = game.roster.some((item) => item.id === source.id)
@@ -315,10 +320,13 @@ export function renderNewGameOverlay(): string {
 export function renderNegotiationOverlay(): string {
   const draft = ui.negotiation
   if (!draft) return ''
+  const quote = draft.kind === 'club' && isOnlineMode() ? aiTransferMarket.offers.find((item) => item.teamId === draft.clubId && item.player.id === draft.playerId) : undefined
+  if (draft.kind === 'club' && isOnlineMode() && !quote) return `<div class="overlay" data-action="nego-cancel"><div class="modal nego-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="球员谈判"><p>球员已不在转会名单，请刷新后重试。</p><button class="btn" data-action="nego-cancel">关闭</button></div></div>`
   const sourcePlayer = findAnyPlayer(draft.playerId)
-  if (!sourcePlayer) return ''
-  const player = untrainedPlayer(sourcePlayer)
-  const demands = negotiationDemands(game, player)
+  const fullPlayer = sourcePlayer ? untrainedPlayer(sourcePlayer) : undefined
+  const player = quote?.player ?? fullPlayer
+  if (!player) return ''
+  const demands = quote?.demands ?? negotiationDemands(game, fullPlayer!)
   const tier = game.season.tier ?? 'division2'
   const terms = negotiationTerms({
     demands,
@@ -330,15 +338,18 @@ export function renderNegotiationOverlay(): string {
     clubId: 'player',
   })
   // 向 AI 球队买人：先过俱乐部（主力 / 年龄 / 最近出场 / 溢价），再过球员本人，成功率是两关相乘。
-  const seller = draft.kind === 'club' ? game.aiTeams.find((team) => team.id === draft.clubId) : undefined
-  const clubPreview = seller ? previewClubSigning(game, seller, player, draft.offer, { goal: draft.goal, role: draft.role }) : undefined
+  const seller = draft.kind === 'club' && !quote ? worldTransferTeams(game).find((team) => team.id === draft.clubId) : undefined
+  const clubChance = quote && !quote.blocked ? releaseChance(quote.terms, draft.offer) : 0
+  const clubPreview = quote
+    ? { value: quote.terms.value, club: { ...quote.terms, blocked: quote.blocked, chance: clubChance }, player: { chance: terms.chance }, chance: clubChance * terms.chance }
+    : seller && fullPlayer ? previewClubSigning(game, seller, fullPlayer, draft.offer, { goal: draft.goal, role: draft.role }) : undefined
   const chance = Math.round((clubPreview ? clubPreview.chance : terms.chance) * 1000) / 10
   const clubSection = clubPreview ? `<div class="nego-club">
       <p><b>俱乐部这关</b> · ${tag(SQUAD_STATUS_LABELS[clubPreview.club.status], clubPreview.club.status === 'key' ? 'good' : clubPreview.club.status === 'rotation' ? 'info' : '')} ${clubPreview.club.age} 岁 · 最近 20 场出场 ${Math.round(clubPreview.club.minutesShare * 100)}%${clubPreview.club.recorded >= 5 ? '' : '（按阵容估算）'} · 身价 ${clubPreview.value.toLocaleString()}</p>
       <p class="hint">${esc(clubPreview.club.blocked ?? clubPreview.club.reasons.join('；'))} · 俱乐部点头 <b>${(clubPreview.club.chance * 100).toFixed(0)}%</b> × 球员点头 <b>${(clubPreview.player.chance * 100).toFixed(0)}%</b></p>
     </div>` : ''
   const clubNameOf = (id: string) => game.world?.clubs.find((club) => club.id === id)?.name ?? game.aiTeams.find((team) => team.id === id)?.name ?? id
-  const source = draft.kind === 'free' ? '自由球员' : draft.kind === 'bid' ? '全服竞拍' : `来自 ${clubNameOf(draft.clubId ?? '')}`
+  const source = draft.kind === 'free' ? '自由球员' : draft.kind === 'bid' ? '全服竞拍' : `来自 ${quote?.teamName ?? clubNameOf(draft.clubId ?? '')}`
   const goalButtons = (Object.keys(SEASON_GOAL_LABELS) as SeasonGoal[]).map((goal) =>
     `<button class="btn small ${draft.goal === goal ? 'primary' : 'ghost'}" data-action="nego-goal" data-goal="${goal}">${SEASON_GOAL_LABELS[goal]}</button>`).join('')
   const roleButtons = (Object.keys(SQUAD_ROLE_LABELS) as SquadRole[]).map((role) =>
@@ -361,7 +372,7 @@ export function renderNegotiationOverlay(): string {
       <div class="modal nego-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="球员谈判">
         <button class="modal-close" data-action="nego-cancel" aria-label="关闭">${icon('close', 16)}</button>
         <div class="kicker">球员谈判 · ${esc(source)}</div>
-        <h1>${esc(player.name)} <small>${posBadge(primaryPosition(player))} 原始 CA ${initialDisplayCA(player).toFixed(0)}</small></h1>
+        <h1>${esc(player.name)} <small>${posBadge(primaryPosition(player))} 原始 CA ${(quote?.player.ca ?? initialDisplayCA(fullPlayer!)).toFixed(0)}</small></h1>
         <p class="hint">球员按原始属性转会，培养出的球员卡不随人转移。</p>
         <p class="hint">${demandsLine}</p>
         ${hardLines}
