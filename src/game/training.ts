@@ -95,6 +95,10 @@ function trainingPositionValue(player: Player, pos: Position | DetailedPosition,
 }
 
 function setTrainingPosition(player: Player, pos: Position | DetailedPosition, value: number, detailed = false): void {
+  // Capture legacy coarse values before training changes them and marks the table final.
+  if (!player.detailedPositions) player.detailedPositions = readDetailedPositions(player)
+  // Once trained, even a uniform group can represent intentional training.
+  player.detailedPositionsVersion = 1
   if (pos === 'ST' && detailed) {
     player.detailedPositions = { ...readDetailedPositions(player), ST: value }
     player.positions = { ...player.positions, ST: Math.max(player.positions.ST, value) }
@@ -334,14 +338,14 @@ export const PLAIN_FREE_STAMINA = 60
 /** “一般”的概率上限：体力 30 以下不再继续升高，把余量让给“失败”。 */
 export const PLAIN_MAX_CHANCE = 0.4
 /** 大成功、完美成功的概率；体力 30 及以下直接关掉。 */
-export const GREAT_CHANCE = 0.1
-export const PERFECT_CHANCE = 0.02
+export const GREAT_CHANCE = 0.08
+export const PERFECT_CHANCE = 0.01
 /** 消耗点数与基础品质概率；界面和结算共用。 */
 export const TRAINING_POINT_TIERS = [
   { points: 0, great: GREAT_CHANCE, perfect: PERFECT_CHANCE },
-  { points: 10, great: 0.15, perfect: 0.03 },
-  { points: 20, great: 0.20, perfect: 0.04 },
-  { points: 30, great: 0.30, perfect: 0.06 },
+  { points: 10, great: 0.12, perfect: 0.02 },
+  { points: 20, great: 0.16, perfect: 0.03 },
+  { points: 30, great: 0.20, perfect: 0.05 },
 ] as const
 /** 体力 30 及以下不再有大成功/完美，并开始出现“失败”（不涨属性）。 */
 export const FAILURE_STAMINA = 30

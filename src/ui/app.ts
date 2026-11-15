@@ -60,7 +60,10 @@ import { mainAttrsFor } from '../game/rating.ts'
 import { attrLabel } from '../game/data/attributes.ts'
 import { claimPeakReward } from '../game/peak-reward.ts'
 import { applyPeakBreakthrough } from '../game/peak-milestones.ts'
-import { ensureCards, playerCards, recyclePlayerCards, setCardRecycleLock } from '../game/cards.ts'
+import { ensureCards, playerCards, recyclePlayerCards, setCardRecycleLock, untrainedPlayer } from '../game/cards.ts'
+import { SCOUT_LEVELS, startScouting, deleteScoutReport, type ScoutLevel, type ScoutSource } from '../game/scouting.ts'
+import { aiTransferOffers } from '../game/market.ts'
+import { isLocalFreeAgentAvailable } from '../game/free-market.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeStarTraits } from '../game/names.ts'
 import { catchUpSeason, lineupLockState, settleGameConditions, skipToPostseasonEnd } from '../game/season.ts'
 import { gameDateOf } from '../game/calendar.ts'
@@ -75,7 +78,7 @@ import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPla
 import { minimumBid } from '../game/auction.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
 import { clubNameError, normalizeClubName } from '../game/club-name.ts'
-import { aiTransferMarket, bidOnline, buyFromAIClubOnline, chatState, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, recycleCardsOnline, refreshAITransferMarket, refreshChatOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setCardRecycleLockOnline, startPeakOnline, startTrainingOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline } from '../online.ts'
+import { aiTransferMarket, bidOnline, buyFromAIClubOnline, chatState, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, recycleCardsOnline, refreshAITransferMarket, refreshChatOnline, refreshGameOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setCardRecycleLockOnline, startPeakOnline, startScoutingOnline, deleteScoutingOnline, startTrainingOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline } from '../online.ts'
 import { agentHandoffText } from './agent-handoff.ts'
 import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
 import { UNHAPPY_GAME_DAYS } from '../game/transfer-rules.ts'
@@ -101,7 +104,7 @@ import { applyAutoSubAction, applyAutoSubFieldChange, type AutoSubScope } from '
 import { renderMatch } from './screens/match.ts'
 import { renderAccountOverlay, renderChangelogOverlay, renderDetailOverlay, renderNegotiationOverlay, renderNewGameOverlay } from './screens/overlays.ts'
 import { comparisonCandidates } from './screens/player-comparison.ts'
-import { renderClubOverlay } from './club-view.ts'
+import { ownerlessTeamsNow, renderClubOverlay } from './club-view.ts'
 import { renderCommentary, renderReview } from './screens/review.ts'
 import { cycleReplay2DSpeed, drawReplay2D, ensureReplay2D, previewReplay2DSeek, replay2d, resetReplay2D, restartReplay2D, seekReplay2D, setReplay2DHooks, toggleReplay2D } from './replay-2d.ts'
 import { renderSeason } from './screens/season.ts'
@@ -723,6 +726,7 @@ let cardActionPending = false
 let onlineSessionRequested = false
 let recyclePreviewSnapshot = ''
 let recyclePreviewRevision: number | null = null
+let lastScoutRefreshAttempt = 0
 
 /** 联机回收和扣点必须等待服务器；明确选择离线模式才允许离线使用缓存存档。 */
 function sharedActionUnavailable(): boolean {
@@ -1134,6 +1138,7 @@ document.addEventListener('click', async (event) => {
   if (detailView?.dataset.playerDetailView && ui.detailPlayerId) {
     const view = detailView.dataset.playerDetailView
     if (view === 'profile' || view === 'performance' || view === 'compare') {
+      if (view === 'compare' && !game.roster.some(player => player.id === ui.detailPlayerId)) return
       if (view === 'compare' && !ui.playerCompareId) {
         const candidates = comparisonCandidates()
         const player = candidates.find((item) => item.id === ui.detailPlayerId)
@@ -1766,6 +1771,76 @@ document.addEventListener('click', async (event) => {
     case 'card-equip':
       if (playerId) equipFromUI(playerId, actionEl.dataset.card || null)
       break
+    case 'scout-start': {
+      const source = actionEl.dataset.source
+      const clubId = actionEl.dataset.club
+      const level = Number(actionEl.closest('.scout-controls')?.querySelector<HTMLSelectElement>('[data-scout-level]')?.value)
+      if (!playerId || (source !== 'club' && source !== 'transfer' && source !== 'market') ||
+          !SCOUT_LEVELS.some(item => item.level === level) || (source !== 'market' && !clubId)) break
+      if (sharedActionUnavailable()) { showNotice('联机连接已断开，请先重新连接服务器'); break }
+      cardActionPending = true
+      syncAutoTraining()
+      try {
+        if (isOnlineMode()) {
+          ui.notice = '服务器正在确认球探委托，请稍候…'
+          render()
+          await startScoutingOnline(playerId, source as ScoutSource, level as ScoutLevel, clubId)
+        } else {
+          const result = commitOfflineTransaction(() => {
+            let target: Player | undefined
+            if (source === 'market') {
+              const player = game.freeStars.find(item => item.id === playerId)
+              if (player && isLocalFreeAgentAvailable(game, player, Date.now())) target = untrainedPlayer(player)
+            } else if (source === 'transfer') {
+              const offer = aiTransferOffers({ ...game, aiTeams: worldTransferTeams(game) }).find(item => item.team.id === clubId && item.player.id === playerId)
+              if (offer) target = untrainedPlayer(offer.player)
+            } else {
+              const team = game.aiTeams.find(item => item.id === clubId) ?? (game.world && clubId ? ownerlessTeamsNow(game.world)[clubId] : undefined)
+              target = team?.players.find(item => item.id === playerId)
+            }
+            return target ? startScouting(game, target, { source, ...(clubId ? { clubId } : {}) }, level, Date.now()) : { ok: false, error: '球员已不在指定球队或市场，请刷新后重试。' }
+          })
+          if (!result.ok) throw new Error(result.error ?? '球探委托失败')
+        }
+        ui.notice = '球探已出发，报告到期后可在转会页查看。'
+      } catch (error) {
+        ui.notice = error instanceof Error ? error.message : '球探委托失败'
+      } finally {
+        cardActionPending = false
+      }
+      render()
+      break
+    }
+    case 'scout-delete': {
+      const reportId = actionEl.dataset.report
+      if (!reportId || !window.confirm('确定删除这份球探报告？删除不返费，可能结束该报告的市场暂留。')) break
+      if (sharedActionUnavailable()) { showNotice('联机连接已断开，请先重新连接服务器'); break }
+      cardActionPending = true
+      syncAutoTraining()
+      try {
+        if (isOnlineMode()) await deleteScoutingOnline(reportId)
+        else {
+          const result = commitOfflineTransaction(() => deleteScoutReport(game, reportId, Date.now()))
+          if (!result.ok) throw new Error(result.error ?? '删除失败')
+        }
+        ui.notice = '球探报告已删除，费用不退还。'
+      } catch (error) { ui.notice = error instanceof Error ? error.message : '删除失败' }
+      finally { cardActionPending = false }
+      render()
+      break
+    }
+    case 'scout-refresh': {
+      if (sharedActionUnavailable()) { showNotice('联机连接已断开，请先重新连接服务器'); break }
+      if (isOnlineMode()) {
+        cardActionPending = true
+        syncAutoTraining()
+        try { if (await refreshGameOnline(() => game)) ui.notice = '球探报告已刷新。' }
+        catch (error) { ui.notice = error instanceof Error ? error.message : '报告刷新失败' }
+        finally { cardActionPending = false }
+      }
+      render()
+      break
+    }
     case 'card-recycle-select-all': {
       const ids = [...document.querySelectorAll<HTMLInputElement>('input[data-recycle-card]:not(:disabled)')]
         .map((input) => input.dataset.recycleCard).filter((id): id is string => !!id)
@@ -2745,6 +2820,16 @@ setPesViewHooks({
 window.setInterval(tickRealtimeLeague, 1000)
 // 竞拍倒计时每秒走，不用整页重绘。
 window.setInterval(() => {
+  // 联机待办只在服务器持有估计值，到期后自动拉取一次；失败后限频，仍可手动刷新。
+  const at = serverNow()
+  if (isOnlineMode() && !cardActionPending && !trainingStartPending && at - lastScoutRefreshAttempt >= 30_000 &&
+      (game.scoutReports ?? []).some(report => report.readyAt <= at && !report.estimatedAttrs)) {
+    lastScoutRefreshAttempt = at
+    cardActionPending = true
+    syncAutoTraining()
+    render()
+    void refreshGameOnline(() => game).catch(() => { /* 可通过报告面板手动重试 */ }).finally(() => { cardActionPending = false; render() })
+  }
   for (const element of document.querySelectorAll<HTMLElement>('[data-countdown-end]')) {
     const clock = element.closest('[data-peak-reset-at]') && !isOnlineMode() ? Date.now() : serverNow()
     const left = Number(element.dataset.countdownEnd) - clock

@@ -9,6 +9,7 @@ import { createRandomPlayer } from './data/random-players.ts'
 import { gameDayIndex } from './calendar.ts'
 import { isOnMarketToday } from './market-window.ts'
 import { derivedRng, splitSeed } from './rng.ts'
+import { scoutKeepsOnMarket } from './scouting.ts'
 
 /** 每个游戏日自由市场上至少有多少人。 */
 export const FREE_MARKET_TARGET = 200
@@ -28,6 +29,13 @@ export function marketDayOf(game: MarketAnchor, now: number): number {
 }
 
 export const isDailyFiller = (player: Pick<Player, 'marketDay'>): boolean => player.marketDay !== undefined
+
+/** 只判断池内球员的可用性，不会把已离场的球员放回市场。 */
+export function isLocalFreeAgentAvailable(game: GameState, player: Player, now: number): boolean {
+  const kept = scoutKeepsOnMarket(game, player.id, now)
+  return (player.marketDay === undefined || player.marketDay >= marketDayOf(game, now) || kept) &&
+    (kept || isOnMarketToday(game, player, now))
+}
 
 /** 被签下的人不再是“当天的补充球员”，不会被销毁。 */
 export function keepSignedPlayer(player: Player): void {
@@ -54,7 +62,7 @@ export function refreshFreeMarket(input: {
     changed = true
     return false
   })
-  const visible = pool.filter((player) => isOnMarketToday(anchor, player, now)).length
+  const visible = pool.filter((player) => input.busy?.(player.id) || isOnMarketToday(anchor, player, now)).length
   const need = FREE_MARKET_TARGET - visible
   if (need <= 0) return { pool, changed }
   const used = new Set(pool.flatMap((player) => [player.name, player.enName]))
@@ -82,9 +90,15 @@ export function refreshLocalFreeMarket(game: GameState, now: number): boolean {
   if (game.shared || !game.world) return false
   // 每个游戏日只补一次：当天被签走的人不再补，第二天整体刷新。
   const day = marketDayOf(game, now)
-  if (game.freeMarketDay === day) return false
+  const busy = (id: string) => scoutKeepsOnMarket(game, id, now)
+  if (game.freeMarketDay === day) {
+    const pool = game.freeStars.filter(p => p.marketDay === undefined || p.marketDay >= day || busy(p.id))
+    if (pool.length === game.freeStars.length) return false
+    game.freeStars = pool
+    return true
+  }
   game.freeMarketDay = day
-  const result = refreshFreeMarket({ pool: game.freeStars, anchor: game, now, seed: game.seed })
+  const result = refreshFreeMarket({ pool: game.freeStars, anchor: game, now, seed: game.seed, busy })
   if (result.changed) game.freeStars = result.pool
   return true
 }

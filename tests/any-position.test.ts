@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { STARTERS } from '../src/game/squad.ts'
 import { setLineup } from '../src/game/actions.ts'
 import { FORMATIONS } from '../src/game/data/formations.ts'
+import { detailedPositionForSlot } from '../src/game/detailed-positions.ts'
 import { roleFit } from '../src/game/data/roles.ts'
 import { MatchEngine } from '../src/game/match/engine.ts'
 import { emptyAutoSubs, validateAutoSubPlan } from '../src/game/match/management.ts'
@@ -18,11 +19,15 @@ function unlearned(game: GameState): { player: Player; slotId: string; position:
   for (const player of game.roster) {
     if (player.positions.GK > 0) continue
     const slot = formation.slots.find((item) => item.position !== 'GK' && player.positions[item.position] <= 0)
-    if (slot) return { player, slotId: slot.id, position: slot.position }
+    if (slot) {
+      player.detailedPositions = { ...player.detailedPositions, [detailedPositionForSlot(slot)]: 0 }
+      return { player, slotId: slot.id, position: slot.position }
+    }
   }
   const player = game.roster.find((item) => item.positions.GK <= 0)!
   const slot = formation.slots.find((item) => item.position !== 'GK')!
   player.positions[slot.position] = 0
+  player.detailedPositions = { ...player.detailedPositions, [detailedPositionForSlot(slot)]: 0 }
   return { player, slotId: slot.id, position: slot.position }
 }
 
@@ -81,8 +86,10 @@ describe('任何球员都能踢任何位置', () => {
     mp.stamina = mp.maxStamina
     mp.traitId = 'none' as never
     mp.positions[mp.position] = 100
+    if (mp.detailedPosition) mp.detailedPositions = { ...mp.detailedPositions, [mp.detailedPosition]: 100 }
     const full = engine.eff(mp, 'passing')
     mp.positions[mp.position] = 0
+    if (mp.detailedPosition) mp.detailedPositions![mp.detailedPosition] = 0
     expect(engine.eff(mp, 'passing')).toBeCloseTo(Math.max(1, full * 0.6), 5)
   })
 
@@ -98,12 +105,14 @@ describe('任何球员都能踢任何位置', () => {
     const out = team.players.find((item) => item.position !== 'GK')!
     const incoming = team.bench[0]
     incoming.positions[out.position] = 0
+    if (out.detailedPosition) incoming.detailedPositions = { ...incoming.detailedPositions, [out.detailedPosition]: 0 }
     expect(engine.substitute(out.id, incoming.id).ok).toBe(true)
     expect(team.players.some((item) => item.id === incoming.id && item.position === out.position)).toBe(true)
 
     const second = team.players.find((item) => item.position !== 'GK' && item.id !== incoming.id)!
     const timedIn = team.bench.find((item) => !item.cameOff)!
     timedIn.positions[second.position] = 0
+    if (second.detailedPosition) timedIn.detailedPositions = { ...timedIn.detailedPositions, [second.detailedPosition]: 0 }
     team.autoSubs = { timed: [{ atSeconds: 0, outId: second.sourceId, inId: timedIn.sourceId }], staminaBelow: null, onInjury: false }
     engine.step()
     expect(team.subsUsed).toBe(2)
@@ -116,7 +125,9 @@ describe('任何球员都能踢任何位置', () => {
     const benchId = game.lineup.bench[0]
     const formation = FORMATIONS[game.lineup.formationId]
     const slot = formation.slots.find((item) => item.id === starter.slotId)!
-    game.roster.find((player) => player.id === benchId)!.positions[slot.position] = 0
+    const benchPlayer = game.roster.find((player) => player.id === benchId)!
+    benchPlayer.positions[slot.position] = 0
+    benchPlayer.detailedPositions = { ...benchPlayer.detailedPositions, [detailedPositionForSlot(slot)]: 0 }
     const plan = { timed: [{ atMinute: 10, outId: starter.playerId, inId: benchId }], staminaBelow: null, onInjury: false }
     expect(validateAutoSubPlan(game.roster, game.lineup, plan)).toEqual([])
     const outsider = game.roster.find((player) => !game.lineup.bench.includes(player.id) && !game.lineup.starters.some((item) => item.playerId === player.id))!
@@ -135,7 +146,7 @@ describe('任何球员都能踢任何位置', () => {
 
   it('自动填充在没人学过某个位置时也能排满，不留空', () => {
     const game = createInitialGame(57)
-    for (const player of game.roster) player.positions.ST = 0
+    for (const player of game.roster) { player.positions.ST = 0; player.detailedPositions = { ...player.detailedPositions, ST: 0 } }
     const lineup = autoFillLineup(game.roster, game.lineup.formationId, game.lineup.tactics)
     expect(lineup.starters).toHaveLength(STARTERS)
     expect(validateLineup(game.roster, lineup).valid).toBe(true)

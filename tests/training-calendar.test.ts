@@ -322,6 +322,7 @@ describe('calendar training', () => {
     }
 
     s.candidate.positions = { GK: 0, CB: 100, W: 100, CM: 100, ST: 100 }
+    s.candidate.detailedPositions = Object.fromEntries(['DL', 'DC', 'DR', 'WBL', 'WBR', 'DM', 'ML', 'MC', 'MR', 'AML', 'AMC', 'AMR', 'ST'].map(pos => [pos, 100]))
     for (let seed = 1; seed <= 40; seed++) {
       s.scheduleSeed = seed
       s.action = 2

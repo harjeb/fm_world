@@ -63,6 +63,7 @@ function neutralize(engine: MatchEngine): void {
       player.skills = []
       player.stamina = player.maxStamina * 0.6
       player.positions[player.position] = 100
+      if (player.detailedPosition) player.detailedPositions = { ...player.detailedPositions, [player.detailedPosition]: 100 }
       for (const key of Object.keys(player.attrs) as (keyof typeof player.attrs)[]) player.attrs[key] = 40
     }
   }

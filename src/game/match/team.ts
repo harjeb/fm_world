@@ -54,7 +54,7 @@ export function toMatchPlayer(player: Player, side: MatchSide, role: MatchPlayer
     side,
     attrs,
     positions: { ...player.positions },
-    ...(player.detailedPositions ? { detailedPositions: { ...player.detailedPositions } } : {}),
+    detailedPositions: player.detailedPositions && { ...player.detailedPositions },
     skills: [...player.skills],
     skillTiers: { ...player.skillTiers },
     traitId: player.traitId,

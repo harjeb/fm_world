@@ -1,6 +1,7 @@
 import type { AITeam, AttrKey, Attributes, Foot, Player, Position, PositionTable, StyleId } from './types.ts'
 import { ALL_ATTRIBUTES, GK_ATTRIBUTES, POSITIONS } from './types.ts'
 import { caOf } from './ca.ts'
+import { inferDetailedPositions } from './detailed-positions.ts'
 import { attrRating, attrStorage } from './scale.ts'
 import { FORMATIONS } from './data/formations.ts'
 import { LEGEND_TEAMS, type LegendPlayerTuple, type LegendTeamDef } from './data/legend-teams.ts'
@@ -253,6 +254,10 @@ function buildPlayer(def: LegendTeamDef, tuple: LegendPlayerTuple, index: number
     ceilings: { ...attrs },
     pa: actualCa,
     positions,
+    detailedPositions: inferDetailedPositions({ positions, foot: foot ?? 'R', style }),
+    detailedPositionsVersion: 1,
+    baseDetailedPositionsVersion: 1,
+    baseDetailedPositions: inferDetailedPositions({ positions, foot: foot ?? 'R', style }),
     personality,
     traitId: styleTraitFor(style),
     style,

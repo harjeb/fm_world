@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { effectiveAttr } from '../ca.ts'
 import { FORMATIONS } from '../data/formations.ts'
+import { detailedPositionForSlot, detailedPositionValue } from '../detailed-positions.ts'
 import { MatchRatings } from '../match/ratings.ts'
 import type { MatchPlayerState } from '../match/types.ts'
 import { attrStorage } from '../scale.ts'
@@ -21,8 +22,9 @@ function options(): PesGameOptions {
       player.condition = 100
     }
     for (const starter of team.starters) {
-      const position = FORMATIONS[team.formationId].slots.find(s => s.id === starter.slotId)!.position
-      starter.player.positions[position] = 100
+      const slot = FORMATIONS[team.formationId].slots.find(s => s.id === starter.slotId)!
+      starter.player.positions[slot.position] = 100
+      starter.player.detailedPositions = { ...starter.player.detailedPositions, [detailedPositionForSlot(slot)]: 100 }
     }
   }
   return { seed: 314, ...inputs, now: 0, durationSeconds: 20 }
@@ -36,7 +38,7 @@ function selected(g: PesGame) {
 function expected(p: MatchPlayerState) {
   const attrs = { ...p.attrs }
   for (const key of ALL_ATTRIBUTES) {
-    attrs[key] = effectiveAttr(p.attrs, 1, p.positions[p.position], key, p.position === 'GK') * (p.injured ? 0.7 : 1)
+    attrs[key] = effectiveAttr(p.attrs, 1, p.detailedPosition ? detailedPositionValue(p, p.detailedPosition) : p.positions[p.position], key, p.position === 'GK') * (p.injured ? 0.7 : 1)
   }
   return abilityOf(attrs)
 }
@@ -96,7 +98,9 @@ describe('effective PES motion abilities', () => {
     const init = options()
     const healthy = new PesGame(init)
     const { q: hq, p: hp } = selected(healthy)
-    init.home.starters.find(s => s.player.id === hp.sourceId)!.player.positions[hp.position] = 0
+    const source = init.home.starters.find(s => s.player.id === hp.sourceId)!.player
+    source.positions[hp.position] = 0
+    if (hp.detailedPosition) source.detailedPositions![hp.detailedPosition] = 0
     const poor = new PesGame(init)
     const { q, p } = selected(poor)
     expect(p.injured).not.toBe(true)
@@ -200,6 +204,7 @@ describe('effective PES motion abilities', () => {
     const { p: out } = selected(g)
     const bench = g.availableBench('home').find(p => p.positions.GK === 0)!
     bench.positions[out.position] = 0
+    if (out.detailedPosition) bench.detailedPositions = { ...bench.detailedPositions, [out.detailedPosition]: 0 }
     bench.injured = true
     bench.traitId = 'star_p477' // Guaranteed speed bonus only after coming on.
     const before = roundTrip(g)

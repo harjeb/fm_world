@@ -142,7 +142,7 @@ describe('training quality points', () => {
         if (quality.label === '完美成功') counts[i].perfect++
       })
     }
-    for (const [i, great, perfect] of [[0, .1, .02], [1, .15, .03], [2, .2, .04], [3, .3, .06]] as const) {
+    for (const [i, great, perfect] of [[0, .08, .01], [1, .12, .02], [2, .16, .03], [3, .2, .05]] as const) {
       expect(Math.abs(counts[i].great / 4096 - great)).toBeLessThan(0.025)
       expect(Math.abs(counts[i].perfect / 4096 - perfect)).toBeLessThan(0.015)
     }
@@ -152,20 +152,49 @@ describe('training quality points', () => {
     const game = createInitialGame(23); const session = createTrainingSession(game.roster[0], 999)
     session.candidate.skills = []; session.candidate.skillTiers = {}
     const old = trainingQualityChances(session)
-    for (const [points, great, perfect] of [[0, .1, .02], [10, .15, .03], [20, .2, .04], [30, .3, .06]] as const) {
+    for (const [points, great, perfect] of [[0, .08, .01], [10, .12, .02], [20, .16, .03], [30, .2, .05]] as const) {
       session.qualityBonusPoints = points
       const chance = trainingQualityChances(session)
       expect(chance.great).toBeCloseTo(great); expect(chance.perfect).toBeCloseTo(perfect)
+      expect(chance.success).toBeCloseTo(1 - chance.failure - chance.plain - great - perfect)
       expect(Object.values(chance).reduce((a, b) => a + b, 0)).toBeCloseTo(1)
       expect(expectedQualityMultiplier(session)).toBeCloseTo(chance.plain * .7 + chance.success + chance.great * 1.3 + chance.perfect * 1.6)
       expect(trainingQuality(session)).toEqual(trainingQuality(structuredClone(session)))
     }
     delete session.qualityBonusPoints; expect(trainingQualityChances(session)).toEqual(old)
     session.qualityBonusPoints = 30; session.candidate.skills = ['lg_fast_learner']; session.candidate.skillTiers = { lg_fast_learner: 'gold' }
-    expect(trainingQualityChances(session).great).toBeCloseTo(.35)
-    expect(trainingQualityChances(session).perfect).toBeCloseTo(.11)
+    expect(trainingQualityChances(session).great).toBeCloseTo(.25)
+    expect(trainingQualityChances(session).perfect).toBeCloseTo(.10)
     const low = trainingQualityChances(session, 30)
     expect(low.great).toBe(0); expect(low.perfect).toBe(0); expect(low.failure).toBeCloseTo(.05)
     expect(low.plain).toBeCloseTo(.2); expect(Object.values(low).reduce((a, b) => a + b, 0)).toBeCloseTo(1)
+  })
+
+  it('keeps tiers monotone and probabilities valid at stamina boundaries with each fast learner tier', () => {
+    const session = createTrainingSession(createInitialGame(23).roster[0], 999)
+    for (const [skillTier, bonus] of [[null, 0], ['gold', .05], ['rainbow', .07]] as const) {
+      session.candidate.skills = skillTier ? ['lg_fast_learner'] : []
+      session.candidate.skillTiers = skillTier ? { lg_fast_learner: skillTier } : {}
+      for (const stamina of [0, 30, 30.001, 59.999, 60, 100]) {
+        let previousGreat = 0, previousPerfect = 0, previousSuccess = 1
+        for (const [points, great, perfect] of [[0, .08, .01], [10, .12, .02], [20, .16, .03], [30, .2, .05]] as const) {
+          session.qualityBonusPoints = points
+          const chance = trainingQualityChances(session, stamina)
+          expect(chance.great).toBeCloseTo(stamina > 30 ? great + bonus : 0)
+          expect(chance.perfect).toBeCloseTo(stamina > 30 ? perfect + bonus : 0)
+          if (stamina > 30 && points > 0) {
+            expect(chance.great).toBeGreaterThan(previousGreat)
+            expect(chance.perfect).toBeGreaterThan(previousPerfect)
+          } else {
+            expect(chance.great).toBeGreaterThanOrEqual(previousGreat)
+            expect(chance.perfect).toBeGreaterThanOrEqual(previousPerfect)
+          }
+          expect(chance.success).toBeLessThanOrEqual(previousSuccess + 1e-12)
+          for (const value of Object.values(chance)) { expect(value).toBeGreaterThanOrEqual(0); expect(value).toBeLessThanOrEqual(1) }
+          expect(Object.values(chance).reduce((a, b) => a + b, 0)).toBeCloseTo(1, 12)
+          previousGreat = chance.great; previousPerfect = chance.perfect; previousSuccess = chance.success
+        }
+      }
+    }
   })
 })

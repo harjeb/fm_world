@@ -1,4 +1,5 @@
 import type { Auction, AuctionResult } from './game/auction.ts'
+import type { ScoutLevel, ScoutSource, VisibleScoutReport } from './game/scouting.ts'
 import { CHAT_HISTORY_LIMIT, appendChatMessage, isValidChatMessage, type ChatMessage, type ChatSseMessage } from './game/chat.ts'
 import type { AITeam, Attributes, FacilityId, GameState, Player, SeasonTableRow, Fixture, TierId, ConferenceId } from './game/types.ts'
 import type { ReleaseAssessment } from './game/transfer-rules.ts'
@@ -164,6 +165,7 @@ type StateResponse = { type: 'state'; revision: number; serverTime?: number; gam
 
 const clientId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 let token = typeof localStorage === 'undefined' ? null : localStorage.getItem(TOKEN_KEY)
+let sessionEpoch = 0
 let eventSource: EventSource | null = null
 let deferredState: StateResponse | null = null
 let pendingGame: GameState | null = null
@@ -274,6 +276,7 @@ export async function loginOnline(username: string, password: string): Promise<A
 }
 
 export async function logoutOnline(): Promise<void> {
+  ++sessionEpoch
   await flushOnlineNow()
   try {
     await requestJson('/api/logout', { method: 'POST' })
@@ -300,6 +303,7 @@ export async function logoutOnline(): Promise<void> {
 
 async function restoreSession(): Promise<GameState | null> {
   if (!token) return null
+  ++sessionEpoch
   onlineState.status = 'connecting'
   notify()
   try {
@@ -327,6 +331,7 @@ async function restoreSession(): Promise<GameState | null> {
 }
 
 function acceptSession(data: AuthResponse): void {
+  ++sessionEpoch
   clearAITransferMarket()
   setToken(data.token)
   onlineState.user = data.user
@@ -614,7 +619,7 @@ export async function respondOfferOnline(offerId: string, accept: boolean): Prom
 }
 
 /** 响应丢失或并发失败时先取回权威状态：请求可能已提交，不能盲目在本地重做。 */
-async function protectedGameAction(endpoint: string, body: Record<string, unknown>): Promise<GameState> {
+async function protectedGameAction(endpoint: string, body: Record<string, unknown> | (() => Record<string, unknown>)): Promise<GameState> {
   try {
     return await onlineGameAction(endpoint, body)
   } catch (error) {
@@ -638,6 +643,49 @@ export async function setCardRecycleLockOnline(cardId: string, locked: boolean):
   return protectedGameAction('/api/cards/lock', { cardId, locked })
 }
 
+export async function startScoutingOnline(playerId: string, source: ScoutSource, level: ScoutLevel, clubId?: string): Promise<GameState> {
+  return protectedGameAction('/api/scouting/start', { playerId, source, level, clubId })
+}
+
+export async function deleteScoutingOnline(reportId: string): Promise<GameState> {
+  // 排队的普通存档可能先把 revision 推进，必须在 flush 后再取版本。
+  return protectedGameAction('/api/scouting/delete', () => ({ reportId, baseRevision: onlineState.revision }))
+}
+
+/** 只合并当前存档中仍存在的已完成报告，不应用服务器存档快照。 */
+export async function refreshGameOnline(currentGame: () => GameState): Promise<boolean> {
+  const requestToken = token
+  const user = onlineState.user?.id
+  const epoch = sessionEpoch
+  const currentSession = () => !!requestToken && token === requestToken && !!user && onlineState.user?.id === user && sessionEpoch === epoch && isOnlineMode()
+  await flushOnlineNow()
+  if (sessionEpoch !== epoch || token !== requestToken || onlineState.user?.id !== user) return false
+  if (!currentSession() || onlineState.error) throw new Error(onlineState.error || '请先连接服务器')
+  let response: Response
+  let data: { reports?: VisibleScoutReport[]; serverTime?: number; error?: string }
+  try {
+    response = await fetch('/api/scouting/reports', { headers: { Authorization: `Bearer ${requestToken}`, 'X-FM-Client': clientId } })
+    data = await response.json()
+  } catch (error) {
+    if (!currentSession()) return false
+    throw error
+  }
+  if (!currentSession()) return false
+  if (!response.ok) throw new Error(data.error ?? `请求失败 (${response.status})`)
+  if (!Array.isArray(data.reports) || typeof data.serverTime !== 'number' || !Number.isFinite(data.serverTime)) throw new Error('报告响应无效')
+  const reports = data.reports
+  const game = currentGame()
+  if (Array.isArray(game.scoutReports)) {
+    game.scoutReports = game.scoutReports.map(local => {
+      const completed = reports.find(report => report.id === local.id && report.playerId === local.playerId && report.source === local.source && report.clubId === local.clubId && report.readyAt === local.readyAt && report.readyAt <= data.serverTime! && 'estimatedAttrs' in report && !!report.estimatedAttrs)
+      return completed && 'estimatedAttrs' in completed ? completed : local
+    })
+  }
+  syncServerClock(data.serverTime)
+  notify()
+  return true
+}
+
 export async function startTrainingOnline(playerId: string, bookKeys: string[], points: number): Promise<GameState> {
   return protectedGameAction('/api/training/start', { playerId, bookKeys, points })
 }
@@ -648,13 +696,13 @@ export async function nextWorldSeasonOnline(): Promise<GameState> {
   return next
 }
 
-async function onlineGameAction(endpoint: string, body: Record<string, unknown>): Promise<GameState> {
+async function onlineGameAction(endpoint: string, body: Record<string, unknown> | (() => Record<string, unknown>)): Promise<GameState> {
   await flushOnlineNow()
   if (onlineState.status !== 'online' || onlineState.error) throw new Error(onlineState.error || '请先连接服务器')
   const result = await requestJson<{ revision: number; game: GameState }>(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(typeof body === 'function' ? body() : body),
   })
   if (result.revision >= onlineState.revision) {
     onlineState.revision = result.revision

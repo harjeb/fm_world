@@ -8,12 +8,13 @@ import { traitEffectText } from '../../game/data/skill-effects.ts'
 import { traitNameOf } from '../../game/data/star-traits.ts'
 import { SQUAD_LIMIT, aiTransferOffers, bestMarketValue, freeAgentAsking, saleChance, sellerSquadError, suggestedPrice, transferWindowOpen } from '../../game/market.ts'
 import { worldTransferTeams } from '../../game/world.ts'
-import { isOnMarketToday } from '../../game/market-window.ts'
+import { isLocalFreeAgentAvailable } from '../../game/free-market.ts'
 import { initialDisplayCA } from '../../game/rating.ts'
 import { caHeat, clubName, countryLabel, emptyState, icon, ownName, pageHead, panel, posBadge, primaryPosition, tag, traitLabel } from '../components.ts'
 import { countdownText, esc } from '../format.ts'
 import { aiTransferMarket, isOnlineMode, marketState, onlineState, serverNow } from '../../online.ts'
 import { game, ui, type TransferTab } from '../state.ts'
+import { renderScoutPanel } from './scouting.ts'
 
 const TABS: { id: TransferTab; label: string }[] = [
   { id: 'market', label: '挂牌出售' },
@@ -117,6 +118,7 @@ function auctionTab(): string {
     <p class="hint">${icon('clock', 13)} 第一口出价开始 ${AUCTION_DURATION_MS / 3_600_000} 小时倒计时，全服可见；最后 ${AUCTION_EXTEND_MS / 60_000} 分钟内有人跟价，倒计时重新回到 ${AUCTION_EXTEND_MS / 60_000} 分钟。跟价每次至少加 5%，并交出价 2%（至少 1,000）的手续费，手续费不退还。</p>
     ${running.length ? panel(`竞拍中 <small>${running.length}</small>`, `<div class="table-scroll"><table class="dt auction-table"><thead><tr><th>位置</th><th>球员</th><th class="num">龄</th><th class="num">原始 CA</th><th>特性</th><th class="num">当前价</th><th>领先</th><th class="num">倒计时</th><th class="num">出价</th></tr></thead><tbody>${auctionRows}</tbody></table></div>`, { flush: true }) : ''}
     ${panel(`自由球员 <small>${agents.length}</small>`, `
+      <p class="hint">市场球探目标在考察期间及报告完成后额外 1 个游戏日暂留；并非独占，其他玩家仍可竞拍或签走。</p>
       <div class="toolbar in-panel">
         <div class="input-icon">${icon('search', 14)}<input id="club-search" placeholder="搜索姓名 / 国家 / 英文名 / 特性" value="${esc(ui.clubSearch)}"></div>
         <button class="btn small" data-action="club-search">搜索</button>
@@ -136,14 +138,14 @@ function freeTab(): string {
   // 特性也能搜：想找“单刀”“点球”的球星时不用一个个点开看。
   // 球星只在挂牌日出现在市场；不在窗口里的直接不列出来（这是隐藏日程）。
   const agents = game.freeStars
-    .filter((player) => isOnMarketToday(game, player))
+    .filter((player) => isLocalFreeAgentAvailable(game, player, Date.now()))
     .filter((player) => `${player.name} ${player.enName} ${player.country} ${traitNameOf(player.traitId)} ${traitEffectText(player.traitId)}`.toLowerCase().includes(query))
   const pageSize = 20
   const pages = Math.max(1, Math.ceil(agents.length / pageSize))
   ui.clubPage = Math.min(ui.clubPage, pages - 1)
   const rows = agents.slice(ui.clubPage * pageSize, ui.clubPage * pageSize + pageSize).map((player) => {
     const price = freeAgentAsking(game, player)
-    const available = isOnMarketToday(game, player)
+    const available = isLocalFreeAgentAvailable(game, player, Date.now())
     return `<tr class="clickable ${available ? '' : 'dim-row'}" data-action="detail" data-player="${esc(player.id)}" data-key="${esc(player.id)}">
       <td>${posBadge(primaryPosition(player))}</td>
       ${nameCell(player)}
@@ -163,7 +165,7 @@ function freeTab(): string {
       <button class="btn small" data-action="club-search">搜索</button>
       <span class="muted small">阵容 ${game.roster.length} / ${SQUAD_LIMIT} · 余额 ${economy.balance.toLocaleString()}</span>
     </div>
-    <p class="hint">签人要谈判：他会问你的赛季目标和给他的位置，报价越高成功率越高。不是所有球员随时都能碰到。</p>
+    <p class="hint">市场球探目标在考察期间及报告完成后额外 1 个游戏日暂留；并非独占，仍可能被他人签走。签人要谈判：他会问你的赛季目标和给他的位置，报价越高成功率越高。不是所有球员随时都能碰到。</p>
     ${game.roster.length > SQUAD_LIMIT ? `<p class="warn-text">阵容 ${game.roster.length} / ${SQUAD_LIMIT}，已超编：必须裁掉 ${game.roster.length - SQUAD_LIMIT} 人才能进入比赛。</p>` : ''}
     ${rows ? `<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th>国籍</th><th class="num">龄</th><th class="num">原始 CA</th><th>特性</th><th class="num">底价</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('没有匹配的自由球员。')}
     <div class="pager"><button class="btn small" data-action="club-prev" ${ui.clubPage === 0 ? 'disabled' : ''}>${icon('left', 13)}上一页</button><span class="muted small">${ui.clubPage + 1} / ${pages}</span><button class="btn small" data-action="club-next" ${ui.clubPage >= pages - 1 ? 'disabled' : ''}>下一页${icon('right', 13)}</button></div>
@@ -261,5 +263,6 @@ export function renderTransfer(): string {
       ${TABS.map((item) => `<button class="tab ${tab === item.id ? 'active' : ''}" role="tab" aria-selected="${tab === item.id}" data-transfer-tab="${item.id}">${item.id === 'free' && isOnlineMode() ? '全服竞拍' : item.label}${item.id === 'offers' && pendingCount ? ` <span class="badge">${pendingCount}</span>` : ''}</button>`).join('')}
     </div>
     ${body}
+    ${renderScoutPanel()}
   `
 }

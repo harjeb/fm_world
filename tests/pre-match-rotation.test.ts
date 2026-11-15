@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
 import { FORMATIONS } from '../src/game/data/formations.ts'
+import { DETAILED_POSITIONS, DETAILED_TO_POSITION } from '../src/game/detailed-positions.ts'
 import { emptyAutoSubs, validateAutoSubPlan, validateLiveAutoSubPlan } from '../src/game/match/management.ts'
 import { teamInputFromLineup } from '../src/game/match/setup.ts'
 import { MatchEngine } from '../src/game/match/engine.ts'
@@ -20,6 +21,7 @@ function fixture() {
     const p = byId(lineup.bench[index])
     p.positions = { GK: 0, CB: 0, W: 0, CM: 0, ST: 0 }
     p.positions[pos] = prof
+    p.detailedPositions = Object.fromEntries(DETAILED_POSITIONS.map(d => [d, p.positions[DETAILED_TO_POSITION[d]]]))
     p.condition = condition
     return p
   }
@@ -52,6 +54,7 @@ describe('赛前体能轮换', () => {
     const p0 = f.makeBench(0, pos, 90, 80)
     const p1 = f.makeBench(1, pos, 60, 95)
     p1.positions[f.position(b.slotId)] = 95
+    for (const d of DETAILED_POSITIONS) p1.detailedPositions![d] = p1.positions[DETAILED_TO_POSITION[d]]
     const before = structuredClone({ roster: f.roster, lineup: f.lineup, plan: f.plan })
     const result = rotatePreMatch(f.roster, f.lineup, f.plan)
     expect(result.changes).toEqual([

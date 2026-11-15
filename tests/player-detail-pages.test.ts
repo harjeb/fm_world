@@ -1,16 +1,16 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
 import type { MatchRecord, PlayerMatchStats } from '../src/game/types.ts'
-import { untrainedPlayer } from '../src/game/cards.ts'
 import { game as previousGame, setGame, ui } from '../src/ui/state.ts'
 import { renderDetailOverlay } from '../src/ui/screens/overlays.ts'
 import { comparisonCandidates } from '../src/ui/screens/player-comparison.ts'
 
 const originalGame = previousGame
+const originalUi = { ...ui }
 
 afterEach(() => {
   setGame(originalGame)
-  Object.assign(ui, { detailPlayerId: null, playerDetailView: 'profile', playerCompareId: null, playerCompareTab: 'overview', playerPerformancePeriod: 'season', playerPerformanceCompetition: 'all', screen: 'home' })
+  Object.assign(ui, originalUi)
 })
 
 function setup() {
@@ -74,17 +74,24 @@ describe('球员详情中的表现与对比页面', () => {
     expect(html).toContain('预期进球')
     expect(html).not.toMatch(/NaN|Infinity/)
   })
-  it('转会页面两侧外队球员都使用可转移的原始属性', () => {
-    const { game } = setup()
-    const [player, other] = game.aiTeams[0].players.filter(item => !item.positions.GK)
-    player.attrs.passing = 1400
-    other.attrs.passing = 1400
-    player.baseAttrs.passing = 400
-    other.baseAttrs.passing = 600
+  it('转会页面禁止外队对比，本队选择器不能注入外队球员', () => {
+    const { game, player: own } = setup()
+    const [player, other] = game.aiTeams[0].players.filter(item => !game.roster.some(p => p.id === item.id))
+    other.name = '外队唯一球员名'
     Object.assign(ui, { screen: 'transfer', detailPlayerId: player.id, playerCompareId: other.id, playerDetailView: 'compare', playerCompareTab: 'attributes' })
-    const html = renderDetailOverlay()
-    expect(html).toContain(`<th>传球</th><td>${untrainedPlayer(player).attrs.passing}</td><td>${untrainedPlayer(other).attrs.passing}</td>`)
-    expect(html).toContain('不包含球员卡')
+    const foreignHtml = renderDetailOverlay()
+    expect(foreignHtml).not.toContain('data-player-detail-view="compare"')
+    expect(foreignHtml).not.toContain('pc-root')
+    expect(foreignHtml).toContain('位置熟练度')
+    expect(foreignHtml).toContain('转会不包含球员卡')
+
+    ui.detailPlayerId = own.id
+    const ownHtml = renderDetailOverlay()
+    expect(ownHtml).toContain('data-player-detail-view="compare"')
+    expect(ownHtml).toContain('data-player-compare-select')
+    expect(ownHtml).toContain('value="" selected')
+    expect(ownHtml).not.toContain(`value="${other.id}"`)
+    expect(ownHtml).not.toContain('外队唯一球员名')
   })
   it('候选列表去重并优先本队球员', () => {
     const { game, player } = setup()

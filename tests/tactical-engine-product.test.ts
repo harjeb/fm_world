@@ -77,7 +77,7 @@ describe('战术引擎产品链路集成', () => {
     const mismatched = structuredClone(game.lineup)
     // 故意把外场位置熟练度清零模拟严重错位，熟练度应明显下降
     const strippedRoster = game.roster.map((p) =>
-      p.positions.GK > 0 ? p : { ...p, positions: { GK: 0, CB: 0, W: 0, CM: 0, ST: 0 } },
+      p.positions.GK > 0 ? p : { ...p, positions: { GK: 0, CB: 0, W: 0, CM: 0, ST: 0 }, detailedPositions: {} },
     )
     const lowFam = computeLineupFamiliarity(strippedRoster, mismatched, 1)
     expect(lowFam).toBeLessThan(baseFam)

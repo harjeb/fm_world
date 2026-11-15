@@ -5,6 +5,7 @@ import path from 'node:path'
 import { buildOwnerlessTeams, createOwnerlessWorld } from '../src/game/world.ts'
 import { AI_REST_BELOW } from '../src/game/squad.ts'
 import { FORMATIONS } from '../src/game/data/formations.ts'
+import { DETAILED_POSITIONS, DETAILED_TO_POSITION } from '../src/game/detailed-positions.ts'
 import { NEUTRAL_INSTRUCTIONS } from '../src/game/pes/tactics.ts'
 import { emptyAutoSubs } from '../src/game/match/management.ts'
 import { personKey } from '../src/game/injury.ts'
@@ -55,6 +56,7 @@ function coachedRotation(team: LockedTeam) {
   const bench = lineup.bench.map(id => team.team.players.find(p => p.id === id)!)
   for (const player of bench) { player.condition = 10; player.positions = { GK: 0, CB: 0, W: 0, CM: 0, ST: 0 } }
   for (const player of bench.slice(0, 4)) { player.condition = 100; player.positions[pos] = 90 }
+  for (const player of bench) player.detailedPositions = Object.fromEntries(DETAILED_POSITIONS.map(d => [d, player.positions[DETAILED_TO_POSITION[d]]]))
   team.autoSubs = { ...emptyAutoSubs(), preMatchStaminaBelow: 60, timed: [
     { atMinute: 10, outId: out.id, inId: bench[3].id },
     { atMinute: 20, outId: lineup.starters.find(s => s !== slot)!.playerId, inId: bench[3].id },

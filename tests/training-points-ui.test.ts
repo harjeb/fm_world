@@ -21,7 +21,7 @@ describe('培养点界面', () => {
     state.trainingPointSpend = 10
     const html = renderTraining()
     expect(html).toContain('余额 15')
-    for (const [points, great, perfect] of [[0, 10, 2], [10, 15, 3], [20, 20, 4], [30, 30, 6]]) {
+    for (const [points, great, perfect] of [[0, 8, 1], [10, 12, 2], [20, 16, 3], [30, 20, 5]]) {
       const button = html.match(new RegExp(`<button[^>]*data-action="training-points-select" data-points="${points}"[^>]*>[^<]*</button>`))![0]
       expect(button).toContain(`data-player="${player.id}"`)
       expect(button).toContain(`大成功 ${great}% / 完美 ${perfect}%`)
@@ -43,7 +43,10 @@ describe('培养点界面', () => {
       delete player.equippedCardId
       player.skills = ['lg_fast_learner']
       player.skillTiers = { lg_fast_learner: 'gold' }
-      expect(renderTraining()).toContain('以本轮初始技能、体力充足计算：大成功 20% / 完美 8%')
+      expect(renderTraining()).toContain('以本轮初始技能、体力充足计算：大成功 17% / 完美 7%')
+      game.trainingPoints = 30
+      state.trainingPointSpend = 30
+      expect(renderTraining()).toContain('以本轮初始技能、体力充足计算：大成功 25% / 完美 10%')
     } finally {
       player.skills = original.skills
       player.skillTiers = original.tiers

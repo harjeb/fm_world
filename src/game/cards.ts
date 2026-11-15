@@ -1,6 +1,7 @@
 import type { GameState, Player, PlayerCard, RouteId, TrainingSession } from './types.ts'
 import { caOf, costAttrs } from './ca.ts'
 import { CA_MAX } from './scale.ts'
+import { inferDetailedPositions } from './detailed-positions.ts'
 
 /**
  * 球员卡。
@@ -142,6 +143,8 @@ function addCard(game: GameState, owner: Pick<Player, 'id' | 'name'>, build: Bui
   game.cardSeq = (game.cardSeq ?? 0) + 1
   const serial = cards.reduce((max, card) => (card.playerId === owner.id ? Math.max(max, card.serial) : max), 0) + 1
   const copy = cloneBuild(build)
+  const player = game.roster.find(item => item.id === owner.id)
+  copy.detailedPositions ??= inferDetailedPositions({ positions: copy.positions, foot: player?.foot, style: player?.style })
   const card: PlayerCard = {
     id: `card-${game.cardSeq}`,
     playerId: owner.id,
@@ -150,6 +153,7 @@ function addCard(game: GameState, owner: Pick<Player, 'id' | 'name'>, build: Bui
     routeId,
     createdAt: Date.now(),
     ...copy,
+    detailedPositionsVersion: 1,
     history: copy.history?.slice(-CARD_HISTORY_LIMIT),
   }
   cards.push(card)
@@ -174,7 +178,7 @@ export function baseBuild(player: Player): Build {
   return {
     attrs: { ...player.baseAttrs },
     positions: { ...player.basePositions },
-    detailedPositions: (player.baseDetailedPositions ?? (untouched ? player.detailedPositions : undefined)) && { ...(player.baseDetailedPositions ?? player.detailedPositions) },
+    detailedPositions: { ...(player.baseDetailedPositions ?? (untouched ? player.detailedPositions : undefined) ?? inferDetailedPositions({ positions: player.basePositions, style: player.style, foot: player.foot })) },
     personality: { ...player.basePersonality },
     skills: [...skills],
     skillTiers: Object.fromEntries(skills.flatMap((skill) => (tiers?.[skill] ? [[skill, tiers[skill]]] : []))),
@@ -193,13 +197,16 @@ export function untrainedPlayer(player: Player): Player {
 function wear(player: Player, build: Build, cardId: string | null): void {
   if (!player.equippedCardId && player.version === 0) {
     player.baseDetailedPositions = player.detailedPositions && { ...player.detailedPositions }
+    player.baseDetailedPositionsVersion = player.detailedPositionsVersion
     player.baseSkills = [...player.skills]
     player.baseSkillTiers = { ...player.skillTiers }
   }
   const copy = cloneBuild(build)
+  copy.detailedPositions ??= inferDetailedPositions({ positions: copy.positions, style: player.style, foot: player.foot })
   player.attrs = copy.attrs
   player.positions = copy.positions
   player.detailedPositions = copy.detailedPositions
+  player.detailedPositionsVersion = 1
   player.personality = copy.personality
   player.skills = copy.skills
   player.skillTiers = copy.skillTiers

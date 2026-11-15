@@ -4,7 +4,6 @@ import { DETAILED_POSITIONS, DETAILED_POSITION_LABELS, detailedPositionValue } f
 import type { DetailedPosition } from '../../game/types.ts'
 import { GK_ATTRIBUTES, POSITIONS, type AttrKey, type Player, type Position } from '../../game/types.ts'
 import { bestMarketValue } from '../../game/market.ts'
-import { marketState } from '../../online.ts'
 import { countryLabel } from '../components.ts'
 import { esc } from '../format.ts'
 import { game } from '../state.ts'
@@ -12,12 +11,9 @@ import { aggregatePerformance, averageRating, type AdvancedMetric, type Performa
 
 export type CompareTab = 'overview' | 'attributes' | 'stats' | 'positions'
 
-/** 与球员详情的查找范围一致，优先本队，避免挂牌球员重复。 */
+/** 对比只使用本队阵容及其当前球员数据。 */
 export function comparisonCandidates(): Player[] {
-  const players = [...game.roster, ...(game.market?.listings ?? []).map((item) => item.player), ...game.freeStars, ...marketState.pool, ...game.aiTeams.flatMap((team) => team.players)]
-  const unique = new Map<string, Player>()
-  for (const player of players) if (!unique.has(player.id)) unique.set(player.id, player)
-  return [...unique.values()]
+  return [...new Map(game.roster.map(player => [player.id, player])).values()]
 }
 
 const tabs: [CompareTab, string][] = [['overview', '总览'], ['attributes', '属性'], ['stats', '数据'], ['positions', '位置']]
@@ -41,7 +37,7 @@ function identity(p: Player | undefined, side: string): string {
 
 const spots: Record<DetailedPosition, [number, number]> = { GK: [50, 96], DL: [18, 78], DC: [50, 78], DR: [82, 78], WBL: [18, 66], WBR: [82, 66], DM: [50, 66], ML: [18, 53], MC: [50, 53], MR: [82, 53], AML: [18, 37], AMC: [50, 37], AMR: [82, 37], ST: [50, 20] }
 function pitch(p?: Player): string {
-  return `<svg class="pc-pitch" viewBox="0 0 100 110" role="img" aria-label="位置分布"><rect x="2" y="2" width="96" height="106" rx="2"/><path d="M2 55H98 M35 2V16H65V2 M35 108V94H65V108"/><circle cx="50" cy="55" r="12"/>${DETAILED_POSITIONS.map(pos => { const [x, y] = spots[pos]; const value = p ? detailedPositionValue(p, pos) : 0; const tier = value >= 85 ? 5 : value >= 65 ? 4 : value >= 40 ? 3 : value > 0 ? 2 : 1; return `<circle class="pc-spot pc-spot-${tier}" cx="${x}" cy="${y}" r="4"><title>${DETAILED_POSITION_LABELS[pos]}：${p ? esc(number(value)) : '—'}</title></circle>` }).join('')}</svg>`
+  return `<svg class="pc-pitch" viewBox="0 0 100 110" role="img" aria-label="位置分布"><rect x="2" y="2" width="96" height="106" rx="2"/><path d="M2 55H98 M35 2V16H65V2 M35 108V94H65V108"/><circle cx="50" cy="55" r="12"/>${DETAILED_POSITIONS.map(pos => { const [x, y] = spots[pos]; const value = p ? detailedPositionValue(p, pos) : 0; const tier = value >= 85 ? 5 : value >= 65 ? 4 : value >= 40 ? 3 : value > 0 ? 2 : 1; return `<g><title>${DETAILED_POSITION_LABELS[pos]}：${p ? esc(number(value)) : '—'}</title><circle class="pc-spot pc-spot-${tier}" cx="${x}" cy="${y}" r="5"/><text class="pc-spot-value" x="${x}" y="${y + 1.3}" text-anchor="middle">${p ? esc(number(value)) : '—'}</text></g>` }).join('')}</svg>`
 }
 
 function radar(p: Player, other?: Player): string {
@@ -100,9 +96,13 @@ function overview(p: Player, other?: Player): string {
 }
 
 export function renderPlayerComparison(player: Player, compare: Player | undefined, candidates: Player[], tab: CompareTab): string {
-  const options = [...candidates]
-  if (compare && !options.some(candidate => candidate.id === compare.id)) options.push(compare)
-  if (!options.some(candidate => candidate.id === player.id)) options.unshift(player)
+  // 参数和 UI 状态均不可信；以阵容中的对象为准，避免同 ID 的外部数据混入。
+  const options = comparisonCandidates()
+  const ownPlayer = options.find(candidate => candidate.id === player.id)
+  if (!ownPlayer) return ''
+  player = ownPlayer
+  compare = options.find(candidate => candidate.id === compare?.id)
+  void candidates
   const optionsFor = (selected: string | undefined) => options.map(candidate => `<option value="${esc(candidate.id)}"${candidate.id === selected ? ' selected' : ''}>${esc(candidate.name)} · ${esc(positionName(candidate))}</option>`).join('')
   return `<section class="pc-root" aria-label="球员对比"><header class="pc-header"><div><span class="pc-eyebrow">球员中心</span><h1>球员对比</h1></div><div class="pc-selectors"><label class="pc-select">球员<select data-player-compare-base>${optionsFor(player.id)}</select></label><label class="pc-select">对比球员<select data-player-compare-select><option value=""${compare ? '' : ' selected'}>请选择球员</option>${optionsFor(compare?.id)}</select></label></div></header><div class="pc-identities">${identity(player, 'pc-first')}${identity(compare, 'pc-second')}</div><div class="pc-panel"><nav class="pc-tabs" aria-label="对比分类">${tabs.map(([key, label]) => `<button type="button" data-player-compare-tab="${key}" class="${tab === key ? 'pc-active' : ''}" aria-pressed="${tab === key}">${label}</button>`).join('')}</nav>${tab === 'overview' ? overview(player, compare) : tab === 'attributes' ? attributeTable(player, compare) : tab === 'stats' ? statTable(player, compare) : positionsTable(player, compare)}</div></section>`
 }

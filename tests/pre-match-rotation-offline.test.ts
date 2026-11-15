@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { restoreActiveEngine } from '../src/game/actions.ts'
 import { conditionSettleMs } from '../src/game/condition.ts'
 import { FORMATIONS } from '../src/game/data/formations.ts'
+import { DETAILED_POSITIONS, DETAILED_TO_POSITION } from '../src/game/detailed-positions.ts'
 import { personKey } from '../src/game/injury.ts'
 import { emptyAutoSubs } from '../src/game/match/management.ts'
 import { createInitialGame } from '../src/game/state.ts'
@@ -17,9 +18,14 @@ function fixture() {
   const tired = game.roster.find(item => item.id === starter.playerId)!
   const fresh = game.roster.find(item => item.id === game.lineup.bench[0])!
   for (const player of game.roster) { player.condition = 100; player.recoveryAt = now }
-  for (const id of game.lineup.bench) game.roster.find(item => item.id === id)!.positions[slot.position] = 0
+  for (const id of game.lineup.bench) {
+    const player = game.roster.find(item => item.id === id)!
+    player.positions[slot.position] = 0
+    player.detailedPositions = Object.fromEntries(DETAILED_POSITIONS.map(d => [d, player.positions[DETAILED_TO_POSITION[d]]]))
+  }
   tired.condition = 30
   fresh.positions = { GK: 0, CB: 0, W: 0, CM: 0, ST: 0, [slot.position]: 100 }
+  fresh.detailedPositions = Object.fromEntries(DETAILED_POSITIONS.map(d => [d, fresh.positions[DETAILED_TO_POSITION[d]]]))
   const otherStarter = game.lineup.starters.find(item => item.playerId !== tired.id)!
   const otherBench = game.lineup.bench[1]
   game.autoSubs = { ...emptyAutoSubs(), preMatchStaminaBelow: 70, timed: [

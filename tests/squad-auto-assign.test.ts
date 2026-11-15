@@ -105,9 +105,9 @@ describe('战术页自动分配', () => {
     const { roster, formationId, tactics } = setup()
     const outfield = roster.filter((player) => player.positions.GK <= 0)
     const [a, b] = outfield
-    for (const player of outfield) player.positions.ST = 0
+    for (const player of outfield) { player.positions.ST = 0; player.detailedPositions = { ...player.detailedPositions, ST: 0 } }
     // a 的 CA 更高但前锋熟练度只有 79；b 的前锋熟练度刚好 80。两人别的位置都不会，只能争前锋位。
-    for (const player of [a, b]) { player.positions.CB = 0; player.positions.W = 0; player.positions.CM = 0 }
+    for (const player of [a, b]) { player.positions.CB = 0; player.positions.W = 0; player.positions.CM = 0; delete player.detailedPositions }
     a.positions.ST = 79
     b.positions.ST = 80
     for (const mode of ['best', 'half'] as const) {

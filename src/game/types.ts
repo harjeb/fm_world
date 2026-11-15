@@ -1,3 +1,5 @@
+import type { ScoutReport } from './scouting.ts'
+
 export const FIELD_ATTRIBUTES = [
   'passing',
   'firstTouch',
@@ -245,6 +247,7 @@ export type Player = {
   pa: number
   positions: PositionTable
   detailedPositions?: DetailedPositionTable
+  detailedPositionsVersion?: 1
   personality: Personality
   traitId: TraitId
   style: StyleId
@@ -257,6 +260,7 @@ export type Player = {
   baseAttrs: Attributes
   basePositions: PositionTable
   baseDetailedPositions?: DetailedPositionTable
+  baseDetailedPositionsVersion?: 1
   basePersonality: Personality
   /** 第一次换上球员卡时记下的原始技能；此前 skills 本身就是原始技能。 */
   baseSkills?: SkillId[]
@@ -324,6 +328,7 @@ export type PlayerCard = {
   attrs: Attributes
   positions: PositionTable
   detailedPositions?: DetailedPositionTable
+  detailedPositionsVersion?: 1
   personality: Personality
   skills: SkillId[]
   skillTiers?: Partial<Record<SkillId, SkillTier>>
@@ -1134,6 +1139,7 @@ export type PairChemistry = {
 export type Chemistry = Record<string, PairChemistry>
 
 export type GameState = {
+  scoutReports?: ScoutReport[]
   /** 全俱乐部共用的回收培养点；旧档不存在时为 0。 */
   trainingPoints?: number
   version: number

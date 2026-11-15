@@ -130,7 +130,10 @@ describe('联机服务器 / 账号 / SSE', () => {
     const put = await fetch(`${base}/api/game`, { method: 'PUT', headers, body: JSON.stringify({ game: valid, baseRevision: account.revision }) })
     expect(put.status).toBe(200)
     const saved = await (await fetch(`${base}/api/game`, { headers })).json() as { game: Record<string, any> }
-    expect(saved.game.cards).toEqual([card])
+    expect(saved.game.cards).toHaveLength(1)
+    expect(saved.game.cards[0]).toMatchObject(card)
+    expect(saved.game.cards[0].detailedPositionsVersion).toBe(1)
+    expect(saved.game.cards[0].detailedPositions).toBeDefined()
   })
 
   it('服务器重启后把旧存档已确认的培养成果收进库存', async () => {

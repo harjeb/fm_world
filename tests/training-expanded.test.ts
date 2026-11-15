@@ -147,7 +147,7 @@ describe('expanded training courses', () => {
     expect(({ '一般': 0.7, '成功': 1, '大成功': 1.3, '完美成功': 1.6 } as Record<string, number>)[plans[0].quality!.label]).toBe(plans[0].quality!.multiplier)
   })
 
-  it('体力 60 以上不出一般，大成功 10%、完美成功 2%，其余是成功', () => {
+  it('体力 60 以上不出一般，大成功 8%、完美成功 1%，其余是成功', () => {
     const { game, players, sessions } = setup()
     for (const fatigue of [0, 20, 40]) {
       sessions[0].fatigue = fatigue
@@ -158,9 +158,9 @@ describe('expanded training courses', () => {
         counts[quality.label] = (counts[quality.label] ?? 0) + 1
       }
       expect(counts['一般'], `fatigue ${fatigue}`).toBeUndefined()
-      expect(Math.abs(counts['大成功'] / 4096 - 0.1), `fatigue ${fatigue}`).toBeLessThan(0.02)
-      expect(Math.abs(counts['完美成功'] / 4096 - 0.02), `fatigue ${fatigue}`).toBeLessThan(0.01)
-      expect(Math.abs(counts['成功'] / 4096 - 0.88), `fatigue ${fatigue}`).toBeLessThan(0.03)
+      expect(Math.abs(counts['大成功'] / 4096 - 0.08), `fatigue ${fatigue}`).toBeLessThan(0.02)
+      expect(Math.abs(counts['完美成功'] / 4096 - 0.01), `fatigue ${fatigue}`).toBeLessThan(0.01)
+      expect(Math.abs(counts['成功'] / 4096 - 0.91), `fatigue ${fatigue}`).toBeLessThan(0.03)
     }
   })
 

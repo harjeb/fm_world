@@ -950,11 +950,12 @@ button.nm-recent:hover { background: var(--raised); }
 .profile-history { padding: 12px 16px 14px; border-top: 1px solid var(--line); }
 .profile-history .log-row { padding-left: 0; padding-right: 0; }
 .pos-map { display: grid; gap: 8px; justify-items: center; }
-.pos-map svg { width: 100%; max-width: 196px; }
+.pos-map svg { width: 100%; max-width: 300px; }
 .pm-pitch { fill: #1b432c; }
 .pm-line { fill: none; stroke: rgba(255, 255, 255, 0.28); stroke-width: 0.6; }
 .pm-dot { stroke: rgba(8, 12, 10, 0.55); stroke-width: 0.8; }
 .pm-value { fill: #10141a; font: 700 7.5px var(--font-num); }
+.pm-1 + .pm-value { fill: #fff; }
 .pm-label { fill: #fff; font: 500 6.5px var(--font); }
 circle.pm-1 { fill: #4b5563; }
 circle.pm-2 { fill: var(--h1); }
@@ -1806,3 +1807,15 @@ circle.pm-5 { fill: var(--h6); }
 @media (max-width: 760px) {
   .chat-drawer { width: 100vw; border-left: 0; }
 }
+
+.scout-section, .scout-panel { margin: 1rem 0; padding: 1rem; border: 1px solid var(--raised); border-radius: 8px; }
+.scout-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.scout-report { padding: .75rem 0; border-top: 1px solid var(--raised); }
+.scout-delete { margin-inline-start: .75rem; }
+.scout-report p { margin: .4rem 0; }
+.scout-attrs { display: flex; flex-wrap: wrap; gap: .5rem 1rem; }
+.scout-ratings { display: grid; gap: 4px; }
+.scout-stars { display: inline-flex; letter-spacing: 1px; }
+.scout-star { color: var(--line); }
+.scout-star.full { color: #e6b856; }
+.scout-star.half { color: transparent; background: linear-gradient(90deg, #e6b856 50%, var(--line) 50%); background-clip: text; }

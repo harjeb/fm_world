@@ -9,7 +9,7 @@ import { wageForPlayer, worldTransferTeams } from './world.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 import { closeFinishedTraining, destroyPlayerCards, untrainedPlayer } from './cards.ts'
 import { negotiationDemands, negotiationFailure, negotiationRoll, negotiationTerms, type NegotiationAnswers, type NegotiationDemands } from './negotiation.ts'
-import { isOnMarketToday } from './market-window.ts'
+import { isLocalFreeAgentAvailable } from './free-market.ts'
 
 type Market = NonNullable<GameState['market']>
 type Listing = Market['listings'][number]
@@ -268,7 +268,7 @@ export function signFreeAgent(
   if (!player) return fail('球员不存在')
   if (!transferWindowOpen(game)) return fail('转会窗口已关闭')
   // 挂牌日程是隐藏的：只说“现在不在市场”，不告诉玩家具体哪天挂牌。
-  if (!isOnMarketToday(game, player)) return fail(`${player.name} 现在不在市场，过些天再来看看`)
+  if (!isLocalFreeAgentAvailable(game, player, Date.now())) return fail(`${player.name} 现在不在市场，过些天再来看看`)
   const asking = freeAgentAsking(game, player)
   const result = negotiate(game, player, offer, answers, asking, game.seed)
   if (!result.ok) return result
@@ -354,7 +354,7 @@ export function buyFreeAgent(game: GameState, playerId: string): MarketOutcome {
   const price = bestMarketValue(game, player)
   if (!positive(price)) return fail('无效的价格')
   if (!transferWindowOpen(game)) return fail('转会窗口已关闭')
-  if (!isOnMarketToday(game, player)) return fail(`${player.name} 现在不在市场，过些天再来看看`)
+  if (!isLocalFreeAgentAvailable(game, player, Date.now())) return fail(`${player.name} 现在不在市场，过些天再来看看`)
   const economy = economyOf(game)
   if (!economy || !validBalance(economy.balance)) return fail('余额数据无效')
   if (economy.balance < price) return fail('余额不足')

@@ -22,7 +22,7 @@ import { advanceLeagueRealtime } from '../src/game/realtime.ts'
 import { validateAutoSubPlan } from '../src/game/match/management.ts'
 import type { ActiveMatchSave, GameState, PlayerCard } from '../src/game/types.ts'
 import { LEAGUE_REALTIME_MS, LOGIC_MATCH_SECONDS } from '../src/game/match/time.ts'
-import { absorbFreeAgents, aiClubIdOf, auctionRaiseFee, leadingBid, minimumBid, placeAIBid, placeBid, settleAuctions, type AIBidder, type Auction, type AuctionResult, type BidResult, type FreeMarket } from '../src/game/auction.ts'
+import { absorbFreeAgents, aiClubIdOf, auctionRaiseFee, committedFunds, leadingBid, minimumBid, placeAIBid, placeBid, settleAuctions, type AIBidder, type Auction, type AuctionResult, type BidResult, type FreeMarket } from '../src/game/auction.ts'
 import { isOnMarketToday } from '../src/game/market-window.ts'
 import { lineupRating } from '../src/game/club-rating.ts'
 import { AI_SQUAD_LIMIT, advanceAIClub, aiBidFor, createAIClub, playerValue, recordAISigning, seedAIClubs } from '../src/game/ai-club.ts'
@@ -52,6 +52,8 @@ import { isMatchPlanId, matchPlanConditionFactor } from '../src/game/pes/match-p
 import { simulateAITrainingSession } from '../src/game/ai-training.ts'
 import { settleSquadEnergy } from '../src/game/energy.ts'
 import { TRAINING_ENERGY_COST } from '../src/game/training.ts'
+import { SCOUT_LEVELS, startScouting, deleteScoutReport, visibleScoutReports, scoutKeepsOnMarket } from '../src/game/scouting.ts'
+import { migrateGamePositions, migratePlayerPositions } from '../src/game/detailed-positions.ts'
 import {
   CHAT_COOLDOWN_MS,
   CHAT_HISTORY_LIMIT,
@@ -239,6 +241,18 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         : elevenAITeam(team, sharedWorld.seed)
     }
   }
+  // 统一迁移账号与共享世界的实时球员；已锁定的比赛任务、回放和杯赛开赛快照不改。
+  for (const account of db.accounts) if (account.game && migrateGamePositions(account.game)) {
+    account.revision++
+    account.lastUserRevision = account.revision
+    persistAccount(account)
+  }
+  for (const player of [
+    ...Object.values(sharedWorld.teams ?? {}).flatMap(team => team.players),
+    ...sharedWorld.freeStars, ...sharedWorld.reserveStars,
+    ...Object.values(sharedWorld.aiClubs ?? {}).flatMap(club => club.signings ?? []),
+    ...Object.values(sharedWorld.world.transferTeams ?? {}).flatMap(team => team.players),
+  ]) migratePlayerPositions(player)
   // 以前 AI 买进来的球员没排进首发（只修“不合法”的阵容），一直坐在名单外：无主的 AI 球队按名单重排一次。
   // 有教练的球队阵容是教练自己排的，不动。
   refreshAILineups(Object.entries(sharedWorld.teams ?? {}).filter(([clubId]) => !sharedWorld.owners[clubId]).map(([, team]) => team))
@@ -422,7 +436,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const anchor = { world: sharedWorld.world, createdAt: sharedWorld.startedAt }
     const committed = market.auctions.reduce((sum, item) => (item.bids.length && leadingBid(item).accountId === `ai:${club.id}` ? sum + leadingBid(item).amount : sum), 0)
     const open = market.pool
-      .filter((player) => !market.auctions.some((auction) => auction.playerId === player.id) && isOnMarketToday(anchor, player, nowMs))
+      .filter((player) => !market.auctions.some((auction) => auction.playerId === player.id) && sharedAvailable(player, nowMs))
       .sort((a, b) => playerValue(b) - playerValue(a))
       .slice(0, 30)
     for (const player of open) {
@@ -868,12 +882,34 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
    * 全服自由市场每个游戏日补到 200 人：先算当天挂牌的球星和留在市场上的球员，不足的用当天生成的随机球员补；
    * 前几天没人要的随机球员销毁（正在竞拍的等竞拍结束）。每个游戏日只做一次。
    */
+  function sharedScoutKeeps(playerId: string, t: number): boolean {
+    return db.accounts.some(account => account.game && scoutKeepsOnMarket(account.game, playerId, t))
+  }
+
+  function sharedAvailable(player: Player, t: number): boolean {
+    const anchor = { world: sharedWorld.world, createdAt: sharedWorld.startedAt }
+    const kept = sharedScoutKeeps(player.id, t)
+    return (player.marketDay === undefined || player.marketDay >= marketDayOf(anchor, t) || kept) &&
+      (kept || isOnMarketToday(anchor, player, t))
+  }
+
   function refreshSharedFreeMarket(): void {
     const anchor = { world: sharedWorld.world, createdAt: sharedWorld.startedAt }
     const day = marketDayOf(anchor, now())
-    if (sharedWorld.freeMarketDay === day) return
+    const t = now()
+    const busy = (id: string) => market.auctions.some((auction) => auction.playerId === id) || sharedScoutKeeps(id, t)
+    if (sharedWorld.freeMarketDay === day) {
+      const pool = market.pool.filter(player => player.marketDay === undefined || player.marketDay >= day || busy(player.id))
+      if (pool.length !== market.pool.length) {
+        market.pool = pool
+        market.version++
+        persistMarket()
+        broadcastMarket()
+      }
+      return
+    }
     sharedWorld.freeMarketDay = day
-    const result = refreshFreeMarket({ pool: market.pool, anchor, now: now(), seed: sharedWorld.seed, busy: (id) => market.auctions.some((auction) => auction.playerId === id) })
+    const result = refreshFreeMarket({ pool: market.pool, anchor, now: t, seed: sharedWorld.seed, busy })
     if (result.changed) {
       market.pool = result.pool
       market.version += 1
@@ -882,8 +918,21 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     } else persistWorld()
   }
 
+  let visibleMarketIds: string | undefined
+  function syncMarketVisibility(): void {
+    const t = now()
+    const ids = market.pool.filter(p => market.auctions.some(a => a.playerId === p.id) || sharedAvailable(p, t)).map(p => p.id).sort().join('\n')
+    if (visibleMarketIds !== undefined && visibleMarketIds !== ids) {
+      market.version++
+      persistMarket()
+      broadcastMarket()
+    }
+    visibleMarketIds = ids
+  }
+
   function settleDueAuctions(): void {
     refreshSharedFreeMarket()
+    syncMarketVisibility()
     if (!market.auctions.some((auction) => auction.endsAt <= now())) return
     const results = settleAuctions(market, (id) => db.accounts.find((account) => account.id === id)?.game, now(), aiBidder)
     if (!results.length) return
@@ -937,7 +986,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     settleDueAuctions()
     const player = market.pool.find((item) => item.id === playerId)
     const alreadyBidding = market.auctions.some((item) => item.playerId === playerId)
-    if (player && !alreadyBidding && !isOnMarketToday({ world: account.game.world, createdAt: account.game.createdAt }, player)) {
+    if (player && !alreadyBidding && !sharedAvailable(player, now())) {
       return { ok: false, error: `${player.name} 现在不在市场，过些天再来看看` }
     }
     const result = placeBid(market, account.game, account.id, playerId, Number(amount), now())
@@ -1285,6 +1334,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   function publicGame(account: Account): GameState {
     const game = structuredClone(account.game)
     delete (game as GameState & { recycledCardIds?: string[] }).recycledCardIds
+    // Pending reports are deliberately incomplete on the wire, although GameState's
+    // offline type describes the complete, server-side report.
+    game.scoutReports = visibleScoutReports(account.game, now()) as GameState['scoutReports']
     for (const team of game.aiTeams) for (const player of team.players) {
       delete (player as Partial<Player>).condition
       delete (player as Partial<Player>).energy
@@ -1726,7 +1778,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   function withSharedMarket<T extends { market: { freeAgents: unknown[] } }>(view: T, account: Account): T {
     const anchor = { world: account.game.world, createdAt: account.game.createdAt }
     const onAuctionNow = (id: string) => market.auctions.some((item) => item.playerId === id)
-    view.market.freeAgents = market.pool.filter((player) => onAuctionNow(player.id) || isOnMarketToday(anchor, player)).map((player) => {
+    view.market.freeAgents = market.pool.filter((player) => onAuctionNow(player.id) || sharedAvailable(player, now())).map((player) => {
       const auction = market.auctions.find((item) => item.playerId === player.id)
       return {
         player: playerView(player, account.game, now()),
@@ -1787,7 +1839,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       settleDueAuctions()
       const anchor = { world: sharedWorld.world, createdAt: sharedWorld.world.calendarStartAt ?? now() }
       const onAuction = (id: string) => market.auctions.some((item) => item.playerId === id)
-      json(res, 200, { ...marketPayload(), pool: market.pool.filter((player) => onAuction(player.id) || isOnMarketToday(anchor, player)) })
+      json(res, 200, { ...marketPayload(), pool: market.pool.filter((player) => onAuction(player.id) || sharedAvailable(player, now())) })
       return
     }
 
@@ -2138,10 +2190,87 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return
     }
 
+    if (url.pathname === '/api/scouting/reports' && req.method === 'GET') {
+      const serverTime = now()
+      return json(res, 200, { reports: visibleScoutReports(account.game, serverTime), serverTime })
+    }
+
     if (url.pathname === '/api/game' && req.method === 'GET') {
       advanceAccount(account)
       json(res, 200, { game: publicGame(account), revision: account.revision, serverTime: now() })
       return
+    }
+
+    if (url.pathname === '/api/scouting/delete' && req.method === 'POST') {
+      const body = await readJsonBody(req)
+      if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
+      advanceAccount(account)
+      if (typeof body.reportId !== 'string' || !body.reportId || !Number.isSafeInteger(body.baseRevision)) return json(res, 400, { error: '报告或版本无效' })
+      if (body.baseRevision !== account.revision) return json(res, 409, { error: '存档已变化，请刷新报告', revision: account.revision, game: publicGame(account) })
+      const game = structuredClone(account.game)
+      const marketReport = game.scoutReports?.find(r => r.id === body.reportId)?.source === 'market'
+      const outcome = deleteScoutReport(game, body.reportId, now())
+      if (!outcome.ok) return json(res, 400, { error: outcome.error, revision: account.revision, game: publicGame(account) })
+      account.game = game
+      account.revision++
+      account.lastUserRevision = account.revision
+      account.updatedAt = now()
+      pendingAccountCommits.set(account.id, Symbol('scouting-delete-commit'))
+      persistAccount(account)
+      if (!await confirmAccountCommit(account)) return json(res, 503, { error: '服务器保存失败，操作状态未确认，请稍后刷新存档检查' })
+      broadcast(account, String(req.headers['x-fm-client'] ?? '').slice(0, 128))
+      if (marketReport) syncMarketVisibility()
+      return json(res, 200, { ok: true, revision: account.revision, game: publicGame(account), serverTime: now() })
+    }
+
+    if (url.pathname === '/api/scouting/start' && req.method === 'POST') {
+      const body = await readJsonBody(req)
+      if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
+      advanceAccount(account)
+      const { playerId, source, clubId, level } = body
+      if (typeof playerId !== 'string' || !playerId.trim() || !['club', 'transfer', 'market'].includes(String(source)) ||
+          (clubId !== undefined && (typeof clubId !== 'string' || !clubId.trim())) ||
+          ((source === 'club' || source === 'transfer') && (typeof clubId !== 'string' || !clubId.trim())) ||
+          (source === 'market' && clubId !== undefined)) {
+        return json(res, 400, { error: '球探目标无效' })
+      }
+      const id = typeof clubId === 'string' ? clubId.trim() : undefined
+      let player: Player | undefined
+      if (source === 'club') {
+        if (id !== ownedClubId(account) && sharedWorld.world.clubs.some(club => club.id === id)) {
+          const owner = id && sharedWorld.owners[id]
+          player = owner ? db.accounts.find(other => other.id === owner)?.game.roster.find(p => p.id === playerId) : sharedWorld.teams?.[id!]?.players.find(p => p.id === playerId)
+        }
+      } else if (source === 'transfer') {
+        const offer = aiTransferOffers(transferSnapshot(account)).find(item => item.team.id === id && item.player.id === playerId)
+        if (offer && id !== ownedClubId(account) && !db.accounts.some(other => other.game.roster.some(p => p.id === playerId))) player = untrainedPlayer(offer.player)
+      } else {
+        settleDueAuctions()
+        const t = now()
+        const candidate = market.pool.find(p => p.id === playerId)
+        if (candidate && (market.auctions.some(a => a.playerId === playerId && a.endsAt > t) || sharedAvailable(candidate, t))) player = untrainedPlayer(candidate)
+      }
+      if (!player || account.game.roster.some(p => p.id === playerId)) return json(res, 400, { error: '球员不在指定的球探目标中' })
+      const fee = SCOUT_LEVELS.find(item => item.level === level)?.fee
+      if (fee !== undefined && economyOf(account.game).balance - committedFunds(market.auctions, account.id) < fee) {
+        return json(res, 400, { error: '可用余额不足，其他领先的竞拍已占用部分资金' })
+      }
+      const game = structuredClone(account.game)
+      const outcome = startScouting(game, player, { source: source as 'club' | 'transfer' | 'market', ...(id ? { clubId: id } : {}) }, level, now())
+      if (!outcome.ok) return json(res, 400, { error: outcome.error, revision: account.revision, game: publicGame(account) })
+      // Scope IDs to the authoritative account; world seeds and clocks can be shared.
+      if (outcome.report) outcome.report.id = `scout-${account.id}-${outcome.report.id}`
+      account.game = game
+      account.revision++
+      account.lastUserRevision = account.revision
+      account.updatedAt = now()
+      pendingAccountCommits.set(account.id, Symbol('scouting-commit'))
+      persistAccount(account)
+      if (!await confirmAccountCommit(account)) return json(res, 503, { error: '服务器保存失败，操作状态未确认，请稍后刷新存档检查' })
+      broadcast(account, String(req.headers['x-fm-client'] ?? '').slice(0, 128))
+      if (source === 'market') syncMarketVisibility()
+      // Never return outcome.report: it contains the complete, private snapshot.
+      return json(res, 200, { ok: true, revision: account.revision, game: publicGame(account), serverTime: now() })
     }
 
     if (['/api/cards/recycle', '/api/cards/lock', '/api/training/start'].includes(url.pathname) && req.method === 'POST') {
@@ -2234,7 +2363,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       // （AI 训练、共享赛程、自动结算），保存后服务端会重新拉取这些共享数据。
       const serverAdvanced = baseRevision >= (account.lastUserRevision ?? account.revision)
       const onlyLeagueProgress = account.game.activeMatch?.context.isLeague && serverAdvanced && baseRevision < account.revision
-      if (!Number.isInteger(baseRevision) || (baseRevision !== account.revision && !serverAdvanced && !onlyLeagueProgress)) {
+      if (!Number.isInteger(baseRevision) || baseRevision > account.revision || (baseRevision !== account.revision && !serverAdvanced && !onlyLeagueProgress)) {
         json(res, 409, { error: '存档已在另一设备更新', revision: account.revision, game: publicGame(account) })
         return
       }
@@ -2248,6 +2377,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const recycledIds = new Set(recycled)
       if ((body.game.cards ?? []).some(card => recycledIds.has(card.id))) return json(res, 409, { error: '存档包含已回收的球员卡，请重新加载', revision: account.revision, game: publicGame(account) })
       incomingPrivate.recycledCardIds = [...recycled]
+      body.game.scoutReports = structuredClone(account.game.scoutReports)
+      ;(body.game as GameState & { scoutReportSeq?: number }).scoutReportSeq = (account.game as GameState & { scoutReportSeq?: number }).scoutReportSeq
       body.game.trainingPoints = account.game.trainingPoints
       body.game.cardSeq = Math.max(body.game.cardSeq ?? 0, account.game.cardSeq ?? 0)
       const oldCards = new Map((account.game.cards ?? []).map(card => [card.id, card]))
@@ -2345,6 +2476,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         if (card.customName === undefined) delete preserved.customName
         return preserved
       })
+      // Cards are authoritative for existing builds; migrate after restoring them so
+      // missing equipped copies are recovered from the canonical card.
+      migrateGamePositions(body.game)
       economyOf(body.game)
       // 其他教练的球员不能从 AI 购买入口直接转走。
       const incomingGame: GameState = body.game

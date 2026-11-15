@@ -339,6 +339,12 @@ function skipCalendar(game: GameState, delta: number, now: number): { ok: boolea
   pruneChemistry(game.chemistry, now, game.season.gameDayMs)
   shiftEnergyClock(game, delta)
   shiftConditionClock([...game.roster, ...game.aiTeams.flatMap((team) => team.players)], delta)
+  // 未完成的报告及市场宽限期内的报告随游戏时间推进；过期历史报告保持原样。
+  for (const report of game.scoutReports ?? []) {
+    if (report.readyAt <= now && !(report.source === 'market' && now < report.readyAt + game.season.gameDayMs)) continue
+    report.startedAt -= delta
+    report.readyAt -= delta
+  }
   // 报价的回复期限也按游戏日算：时间往前跳，期限跟着往前挪。
   for (const offer of game.transferOffers ?? []) {
     if (offer.status !== 'pending') continue

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { FORMATIONS } from '../src/game/data/formations.ts'
+import { DETAILED_POSITIONS, DETAILED_TO_POSITION } from '../src/game/detailed-positions.ts'
 import { createInitialGame } from '../src/game/state.ts'
 import { autoAssignLineup, validateLineup, type AutoAssignContext, type AutoAssignMode } from '../src/game/squad.ts'
 import type { Lineup, Player, Position } from '../src/game/types.ts'
@@ -18,6 +19,7 @@ function squad(mainStrength = 1, backupStrength = 0.5) {
       player.condition = 100
       for (const key of Object.keys(player.attrs) as (keyof Player['attrs'])[]) player.attrs[key] *= strength
       for (const position of Object.keys(player.positions) as Position[]) player.positions[position] = position === slot.position ? 100 : 0
+      player.detailedPositions = Object.fromEntries(DETAILED_POSITIONS.map(d => [d, player.positions[DETAILED_TO_POSITION[d]]]))
       roster.push(player)
       if (kind === 'main') lineup.starters.push({ slotId: slot.id, playerId: player.id, role: slot.defaultRole })
     }

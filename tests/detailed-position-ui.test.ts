@@ -34,6 +34,8 @@ describe('细分位置界面', () => {
   it('培养选择细分位置并实际只提升选中位置', () => {
     const player = game.roster.find(item => item.positions.GK === 0)!
     player.positions.W = player.basePositions.W = 0
+    player.detailedPositions = { DL: 0, DR: 0 }
+    player.baseDetailedPositions = { DL: 0, DR: 0 }
     const session = createTrainingSession(player, 123)
     delete session.scheduleVersion
     game.training[player.id] = session

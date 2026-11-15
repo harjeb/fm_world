@@ -4,7 +4,7 @@ import { addTrainedCard, equipCard, untrainedPlayer } from '../src/game/cards.ts
 import { createTrainingSession, performTrainingAction } from '../src/game/training.ts'
 import { pickExchangeOpponent } from '../src/game/actions.ts'
 import { trainingOptions } from '../src/game/training-calendar.ts'
-import { DETAILED_POSITIONS, DETAILED_TO_POSITION, detailedPositionValue, readDetailedPositions, slotPositionValue } from '../src/game/detailed-positions.ts'
+import { DETAILED_POSITIONS, DETAILED_TO_POSITION, inferDetailedPositions, detailedPositionForSlot, detailedPositionValue, readDetailedPositions, slotPositionValue } from '../src/game/detailed-positions.ts'
 import { FORMATIONS } from '../src/game/data/formations.ts'
 import { emptyAutoSubs, executeTeamAutoSubs } from '../src/game/match/management.ts'
 import { teamInputFromLineup } from '../src/game/match/setup.ts'
@@ -21,11 +21,16 @@ function fixture() {
 }
 
 describe('detailed positions', () => {
-  it('reads legacy positions without inventing sides, clamps and preserves GK', () => {
+  it('reads missing legacy positions from coarse values, clamps and preserves GK', () => {
     const { player } = fixture()
     delete player.detailedPositions
     const table = readDetailedPositions(player)
     for (const pos of DETAILED_POSITIONS) expect(table[pos]).toBe(player.positions[DETAILED_TO_POSITION[pos]])
+    for (const pos of ['GK', 'CB', 'W', 'CM', 'ST'] as const) {
+      const peak = Math.max(...DETAILED_POSITIONS.filter(p => DETAILED_TO_POSITION[p] === pos).map(p => table[p]))
+      if (player.positions[pos] > 0 || pos === 'GK') expect(peak).toBe(player.positions[pos])
+      else expect(peak).toBeLessThan(80)
+    }
     player.detailedPositions = { DL: 120, DR: -5, GK: 88 }
     expect(detailedPositionValue(player, 'DL')).toBe(100)
     expect(detailedPositionValue(player, 'DR')).toBe(0)
@@ -63,7 +68,7 @@ describe('detailed positions', () => {
     expect(player.detailedPositions).toEqual({ DL: 12, DR: 98 })
   })
 
-  it('maps every formation slot to its legacy coarse value, then respects side and depth', () => {
+  it('maps every formation slot to its inferred detail, then respects side and depth', () => {
     const { player } = fixture()
     delete player.detailedPositions
     player.positions.W = 23

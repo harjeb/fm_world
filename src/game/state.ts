@@ -17,6 +17,7 @@ import { ensureCards } from './cards.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION, upgradeBurstAttr, upgradeNames, upgradeStarTraits } from './names.ts'
 import { ensurePve } from './pve.ts'
 import { pruneChemistry } from './chemistry.ts'
+import { migrateGamePositions } from './detailed-positions.ts'
 
 // 游戏改名后仍沿用旧键，改了已有存档就读不到了。
 export const SAVE_KEY = 'fm-seven-a-side-save-v3'
@@ -156,6 +157,7 @@ export function loadGame(): GameState | null {
       // 越位规则固定开启：旧存档里关掉过的也改回来。
       parsed.settings = { ...(parsed.settings ?? {}), offside: true }
     }
+    const positionsMigrated = migrateGamePositions(parsed)
     // 一天一轮的旧赛程换成一天两轮（北京时间 12:00、20:00），当前该踢的轮次不变。
     const rescheduled = migrateGameSchedule(parsed, Date.now())
     // 7 人制存档迁移到 11 人制：补随机球员、换阵型（只在还有旧阵型时动手）。
@@ -173,7 +175,7 @@ export function loadGame(): GameState | null {
     const pveAdded = ensurePve(parsed)
     parsed.ui = parsed.ui ?? { screen: 'home' }
     const chemistryPruned = pruneChemistry(parsed.chemistry, Date.now(), parsed.season.gameDayMs)
-    if (chemistryPruned || rescheduled || elevenUpgraded || repaired || aiLineupsRefreshed || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || pveAdded) saveGame(parsed)
+    if (positionsMigrated || chemistryPruned || rescheduled || elevenUpgraded || repaired || aiLineupsRefreshed || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || pveAdded) saveGame(parsed)
     return parsed
   } catch {
     return null

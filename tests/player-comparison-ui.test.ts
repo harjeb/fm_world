@@ -1,9 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
 import { renderPlayerComparison, type CompareTab } from '../src/ui/screens/player-comparison.ts'
 import { positionMap } from '../src/ui/components.ts'
+import { game as originalGame, setGame } from '../src/ui/state.ts'
 
-const players = () => createInitialGame(710).roster
+const players = () => {
+  const game = createInitialGame(710)
+  setGame(game)
+  return game.roster
+}
+
+afterEach(() => setGame(originalGame))
 
 describe('球员对比', () => {
   it('renders selection, escaped identities and all tabs with active state', () => {
@@ -32,7 +39,7 @@ describe('球员对比', () => {
     expect(comparison).toContain('<th>左后卫</th><td>91</td>')
     expect(comparison).toContain('<th>右后卫</th><td>13</td>')
   })
-  it('supports no selection, self comparison, and a selected player absent from candidates', () => {
+  it('supports no selection, self comparison, and a selected teammate absent from supplied candidates', () => {
     const [a, b] = players()
     expect(renderPlayerComparison(a, undefined, [], 'overview')).toContain('value="" selected')
     expect(renderPlayerComparison(a, a, [a], 'overview')).toContain(`value="${a.id}" selected`)
@@ -42,6 +49,8 @@ describe('球员对比', () => {
     const [a, b] = players()
     a.positions.GK = 0
     b.positions.GK = 1
+    a.detailedPositions = { ...a.detailedPositions, GK: 0 }
+    b.detailedPositions = { ...b.detailedPositions, GK: 1 }
     a.attrs.passing = 1500
     b.attrs.passing = 750
     const attrs = renderPlayerComparison(a, b, [b], 'attributes')

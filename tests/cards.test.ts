@@ -201,6 +201,7 @@ describe('球员卡库存', () => {
     finishTraining(game, player.id, 714)
     const [card] = playerCards(game, player.id)
     card.positions[slot.position] = 0
+    card.detailedPositions = Object.fromEntries(Object.keys(card.detailedPositions ?? {}).map(pos => [pos, 0]))
     const lineup = structuredClone(game.lineup)
     expect(equipPlayerCard(game, player.id, card.id)).toEqual({ ok: true })
     expect(player.positions[slot.position]).toBe(0)

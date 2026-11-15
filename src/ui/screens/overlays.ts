@@ -1,6 +1,6 @@
 import type { Player } from '../../game/types.ts'
 import { ATTR_GROUPS } from '../../game/data/attributes.ts'
-import { bestMarketValue } from '../../game/market.ts'
+import { aiTransferOffers, bestMarketValue } from '../../game/market.ts'
 import { equippedCard, playerCards, untrainedPlayer } from '../../game/cards.ts'
 import { attrRating, initialDisplayCA, mainAttrsFor } from '../../game/rating.ts'
 import { MAIN_FIELD_ATTRS, MAIN_GK_ATTRS } from '../../game/scale.ts'
@@ -20,6 +20,7 @@ import { chemistryPartners } from '../chemistry.ts'
 import { comparisonCandidates, renderPlayerComparison } from './player-comparison.ts'
 import { publicPlayerPanel } from '../club-view.ts'
 import { renderPlayerPerformance } from './player-performance.ts'
+import { renderRelativePositionRatings, renderScoutControls } from './scouting.ts'
 
 function cardRows(player: Player): string {
   const cards = playerCards(game, player.id)
@@ -62,23 +63,26 @@ function statsBlock(player: Player): string {
   </section>`
 }
 
-function detailNavigation(): string {
-  const tabs = [['profile', '球员档案'], ['performance', '球员表现'], ['compare', '球员对比']] as const
-  return `<nav class="player-detail-nav" aria-label="球员详情页面">${tabs.map(([view, label]) => `<button type="button" data-player-detail-view="${view}" class="${ui.playerDetailView === view ? 'active' : ''}" aria-pressed="${ui.playerDetailView === view}">${label}</button>`).join('')}</nav>`
+function detailNavigation(owned: boolean): string {
+  const tabs = ([['profile', '球员档案'], ['performance', '球员表现'], ['compare', '球员对比']] as const).filter(([view]) => owned || view !== 'compare')
+  const active = !owned && ui.playerDetailView === 'compare' ? 'profile' : ui.playerDetailView
+  return `<nav class="player-detail-nav" aria-label="球员详情页面">${tabs.map(([view, label]) => `<button type="button" data-player-detail-view="${view}" class="${active === view ? 'active' : ''}" aria-pressed="${active === view}">${label}</button>`).join('')}</nav>`
 }
 
 export function renderDetailOverlay(): string {
   if (!ui.detailPlayerId) return ''
   // 联机转会名单以服务器报价为准；即使本赛区缓存里也有同一名球员，也不能显示过期的装备卡属性。
-  const offered = isOnlineMode() && ui.screen === 'transfer' && ui.transferTab === 'ai' && !game.roster.some((item) => item.id === ui.detailPlayerId)
-    ? aiTransferMarket.offers.find((item) => item.player.id === ui.detailPlayerId)?.player : undefined
-  if (offered) return `<div class="overlay" data-action="close-detail"><div class="modal profile" data-stop="true" role="dialog" aria-modal="true" aria-label="${esc(offered.name)} 球员详情"><button class="modal-close" data-action="close-detail" aria-label="关闭">${icon('close', 16)}</button><h1>${esc(offered.name)} <small>${esc(offered.enName)}</small></h1><p class="hint">转会预览：展示球员的原始属性，不含球员卡。</p>${publicPlayerPanel(offered)}</div></div>`
+  const offer = isOnlineMode() && ui.screen === 'transfer' && ui.transferTab === 'ai' && !game.roster.some((item) => item.id === ui.detailPlayerId)
+    ? aiTransferMarket.offers.find((item) => item.player.id === ui.detailPlayerId) : undefined
+  const offered = offer?.player
+  if (offered) return `<div class="overlay" data-action="close-detail"><div class="modal profile" data-stop="true" role="dialog" aria-modal="true" aria-label="${esc(offered.name)} 球员详情"><button class="modal-close" data-action="close-detail" aria-label="关闭">${icon('close', 16)}</button><h1>${esc(offered.name)} <small>${esc(offered.enName)}</small></h1><p class="hint">转会预览：展示球员的原始属性，不含球员卡。</p>${publicPlayerPanel(offered)}${renderScoutControls(offered.id, 'transfer', offer!.teamId)}</div></div>`
   const source = findAnyPlayer(ui.detailPlayerId)
   if (!source) return ''
   const owned = game.roster.some((item) => item.id === source.id)
   // 在转会市场预览别人球队的球员时，展示实际能买到的原始球员，而不是不随转会转移的卡。
   const transferPreview = !owned && ui.screen === 'transfer'
   const player = transferPreview ? untrainedPlayer(source) : source
+  const transferClub = transferPreview && ui.transferTab === 'ai' ? aiTransferOffers({ ...game, aiTeams: worldTransferTeams(game) }).find(item => item.player.id === player.id)?.team.id : undefined
   const gk = player.positions.GK > 0
   const head = `<header class="profile-head">
     <div class="profile-id">${posBadge(primaryPosition(player))}<div>
@@ -87,17 +91,16 @@ export function renderDetailOverlay(): string {
     </div></div>
     <div class="big-ca"><span>${transferPreview ? '原始 CA' : 'CA'}</span><b>${caHeat(playerCA(player), 1)}</b><small>${transferPreview ? '转会不包含球员卡' : `原始 CA ${initialDisplayCA(player).toFixed(1)}`}</small></div>
   </header>`
-  if (ui.playerDetailView !== 'profile') {
+  if (ui.playerDetailView !== 'profile' && (owned || ui.playerDetailView !== 'compare')) {
     const candidates = comparisonCandidates()
-    const opponentSource = candidates.find((candidate) => candidate.id === ui.playerCompareId)
-    const opponent = opponentSource && ui.screen === 'transfer' && !game.roster.some((item) => item.id === opponentSource.id) ? untrainedPlayer(opponentSource) : opponentSource
+    const opponent = candidates.find((candidate) => candidate.id === ui.playerCompareId)
     const content = ui.playerDetailView === 'performance'
       ? renderPlayerPerformance(player, ui.playerPerformancePeriod, ui.playerPerformanceCompetition)
       : renderPlayerComparison(player, opponent, candidates, ui.playerCompareTab)
     return `<div class="overlay" data-action="close-detail">
       <div class="modal profile player-analysis-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="${esc(player.name)} 球员详情">
         <button class="modal-close" data-action="close-detail" aria-label="关闭">${icon('close', 16)}</button>
-        ${head}${detailNavigation()}${ui.screen === 'transfer' && ui.playerDetailView === 'compare' ? '<p class="player-analysis-note">转会页面中非本队球员的对比使用转会后可获得的原始属性，不包含球员卡。</p>' : ''}${content}
+        ${head}${detailNavigation(owned)}${content}
       </div>
     </div>`
   }
@@ -138,7 +141,8 @@ export function renderDetailOverlay(): string {
     <div class="overlay" data-action="close-detail">
       <div class="modal profile" data-stop="true" role="dialog" aria-modal="true" aria-label="${esc(player.name)} 球员详情">
         <button class="modal-close" data-action="close-detail" aria-label="关闭">${icon('close', 16)}</button>
-        ${head}${detailNavigation()}
+        ${head}${detailNavigation(owned)}
+        ${!owned && ui.screen === 'transfer' && (ui.transferTab === 'free' || transferClub) ? renderScoutControls(player.id, ui.transferTab === 'free' ? 'market' : 'transfer', transferClub) : ''}
         ${injury ? `<div class="banner bad">${icon('cross', 16)}<span>${injury}；带伤比赛能力下降 30%，不影响精力或培养。</span></div>` : ''}
         <div class="profile-grid">
           <section class="profile-col">
@@ -149,6 +153,7 @@ export function renderDetailOverlay(): string {
           <section class="profile-col">
             <h3>位置熟练度</h3>
             ${positionMap(player)}
+            ${owned ? `<h3>位置星级</h3>${renderRelativePositionRatings(player, game.roster)}` : ''}
             <h3>特性与技能</h3>
             <div class="tag-row">${traitLabel(player.traitId, true)}</div>
             ${skillGroups(player)}
