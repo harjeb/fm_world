@@ -1179,6 +1179,16 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }))
   }
 
+  /** Agent 球探只读取共享名册/自由市场解析目标；费用和报告仍写入账号自己的存档。 */
+  function scoutingSnapshot(account: Account): GameState {
+    const validClubs = new Set(sharedWorld.world.clubs.map((club) => club.id))
+    return {
+      ...account.game,
+      aiTeams: Object.entries(sharedWorld.teams ?? {}).filter(([id]) => validClubs.has(id)).map(([, team]) => team),
+      freeStars: market.pool,
+    }
+  }
+
   type ServerReply = { status: number; payload: Record<string, unknown> }
 
   /**
@@ -1998,7 +2008,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (pendingAccountCommits.has(agentAccount.id) && !await confirmAccountCommit(agentAccount)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
       touchAccountOnline(agentAccount)
       // 联机时有教练执教的球队不能从 AI 购买入口买人，和转会页一致。
-      const agentOptions: AgentOptions = { isManaged: (clubId) => !!sharedWorld.owners[clubId], transferGame: () => transferSnapshot(agentAccount) }
+      const agentOptions: AgentOptions = { isManaged: (clubId) => !!sharedWorld.owners[clubId], transferGame: () => transferSnapshot(agentAccount), scoutGame: () => scoutingSnapshot(agentAccount) }
       const agentState = () => withSharedMarket(agentView(agentAccount.game, now(), agentOptions), agentAccount)
       if (url.pathname === '/api/agent/state' && req.method === 'GET') {
         advanceAccount(agentAccount)
@@ -2068,7 +2078,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
           outcome = applyAgentAction(body.action === 'preview_signing' ? transferSnapshot(agentAccount) : agentAccount.game, body, now(), agentOptions)
         }
         if (outcome.ok) commitAiSignings(previousRoster, previousTeams, agentAccount.game)
-        if (outcome.ok && !['get_player', 'get_match', 'preview_training', 'preview_signing'].includes(String(body.action))) {
+        if (outcome.ok && !['get_player', 'get_match', 'preview_training', 'preview_signing', 'get_scout_reports'].includes(String(body.action))) {
           publishClub(agentAccount)
           agentAccount.revision++
           const leagueOnly = agentAccount.game.activeMatch?.context.isLeague && ['start_league', 'set_match_tactics', 'set_match_auto_subs', 'substitute'].includes(String(body.action))

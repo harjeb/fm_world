@@ -1,5 +1,8 @@
 import type { AttrKey, DetailedPosition, EventDef, FormationId, GameState, Lineup, PlayerCard, Position, RoleId, Tactics, TrainingAutoConfig, TrainingSession } from '../src/game/types.ts'
-import { isDetailedPosition, readDetailedPositions } from '../src/game/detailed-positions.ts'
+import { detailedPositionForSlot, isDetailedPosition, readDetailedPositions, slotPositionValue } from '../src/game/detailed-positions.ts'
+import { MAX_SCOUT_REPORTS, SCOUT_LEVELS, deleteScoutReport, startScouting, visibleScoutReports, type ScoutReport, type ScoutSource, type ScoutTarget, type VisibleScoutReport } from '../src/game/scouting.ts'
+import { preferredPositionRatings } from '../src/game/scout-rating.ts'
+import { cupCeilingBonus } from '../src/game/cup-rewards.ts'
 import type { TrainingRequest } from '../src/game/training.ts'
 import { trainingDate, trainingOptions, type TrainingActivityId } from '../src/game/training-calendar.ts'
 import type { SkillId } from '../src/game/types.ts'
@@ -14,7 +17,7 @@ import { mainAttrsFor } from '../src/game/scale.ts'
 import { FORMATIONS, FORMATION_LIST, isLegacyFormation } from '../src/game/data/formations.ts'
 import { ROLES, ROLES_BY_POSITION } from '../src/game/data/roles.ts'
 import { bookKey, bookLearnChance, bookName, bookRequirementText, eventForSession, trainingSkillChance } from '../src/game/legend-learning.ts'
-import { branchProbability, eventChance, trainingActionsTotal, eventGrowthScale, TRAINING_ACTION_INFO } from '../src/game/training.ts'
+import { branchProbability, eventChance, trainingActionsTotal, eventGrowthScale, trainingQualityChances, TRAINING_ACTION_INFO, TRAINING_POINT_TIERS } from '../src/game/training.ts'
 import { computeLineupFamiliarity, lineupSlots, validateLineup } from '../src/game/squad.ts'
 import {
   STYLE_LIST_REV3,
@@ -36,7 +39,7 @@ import { displayClock } from '../src/game/match/time.ts'
 import { leagueDisplayClock } from '../src/game/realtime.ts'
 import { injuryUntil } from '../src/game/injury.ts'
 import { buildReview } from '../src/game/review.ts'
-import { cardsOf, playerCards, untrainedPlayer } from '../src/game/cards.ts'
+import { cardRecyclePoints, cardsOf, playerCards, recyclePlayerCards, setCardRecycleLock, untrainedPlayer } from '../src/game/cards.ts'
 import { traitEffectText } from '../src/game/data/skill-effects.ts'
 import { traitNameOf } from '../src/game/data/star-traits.ts'
 import {
@@ -78,7 +81,12 @@ import { displayEventHint, trainingLogText } from '../src/ui/format.ts'
 export type AgentOutcome = { ok: boolean; error?: string; result?: unknown }
 
 /** 服务器提供的共享世界信息：联机时有教练执教的球队不能直接买人（和转会页一致）。 */
-export type AgentOptions = { isManaged?: (clubId: string) => boolean; transferGame?: () => GameState }
+export type AgentOptions = {
+  isManaged?: (clubId: string) => boolean
+  transferGame?: () => GameState
+  /** 联机时用全服共享名册/自由市场解析球探目标；只读，不改账号存档。 */
+  scoutGame?: () => GameState
+}
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
@@ -117,7 +125,45 @@ function cardView(card: PlayerCard, game: GameState) {
     skillTiers: card.skillTiers ?? {},
     equipped: owner?.equippedCardId === card.id,
     ownerInSquad: !!owner,
+    recycleLocked: card.recycleLocked === true,
+    recyclePoints: cardRecyclePoints(card),
   }
+}
+
+/** 球探报告只返回服务器已允许公开的字段；完成后附相对本队的明细位置星级。 */
+function scoutReportView(report: VisibleScoutReport, game: GameState, now = Date.now()) {
+  const full = 'estimatedAttrs' in report && report.estimatedAttrs && 'positions' in report && report.positions ? report as ScoutReport : undefined
+  const positionRatings = full ? preferredPositionRatings({
+    attrs: full.estimatedAttrs,
+    positions: full.positions,
+    ...(full.detailedPositions ? { detailedPositions: full.detailedPositions } : {}),
+  }, game.roster).map(rating => ({
+    position: rating.position,
+    role: rating.role,
+    roleLabel: ROLES[rating.role].label,
+    score: Math.round(rating.score * 100) / 100,
+    reference: Math.round(rating.reference * 100) / 100,
+    stars: rating.stars,
+  })) : null
+  return { ...report, ready: !!full && report.readyAt <= now, ...(positionRatings ? { positionRatings } : {}) }
+}
+
+function scoutTarget(game: GameState, options: AgentOptions, body: Record<string, unknown>): { player?: GameState['roster'][number]; target?: ScoutTarget; error?: string } {
+  const source = text(body.source) as ScoutSource
+  if (!['club', 'transfer', 'market'].includes(source)) return { error: 'source 只能是 club、transfer 或 market' }
+  const clubId = text(body.clubId || body.teamId).trim() || undefined
+  const view = options.scoutGame?.() ?? game
+  if (source === 'market') {
+    const player = view.freeStars.find(item => item.id === text(body.playerId))
+    return player ? { player, target: { source } } : { error: '球员不在自由市场' }
+  }
+  if (!clubId) return { error: '球队目标需要 clubId' }
+  const team = view.aiTeams.find(item => item.id === clubId)
+  if (!team) return { error: '找不到这支球队' }
+  if (source === 'transfer' && options.isManaged?.(clubId)) return { error: '其他教练执教的球队请通过球队详情查看' }
+  const found = team.players.find(item => item.id === text(body.playerId))
+  if (!found) return { error: '球员不在该球队' }
+  return { player: source === 'transfer' ? untrainedPlayer(found) : found, target: { source, clubId } }
 }
 
 function visibleGains(gains: Partial<Record<AttrKey, number>>, gk: boolean) {
@@ -346,6 +392,8 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
       cardId: session.cardId ?? null,
       routeId: session.routeId,
       routePoints: session.routePoints,
+      qualityBonusPoints: session.qualityBonusPoints ?? 0,
+      qualityChances: trainingQualityChances(session),
       nextEventChance: session.action >= trainingActionsTotal(session) ? null : eventChance(session, session.action + 1),
       candidate: playerView(session.candidate, game, now),
       autoTraining: autoTrainingView(game, session.playerId),
@@ -365,7 +413,17 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
   const slots = lineupSlots(game.roster, game.lineup)
   return {
     club: { name: game.clubName, seed: game.seed, version: game.version },
+    trainingPoints: Number.isSafeInteger(game.trainingPoints) && (game.trainingPoints ?? 0) >= 0 ? game.trainingPoints ?? 0 : 0,
+    trainingPointTiers: TRAINING_POINT_TIERS,
     seasonCups: game.world?.seasonCups ?? null,
+    scouting: { levels: SCOUT_LEVELS, maxReports: MAX_SCOUT_REPORTS },
+    scoutReports: visibleScoutReports(game, now).map(report => scoutReportView(report, game, now)),
+    honors: {
+      trophies: (game.pve?.trophies ?? []).map(trophy => ({ ...trophy })),
+      cupCeilingBonus: cupCeilingBonus(game),
+      cupCeilingClaims: { ...(game.pve?.cupCeilingClaims ?? {}) },
+      seasonCupGoldClaims: { ...(game.pve?.seasonCupGoldClaims ?? {}) },
+    },
     season: {
       index: game.season.index,
       round: game.season.round,
@@ -411,7 +469,8 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
         playerId: slot.player?.id ?? null,
         playerName: slot.player?.name ?? null,
         role: slot.role,
-        proficiency: slot.player ? Math.round(slot.player.positions[slot.position]) : 0,
+        detailedPosition: detailedPositionForSlot({ id: slot.slotId, position: slot.position, label: slot.label }),
+        proficiency: slot.player ? Math.round(slotPositionValue(slot.player, { id: slot.slotId, position: slot.position, label: slot.label })) : 0,
         effectiveLoss: Math.round(slot.effectiveLoss * 1000) / 1000,
         fit: Math.round(slot.fit * 10) / 10,
       })),
@@ -424,7 +483,7 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
       id: formation.id,
       label: formation.label,
       desc: formation.desc,
-      slots: formation.slots.map((slot) => ({ id: slot.id, position: slot.position, label: slot.label, defaultRole: slot.defaultRole })),
+      slots: formation.slots.map((slot) => ({ id: slot.id, position: slot.position, label: slot.label, detailedPosition: detailedPositionForSlot(slot), defaultRole: slot.defaultRole })),
       defaultTactics: formation.defaultTactics,
     })),
     tacticalStyles: STYLE_LIST_REV3.map((style) => ({
@@ -699,8 +758,40 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
     case 'start_training': {
       // 省略 bookKeys 时使用该球员已保存的配置。
       if (body.bookKeys !== undefined && (!Array.isArray(body.bookKeys) || body.bookKeys.some((key) => typeof key !== 'string'))) return { ok: false, error: 'bookKeys 必须是技能书 key 数组' }
-      const result = startTrainingWithSupport(game, text(body.playerId), undefined, body.bookKeys as string[] | undefined)
+      const points = body.points === undefined ? 0 : body.points
+      if (typeof points !== 'number' || !Number.isSafeInteger(points) || !TRAINING_POINT_TIERS.some(tier => tier.points === points)) return { ok: false, error: 'points 只能是 0、10、20 或 30' }
+      const result = startTrainingWithSupport(game, text(body.playerId), undefined, body.bookKeys as string[] | undefined, points)
+      return { ...result, result: result.ok ? { ok: true, pointsSpent: points, trainingPoints: game.trainingPoints ?? 0 } : result }
+    }
+    case 'recycle_cards': {
+      if (!Array.isArray(body.cardIds) || body.cardIds.some(id => typeof id !== 'string')) return { ok: false, error: 'cardIds 必须是球员卡 ID 数组' }
+      const result = recyclePlayerCards(game, body.cardIds as string[])
+      if (result.ok) {
+        const privateGame = game as GameState & { recycledCardIds?: string[] }
+        privateGame.recycledCardIds = [...new Set([...(privateGame.recycledCardIds ?? []), ...body.cardIds as string[]])]
+      }
+      return result.ok ? { ok: true, result: { ...result, trainingPoints: game.trainingPoints ?? 0 } } : result
+    }
+    case 'lock_card': {
+      if (typeof body.locked !== 'boolean') return { ok: false, error: 'locked 必须是布尔值' }
+      const result = setCardRecycleLock(game, text(body.cardId), body.locked)
       return { ...result, result }
+    }
+    case 'start_scouting': {
+      const resolved = scoutTarget(game, options, body)
+      if (!resolved.player || !resolved.target) return { ok: false, error: resolved.error ?? '球探目标无效' }
+      if (game.roster.some(item => item.id === resolved.player!.id)) return { ok: false, error: '不能考察本队球员' }
+      const result = startScouting(game, resolved.player, resolved.target, body.level, now)
+      if (!result.ok || !result.report) return { ok: false, error: result.error ?? '无法发起球探考察' }
+      const report = scoutReportView(visibleScoutReports(game, now).find(item => item.id === result.report!.id)!, game, now)
+      return { ok: true, result: { report, trainingPoints: game.trainingPoints ?? 0, balance: economyOf(game).balance } }
+    }
+    case 'get_scout_reports': {
+      return { ok: true, result: { levels: SCOUT_LEVELS, maxReports: MAX_SCOUT_REPORTS, reports: visibleScoutReports(game, now).map(report => scoutReportView(report, game, now)) } }
+    }
+    case 'delete_scout_report': {
+      const result = deleteScoutReport(game, body.reportId, now)
+      return result.ok ? { ok: true, result: { ...result, reports: visibleScoutReports(game, now).map(report => scoutReportView(report, game, now)) } } : result
     }
     case 'preview_training': {
       const playerId = text(body.playerId)

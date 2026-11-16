@@ -160,15 +160,34 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     plan: autoSubsSchema,
   }, (args) => action('set_auto_subs', args))
 
+  register('set_match_auto_subs', '比赛中设置自动换人', '进行中的比赛实时更新本场自动换人计划；可选 syncDefault 同步保存为默认设置。', {
+    plan: autoSubsSchema,
+    syncDefault: z.boolean().optional(),
+  }, (args) => action('set_match_auto_subs', args))
+
   register('set_training_books', '保存培养技能卡配置', '按球员保存最多 4 本技能书，key 来自 get_state 的 legendBooks。交流赛后从技能书、随机最多 5 名共同培养的队友和基础技能按 50:30:20 权重抽取三选一；已学技能不出现。', {
     playerId: z.string(),
     bookKeys: z.array(z.string()).max(4),
   }, (args) => action('set_training_books', args))
 
-  register('start_training', '开始培养', '每轮从原始属性开始，产出球员卡；省略 bookKeys 时使用保存的技能卡配置，传入时同时保存。交流赛后可学习技能书，书不会消耗。', {
+  register('start_training', '开始培养', '每轮从原始属性开始，产出球员卡；省略 bookKeys 时使用保存的技能卡配置，传入时同时保存。可投入共享培养点提高品质。', {
     playerId: z.string(),
     bookKeys: z.array(z.string()).max(4).optional(),
+    points: z.union([z.literal(0), z.literal(10), z.literal(20), z.literal(30)]).optional().describe('本轮投入的共享培养点；余额不足会失败'),
   }, (args) => action('start_training', args))
+
+  register('start_scouting', '委托球探', '考察其他球队或自由市场球员；转会/自由市场考察原始版本，球队目标考察装备版本。完成前不返回估计属性。', {
+    playerId: z.string().min(1),
+    source: z.enum(['club', 'transfer', 'market']),
+    level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+    clubId: z.string().optional().describe('source=club 或 transfer 时必填，来自 get_world 的 clubs[].id'),
+  }, (args) => action('start_scouting', args))
+
+  register('get_scout_reports', '读取球探报告', '读取进行中和已完成的球探报告；已完成报告附相对本队的明细位置星级。', {}, () => action('get_scout_reports', {}))
+
+  register('delete_scout_report', '删除球探报告', '删除已完成的球探报告，不退费。', {
+    reportId: z.string().min(1),
+  }, (args) => action('delete_scout_report', args))
 
   register('preview_training', '预览训练行动', '验证训练并预览成长等信息，不写入存档；交流赛结果在执行时产生，预览不保证比赛结果。', {
     playerId: z.string(),
@@ -220,6 +239,15 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     cardId: z.string(),
   }, (args) => action('delete_card', args))
 
+  register('recycle_cards', '回收球员卡', '回收未装备、未锁定且已处理完培养结果的球员卡，获得共享培养点；不可逆。', {
+    cardIds: z.array(z.string().min(1)).min(1).describe('来自 get_state 的 cards[].id'),
+  }, (args) => action('recycle_cards', args))
+
+  register('lock_card', '锁定球员卡', '锁定或解锁库存卡的回收状态；锁定卡不能回收，挂牌成交仍会销毁。', {
+    cardId: z.string().min(1),
+    locked: z.boolean(),
+  }, (args) => action('lock_card', args))
+
   register('start_next_season', '开始新赛季', '赛季结束后开始下一赛季，保留球员和俱乐部数据。', {}, () => action('start_next_season'))
 
   register('start_league', '开始联赛比赛', '单机：开始本轮联赛。联机联赛到开赛时间由服务器用保存的阵容自动结算，不能手动开赛；开赛前 30 分钟锁定阵容。', {}, () => action('start_league'))
@@ -233,6 +261,12 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
   }, (args) => action('start_world_friendly', args))
 
   register('get_world', '查看全服世界', '读取全服所有球队（名单、RANK、是否有教练执教、电脑球队设施）以及各分区的积分榜和赛程，和世界页 / 球队详情一致。', {}, () => action('get_world'))
+
+  register('get_chat', '读取全服聊天', '读取最新最多 50 条全服聊天，含教练、俱乐部、文字和时间。', {}, () => action('get_chat'))
+
+  register('send_chat', '发送全服聊天', '发送一条最多 200 字的全服聊天消息，受发言间隔限制。', {
+    text: z.string().min(1).max(200),
+  }, (args) => action('send_chat', args))
 
   register('rename_club', '俱乐部改名', '联机时修改俱乐部名字：最多 8 个字，不能和全服已有球队（AI 球队或其他教练的球队）重名；比赛进行中不能改。', {
     name: z.string().min(1).max(8),

@@ -24,7 +24,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 `/api/agent/action` 请求体统一为 `{ "action": "...", ...参数 }`。成功返回 `{ ok: true, revision, result, game }`；失败返回 HTTP 400、`{ ok: false, error, revision, game }`。`game` 是执行后的最新状态，可直接用于下一步决策。
 
-状态里和手动界面一致地公开：0–1500 原始主属性、位置、CA、年龄、估值 `marketValue`、合同 `contract`（`wage`、`expiresSeason`）、技能、性格、训练日志（最近 24 条）、待处理事件及成功率、自动培养设置 `autoTraining`、阵容合法性/位置折损、比赛历史、挑战历史、历年联赛成绩 `seasonHistory`（级别、名次、战绩、冠军）、前 5 轮赛程、转会窗口 `market.transferWindowOpen`、可谈判的 AI 球员 `market.clubOffers`。全服其他球队和分区用 `get_world` 读取。**球员的隐藏属性当前值不会返回给 Agent；事件提示或日志可能提及相关成长。**
+状态里和手动界面一致地公开：0–1500 原始主属性、位置与 `detailedPositions`、CA、年龄、估值 `marketValue`、合同 `contract`（`wage`、`expiresSeason`）、技能、性格、训练日志（最近 24 条）、待处理事件及成功率、自动培养设置 `autoTraining`、共享培养点 `trainingPoints` 与档位 `trainingPointTiers`、阵容合法性/位置折损、比赛历史、挑战历史、历年联赛成绩 `seasonHistory`（级别、名次、战绩、冠军）、前 5 轮赛程、转会窗口 `market.transferWindowOpen`、可谈判的 AI 球员 `market.clubOffers`、球探配置 `scouting` 和报告 `scoutReports`、奖杯与杯赛奖励 `honors`。全服其他球队和分区用 `get_world` 读取。**球员的隐藏属性当前值不会返回给 Agent；事件提示、日志或球探估计可能提及相关成长。**
 
 ## 3. 动作
 
@@ -91,9 +91,10 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 - `start_next_season` — 联机时由服务器全服统一结算；你的赛季结束且全服各队比赛都完成后，才能开始下一赛季。服务器到赛季结束时间也会自动推进，所有账号同步新赛程、升降级与 AI 名册；`state.season.index` 表示赛季编号。
 - `set_training_books` — 保存指定球员的技能书配置；`playerId`，`bookKeys` 为最多 4 个 `state.legendBooks[].key`（例如 `lg_drill_master:rainbow`），传空数组清空。位置不符、原始技能已掌握、同一技能重复选不同档位或库存不存在会被拒绝；技能槽满时可配置，成功学习时需替换同类技能。
-- `start_training` — 开始一轮 30 时段培养，消耗 30 精力（精力每个游戏日恢复 50 点，按经过的时间连续恢复，满 100 为止；不满的球员只恢复一成），不消耗金币；每轮都从原始属性开始，成长不跨轮累积。无 `scheduleVersion` 的旧 18/30 次课程保留旧规则。陪练队友由系统自动选 6 名（按阵型其他位置，中卫、边路、中场、前锋轮流挑，练外场必带 1 名其他门将；整轮固定，下一轮重新随机）：每个时段这 6 人会随机分到当天的各个选项里（含 `rest`，合计 6 人，有的选项可能没有人）：选哪个选项拿哪个选项上的人，训练项目每名队友每项正成长主属性加 N 点（N = 开始这一轮时七座设施里最低的等级，1–5；没有设施快照的旧课程仍是 2），站在恢复上的每人多恢复 4 点训练体力；他们不消耗精力、不生成 session；交流赛/队内赛只有一个选项，6 人全在上面；交流赛用当前保存的 11 人首发，培养中的球员一定上场（不在首发时顶替同位置 CA 最低的人）。`partnerIds` 参数已不再生效。
+- `start_training` — 开始一轮 30 时段培养，消耗 30 精力（精力每个游戏日恢复 50 点，按经过的时间连续恢复，满 100 为止；不满的球员只恢复一成），不消耗金币；每轮都从原始属性开始，成长不跨轮累积。可投入共享培养点 `points`（0 / 10 / 20 / 30）提高品质概率，开始时立即扣除；`state.trainingPoints` 为余额，`trainingSessions[].qualityBonusPoints` 和 `qualityChances` 显示本轮投入与当前概率。无 `scheduleVersion` 的旧 18/30 次课程保留旧规则。陪练队友由系统自动选 6 名（按阵型其他位置，中卫、边路、中场、前锋轮流挑，练外场必带 1 名其他门将；整轮固定，下一轮重新随机）：每个时段这 6 人会随机分到当天的各个选项里（含 `rest`，合计 6 人，有的选项可能没有人）：选哪个选项拿哪个选项上的人，训练项目每名队友每项正成长主属性加 N 点（N = 开始这一轮时七座设施里最低的等级，1–5；没有设施快照的旧课程仍是 2），站在恢复上的每人多恢复 4 点训练体力；他们不消耗精力、不生成 session；交流赛/队内赛只有一个选项，6 人全在上面；交流赛用当前保存的 11 人首发，培养中的球员一定上场（不在首发时顶替同位置 CA 最低的人）。`partnerIds` 参数已不再生效。
   - `playerId`
   - `bookKeys?`: 可选，指定并保存本轮配置；省略则使用该球员已保存的配置。配置在 `state.trainingBooksByPlayer`，本轮快照在 `state.trainingSessions[].books`。
+  - `points?`: 0 / 10 / 20 / 30，默认 0；必须是 `state.trainingPointTiers[].points` 之一且余额足够。
 
   **只有培养中的交流赛后**：技能书、本轮随机最多 5 名共同培养队友、该位置的基础技能按 50:30:20 的来源权重逐项抽取，去重后最多 3 选 1；某类没有候选时剩余权重重新归一化。队友只来自本轮陪练或本次共同训练球员，玩家不选导师；`skillTeacherIds` 显示本轮抽中的人，选项中 `source`（`"book" | "teammate" | "basic"`）/ `skillId` / `mentorName` 显示来源与技能。已掌握技能不出现；少于 3 个按实际数量显示。基础技能学习必定成功并获得银档，书看属性，队友看位置、疲劳和导师档位；失败可在下次交流赛重试，书永久保留。满槽选项的 `replaceOptions` 列出可替换同类技能，成功才替换。队内赛、联赛和挑战赛均不触发，普通事件排队处理；技能属于本轮产出的球员卡。
 - `preview_training` — 预览下一次行动，不写入存档；与执行使用同一套规则。
@@ -129,13 +130,18 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 一轮培养结束时新卡自动进入库存 `state.cards`，换上之前球员继续用原来的卡；不处理培养结果也可以直接开始下一轮。每轮培养都从原始属性开始，卡和卡之间互不影响。
 
-`state.roster[]` 的 `attrs`、`positions`、`skills`、`personality` 始终是当前装备的卡（或原始属性）的值，另有 `equippedCardId`（`null` 表示原始属性）和 `cardIds`。`state.cards[]` 每张卡有 `id`、`playerId`、`playerName`、`serial`（这名球员的第几张）、`routeId`、`ca`、可见主属性 `attrs`、`positions`、`personality`、`skills`、`skillTiers`、`equipped`、`ownerInSquad`。
+`state.roster[]` 的 `attrs`、`positions`、`skills`、`personality` 始终是当前装备的卡（或原始属性）的值，另有 `equippedCardId`（`null` 表示原始属性）和 `cardIds`。`state.cards[]` 每张卡有 `id`、`playerId`、`playerName`、`serial`（这名球员的第几张）、`routeId`、`ca`、可见主属性 `attrs`、`positions`、`detailedPositions`、`personality`、`skills`、`skillTiers`、`equipped`、`ownerInSquad`、`recycleLocked` 和 `recyclePoints`（不可回收时为 `null`）。
 
 - `equip_card` — 给球员换卡，只能装备他自己的卡。比赛进行中不能换。换卡不会让阵容失效，新卡在当前位置熟练度低只是属性折损更多。
   - `playerId`
   - `cardId`: `state.cards[].id`；`null` 表示换回原始属性
-- `delete_card` — 从库存删除一张卡；正在装备的卡不能删。
+- `delete_card` — 从库存删除一张卡；正在装备的卡不能删。回收和删除都不返还费用/培养点，区别是回收会增加 `state.trainingPoints`。
   - `cardId`
+- `recycle_cards` — 回收未装备、未锁定且不在待处理培养结果中的卡，获得共享培养点（显示 CA 每 100 分 1 点，最低 1 点）。不可逆；已回收的卡不能再被旧存档写回。
+  - `cardIds`: 非空且不重复的 `state.cards[].id` 数组
+- `lock_card` — 锁定或解锁一张库存卡的回收状态；已装备的卡也可以提前上锁，挂牌出售成交时仍会销毁。
+  - `cardId`
+  - `locked`: 布尔值
 
 球员的 `traitId`、`traitName`、`traitEffect` 是特性及其效果说明。500 名真实球星每人一个专属特性，随机球员用通用特性；特性属于球员本人，不随球员卡变化。
 
@@ -152,6 +158,19 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 事件提示按课程基础倍率换算，不包含设施或低落情绪影响。属性训练品质按球员与行动确定性判定：失败 ×0、一般 ×0.7、成功 ×1、大成功 ×1.3、完美成功 ×1.6。体力高于 30 时，投入共享培养点 0 / 10 / 20 / 30 点的大成功概率分别为 8% / 12% / 16% / 20%，完美概率分别为 1% / 2% / 3% / 5%；悟性金 / 彩各自对两项概率叠加 5 / 7 个百分点，只挤占普通成功。体力 ≥60 时一般概率为 0，低于 60 时随体力下降线性上升，至体力 0 时封顶 40%；体力 ≤30 时大成功和完美概率为 0，失败概率从体力 30 的 5% 升至体力 0 的 50%，其余为成功。每位其他队友提供每项原始主属性 +2，隐藏属性按比例缩放，设施加成另计。旧行动的 `drill`、`combo`、`match` 分别消耗 12、16、25 点课程体力；新课程每个选项公布消耗，固定比赛最多消耗 25，恢复加 30。课程体力与开始课程消耗的球员精力不同：`stamina = 100 - fatigue`。
 
 行动次数、实际 `actionsTotal`、`stamina`、疲劳、待处理事件都在 `state.trainingSessions` 中。事件未处理时不能继续训练。`facilityLevels` 是开始课程时的设施快照，数值是**阶段**（1–25，每个等级 5 个阶段）；旧课程若没有快照则没有建筑加成。升级从下一次培养生效。主属性及其收益返回原始数值，主属性范围 0–1500，但每名球员每项属性都有自己的上限（存档在 `player.ceilings`），培养到该项上限即停，不再统一到 1500；这改变了 API 的数值语义，调用方须调整。隐藏属性当前值不公开，范围为 0–20；比赛和 CA 仍使用内部 0–100 评分。事件选项提示列出未含设施加成的基础成长，实际成长还受上限影响。球场对所有属性提供额外成长，医疗对身体、青训对技术、心理辅导室对决断/团队合作/镇定、战术研究室对视野/预判/无球跑动/防守站位提供额外成长；球迷商店和赞助商只提高每轮余额收入，不再影响培养。每次行动或事件仅对基础成长为正的属性加成，并分两段独立判定：每个等级的第 5 阶段必定触发，等级内其余阶段的概率从该等级的下限线性上升（1 级 20%、2 级 50%、3 级 70%、4 级 80%、5 级 85% 起步，到该级第 5 阶段的 100%）。新球队从 1 级第 1 阶段开始，旧存档按原等级换算成阶段（1 级 = 第 5 阶段）。球场每级 +2，对应设施每级 +5；等级由阶段决定（第 1–5 阶段为 1 级，第 6–10 阶段为 2 级，以此类推）。例如医疗位于第 11 阶段（3 级第 1 阶段）时，有 70% 概率为每项符合条件的身体主属性额外 +15，球场另计；没触发就没有该设施加成。隐藏属性加成按 20/1500 缩放。休息、位置训练及无成长不加成；上限截断成长但不降低现有属性。已有快照的课程下一行动使用新规则。
+
+### 球探
+
+`state.scouting.levels` 给出 1–5 级球探的费用、耗时游戏日和隐藏属性最大误差；`state.scoutReports` 含进行中和已完成报告。考察其他球队/自由市场球员时立即扣费，到期前不返回位置、估计属性或星级；完成后返回 `estimatedAttrs`、`positions`、`detailedPositions`、`isGk` 和相对本队的 `positionRatings`（明细位置、职责、评分、参照分和 0–5 星）。报告基于估计属性，本队阵容变化会改变星级；每个目标同一时刻只能有一份未完成报告，最多保存 500 份。自由市场目标会暂留市场，删除报告可能提前结束暂留。
+
+- `start_scouting` — 委托球探考察其他球队或自由市场球员。`source`: `club`（考察装备版本）、`transfer`（考察可转会的原始版本）或 `market`；`clubId` 在 club/transfer 时必填。不能考察本队球员。
+  - `playerId`
+  - `source`
+  - `level`: 1–5
+  - `clubId?`: `source` 为 club/transfer 时必填，来自 `get_world` 的 `clubs[].id`
+- `get_scout_reports` — 读取球探配置和全部可见报告，不写存档。
+- `delete_scout_report` — 删除一份已完成的报告，不退费；进行中的报告不能删除。
+  - `reportId`
 
 ### 经济与市场
 
@@ -202,7 +221,9 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 联赛每天两轮：北京时间（UTC+8）12:00 和 20:00 开赛，相邻两轮隔 8 小时或 16 小时，一个赛季 38 轮约 19 天，常规赛结束后有 12 个游戏日（现实 3 天）的赛后休整。`state.season.currentFixture` 和赛程里的 `kickoffAt` 是开赛时间（Unix 毫秒）。开球前 30 分钟，服务器持久化双方阵容、职责、战术、自动换人和球员属性/状态快照；低优先级单任务子进程提前计算，结果不外发。开球后比赛直播 10 分钟（浏览器拿到开球时的初始引擎状态，按现实时钟回放整场，Agent 看不到画面），开球 10 分钟后比分、积分榜和战报才全服统一公布。之后的培养、换卡或转会不会改变本场已锁定的输入，也不会被发布时的旧快照覆盖。关闭网页或断开 Agent 不影响队列；重启复用已保存的输入和结果，未完成任务用原快照继续。读取 `GET /api/agent/state` 查看公布后的比分，再从 `matchHistory` 的 `id` 调用 `get_match(matchId)`。双方教练看到的是同一个任务、同一份比分；提前计算期间不会泄露伤病、停赛或出场记录。友谊赛保留手动推进与跳过。
 
-**赛季杯赛**：`state.seasonCups` / `get_world.seasonCups` 提供四项已公开签表、赛程及已公布比赛的射手、助攻和精简个人统计；未来赛果不会提前下发。跨级杯名为「星联杯」。比赛双方均有参赛金币，冠军另获金币，首次夺得该杯解锁俱乐部主属性上限；旧同名挑战杯加成不重复。
+**赛季杯赛**：`state.seasonCups` / `get_world.seasonCups` 提供四项已公开签表、赛程及已公布比赛的射手、助攻和精简个人统计；未来赛果不会提前下发。跨级杯名为「星联杯」。比赛双方均有参赛金币，冠军另获金币，首次夺得该杯解锁俱乐部主属性上限；旧同名挑战杯加成不重复。`state.honors` 返回俱乐部 `trophies`、当前 `cupCeilingBonus`、已领取的 `cupCeilingClaims` 和杯赛金币账本 `seasonCupGoldClaims`。
+
+`state.lineupAnalysis.starters[]` 的 `detailedPosition` 是该战术槽对应的细分位置，`proficiency` 按该细分位置熟练度计算；`state.formations[].slots[]` 也返回 `detailedPosition`。
 
 **联赛技能书掉落**：比赛公布时，服务器为每支真人执教的球队独立判定（AI 球队不参与）：双方所有上场球员每人掉落概率 = 5% × 上场分钟 / 90，命中后从该球员技能中随机一项、按其技能档位（银/金/彩）转为技能书放入 `state.legendBooks`；库存已有同档或更高档的同技能书不会再掉，不设每场上限（11 人制满场期望约 1 本）。随机数由比赛种子 + 比赛 ID + 球队决定，可重放、不受刷新影响。`matchHistory[].bookDrops` 列出本场掉落（`playerName`、`side`、`id`、`tier`、`minutes`、`key`、`name`），无掉落时为空数组。基础技能书也可在 `set_training_books` 中配置，门槛为对应单项属性（主属性 银 600 / 金 750 / 彩 900，隐藏属性 银 8 / 金 11 / 彩 14）。
 
@@ -225,7 +246,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 ## 5. MCP
 
-本仓库自带 stdio MCP 服务 `mcp/index.ts`，工具名与上面的动作一致（含 `get_world`、`preview_signing`、`sign_club_player`、`run_auto_training` 等），另有 `get_state`、`get_docs`。
+本仓库自带 stdio MCP 服务 `mcp/index.ts`，工具名与上面的动作一致（含 `get_world`、`preview_signing`、`sign_club_player`、`run_auto_training`、`start_scouting`、`get_scout_reports`、`recycle_cards`、`lock_card`、`get_chat`、`send_chat`、`set_match_auto_subs` 等），另有 `get_state`、`get_docs`。
 
 ```bash
 FM_AGENT_TOKEN=fm_... FM_SERVER=http://127.0.0.1:8787 npm run mcp

@@ -7,7 +7,7 @@
  * - 玩家也可随时通过顶栏版本号按钮重新打开查看。
  */
 
-export const APP_VERSION = 'v0.4.12'
+export const APP_VERSION = 'v0.4.13'
 export const CHANGELOG_STORAGE_KEY = 'fm-world-changelog-seen'
 
 export type ChangelogItem = {
@@ -26,6 +26,17 @@ export type ChangelogRelease = {
 }
 
 export const CHANGELOG_RELEASES: readonly ChangelogRelease[] = [
+  {
+    version: 'v0.4.13',
+    date: '2026-11-16',
+    headline: 'Agent API 功能对齐',
+    summary: '球探、回收培养点、杯赛荣誉和 MCP 工具补齐。',
+    items: [
+      { badge: '球探', tone: 'good', title: '委托球探和查看位置评分', desc: 'Agent 可委托球队/转会/自由市场球探，到期后读取估计属性和相对本队的明细位置星级，并可删除报告。' },
+      { badge: '球员卡', tone: 'gold', title: '回收卡片与培养点', desc: 'Agent 可锁定、回收球员卡并获得共享培养点，开始培养时可投入 0/10/20/30 点提高品质。' },
+      { badge: 'MCP', tone: '', title: '补齐聊天和赛中换人工具', desc: '新增 get_chat、send_chat、set_match_auto_subs，并公开奖杯和杯赛奖励记录。' },
+    ],
+  },
   {
     version: 'v0.4.12',
     date: '2026-11-15',
