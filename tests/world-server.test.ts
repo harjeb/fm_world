@@ -34,7 +34,7 @@ async function start(clock?: () => number, dir?: string) {
   return { base, dir: dataDir }
 }
 
-type Account = { token: string; revision: number; game: any }
+type Account = { token: string; revision: number; game: any; clubCoaches: Record<string, string> }
 
 async function register(base: string, username: string): Promise<Account> {
   const response = await fetch(`${base}/api/register`, {
@@ -88,6 +88,11 @@ describe('服务器共享世界', () => {
     const world = await (await fetch(`${base}/api/world`)).json() as any
     expect(world.clubs).toHaveLength(80)
     expect(Object.keys(world.owners)).toHaveLength(2)
+    const coaches = Object.fromEntries(Object.keys(world.owners).map(id => [id, 'human']))
+    expect(b.clubCoaches).toEqual(coaches)
+    const restored = await (await fetch(`${base}/api/game`, { headers: auth(a.token) })).json()
+    expect(restored.clubCoaches).toEqual(coaches)
+    expect(restored.game).not.toHaveProperty('clubCoaches')
     expect(world.slots).toEqual({ total: 80, taken: 2, free: 78 })
     expect(new Set(Object.keys(world.owners)).size).toBe(2)
     expect(world.round).toBeGreaterThanOrEqual(1)

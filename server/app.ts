@@ -360,6 +360,18 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     return at - lastOnline > AI_TAKEOVER_INACTIVE_MS
   }
 
+  /** 只返回球队 ID 和公开执教状态，不带账号 ID、在线时间或球员名单。 */
+  function clubCoaches(): Record<string, 'human' | 'takeover'> {
+    const accounts = new Map(db.accounts.map(account => [account.id, account]))
+    const result: Record<string, 'human' | 'takeover'> = {}
+    const at = now()
+    for (const [clubId, ownerId] of Object.entries(sharedWorld.owners)) {
+      const owner = accounts.get(ownerId)
+      if (owner) result[clubId] = isAccountAITakeover(owner, at) ? 'takeover' : 'human'
+    }
+    return result
+  }
+
   function touchAccountOnline(account: Account, forcePersist = false): void {
     const t = now()
     const prev = account.lastOnlineAt
@@ -1449,7 +1461,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
   }
   // serverTime：客户端在应用存档（含直播回放）之前先对准服务器时钟，本机时钟不准也不会把回放放到错的时刻。
-  const statePayload = (account: Account, source?: string) => ({ type: 'state', revision: account.revision, serverTime: now(), game: publicGame(account), ...(source ? { source } : {}) })
+  const statePayload = (account: Account, source?: string) => ({ type: 'state', revision: account.revision, clubCoaches: clubCoaches(), serverTime: now(), game: publicGame(account), ...(source ? { source } : {}) })
 
   function sendState(res: ServerResponse, account: Account, source?: string): void {
     res.write(`data: ${JSON.stringify(statePayload(account, source))}\n\n`)
@@ -2061,7 +2073,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       persistAccount(account)
       advanceAccount(account)
       await accountStore.flush()
-      json(res, 201, { token, user: publicAccount(account), revision: account.revision, serverTime: now(), game: publicGame(account) })
+      json(res, 201, { token, user: publicAccount(account), revision: account.revision, clubCoaches: clubCoaches(), serverTime: now(), game: publicGame(account) })
       return
     }
 
@@ -2076,7 +2088,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const token = createSession(account.id)
       advanceAccount(account)
       await accountStore.flush()
-      json(res, 200, { token, user: publicAccount(account), revision: account.revision, serverTime: now(), game: publicGame(account) })
+      json(res, 200, { token, user: publicAccount(account), revision: account.revision, clubCoaches: clubCoaches(), serverTime: now(), game: publicGame(account) })
       return
     }
 
@@ -2333,7 +2345,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
     if (url.pathname === '/api/game' && req.method === 'GET') {
       advanceAccount(account)
-      const snapshot = { user: publicAccount(account), game: publicGame(account), revision: account.revision, serverTime: now() }
+      const snapshot = { user: publicAccount(account), game: publicGame(account), revision: account.revision, clubCoaches: clubCoaches(), serverTime: now() }
       res.setHeader('Vary', 'Accept-Encoding')
       if (acceptsGzip(req.headers['accept-encoding'])) {
         const body = await gzipAsync(JSON.stringify(snapshot), { level: 1 })

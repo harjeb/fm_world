@@ -12,6 +12,9 @@ const SAVE_TIMEOUT_MS = 12_000
 const ACTION_TIMEOUT_MS = 10_000
 const RECOVERY_TIMEOUT_MS = 5_000
 
+type ClubCoaches = Record<string, 'human' | 'takeover'>
+type CoachSnapshot = { clubCoaches?: ClubCoaches }
+
 export type OnlineUser = { id: string; username: string }
 export type OnlineStatus = 'offline' | 'connecting' | 'online'
 
@@ -22,6 +25,7 @@ export const onlineState: {
   connected: boolean
   error: string
   lastSync: number
+  clubCoaches: ClubCoaches | null
 } = {
   status: 'offline',
   user: null,
@@ -29,6 +33,7 @@ export const onlineState: {
   connected: false,
   error: '',
   lastSync: 0,
+  clubCoaches: null,
 }
 
 /** 全服自由市场。只有联机时有内容；单机还是用存档里的 freeStars。 */
@@ -74,6 +79,7 @@ export async function refreshPublicWorld(): Promise<void> {
     const data = await requestJson<WorldPublicSnapshot>('/api/world/teams')
     if (request === publicWorldRequest && onlineState.status === 'online') {
       publicWorld = data
+      onlineState.clubCoaches = Object.fromEntries(data.clubs.filter(club => club.managed).map(club => [club.id, club.aiTakeover ? 'takeover' : 'human']))
       notify()
     }
   } catch {
@@ -163,8 +169,8 @@ export async function loadPublicConfig(): Promise<PublicConfig> {
   return publicConfig
 }
 
-type AuthResponse = { token: string; user: OnlineUser; revision: number; game: GameState }
-type StateResponse = { type: 'state'; revision: number; serverTime?: number; game: GameState; source?: string }
+type AuthResponse = CoachSnapshot & { token: string; user: OnlineUser; revision: number; game: GameState }
+type StateResponse = CoachSnapshot & { type: 'state'; revision: number; serverTime?: number; game: GameState; source?: string }
 
 const clientId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 let token = typeof localStorage === 'undefined' ? null : localStorage.getItem(TOKEN_KEY)
@@ -314,6 +320,7 @@ export async function logoutOnline(): Promise<void> {
   setToken(null)
   onlineState.status = 'offline'
   onlineState.user = null
+  onlineState.clubCoaches = null
   onlineState.connected = false
   onlineState.revision = 0
   onlineState.error = ''
@@ -328,13 +335,15 @@ export async function logoutOnline(): Promise<void> {
 async function restoreSession(): Promise<GameState | null> {
   if (!token) return null
   ++sessionEpoch
+  onlineState.clubCoaches = null
   onlineState.status = 'connecting'
   notify()
   try {
-    const snapshot = await requestJson<{ user?: OnlineUser; game: GameState; revision: number }>('/api/game', { cache: 'no-store' }, 30_000)
+    const snapshot = await requestJson<CoachSnapshot & { user?: OnlineUser; game: GameState; revision: number }>('/api/game', { cache: 'no-store' }, 30_000)
     if (!snapshot.game || !Number.isSafeInteger(snapshot.revision)) throw new Error('服务器返回的存档无效，请重试。')
     // 滚动更新期间旧服务端尚未在快照里附带账号信息。
     onlineState.user = snapshot.user ?? (await requestJson<{ user: OnlineUser }>('/api/me', undefined, ACTION_TIMEOUT_MS)).user
+    onlineState.clubCoaches = snapshot.clubCoaches ?? null
     onlineState.revision = snapshot.revision
     onlineState.error = ''
     onlineState.status = 'online'
@@ -359,6 +368,7 @@ function acceptSession(data: AuthResponse): void {
   ++sessionEpoch
   clearAITransferMarket()
   setToken(data.token)
+  onlineState.clubCoaches = data.clubCoaches ?? null
   onlineState.user = data.user
   onlineState.revision = data.revision
   onlineState.status = 'online'
@@ -398,6 +408,7 @@ function connectEvents(): void {
       if (data.type !== 'state' || !data.game) return
       syncServerClock(data.serverTime)
       if (data.revision < onlineState.revision) return
+      if (data.clubCoaches) onlineState.clubCoaches = data.clubCoaches
       onlineState.lastSync = Date.now()
       onlineState.connected = true
       if (data.source !== clientId && (saving || pendingGame)) {

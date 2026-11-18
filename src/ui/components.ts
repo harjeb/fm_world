@@ -15,7 +15,7 @@ import { isMainAttr } from '../game/scale.ts'
 import { PLAYER_TEAM_ID, teamName } from '../game/season.ts'
 import { worldTransferTeams } from '../game/world.ts'
 import { latestRoundRankChanges } from '../game/standings-history.ts'
-import { isOnlineMode, marketState, publicWorld } from '../online.ts'
+import { isOnlineMode, marketState, onlineState, publicWorld } from '../online.ts'
 import { esc, playerCA, positionClass, positionLabel, skillName, traitName } from './format.ts'
 import { tipAttrs } from './tooltip.ts'
 import { icon } from './icons.ts'
@@ -109,13 +109,13 @@ export function crest(look: Pick<ClubLook, 'name' | 'color'>, size = 18): string
 /** 这支球队由真实玩家执教：自己的球队，或联机时有教练接管的球队。 */
 export function isHumanClub(id: string): boolean {
   if (id === PLAYER_TEAM_ID) return true
-  return isOnlineMode() && !!publicWorld?.clubs.find((club) => club.id === id)?.managed
+  return isOnlineMode() && !!onlineState.clubCoaches && Object.hasOwn(onlineState.clubCoaches, id)
 }
 
 /** 联机时这支玩家球队是否因超过 3 天未上线正由 AI 临时接管（自己的球队当前在线查看，不显示接管）。 */
 export function isAITakeoverClub(id: string): boolean {
   if (id === PLAYER_TEAM_ID) return false
-  return isOnlineMode() && !!publicWorld?.clubs.find((club) => club.id === id)?.aiTakeover
+  return isOnlineMode() && onlineState.clubCoaches?.[id] === 'takeover'
 }
 
 /** 真实玩家执教的球队名右边的人物图标：正常在线绿色，超过 3 天未上线（AI 接管）黄色；电脑球队返回空。 */
