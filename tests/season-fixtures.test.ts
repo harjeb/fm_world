@@ -25,18 +25,20 @@ function setup() {
 
 describe('赛季页我的赛程', () => {
   it('联赛和杯赛按开赛时间混排，并标出赛事、轮次和开赛时间', () => {
-    setup()
+    const game = setup()
+    const cupAt = game.world!.seasonCups!.cups.find(cup => cup.id === 'community')!.rounds[0].fixtures[0].kickoffAt
+    const prevRound = game.season.fixtures.find(f => f.isPlayer && f.kickoffAt === cupAt - 2 * 3600_000)!.round
+    const nextRound = game.season.fixtures.find(f => f.isPlayer && f.kickoffAt === cupAt + 2 * 3600_000)!.round
     const html = renderSeason()
     const start = html.indexOf('my-fixtures')
     const table = html.slice(start, html.indexOf('</table>', start))
     expect(table).toContain('开赛')
     expect(table).toContain('>联赛<')
-    expect(table).toContain('第 8 轮')
+    expect(table).toContain(`第 ${prevRound} 轮`)
     expect(table).toContain('社区杯')
     expect(table).toContain('16 强')
     expect(table).toMatch(/\d{2}\/\d{2} \d{2}:\d{2}/)
-    // 社区杯 18:00 夹在第 8 轮（12:00）和第 9 轮（22:00）之间。
-    expect(table.indexOf('社区杯')).toBeGreaterThan(table.indexOf('第 8 轮'))
-    expect(table.indexOf('社区杯')).toBeLessThan(table.indexOf('第 9 轮'))
+    expect(table.indexOf('社区杯')).toBeGreaterThan(table.indexOf(`第 ${prevRound} 轮`))
+    expect(table.indexOf('社区杯')).toBeLessThan(table.indexOf(`第 ${nextRound} 轮`))
   })
 })

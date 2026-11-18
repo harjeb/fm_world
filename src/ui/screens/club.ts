@@ -2,6 +2,7 @@ import type { Player, SeasonState, TierId } from '../../game/types.ts'
 import { CLUB_NAME_MAX } from '../../game/club-name.ts'
 import { PLAYER_TEAM_ID } from '../../game/season.ts'
 import { worldTierLabel } from '../../game/world.ts'
+import { conferenceLabel } from '../../game/data/world-clubs.ts'
 import { isOnlineMode } from '../../online.ts'
 import { BASE_ROUND_INCOME, economyOf, FACILITIES, facilityLevel, facilityRoundIncome, facilityStageChance, facilityStageInLevel, facilityUpgradeCost, GOAL_INCOME_BONUS, LEAGUE_WIN_BONUS, MAX_FACILITY_LEVEL, MAX_FACILITY_STAGE, projectedRoundIncome, STAGES_PER_LEVEL, type FacilityId } from '../../game/economy.ts'
 import { CATEGORY_BONUS_PER_LEVEL, STADIUM_BONUS_PER_LEVEL } from '../../game/training.ts'
@@ -41,7 +42,7 @@ function clubNameOf(id: string | null): string {
 
 function seasonLeague(season: SeasonState): string {
   if (!season.tier) return '联赛'
-  const conference = season.conference === 'south' ? ' · 南区' : season.conference === 'north' ? ' · 北区' : ''
+  const conference = season.conference ? ` · ${conferenceLabel(season.conference)}` : ''
   return `${worldTierLabel(season.tier)}${season.tier === 'division2' ? conference : ''}`
 }
 
@@ -150,7 +151,7 @@ function stagePips(stage: number): string {
 }
 
 function nameCell(player: Player): string {
-  return `<td class="name-cell"><button class="name-btn" data-action="detail" data-player="${esc(player.id)}">${esc(player.name)}</button><small>${esc(player.enName)}</small></td>`
+  return `<td class="name-cell"><button class="name-btn" data-action="detail" data-player="${esc(player.id)}">${esc(player.name)}</button>${player.youthOrigin ? '<span class="youth-badge">青训</span>' : ''}<small>${esc(player.enName)}</small></td>`
 }
 
 function facilitiesTab(): string {

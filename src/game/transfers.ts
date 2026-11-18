@@ -13,13 +13,14 @@ import { AI_SQUAD_LIMIT, aiBidFor, aiTierProfile, recordAISigning } from './ai-c
 import { playerMarketValue } from './pricing.ts'
 import { MIN_SQUAD, refreshAILineup, repairLineup, validateLineup } from './squad.ts'
 import { sellerSquadError, transferWindowOpen } from './market.ts'
-import { validateAutoSubPlan } from './match/management.ts'
+import { youthTransferBlocked } from './youth.ts'
+import { sanitizeAutoSubPlan, validateAutoSubPlan } from './match/management.ts'
 import { derivedRng, splitSeed } from './rng.ts'
-import { GAME_DAY_MS } from './calendar.ts'
 import { economyOf } from './economy.ts'
 import {
   HIGH_OFFER_RATIO,
-  OFFER_RESPONSE_GAME_DAYS,
+  OFFER_RESPONSE_MS,
+  UNHAPPY_HOURS,
   aiBuysLeft,
   assessRelease,
   makeUnhappy,
@@ -148,7 +149,7 @@ export function generateAIOffers(input: { game: GameState; clubs: MarketClub[]; 
   if (!rng.chance(0.4)) return null
   const busy = new Set(pending.map((offer) => offer.playerId))
   const targets = game.roster
-    .filter((player) => !busy.has(player.id) && !(game.training[player.id] && !game.training[player.id].completed))
+    .filter((player) => !youthTransferBlocked(player, now) && !busy.has(player.id) && !(game.training[player.id] && !game.training[player.id].completed))
     .sort((a, b) => caOfPlayer(b) - caOfPlayer(a))
   const buyers = [...clubs].sort((a, b) => a.id.localeCompare(b.id))
   const start = rng.int(Math.max(1, buyers.length))
@@ -177,7 +178,7 @@ export function generateAIOffers(input: { game: GameState; clubs: MarketClub[]; 
         amount,
         value,
         createdAt: now,
-        expiresAt: now + OFFER_RESPONSE_GAME_DAYS * GAME_DAY_MS,
+        expiresAt: now + OFFER_RESPONSE_MS,
         status: 'pending',
       }
       game.transferOffers = [...(game.transferOffers ?? []), offer]
@@ -198,7 +199,7 @@ function declineOffer(game: GameState, offer: TransferOffer, status: 'rejected' 
   const player = game.roster.find((item) => item.id === offer.playerId)
   if (!player) return false
   makeUnhappy(player, `${offer.clubName} 出价 ${offer.amount.toLocaleString()} 被拒绝`, at)
-  offer.note = `${player.name} 不满：8 个游戏日内精力恢复只剩一成`
+  offer.note = `${player.name} 不满：${UNHAPPY_HOURS} 小时内精力恢复只剩一成`
   return true
 }
 
@@ -246,6 +247,7 @@ export function respondToOffer(game: GameState, offerId: string, accept: boolean
   if (!transferWindowOpen(game)) return { ok: false, error: '转会窗口已关闭' }
   const player = game.roster.find((item) => item.id === offer.playerId)
   if (!player) return { ok: false, error: '球员已经不在队里' }
+  if (youthTransferBlocked(player, now)) return { ok: false, error: '在营青年或提拔未满一周的青训球员不能转会' }
   if (game.training[player.id] && !game.training[player.id].completed) return { ok: false, error: `${player.name} 正在培养，培养结束后才能转会` }
   if (!buyer) return { ok: false, error: '对方球队不存在' }
   if (aiBuysLeft(buyer.state, season) <= 0) return { ok: false, error: `${buyer.name} 本赛季的买人名额已经用完` }
@@ -257,7 +259,9 @@ export function respondToOffer(game: GameState, offerId: string, accept: boolean
   if (!validateLineup(roster, repaired.lineup).valid) return { ok: false, error: '卖掉他之后无法组成合法阵容' }
   game.roster = roster
   game.lineup = repaired.lineup
-  if (game.autoSubs && validateAutoSubPlan(game.roster, game.lineup, game.autoSubs).length) delete game.autoSubs
+  if (game.autoSubs && validateAutoSubPlan(game.roster, game.lineup, game.autoSubs).length) {
+    game.autoSubs = sanitizeAutoSubPlan(game.roster, game.lineup, game.autoSubs)
+  }
   economyOf(game).balance += offer.amount
   joinAIClub(buyer, player, offer.amount, season)
   offer.status = 'accepted'

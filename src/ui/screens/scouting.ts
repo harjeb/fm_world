@@ -7,18 +7,14 @@ import { isMainAttr } from '../../game/scale.ts'
 import { serverNow } from '../../online.ts'
 import { game } from '../state.ts'
 import { attrLabel, countdownText, esc } from '../format.ts'
+import { starRating } from '../stars.ts'
 
 const sourceName: Record<ScoutSource, string> = { club: '球队', transfer: '转会', market: '自由市场' }
-
-function starIcons(stars: number): string {
-  const icons = Array.from({ length: 5 }, (_, i) => `<span class="scout-star ${stars >= i + 1 ? 'full' : stars >= i + .5 ? 'half' : 'empty'}">★</span>`).join('')
-  return `<span class="scout-stars" aria-label="${stars.toFixed(1)} 星">${icons}</span> <b>${stars.toFixed(1)}</b>`
-}
 
 /** 只使用传入的属性，球探报告不能从真实球员补回隐藏值。 */
 export function renderRelativePositionRatings(subject: ScoutSubject, roster: GameState['roster']): string {
   const ratings = preferredPositionRatings(subject, roster)
-  const stars = ratings.length ? ratings.map((r, i) => `<div>${i === 0 ? '<strong>最佳位置（有本队参照）：</strong>' : ''}${esc(DETAILED_POSITION_LABELS[r.position])} ${esc(r.position)} ${starIcons(r.stars)} <span class="muted small">${esc(ROLES[r.role].label)}</span></div>`).join('') : '—（本队该位置可踢球员不足或数据未知）'
+  const stars = ratings.length ? ratings.map((r, i) => `<div>${i === 0 ? '<strong>最佳位置（有本队参照）：</strong>' : ''}${esc(DETAILED_POSITION_LABELS[r.position])} ${esc(r.position)} ${starRating(r.stars, `${DETAILED_POSITION_LABELS[r.position]}位置能力`, true)} <span class="muted small">${esc(ROLES[r.role].label)}</span></div>`).join('') : '—（本队该位置可踢球员不足或数据未知）'
   return `<div class="scout-ratings">相对本队：${stars}</div><p class="hint">以本队同位置最多三名最强可踢球员为参照，3 星为该参照水平；不同位置或本队实力变化时星级会变化。未列出的位置可能因球员熟练度、本队可踢球员不足或属性未知而无法比较（—）。</p>`
 }
 
@@ -39,7 +35,7 @@ export function renderScoutControls(playerId: string, source: ScoutSource, clubI
   const now = serverNow()
   const reports = (game.scoutReports ?? []).filter(r => r.playerId === playerId && r.source === source && (r.clubId ?? '') === (clubId ?? '')).sort((a, b) => b.startedAt - a.startedAt)
   const pending = reports.some(r => r.readyAt > now)
-  return `<section class="scout-section"><h3>球探考察</h3><p class="hint">${source === 'club' ? '考察当前装备版本。' : '考察可购买的原始版本。'}隐藏属性为估计值，误差可能影响星级；考察不保证签约成功。</p><div class="scout-controls"><label>球探等级 <select data-scout-level data-keep-value>${SCOUT_LEVELS.map(x => `<option value="${x.level}">${x.level}级 · ${x.fee.toLocaleString()} · ${x.days}游戏日 · ±${x.maxError}</option>`).join('')}</select></label><button class="btn small primary" data-action="scout-start" data-player="${esc(playerId)}" data-source="${source}"${clubId ? ` data-club="${esc(clubId)}"` : ''} ${pending ? 'disabled' : ''}>确认考察</button></div>${reports.map(r => renderScoutReport(r, game.roster, now)).join('')}</section>`
+  return `<section class="scout-section"><h3>球探考察</h3><p class="hint">${source === 'club' ? '考察当前装备版本。' : '考察可购买的原始版本。'}隐藏属性为估计值，误差可能影响星级；考察不保证签约成功。</p><div class="scout-controls"><label>球探等级 <select data-scout-level data-keep-value>${SCOUT_LEVELS.map(x => `<option value="${x.level}">${x.level}级 · ${x.fee.toLocaleString()} · ${x.hours}小时 · ±${x.maxError}</option>`).join('')}</select></label><button class="btn small primary" data-action="scout-start" data-player="${esc(playerId)}" data-source="${source}"${clubId ? ` data-club="${esc(clubId)}"` : ''} ${pending ? 'disabled' : ''}>确认考察</button></div>${reports.map(r => renderScoutReport(r, game.roster, now)).join('')}</section>`
 }
 
 export function renderScoutPanel(): string {

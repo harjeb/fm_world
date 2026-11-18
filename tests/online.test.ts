@@ -11,6 +11,7 @@ class FakeEvents {
 }
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.resetModules()
 })
@@ -54,4 +55,54 @@ describe('联机保存与 SSE', () => {
     expect(handler).toHaveBeenCalledOnce()
     expect(handler.mock.calls[0][0].clubName).toBe('其他设备修改')
   })
+})
+
+function stallRequest(init: RequestInit): Promise<Response> {
+  return new Promise((_, reject) => {
+    init.signal!.addEventListener('abort', () => reject(init.signal!.reason), { once: true })
+  })
+}
+
+it.each(['PUT', 'POST'])('青训等待中的 %s 超时后取消请求，不自动重复提交', async (stalledMethod) => {
+  vi.useFakeTimers()
+  vi.stubGlobal('window', { setTimeout, clearTimeout })
+  vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {} })
+  const { createInitialGame, saveGame } = await import('../src/game/state.ts')
+  const game = createInitialGame(10)
+  const current = { ...game, clubName: '服务器权威状态' }
+  let signal: AbortSignal | null | undefined
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/login') return Response.json({ token: 'test-token', user: { id: '1', username: 'u' }, revision: 1 })
+    if (url === '/api/game' || url === '/api/youth/action') {
+      if (init?.method === stalledMethod) {
+        signal = init?.signal
+        return stallRequest(init!)
+      }
+      return Response.json({ game: current, revision: 2 })
+    }
+    return Response.json({})
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  const online = await import('../src/online.ts')
+  const handler = vi.fn()
+  online.setRemoteGameHandler(handler)
+  await online.loginOnline('u', 'password')
+  if (stalledMethod === 'PUT') {
+    saveGame(game)
+    await vi.advanceTimersByTimeAsync(300) // 操作开始时，已有普通存档请求在途。
+  }
+  const operation = online.youthActionOnline({ action: 'recruit_position', position: 'DM' })
+  const outcome = expect(operation).rejects.toThrow(stalledMethod === 'PUT' ? '服务器响应超时' : '操作结果尚未确认')
+  await vi.advanceTimersByTimeAsync(20_000)
+  await outcome
+  expect(signal?.aborted).toBe(true)
+  const youthRequests = fetchMock.mock.calls.filter(([url]) => url === '/api/youth/action')
+  if (stalledMethod === 'PUT') {
+    expect(youthRequests).toHaveLength(0)
+    expect(handler).not.toHaveBeenCalled()
+  } else {
+    expect(youthRequests).toHaveLength(1)
+    expect(handler).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ clubName: current.clubName }))
+    expect(online.onlineState.revision).toBe(2)
+  }
 })

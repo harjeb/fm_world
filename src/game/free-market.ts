@@ -1,31 +1,27 @@
 /**
- * 自由市场的每日补充：每个游戏日开始时，先算今天在市场上的人（当天挂牌的球星 + 被解约 / 合同到期留在市场的球员），
+ * 自由市场的每日补充：每个自然日（北京时间 00:00）开始时，先算当天挂牌的球星 + 被解约 / 合同到期留在市场的球员，
  * 不足 200 人就用当天生成的随机球员补满。随机补充的人带着 marketDay 标记，第二天还没人买就销毁
- * （正在竞拍的等竞拍结束），所以名单不会越滚越大。
- * 补人只看种子和游戏日：同一天、同一个世界，补出来的人每次都一样（联机由服务器统一生成）。
+ * （正在竞拍或球探保护期内的先留着），所以名单不会越滚越大。
  */
 import type { GameState, Player, Position } from './types.ts'
 import { createRandomPlayer } from './data/random-players.ts'
-import { gameDayIndex } from './calendar.ts'
+import { beijingDayIndex } from './calendar.ts'
 import { isOnMarketToday } from './market-window.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 import { scoutKeepsOnMarket } from './scouting.ts'
 
-/** 每个游戏日自由市场上至少有多少人。 */
+/** 每天自由市场上至少有多少人。 */
 export const FREE_MARKET_TARGET = 200
 
 /** 补充球员的位置配比（和 25 人名单的比例接近）。 */
 const FILLER_POSITIONS: Position[] = ['GK', 'CB', 'CB', 'W', 'W', 'W', 'CM', 'CM', 'ST', 'ST', 'CB', 'W', 'CM', 'ST', 'W', 'CM']
 
-type MarketAnchor = Pick<GameState, 'world' | 'createdAt'>
+type MarketAnchor = Pick<GameState, 'world' | 'createdAt'> & Partial<Pick<GameState, 'season'>>
 
-function calendarAnchor(game: MarketAnchor): number {
-  return game.world?.calendarStartAt ?? game.createdAt ?? Date.now()
-}
-
-/** 今天是第几个游戏日（从游戏日历的第一天算起）。 */
+/** 今天是第几个北京时间自然日。 */
 export function marketDayOf(game: MarketAnchor, now: number): number {
-  return gameDayIndex(calendarAnchor(game), now)
+  const shift = game.season?.clockShift ?? game.world?.clockShift ?? 0
+  return beijingDayIndex(now + shift)
 }
 
 export const isDailyFiller = (player: Pick<Player, 'marketDay'>): boolean => player.marketDay !== undefined
@@ -69,7 +65,6 @@ export function refreshFreeMarket(input: {
   const today = pool.filter((player) => player.marketDay === day).length
   const rng = derivedRng(splitSeed(input.seed, 'free-market-fillers'), day)
   for (let index = today; index < today + need; index++) {
-    // 大多是二级水平，偶尔有好一点的（三档）和差一点的（一档）。
     const roll = rng.float()
     const tier = roll < 0.15 ? 1 : roll < 0.85 ? 2 : 3
     const player = createRandomPlayer({
@@ -88,7 +83,6 @@ export function refreshFreeMarket(input: {
 /** 单机：存档自己的自由市场（联机账号的市场在服务器上，不在这里补）。 */
 export function refreshLocalFreeMarket(game: GameState, now: number): boolean {
   if (game.shared || !game.world) return false
-  // 每个游戏日只补一次：当天被签走的人不再补，第二天整体刷新。
   const day = marketDayOf(game, now)
   const busy = (id: string) => scoutKeepsOnMarket(game, id, now)
   if (game.freeMarketDay === day) {

@@ -5,6 +5,7 @@ import { MAIN_FIELD_ATTRS, MAIN_GK_ATTRS } from '../../game/scale.ts'
 import { playerCards } from '../../game/cards.ts'
 import { PLAYABLE_PROFICIENCY } from '../../game/ca.ts'
 import { ATTR_STOPS, CA_STOPS, attrHeadCell, attrHeat, caHeat, cardSelect, countryLabel, emptyState, eraLabel, heatLegend, icon, injuryLabel, mainAttrs, meter, pageHead, panel, posBadge, primaryPosition, skillTag, skillTierLabel, tag, traitLabel } from '../components.ts'
+import { youthBadge } from '../components.ts'
 import { esc, playerCA, positionLabel, skillName } from '../format.ts'
 import { tipAttrs } from '../tooltip.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
@@ -68,7 +69,7 @@ function squadRow(player: Player): string {
   const more = hiddenSkills.length ? `<span class="muted small has-tip" ${tipAttrs('其余技能', hiddenSkills.map((skill) => `${skillName(skill)} · ${skillTierLabel(player, skill)}：${skillEffectText(skill, getSkillTier(player, skill))}`).join('\n'))}>+${hiddenSkills.length}</span>` : ''
   return `<tr class="clickable" data-action="detail" data-player="${esc(player.id)}" data-key="${esc(player.id)}">
     <td>${posBadge(pos)}</td>
-    <td class="name-cell"><button class="name-btn" data-action="detail" data-player="${esc(player.id)}">${esc(player.name)}</button><small>${esc(player.enName)}</small></td>
+    <td class="name-cell"><button class="name-btn" data-action="detail" data-player="${esc(player.id)}">${esc(player.name)}</button>${youthBadge(player)}<small>${esc(player.enName)}</small></td>
     <td class="num">${player.age ?? 24}</td>
     <td class="dim">${esc(countryLabel(player))}</td>
     <td class="dim">${esc(eraLabel(player.era))}</td>

@@ -1,4 +1,6 @@
 import type { ScoutReport } from './scouting.ts'
+import type { YouthOrigin, YouthState } from './youth.ts'
+import type { PositionProfile } from './natural-positions.ts'
 
 export const FIELD_ATTRIBUTES = [
   'passing',
@@ -233,6 +235,10 @@ export type Personality = {
 }
 
 export type Player = {
+  /** Stable natural-position floors; independent of equipped card/training. */
+  positionProfile?: PositionProfile
+  /** 永久的青训出身标记；提拔和转会后仍保留。 */
+  youthOrigin?: YouthOrigin
   id: string
   seedId: string
   name: string
@@ -387,6 +393,8 @@ export type WorldSeasonSummary = {
 }
 
 export type WorldState = {
+  /** Missing means legacy deterministic generation; only new worlds/seasons enable the new generator. */
+  positionGenerationVersion?: 1
   version: 1
   seasonIndex: number
   seasonStartedAt: number
@@ -1139,6 +1147,8 @@ export type PairChemistry = {
 export type Chemistry = Record<string, PairChemistry>
 
 export type GameState = {
+  /** 独立青训营；缺省旧档首次进入时初始化一次。 */
+  youth?: YouthState
   scoutReports?: ScoutReport[]
   /** 全俱乐部共用的回收培养点；旧档不存在时为 0。 */
   trainingPoints?: number

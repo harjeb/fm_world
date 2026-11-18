@@ -1,6 +1,7 @@
 import type { AITeam, AITeamDef, FormationId, Player, Position, Tactics } from '../types.ts'
 import { PLAYER_SEEDS, createPlayerFromSeed } from './players.ts'
 import { createRandomPlayer, randomSquadPositionTemplate } from './random-players.ts'
+import { allocateNaturalSquad } from '../natural-positions.ts'
 import { autoFillLineup, validateLineup } from '../squad.ts'
 import { applyAITacticsToLineup } from '../ai-tactics.ts'
 import { caOf } from '../ca.ts'
@@ -97,22 +98,19 @@ export function buildLeague(seed: number, clubName = '青训联队'): LeagueSetu
   const builtStars = new Map<string, Player[]>()
   for (const team of teams) {
     const stars = team.stars
-    const starsByPosition = new Map<Position, Player[]>()
-    for (const star of stars) {
-      const pos = POSITION_ORDER.find((p) => star.positions[p] >= 70) ?? (star.positions.GK > 0 ? 'GK' : 'CM')
-      starsByPosition.set(pos, [...(starsByPosition.get(pos) ?? []), star])
-    }
     const players: Player[] = []
     const template = randomSquadPositionTemplate()
+    const natural = allocateNaturalSquad(stars, seed + team.index)
     for (let slot = 0; slot < template.length; slot++) {
       const position = template[slot]
-      const star = starsByPosition.get(position)?.shift()
+      const star = natural.stars.get(slot)
       if (star) {
         players.push(star)
       } else {
         players.push(createRandomPlayer({
           seed: Math.floor(rng.float() * 0x7fffffff) + team.index * 1000 + slot,
           position,
+          detailedPosition: natural.positions[slot],
           tier: randomTierFor(team.def.strength),
           usedNames,
           idPrefix: `r${team.index + 1}-${slot + 1}`,

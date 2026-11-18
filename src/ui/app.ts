@@ -66,7 +66,6 @@ import { aiTransferOffers } from '../game/market.ts'
 import { isLocalFreeAgentAvailable } from '../game/free-market.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeStarTraits } from '../game/names.ts'
 import { catchUpSeason, lineupLockState, settleGameConditions, skipToPostseasonEnd } from '../game/season.ts'
-import { gameDateOf } from '../game/calendar.ts'
 import { fetchFriendlyTeam, flushOnlineNow, isOnlineMode } from '../online.ts'
 import { advanceLeagueRealtime, leagueDisplayClock, setLeagueClock } from '../game/realtime.ts'
 import { displayClock } from '../game/match/time.ts'
@@ -81,7 +80,7 @@ import { clubNameError, normalizeClubName } from '../game/club-name.ts'
 import { aiTransferMarket, bidOnline, buyFromAIClubOnline, chatState, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, recycleCardsOnline, refreshAITransferMarket, refreshChatOnline, refreshGameOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setCardRecycleLockOnline, startPeakOnline, startScoutingOnline, deleteScoutingOnline, startTrainingOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline } from '../online.ts'
 import { agentHandoffText } from './agent-handoff.ts'
 import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
-import { UNHAPPY_GAME_DAYS } from '../game/transfer-rules.ts'
+import { UNHAPPY_HOURS } from '../game/transfer-rules.ts'
 import { cardName, findAnyPlayer } from './components.ts'
 import { clockText, countdownText, esc, pct } from './format.ts'
 import { icon } from './icons.ts'
@@ -91,6 +90,10 @@ import { drawPitch, pitchPlaybackPending, resetPitchView } from './pitch-canvas.
 import { isPesEngine, setPesViewHooks } from './pes-pitch.ts'
 import { game, replay, resetReplay, setGame, stopReplay, ui, type ClubTab, type Screen, type SquadSortKey, type TransferTab } from './state.ts'
 import { renderAcademy } from './screens/academy.ts'
+import { renderYouth } from './screens/youth.ts'
+import { ensureYouth, settleYouth, type YouthPlan } from '../game/youth.ts'
+import { applyYouthAction, type YouthAction } from '../game/youth-actions.ts'
+import { youthActionOnline } from '../online.ts'
 import { renderChallenge } from './screens/challenge.ts'
 import type { CupId } from '../game/data/cup-config.ts'
 import { loadPveContent } from '../game/pve-content.ts'
@@ -237,6 +240,7 @@ function go(screen: Screen): void {
   ui.detailPlayerId = null
   ui.lineupSlot = null
   ui.screen = screen
+  if (screen === 'youth' && !isOnlineMode() && !sharedActionUnavailable()) settleYouth(game, Date.now())
   if (screen === 'season') ui.seasonRound = null
   if (screen === 'world' || screen === 'cups') void refreshPublicWorld()
   if (screen === 'transfer' && ui.transferTab === 'ai' && isOnlineMode()) void refreshAITransferMarket()
@@ -255,6 +259,8 @@ function go(screen: Screen): void {
 
 function renderScreen(): string {
   switch (ui.screen) {
+    case 'youth':
+      return renderYouth()
     case 'club':
       return renderClub()
     case 'transfer':
@@ -294,7 +300,7 @@ function syncNoticeTimer(): void {
   lastNotice = ui.notice
   if (noticeTimer !== null) window.clearTimeout(noticeTimer)
   noticeTimer = null
-  if (!ui.notice || /令牌已复制|存档保存失败/.test(ui.notice)) return
+  if (!ui.notice || /令牌已复制|存档保存失败|正在提交青训操作/.test(ui.notice)) return
   noticeTimer = window.setTimeout(() => {
     ui.notice = ''
     render()
@@ -302,12 +308,18 @@ function syncNoticeTimer(): void {
 }
 
 function render(): void {
-  // 回收和扣点等待服务器期间冻结所有交互（包括库存页独立的改名监听器）。
+  // 服务器确认写入前锁住交互，避免其它操作用旧状态提交存档。
   app.toggleAttribute('inert', trainingStartPending || cardActionPending)
   app.setAttribute('aria-busy', String(trainingStartPending || cardActionPending))
   if (ui.screen === 'lineup' && !ui.lineupDraft) ui.lineupDraft = structuredClone(game.lineup)
   if (ui.screen === 'lineup' && !ui.autoSubsDraft) ui.autoSubsDraft = structuredClone(game.autoSubs ?? emptyAutoSubs())
-  const selections = new Map([...document.querySelectorAll<HTMLSelectElement>('#match-mentality, #match-out, #match-in')].map((select) => [select.id, select.value]))
+  const matchSelects = '#match-mentality, #match-out, #match-in'
+  const youthSelects = '[data-youth-position], [data-youth-focus], #youth-recruit-position'
+  const selections = new Map([...document.querySelectorAll<HTMLSelectElement>(matchSelects)].map(select => [select.id, select.value]))
+  // 只保留尚未提交的选择；不要用上一次渲染的已保存值覆盖服务器更新。
+  for (const select of document.querySelectorAll<HTMLSelectElement>(youthSelects)) {
+    if (select.value !== select.querySelector<HTMLOptionElement>('option[selected]')?.value) selections.set(select.id, select.value)
+  }
   const pageKey = `${ui.screen}|${ui.clubTab}|${ui.transferTab}|${ui.reviewId ?? ''}|${ui.trainingPlayerId ?? ''}`
   const pageChanged = pageKey !== lastPageKey
   if (pageChanged && ui.screen === 'match') resetPitchView()
@@ -332,7 +344,7 @@ function render(): void {
     ${renderChangelogOverlay()}
     ${ui.notice ? `<div class="toast" data-action="dismiss-notice" role="status">${icon('info', 15)}<span class="toast-text">${esc(ui.notice)}</span><span class="toast-close">${icon('close', 13)}</span></div>` : ''}
   `)
-  for (const select of document.querySelectorAll<HTMLSelectElement>('#match-mentality, #match-out, #match-in')) {
+  for (const select of document.querySelectorAll<HTMLSelectElement>(`${matchSelects}, ${youthSelects}`)) {
     const value = selections.get(select.id)
     if (value !== undefined && [...select.options].some((option) => option.value === value)) select.value = value
   }
@@ -532,6 +544,7 @@ async function submitAccount(): Promise<void> {
     ui.turnstileToken = ''
     document.getElementById('turnstile-slot')?.replaceChildren()
     ui.notice = error instanceof Error ? error.message : '登录失败'
+    if (ui.authMode === 'register') void refreshRegistrationClubs().catch(() => {})
     render()
   }
 }
@@ -727,13 +740,14 @@ let onlineSessionRequested = false
 let recyclePreviewSnapshot = ''
 let recyclePreviewRevision: number | null = null
 let lastScoutRefreshAttempt = 0
+let scoutRefreshPending = false
 
 /** 联机回收和扣点必须等待服务器；明确选择离线模式才允许离线使用缓存存档。 */
 function sharedActionUnavailable(): boolean {
   return !!game.shared && (onlineSessionRequested || !!onlineState.user) && !isOnlineMode()
 }
 
-/** 离线回收和扣点只写一次存档；无法落盘时撤销内存改动，不能显示成功。 */
+/** 离线事务只写一次存档；无法落盘时撤销内存改动，不能显示成功。 */
 function commitOfflineTransaction(action: () => { ok: boolean; error?: string }): { ok: boolean; error?: string } {
   const before = structuredClone(game)
   try {
@@ -1264,6 +1278,48 @@ document.addEventListener('click', async (event) => {
   const playerId = actionEl.dataset.player
   const recordId = actionEl.dataset.record
   switch (action) {
+    case 'youth-plan':
+    case 'youth-recruit_position':
+    case 'youth-sign':
+    case 'youth-call_up':
+    case 'youth-return':
+    case 'youth-promote':
+    case 'youth-release': {
+      if (sharedActionUnavailable()) { showNotice('联机连接已断开，请先重新连接服务器'); break }
+      const kind = action.slice('youth-'.length) as YouthAction['action']
+      const card = actionEl.closest('[data-youth-member]')
+      const body: YouthAction = { action: kind, playerId }
+      if (kind === 'plan') body.plan = {
+        position: (card?.querySelector<HTMLSelectElement>('[data-youth-position]')?.value ?? '') as YouthPlan['position'],
+        focus: (card?.querySelector<HTMLSelectElement>('[data-youth-focus]')?.value ?? '') as YouthPlan['focus'],
+      }
+      if (kind === 'recruit_position') body.position = (document.querySelector<HTMLSelectElement>('#youth-recruit-position')?.value ?? '') as YouthAction['position']
+      if (kind === 'promote' && !window.confirm('正式提拔后，基础属性永久定型，不可退回青训。将开放球员卡培养，并签订低薪合同。确定提拔？')) break
+      if (kind === 'release' && !window.confirm('解约不返金币、材料或球员卡，也不会补发新人。确定放弃这名青年？')) break
+      const messages: Record<YouthAction['action'], string> = { plan: '培养方向已保存，下个周期生效。', recruit_position: '下期招募方向已保存。', sign: '青年已免费加入青训营。', call_up: '已临时征召，可到战术页安排上场。', return: '已返回青训营，体能和伤停保留。', promote: '已正式提拔，可以开始培养角色卡。', release: '已解约。' }
+      cardActionPending = true
+      try {
+        if (isOnlineMode()) {
+          ui.notice = '正在提交青训操作，请稍候…'
+          render()
+          await youthActionOnline(body)
+        } else {
+          const result = commitOfflineTransaction(() => applyYouthAction(game, body, Date.now()))
+          if (!result.ok) throw new Error(result.error)
+        }
+        if (kind === 'call_up' || kind === 'return' || kind === 'promote' || kind === 'release') {
+          ui.lineupDraft = null
+          ui.autoSubsDraft = null
+        }
+        ui.notice = messages[kind]
+      } catch (error) {
+        ui.notice = error instanceof Error ? error.message : '青训操作失败，请刷新检查'
+      } finally {
+        cardActionPending = false
+        render()
+      }
+      break
+    }
     case 'club-search':
       ui.clubSearch = (document.getElementById('club-search') as HTMLInputElement | null)?.value ?? ''
       ui.clubPage = 0
@@ -1289,7 +1345,7 @@ document.addEventListener('click', async (event) => {
       if (!offerId || !offer) break
       const accept = action === 'offer-accept'
       if (accept && !window.confirm(`以 ${offer.amount.toLocaleString()} 把 ${offer.playerName} 卖给 ${offer.clubName}？`)) break
-      if (!accept && isHighOffer(offer) && !window.confirm(`这是高价报价（身价的 ${(offer.amount / offer.value).toFixed(2)} 倍）。拒绝后 ${offer.playerName} 会不满 ${UNHAPPY_GAME_DAYS} 个游戏日，精力恢复只剩一成。确定拒绝？`)) break
+      if (!accept && isHighOffer(offer) && !window.confirm(`这是高价报价（身价的 ${(offer.amount / offer.value).toFixed(2)} 倍）。拒绝后 ${offer.playerName} 会不满 ${UNHAPPY_HOURS} 小时，精力恢复只剩一成。确定拒绝？`)) break
       try {
         if (isOnlineMode()) {
           const next = await respondOfferOnline(offerId, accept)
@@ -1301,7 +1357,7 @@ document.addEventListener('click', async (event) => {
           ui.lineupDraft = null
           ui.autoSubsDraft = null
           persist()
-          showNotice(accept ? `${offer.playerName} 以 ${offer.amount.toLocaleString()} 转会 ${offer.clubName}。` : result.unhappy ? `已拒绝。${offer.playerName} 对此不满，接下来 ${UNHAPPY_GAME_DAYS} 个游戏日精力恢复很慢。` : `已拒绝 ${offer.clubName} 的报价。`)
+          showNotice(accept ? `${offer.playerName} 以 ${offer.amount.toLocaleString()} 转会 ${offer.clubName}。` : result.unhappy ? `已拒绝。${offer.playerName} 对此不满，接下来 ${UNHAPPY_HOURS} 小时精力恢复很慢。` : `已拒绝 ${offer.clubName} 的报价。`)
         }
       } catch (error) {
         showNotice(error instanceof Error ? error.message : '操作失败')
@@ -1534,6 +1590,7 @@ document.addEventListener('click', async (event) => {
       stopTimer()
       clearSave()
       setGame(createWorldGame(ui.newGamePreview?.seed, ui.newGameClubId ?? undefined))
+      ensureYouth(game)
       ui.newGameOpen = false
       ui.newGamePreview = null
       saveGame(game)
@@ -1831,12 +1888,11 @@ document.addEventListener('click', async (event) => {
     }
     case 'scout-refresh': {
       if (sharedActionUnavailable()) { showNotice('联机连接已断开，请先重新连接服务器'); break }
-      if (isOnlineMode()) {
-        cardActionPending = true
-        syncAutoTraining()
+      if (isOnlineMode() && !scoutRefreshPending) {
+        scoutRefreshPending = true
         try { if (await refreshGameOnline(() => game)) ui.notice = '球探报告已刷新。' }
         catch (error) { ui.notice = error instanceof Error ? error.message : '报告刷新失败' }
-        finally { cardActionPending = false }
+        finally { scoutRefreshPending = false }
       }
       render()
       break
@@ -2048,7 +2104,7 @@ document.addEventListener('click', async (event) => {
           const result = startLeagueOnMatchday(game)
           if (!result.ok) throw new Error(result.error ?? '无法开始比赛')
           if (result.gameDays > 0) {
-            ui.notice = `已跳至第 ${game.season.round} 轮比赛日（前进 ${Math.round(result.gameDays * 10) / 10} 个游戏日），全队体能已按时间恢复。`
+            ui.notice = `已跳至第 ${game.season.round} 轮开赛时间，全队体能与精力已按时间恢复。`
           }
           advanceLeagueRealtime(game)
         }
@@ -2074,9 +2130,8 @@ document.addEventListener('click', async (event) => {
         break
       }
       const next = startNextSeasonAction(game)
-      const date = gameDateOf(game.world?.calendarStartAt ?? game.createdAt, Date.now()).label
       ui.notice = next.ok
-        ? `已跳至新赛季：第 ${game.season.index} 赛季开始（日历已进入 ${date}）。`
+        ? `已跳至新赛季：第 ${game.season.index} 赛季开始。`
         : next.error ?? '休整已结束，可以开始下一赛季'
       persist()
       render()
@@ -2090,8 +2145,7 @@ document.addEventListener('click', async (event) => {
         } catch (error) { ui.notice = error instanceof Error ? error.message : '全服赛季尚未结束' }
       } else {
         const result = startNextSeasonAction(game)
-        const date = gameDateOf(game.world?.calendarStartAt ?? game.createdAt, Date.now()).label
-        ui.notice = result.ok ? `新赛季已开始（日历已进入 ${date}）；升级附加赛、升降级、年龄与合同已结算。` : result.error ?? '无法开始下一赛季'
+        ui.notice = result.ok ? `第 ${game.season.index} 赛季已开始；升级附加赛、升降级、年龄与合同已结算。` : result.error ?? '无法开始下一赛季'
         if (result.ok) persist()
       }
       render()
@@ -2252,6 +2306,7 @@ document.addEventListener('click', async (event) => {
       onlineSessionRequested = false
       ui.bootGate = false
       ui.notice = '离线模式：本次不会连接服务器。'
+      if (ensureYouth(game)) persist()
       // 本地存档是系统自动建的、还没自己选过球队：先让玩家挑一支。
       if (teamPickPending()) openNewGamePicker(true)
       else maybeOpenChangelog()
@@ -2822,13 +2877,12 @@ window.setInterval(tickRealtimeLeague, 1000)
 window.setInterval(() => {
   // 联机待办只在服务器持有估计值，到期后自动拉取一次；失败后限频，仍可手动刷新。
   const at = serverNow()
-  if (isOnlineMode() && !cardActionPending && !trainingStartPending && at - lastScoutRefreshAttempt >= 30_000 &&
+  if (isOnlineMode() && !scoutRefreshPending && !cardActionPending && !trainingStartPending && at - lastScoutRefreshAttempt >= 30_000 &&
       (game.scoutReports ?? []).some(report => report.readyAt <= at && !report.estimatedAttrs)) {
     lastScoutRefreshAttempt = at
-    cardActionPending = true
-    syncAutoTraining()
-    render()
-    void refreshGameOnline(() => game).catch(() => { /* 可通过报告面板手动重试 */ }).finally(() => { cardActionPending = false; render() })
+    // 只合并报告的后台读取不能冻结青训或其它页面。
+    scoutRefreshPending = true
+    void refreshGameOnline(() => game).catch(() => { /* 可通过报告面板手动重试 */ }).finally(() => { scoutRefreshPending = false })
   }
   for (const element of document.querySelectorAll<HTMLElement>('[data-countdown-end]')) {
     const clock = element.closest('[data-peak-reset-at]') && !isOnlineMode() ? Date.now() : serverNow()

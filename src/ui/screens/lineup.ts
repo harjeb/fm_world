@@ -10,6 +10,7 @@ import { injuryUntil } from '../../game/injury.ts'
 import { emptyAutoSubs, validateAutoSubPlan } from '../../game/match/management.ts'
 import { LINEUP_LOCK_MS, PLAYER_TEAM_ID, lineupLockState, matchdayCountdown, playerFixture, teamName } from '../../game/season.ts'
 import { isOnlineMode } from '../../online.ts'
+import { youthBadge } from '../components.ts'
 import {
   BENCH_SIZE,
   MAX_SUBS,
@@ -382,7 +383,7 @@ function playerRow(player: Player, draft: Lineup, formation: FormationDef, selec
   const winRate = form.apps > 0 ? pct(form.wins / form.apps) : '—'
   return `<tr class="${isPicked ? 'me' : ''} ${assignable ? 'clickable' : ''}" data-key="${esc(player.id)}" data-drop="${dropTarget}" ${assignable ? `tabindex="0" data-action="lineup-assign" data-player="${esc(player.id)}"` : ''}>
     <td class="t-place ${placement.slot || placement.benchIndex !== undefined ? '' : 'reserve'}">${pick(`${posBadge(placement.slot?.position ?? primaryPosition(player))}<span>${esc(placeLabel)}</span>`, `<select data-move-player="${esc(player.id)}" aria-label="${esc(player.name)}的位置">${moveOptions(player, draft, formation)}</select>`)}</td>
-    <td class="name-cell t-name"><span class="grip" draggable="true" data-drag-player="${esc(player.id)}" title="拖到球场或替补席">${icon('grip', 13)}</span><button class="name-btn" data-action="detail" data-player="${esc(player.id)}">${esc(player.name)}</button>${playerFlags(player)}</td>
+    <td class="name-cell t-name"><span class="grip" draggable="true" data-drag-player="${esc(player.id)}" title="拖到球场或替补席">${icon('grip', 13)}</span><button class="name-btn" data-action="detail" data-player="${esc(player.id)}">${esc(player.name)}</button>${youthBadge(player)}${playerFlags(player)}</td>
     <td class="num t-prof" title="${esc(info.label)}熟练度 ${Math.round(info.proficiency)} / 100，属性折损 ${pct(1 - positionMultiplier(info.proficiency))}">${proficiencyBar(info.proficiency)}</td>
     <td class="num t-cond" title="体能 ${Math.round(player.condition ?? 100)} / 100，比赛开始时映射为初始体力">${fitnessHeart(player.condition ?? 100)}</td>
     <td class="num strong">${fitHeat(info.fit)}</td>
@@ -893,7 +894,7 @@ function chemistryLines(draft: Lineup, formation: FormationDef): string {
     const end = boardSpot(b.x, b.y)
     const points = `x1="${start.left}" y1="${start.top}" x2="${end.left}" y2="${end.top}"`
     const title = `${playerOf(a.id)!.name} ↔ ${playerOf(b.id)!.name}`
-    const body = `默契 ${value.toFixed(1)} / 100；共同上场 ${Math.round(minutes)} 分钟。传球配合评分最多 +${(4 * value / 100).toFixed(1)}，长传减半、传中按八成计算。每人仅显示一名主要搭档，其他队友默契仍生效。超过 180 个游戏日未合作会移除。`
+    const body = `默契 ${value.toFixed(1)} / 100；共同上场 ${Math.round(minutes)} 分钟。传球配合评分最多 +${(4 * value / 100).toFixed(1)}，长传减半、传中按八成计算。每人仅显示一名主要搭档，其他队友默契仍生效。超过 21 天未合作会移除。`
     return `<g class="chemistry-link" data-key="${esc(chemistryKey(a.id, b.id))}" data-a="${esc(a.id)}" data-b="${esc(b.id)}" role="img" ${tipAttrs(title, body)}><line class="chemistry-stroke" ${points} opacity="${0.35 + value / 180}" /><line class="chemistry-hit" ${points} /></g>`
   }).join('')}</svg>`
 }

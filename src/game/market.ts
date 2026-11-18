@@ -8,8 +8,10 @@ import { assessRelease, releaseChance, releaseRoll, type ReleaseAssessment } fro
 import { wageForPlayer, worldTransferTeams } from './world.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 import { closeFinishedTraining, destroyPlayerCards, untrainedPlayer } from './cards.ts'
+import { sanitizeAutoSubPlan } from './match/management.ts'
 import { negotiationDemands, negotiationFailure, negotiationRoll, negotiationTerms, type NegotiationAnswers, type NegotiationDemands } from './negotiation.ts'
 import { isLocalFreeAgentAvailable } from './free-market.ts'
+import { isYouthTrainee, youthTransferBlocked } from './youth.ts'
 
 type Market = NonNullable<GameState['market']>
 type Listing = Market['listings'][number]
@@ -74,10 +76,9 @@ const positive = (n: number) => Number.isSafeInteger(n) && n > 0
 /** 一线队人数上限（11 人制：25 人名单再留 5 个签人的空位）。 */
 export const SQUAD_LIMIT = 30
 
-export function transferWindowOpen(game: GameState): boolean {
-  if (!game.world) return true
-  const round = game.season?.round ?? 1
-  return round <= 10 || (round >= 20 && round <= 30)
+/** 转会窗口常开。 */
+export function transferWindowOpen(_game: GameState): boolean {
+  return true
 }
 
 function assignContract(game: GameState, player: Player): void {
@@ -375,6 +376,7 @@ export function listPlayer(game: GameState, playerId: string, price: number): Ma
   if (market?.listings.some(l => l.player.id === playerId)) return fail('球员已挂牌')
   const player = game.roster.find(p => p.id === playerId)
   if (!player) return fail('球员不存在')
+  if (youthTransferBlocked(player)) return fail('在营青年或提拔未满一周的青训球员不能挂牌')
   const value = bestMarketValue(game, player)
   if (!positive(value)) return fail('球员数据无效')
   if (price > value * MAX_LISTING_RATIO) {
@@ -390,7 +392,7 @@ export function listPlayer(game: GameState, playerId: string, price: number): Ma
   closeFinishedTraining(game, playerId)
   game.roster = roster
   game.lineup = repaired.lineup
-  if (game.autoSubs && (repaired.changed || game.autoSubs.timed.some(s => s.outId === playerId || s.inId === playerId))) delete game.autoSubs
+  if (game.autoSubs) game.autoSubs = sanitizeAutoSubPlan(game.roster, game.lineup, game.autoSubs)
   const escrow = market ?? (game.market = { listings: [], lastSettledRound: 0 })
   escrow.listings.push({ player, price, listedRound: round })
   return { ok: true }
@@ -525,6 +527,8 @@ export function releasePlayer(game: GameState, playerId: string): MarketOutcome 
   if (game.roster.length <= MIN_SQUAD) return fail(`阵容必须保留至少 ${MIN_SQUAD} 人`)
   const player = game.roster.find((item) => item.id === playerId)
   if (!player) return fail('球员不在你的阵容')
+  if (isYouthTrainee(player)) return fail('在营青年请在青训页面退回或解约')
+  if (youthTransferBlocked(player)) return fail('青训球员提拔满一周后才能离队')
   const roster = game.roster.filter((item) => item.id !== playerId)
   const repaired = repairLineup(roster, game.lineup)
   if (!validateLineup(roster, repaired.lineup).valid) return fail('解约后无法组成合法阵容')

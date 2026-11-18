@@ -148,8 +148,8 @@ function renderPeak(): string {
   const quota = peakDailyStatus(game, now)
   const disabled = !canPlay || !!game.activeMatch || !!ui.completing || quota.remaining <= 0
   const kindLabel = def.kind === 'national' ? '世界杯国家队' : def.kind === 'special' ? '动漫全明星' : '生成队'
-  return `<div class="kpi-row">${tile('已通关', `${cleared} / ${PEAK_STAGE_COUNT}`)}${tile('当前关', done ? '全部完成' : String(current))}${tile('本游戏日剩余', `${quota.remaining} / ${PEAK_DAILY_LIMIT}`)}${tile('首发平均 CA', String(Math.round(startingCa(team))))}</div>
-    <p class="hint pad" data-peak-reset-at="${quota.resetAt}">每个游戏日（现实 6 小时）最多挑战 ${PEAK_DAILY_LIMIT} 次；开赛即消耗，胜负及重打均计入。下次重置：<span class="countdown" data-countdown-end="${quota.resetAt}">${esc(countdownText(quota.resetAt - now))}</span>。</p>
+  return `<div class="kpi-row">${tile('已通关', `${cleared} / ${PEAK_STAGE_COUNT}`)}${tile('当前关', done ? '全部完成' : String(current))}${tile('今日剩余', `${quota.remaining} / ${PEAK_DAILY_LIMIT}`)}${tile('首发平均 CA', String(Math.round(startingCa(team))))}</div>
+    <p class="hint pad" data-peak-reset-at="${quota.resetAt}">每天（北京时间 00:00 重置）最多挑战 ${PEAK_DAILY_LIMIT} 次；开赛即消耗，胜负及重打均计入。下次重置：<span class="countdown" data-countdown-end="${quota.resetAt}">${esc(countdownText(quota.resetAt - now))}</span>。</p>
     ${panel('进度 · 点击任意关卡预览', `<div class="peak-track" aria-label="巅峰之路关卡">${Array.from({ length: 100 }, (_, i) => `<button class="peak-cell ${i < cleared ? 'done' : ''} ${i + 1 === current && !done ? 'current' : ''} ${i >= 80 ? 'national' : ''}" data-peak-preview="${i + 1}" aria-label="第 ${i + 1} 关${i < cleared ? '，已通关' : i + 1 === current ? '，当前关' : '，未解锁'}" aria-pressed="${i + 1 === stage}">${i + 1}</button>`).join('')}</div><p class="hint pad">绿色已通关，高亮为当前关；81–100 关为世界杯国家队。可重打已通关关卡或挑战当前关，其余关卡只能预览。</p>`, { flush: true })}
     ${peakRewardsPanel(stage, cleared)}
     ${peakRewardPanel()}

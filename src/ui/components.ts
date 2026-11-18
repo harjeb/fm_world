@@ -201,6 +201,10 @@ export function posBadge(pos: Position): string {
   return `<span class="pos ${positionClass(pos)}">${positionLabel(pos)}</span>`
 }
 
+export function youthBadge(player: Pick<Player, 'youthOrigin'>): string {
+  return player.youthOrigin ? `<span class="youth-badge" title="${esc(player.youthOrigin.club)}青训出身">青训</span>` : ''
+}
+
 export function countryLabel(player: Pick<Player, 'country'>): string {
   return player.country === '随机青训' ? '青训' : player.country
 }
@@ -291,6 +295,7 @@ export function pick(text: string, select: string, className = ''): string {
 
 /** 给球员换卡的下拉框：选项是原始属性和他自己的每一张卡。 */
 export function cardSelect(player: Player, className = ''): string {
+  if (player.youthOrigin && player.youthOrigin.promotedAt === undefined) return `<span class="muted small">青训基础属性</span>`
   const cards = playerCards(game, player.id)
   const current = cards.find((card) => card.id === player.equippedCardId)
   const options = [
@@ -303,6 +308,8 @@ export function cardSelect(player: Player, className = ''): string {
 /** 全游戏范围查球员：阵容、挂牌、自由球员和其他俱乐部。 */
 export function findAnyPlayer(id: string): Player | undefined {
   return game.roster.find((player) => player.id === id)
+    ?? game.youth?.members.find(member => member.player.id === id)?.player
+    ?? game.youth?.intake.candidates.find(member => member.player.id === id)?.player
     ?? game.market?.listings.find((listing) => listing.player.id === id)?.player
     ?? game.freeStars.find((player) => player.id === id)
     ?? marketState.pool.find((player) => player.id === id)

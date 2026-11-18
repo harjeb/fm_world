@@ -1,7 +1,7 @@
 {
   "name": "fm-world",
   "private": true,
-  "version": "0.4.13",
+  "version": "0.4.18",
   "type": "module",
   "engines": {
     "node": ">=22.13.0"
@@ -23,6 +23,8 @@
     "start": "tsx server/index.ts",
     "smoke": "node scripts/browser-smoke.mjs",
     "balance": "tsx scripts/balance.ts",
+    "balance:youth": "tsx scripts/youth-balance.ts",
+    "audit:positions": "tsx scripts/position-profile-audit.ts",
     "balance:pve": "tsx scripts/balance-pve.ts",
     "pve:freeze": "tsx scripts/freeze-pve.ts",
     "smoke:pve": "tsx scripts/pve-ui-smoke.ts",

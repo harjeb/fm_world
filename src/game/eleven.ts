@@ -9,8 +9,9 @@
 import type { AITeam, GameState, Lineup, Player, Position, TacticPreset } from './types.ts'
 import { elevenFormationFor, isLegacyFormation } from './data/formations.ts'
 import { createRandomPlayer, randomSquadPositionTemplate } from './data/random-players.ts'
+import { neededNaturalPosition } from './natural-positions.ts'
 import { autoFillLineup } from './squad.ts'
-import { validateAutoSubPlan } from './match/management.ts'
+import { sanitizeAutoSubPlan, validateAutoSubPlan } from './match/management.ts'
 import { splitSeed } from './rng.ts'
 import { SQUAD_WAGE_SCALE, wageForPlayer } from './world.ts'
 
@@ -58,6 +59,7 @@ export function elevenReinforcements(players: Player[], options: { seed: number;
     added.push(createRandomPlayer({
       seed: splitSeed(options.seed, `eleven-${options.key}-${index}`),
       position,
+      detailedPosition: neededNaturalPosition([...players, ...added], position, options.seed + index),
       tier: options.tier,
       usedNames: used,
       idPrefix: `${options.key}-e${index + 1}`,
@@ -126,7 +128,9 @@ export function upgradeElevenASide(game: GameState): boolean {
     }
     game.roster = [...game.roster, ...extra]
     game.lineup = elevenLineup(game.roster, game.lineup)
-    if (game.autoSubs && validateAutoSubPlan(game.roster, game.lineup, game.autoSubs).length) delete game.autoSubs
+    if (game.autoSubs && validateAutoSubPlan(game.roster, game.lineup, game.autoSubs).length) {
+      game.autoSubs = sanitizeAutoSubPlan(game.roster, game.lineup, game.autoSubs)
+    }
   }
   game.aiTeams = (game.aiTeams ?? []).map((team) => (isLegacyFormation(team.formationId) || isLegacyFormation(team.lineup?.formationId ?? '') ? elevenAITeam(team, game.seed) : team))
   for (const club of game.world?.clubs ?? []) {

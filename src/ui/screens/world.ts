@@ -7,7 +7,7 @@ import { publicWorld, onlineState } from '../../online.ts'
 import { clubRosterPanel, divisionRatings, publicClubFor } from '../club-view.ts'
 import { clubLook, crest, emptyState, fixtureRow, humanMark, icon, leagueTable, ownName, pageHead, panel, tag } from '../components.ts'
 import { esc } from '../format.ts'
-import { WORLD_CLUB_DEFS } from '../../game/data/world-clubs.ts'
+import { WORLD_CLUB_DEFS, conferenceLabel, conferenceOfDivision } from '../../game/data/world-clubs.ts'
 import { game, ui } from '../state.ts'
 import type { Fixture, SeasonTableRow, TierId, WorldState } from '../../game/types.ts'
 
@@ -27,8 +27,10 @@ function allTierMetas(world: WorldState): DivisionTierMeta[] {
   const extraIds = [
     ...(snapshot?.divisions.map((d) => d.id) ?? []),
     ...world.divisions.map((d) => d.divisionId ?? ''),
-  ].filter((id) => id && !seen.has(id))
+  ]
   for (const id of extraIds) {
+    // 快照和账号存档通常包含同一赛区；逐项检查，避免两边的扩展赛区重复渲染。
+    if (!id || seen.has(id)) continue
     seen.add(id)
     items.push({
       id,
@@ -199,11 +201,17 @@ export function renderWorld(): string {
   const colorOf = (id: string) => WORLD_CLUB_DEFS.find((club) => club.id === id)?.color ?? '#64748b'
   const selectedInActiveDiv = !!normalizedSelectedId && visibleTable.some((row) => row.teamId === normalizedSelectedId)
 
+  const d2Summary = d2Tiers.length <= 2
+    ? '南北两区'
+    : d2Tiers.length <= 5
+      ? d2Tiers.map((item) => conferenceLabel(conferenceOfDivision(item.id))).filter(Boolean).join(' / ')
+      : '多个赛区'
+
   return `
     ${pageHead({
       kicker: `赛季 ${snapshot?.seasonIndex ?? world.seasonIndex} · ${snapshot?.clubs.length ?? world.clubs.length} 支球队`,
       title: '三级共享世界',
-      sub: `冠军联赛 / 一级联赛 / 二级联赛（南北两区）。当前执教：<b>${ownName(game.clubName)}</b> · ${worldTierLabel(playerClub?.tier ?? 'division2')}${playerClub?.conference ? ` · ${playerClub.conference === 'north' ? '北区' : playerClub.conference === 'south' ? '南区' : playerClub.conference}` : ''}。`,
+      sub: `冠军联赛 / 一级联赛 / 二级联赛（${d2Summary}）。当前执教：<b>${ownName(game.clubName)}</b> · ${worldTierLabel(playerClub?.tier ?? 'division2')}${playerClub?.conference ? ` · ${conferenceLabel(playerClub.conference)}` : ''}。`,
       actions: `${onlineState.status === 'online' ? '' : '<button class="btn" data-action="new-game">开始本地新游戏</button>'}`,
     })}
     ${inPostseason(game) ? `<div class="banner info">${icon('clock', 18)}<b>赛后休整 · 还剩 ${esc(nextSeasonCountdown(game))}</b><span>升级杯正在进行；所有球队都可以约友谊赛，赛季将在休整窗口结束后自动开始。</span></div>` : ''}
@@ -224,11 +232,11 @@ export function renderWorld(): string {
             <li>${icon('flag', 13)}二级每个赛区的前 3 名进入升级杯：各区第 1 轮空，2/3 名先加赛一轮；出线的人和轮空的球队随机分成两组打循环（瑞士轮），小组第一直接升级，两个小组第二再打一轮，胜者拿到第 3 个升级名额。</li>
             <li>${icon('flag', 13)}赛区数量不影响升级名额：不管开多少个区，二级每个赛季都是 3 队升入一级联赛。</li>
           </ul>
-          ${playoff ? `<p class="small">升级杯：${playoff.promoted.map((id) => ownName(clubLabel(id), clubLabel(id) === game.clubName)).join('、') || '进行中'}</p>` : '<p class="hint">常规赛结束后先休整 12 个游戏日踢升级杯，期间可以安排友谊赛。</p>'}
+          ${playoff ? `<p class="small">升级杯：${playoff.promoted.map((id) => ownName(clubLabel(id), clubLabel(id) === game.clubName)).join('、') || '进行中'}</p>` : '<p class="hint">常规赛结束后留 16 小时休整踢升级杯，期间可以安排友谊赛。</p>'}
         `)}
         ${world.history.length ? panel('历届荣誉', `<div class="rows">${world.history.slice().reverse().slice(0, 5).map((item) => `<div class="row-line"><span class="dim">第 ${item.seasonIndex} 赛季</span><span>冠军 ${ownName(item.champion, item.champion === game.clubName)}</span><span class="muted small">升级 ${item.promotions.length} 队</span></div>`).join('')}</div>`, { flush: true }) : ''}
         ${panel('球队席位', `
-          <p class="hint">新账号只会接管<b>二级联赛</b>的空位；二级满员后服务器自动开一个新赛区（第 3 区、第 4 区……），不会把你塞进一级或冠军联赛。联机账号不能自行重开世界；退出账号后可以创建独立的本地存档。</p>
+          <p class="hint">新账号只会接管<b>二级联赛</b>的空位；二级满员后服务器自动开一个新赛区（东区、西区、中区……），不会把你塞进一级或冠军联赛。联机账号不能自行重开世界；退出账号后可以创建独立的本地存档。</p>
           <div class="club-chips">${picks.slice(0, 8).map((club) => `<span class="club-chip">${crest({ name: club.name, color: colorOf(club.id) }, 15)}${esc(club.name)}<small>${club.conference === 'north' ? '北区' : '南区'}</small></span>`).join('')}</div>
         `)}
       </div>

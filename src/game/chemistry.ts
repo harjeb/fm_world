@@ -1,7 +1,9 @@
 import type { Chemistry, PairChemistry, PlayerMatchStats } from './types.ts'
-import { GAME_DAY_MS } from './calendar.ts'
+import { DAY_MS, GAME_DAY_MS } from './calendar.ts'
 
-export const CHEMISTRY_EXPIRY_DAYS = 180
+/** 超过 21 个现实天（3 个赛季）未合作会移除默契。 */
+export const CHEMISTRY_EXPIRY_REAL_DAYS = 21
+export const CHEMISTRY_EXPIRY_DAYS = (CHEMISTRY_EXPIRY_REAL_DAYS * DAY_MS) / GAME_DAY_MS
 export const CHEMISTRY_TRAINING_DAILY_CAP = 2
 
 export function chemistryKey(a: string, b: string): string {

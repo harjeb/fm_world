@@ -20,7 +20,7 @@ afterEach(() => {
   while (dirs.length) fs.rmSync(dirs.pop()!, { recursive: true, force: true })
 })
 
-const kickoffAt = Date.UTC(2026, 10, 9, 12)
+const kickoffAt = Date.UTC(2026, 10, 9, 10)
 
 /** 在开球前 30 分钟锁定第 1 轮，返回冻结下来的某场比赛快照。 */
 function lockFirstFixture(prepare: (home: LockedTeam, away: LockedTeam) => void) {

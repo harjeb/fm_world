@@ -1,22 +1,25 @@
-import { GAME_DAY_MS, gameDayIndex } from './calendar.ts'
+import { beijingDayIndex, nextBeijingMidnight } from './calendar.ts'
 import { splitSeed } from './rng.ts'
 import type { GameState } from './types.ts'
 
-/** 所有关卡共用，每开始一场就消耗一次（无论胜负）。 */
-export const PEAK_DAILY_LIMIT = 3
+/** 所有关卡共用，每个自然日（北京时间 00:00 重置）最多挑战 10 次；开赛即消耗（无论胜负）。 */
+export const PEAK_DAILY_LIMIT = 10
 
-type PeakGame = Pick<GameState, 'world' | 'createdAt' | 'pve' | 'seed'>
+type PeakGame = Pick<GameState, 'world' | 'createdAt' | 'pve' | 'seed'> & Partial<Pick<GameState, 'season'>>
 
-/** 与顶栏日历使用同一锚点；离线跳日与换赛季也随游戏日历走。 */
+/** 按北京时间自然日重置；单机跳轮次（clockShift）也随存档时钟跨越 00:00 正常刷新。 */
 export function peakDailyStatus(game: PeakGame, now = Date.now()): { day: number; used: number; remaining: number; resetAt: number } {
-  const anchor = game.world?.calendarStartAt ?? game.createdAt
-  const currentDay = gameDayIndex(anchor, now)
+  const shift = game.season?.clockShift ?? game.world?.clockShift ?? 0
+  const effectiveNow = now + shift
+  const currentDay = beijingDayIndex(effectiveNow)
   const saved = game.pve?.peak.dailyAttempts
   const savedValid = saved && Number.isSafeInteger(saved.day) && saved.day >= 0 && Number.isSafeInteger(saved.count) && saved.count >= 0
-  // 本机时钟回退不能重置当天次数；正常跳到下一个游戏日才刷新。
+  // 本机时钟回退不能重置当天次数；正常进入下一个自然日才刷新。
   const day = savedValid ? Math.max(currentDay, saved.day) : currentDay
   const used = savedValid && saved.day === day ? Math.min(PEAK_DAILY_LIMIT, saved.count) : 0
-  return { day, used, remaining: PEAK_DAILY_LIMIT - used, resetAt: anchor + (day + 1) * GAME_DAY_MS }
+  const resetDay = Math.max(currentDay, day)
+  const resetAt = nextBeijingMidnight(effectiveNow) + (resetDay - currentDay) * 86_400_000 - shift
+  return { day, used, remaining: PEAK_DAILY_LIMIT - used, resetAt }
 }
 
 /** 序号不按天重置，未完成或已清理的旧战报也不会让比赛种子重用。 */

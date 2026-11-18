@@ -1,38 +1,35 @@
 import type { GameState, Player } from './types.ts'
 import { derivedRng } from './rng.ts'
-import { gameDateOf } from './calendar.ts'
+import { beijingDayIndex } from './calendar.ts'
 
 /**
- * 真实球星不是每天都在市场：每名球星每个月只有 3–5 天挂牌，
- * 具体日期由 starKey 稳定散列得到，存档重开、换设备都一样。
- * 普通（随机）球员不受限制。
+ * 真实球星不是每天都在市场：以 28 个自然日为一个轮换周期，每名球星每周期有 4–5 个自然日挂牌（满 24 小时），
+ * 具体日期由 starKey 稳定散列得到，避免只出现在凌晨短窗口。普通（随机）球员不受限制。
  */
 export function starMarketDays(player: Pick<Player, 'id' | 'starKey'>): number[] | null {
   if (!player.starKey) return null
   const rng = derivedRng(0, 'star-market-days', player.starKey)
-  const count = 3 + rng.int(3)
+  const count = 4 + rng.int(2)
   const days = new Set<number>()
   for (let guard = 0; days.size < count && guard < 60; guard++) days.add(1 + rng.int(28))
   return [...days].sort((a, b) => a - b)
 }
 
-function calendarAnchor(game: Pick<GameState, 'world' | 'createdAt'>): number {
-  return game.world?.calendarStartAt ?? game.createdAt ?? Date.now()
-}
+type MarketClockAnchor = Pick<GameState, 'world' | 'createdAt'> & Partial<Pick<GameState, 'season'>>
 
-/** 今天是游戏内几号（1–31）。 */
-export function marketDayOfMonth(game: Pick<GameState, 'world' | 'createdAt'>, now = Date.now()): number {
-  return gameDateOf(calendarAnchor(game), now).day
+/** 今天落在 28 天轮换周期的第几天（1–28，按北京时间 00:00 切换）。 */
+export function marketDayOfMonth(game: MarketClockAnchor, now = Date.now()): number {
+  const shift = game.season?.clockShift ?? game.world?.clockShift ?? 0
+  const idx = beijingDayIndex(now + shift)
+  return (((idx % 28) + 28) % 28) + 1
 }
 
 export function isOnMarketToday(
-  game: Pick<GameState, 'world' | 'createdAt'>,
+  game: MarketClockAnchor,
   player: Pick<Player, 'id' | 'starKey'>,
   now = Date.now(),
 ): boolean {
   const days = starMarketDays(player)
   if (!days) return true
-  // 只排到 28 号：29–31 号沿用 28 号的窗口，避免大小月和赛季日历错位。
-  return days.includes(Math.min(28, marketDayOfMonth(game, now)))
+  return days.includes(marketDayOfMonth(game, now))
 }
-

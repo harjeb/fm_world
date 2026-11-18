@@ -12,6 +12,7 @@ import { tipAttrs } from './tooltip.ts'
 import { renderClubRankTrendPanel } from './rank-chart.ts'
 import { game, ui } from './state.ts'
 import { renderScoutControls } from './screens/scouting.ts'
+import { youthBadge } from './components.ts'
 
 let ownerlessMemo: { key: string; teams: Record<string, AITeam> } | null = null
 
@@ -74,8 +75,8 @@ export function publicClubFor(world: WorldState | undefined, id: string): WorldP
     conference: club.conference,
     formationId: club.formationId,
     facilities: id === PLAYER_TEAM_ID ? undefined : publicFacilityStages(game.aiClubs?.[id]?.economy),
-    players: roster.map(({ id: playerId, name, enName, country, era, age, foot, height, positions, detailedPositions, attrs, baseAttrs, traitId, skills, skillTiers }) => ({
-      id: playerId, name, enName, country, era, age, foot, height, positions, detailedPositions,
+    players: roster.map(({ youthOrigin, id: playerId, name, enName, country, era, age, foot, height, positions, detailedPositions, attrs, baseAttrs, traitId, skills, skillTiers }) => ({
+      id: playerId, name, enName, country, era, age, foot, height, positions, detailedPositions, youthOrigin,
       attrs: Object.fromEntries(mainAttrsFor(positions.GK > 0).map((key) => [key, attrs[key]])),
       traitId, skills, skillTiers, ca: playerCA({ attrs, positions }),
       baseCa: baseAttrs ? playerCA({ attrs: baseAttrs, positions }) : undefined,
@@ -130,7 +131,7 @@ export function clubRosterPanel(club: WorldPublicClub, selectedId?: string | nul
   const selected = selectedId ? club.players.find((player) => player.id === selectedId) : undefined
   const rows = [...club.players].sort((a, b) => b.ca - a.ca).map((player) => `<tr class="${player.id === selectedId ? 'me' : ''}">
     <td>${posBadge(primaryPosition(player))}</td>
-    <td><button class="name-btn" data-club-player="${esc(player.id)}" data-club="${esc(club.id)}">${esc(player.name)}</button></td>
+    <td><button class="name-btn" data-club-player="${esc(player.id)}" data-club="${esc(club.id)}">${esc(player.name)}</button>${youthBadge(player)}</td>
     <td class="num">${player.age ?? 24}</td><td class="num strong">${caHeat(player.ca)}</td>
     <td>${equippedCardCell(player)}</td>
     <td>${traitLabel(player.traitId)}</td></tr>`).join('')

@@ -4,11 +4,11 @@ import os from 'node:os'
 import path from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
-import { GAME_DAY_MS } from '../src/game/calendar.ts'
+import { DAY_MS } from '../src/game/calendar.ts'
 import { FREE_MARKET_TARGET, refreshFreeMarket, refreshLocalFreeMarket, isLocalFreeAgentAvailable } from '../src/game/free-market.ts'
 import { buyFreeAgent } from '../src/game/market.ts'
 import { isOnMarketToday } from '../src/game/market-window.ts'
-import { scoutKeepsOnMarket, startScouting } from '../src/game/scouting.ts'
+import { scoutKeepsOnMarket, scoutMarketGraceMs, startScouting } from '../src/game/scouting.ts'
 import { economyOf } from '../src/game/economy.ts'
 import { createWorldGame } from '../src/game/world.ts'
 import { loadPveContent } from '../src/game/pve-content.ts'
@@ -28,17 +28,16 @@ it('单机报告耗时与额外一天内保留补充球员，到期清理，签�
   const [p, q] = game.freeStars
   const r = startScouting(game, p, { source: 'market' }, 1, t).report!
   const s = startScouting(game, q, { source: 'market' }, 1, t).report!
-  for (let d = 1; d <= 4; d++) {
-    refreshLocalFreeMarket(game, t + d * GAME_DAY_MS)
-    expect(game.freeStars.some(x => x.id === p.id)).toBe(true)
-  }
+  refreshLocalFreeMarket(game, r.readyAt)
+  expect(game.freeStars.some(x => x.id === p.id)).toBe(true)
   expect(scoutKeepsOnMarket(game, p.id, r.readyAt)).toBe(true)
   vi.spyOn(Date, 'now').mockReturnValue(r.readyAt)
   expect(buyFreeAgent(game, p.id).ok).toBe(true)
-  refreshLocalFreeMarket(game, s.readyAt + GAME_DAY_MS)
+  const expiredAt = Math.max(s.readyAt + scoutMarketGraceMs(), t + DAY_MS)
+  refreshLocalFreeMarket(game, expiredAt)
   expect(game.freeStars.some(x => x.id === p.id || x.id === q.id)).toBe(false)
   expect(game.roster.some(x => x.id === p.id)).toBe(true)
-  expect(scoutKeepsOnMarket(game, q.id, s.readyAt + GAME_DAY_MS)).toBe(false)
+  expect(scoutKeepsOnMarket(game, q.id, s.readyAt + scoutMarketGraceMs())).toBe(false)
 })
 
 it('球星脱离挂牌日仍可谈；迁移后的报告时间和存档游戏日决定宽限', () => {
@@ -46,20 +45,21 @@ it('球星脱离挂牌日仍可谈；迁移后的报告时间和存档游戏日�
   const t = game.world!.calendarStartAt! + 1000
   const star = game.freeStars.find(p => p.starKey)!
   const report = startScouting(game, star, { source: 'market' }, 1, t).report!
-  const off = Array.from({ length: 28 }, (_, i) => t + i * GAME_DAY_MS).find(x => !isOnMarketToday(game, star, x))!
+  const off = Array.from({ length: 28 }, (_, i) => t + i * DAY_MS).find(x => !isOnMarketToday(game, star, x))!
   report.startedAt = off - 100
   report.readyAt = off + 100
   game.season.gameDayMs = 12345
+  const grace = scoutMarketGraceMs(12345)
   expect(isLocalFreeAgentAvailable(game, star, off)).toBe(true)
-  expect(isLocalFreeAgentAvailable(game, star, report.readyAt + 12344)).toBe(true)
-  expect(isLocalFreeAgentAvailable(game, star, report.readyAt + 12345)).toBe(false)
+  expect(isLocalFreeAgentAvailable(game, star, report.readyAt + grace - 1)).toBe(true)
+  expect(isLocalFreeAgentAvailable(game, star, report.readyAt + grace)).toBe(false)
 })
 
 it('刷新计数包含暂留及竞拍的非挂牌球员，但不会复活已离池球员', () => {
   const game = createWorldGame(1453)
   const t = game.world!.calendarStartAt! + 1000
   const star = game.freeStars.find(p => p.starKey)!
-  const off = Array.from({ length: 28 }, (_, i) => t + i * GAME_DAY_MS).find(x => !isOnMarketToday(game, star, x))!
+  const off = Array.from({ length: 28 }, (_, i) => t + i * DAY_MS).find(x => !isOnMarketToday(game, star, x))!
   game.freeStars = []
   refreshLocalFreeMarket(game, t)
   const [auctioned] = game.freeStars
@@ -103,9 +103,9 @@ it('联机任意账号的报告对全服生效，其他账号可竞拍，成交�
     expect((await post('/api/market/bid', a, { playerId: p.id, amount: raised })).status).toBe(200)
     clock += AUCTION_DURATION_MS + 1
     expect((await market()).pool.some(x => x.id === p.id)).toBe(false)
-    clock = report.readyAt + state.game.season.gameDayMs
+    clock = Math.max(report.readyAt + scoutMarketGraceMs(state.game.season.gameDayMs), 1_700_000_000_000 + DAY_MS)
     expect((await market()).pool.some(x => x.id === q.id)).toBe(false)
-    clock += 2 * GAME_DAY_MS
+    clock += DAY_MS
     expect((await market()).pool.some(x => x.id === p.id)).toBe(false)
   } finally {
     if (app) await app.shutdown()

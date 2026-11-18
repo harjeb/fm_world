@@ -1,0 +1,11 @@
+.star-rating { display: inline-flex; align-items: center; gap: 6px; vertical-align: middle; white-space: nowrap; line-height: 1; }
+.rating-stars { display: inline-flex; align-items: center; gap: 2px; font-size: 16px; line-height: 1; }
+.rating-star { display: inline-block; flex: 0 0 1em; width: 1em; height: 1em; line-height: 1; text-align: center; margin: 0; padding: 0; border: 0; border-radius: 0; font-style: normal; font-weight: 400; }
+.rating-star--full { color: #e6b856; }
+.rating-star--empty { color: #697583; }
+.rating-star--half { color: transparent; background: linear-gradient(90deg, #e6b856 50%, #697583 50%); -webkit-background-clip: text; background-clip: text; }
+.rating-number { font-size: 12px; font-variant-numeric: tabular-nums; }
+.youth-ratings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0 12px; }
+.youth-ratings > div { display: flex; flex-direction: column; gap: 9px; }
+.youth-rating-label { color: var(--muted, var(--text-3)); font-size: 12px; }
+.youth-ratings .rating-stars { font-size: 20px; }

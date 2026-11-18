@@ -5,7 +5,7 @@ import { aiTransferOffers } from '../src/game/market.ts'
 import { isLocalFreeAgentAvailable } from '../src/game/free-market.ts'
 import { untrainedPlayer } from '../src/game/cards.ts'
 import { economyOf } from '../src/game/economy.ts'
-import { SCOUT_LEVELS, startScouting } from '../src/game/scouting.ts'
+import { SCOUT_LEVELS, startScouting, visibleScoutReports } from '../src/game/scouting.ts'
 import { onlineState } from '../src/online.ts'
 
 const mocks = vi.hoisted(() => ({
@@ -23,6 +23,8 @@ vi.mock('../src/online.ts', async (original) => ({
 }))
 
 let click: (event: unknown) => Promise<void>
+const app = { toggleAttribute: vi.fn(), setAttribute: vi.fn() }
+const secondTicks: Array<() => void> = []
 let originalGame: typeof game
 let originalUi: typeof ui
 const now = 1731000000000
@@ -30,13 +32,12 @@ beforeAll(async () => {
   originalGame = game
   originalUi = { ...ui }
   const listeners: Record<string, Array<(event: unknown) => Promise<void>>> = {}
-  const app = { toggleAttribute: vi.fn(), setAttribute: vi.fn() }
   vi.stubGlobal('document', {
     getElementById: (id: string) => id === 'app' ? app : null,
     querySelectorAll: () => [], querySelector: () => null,
     addEventListener: (type: string, listener: (event: unknown) => Promise<void>) => { (listeners[type] ??= []).push(listener) },
   })
-  vi.stubGlobal('window', { addEventListener: vi.fn(), setInterval: vi.fn(), setTimeout: vi.fn(() => 1), clearTimeout: vi.fn(), scrollTo: vi.fn() })
+  vi.stubGlobal('window', { addEventListener: vi.fn(), setInterval: (tick: () => void, interval: number) => { if (interval === 1000) secondTicks.push(tick) }, setTimeout: vi.fn(() => 1), clearTimeout: vi.fn(), scrollTo: vi.fn() })
   await import('../src/ui/app.ts')
   expect(listeners.click?.length).toBeGreaterThan(0)
   click = listeners.click.at(-1)!
@@ -173,6 +174,28 @@ describe('球探实际点击：联机', () => {
     expect(mocks.start).not.toHaveBeenCalled()
     expect(mocks.refresh).not.toHaveBeenCalled()
     expect(mocks.save).not.toHaveBeenCalled()
+  })
+  it('在青训页后台刷新到期报告时不锁住界面，也不重复请求', async () => {
+    mocks.online = true
+    ui.screen = 'youth'
+    const team = game.aiTeams[0]
+    const report = startScouting(game, team.players[0], { source: 'club', clubId: team.id }, 2, now).report!
+    const visible = visibleScoutReports(game, now)[0] as typeof report
+    game.scoutReports = [{ ...visible, readyAt: 0 }]
+    let finish!: (result: boolean) => void
+    const pending = new Promise<boolean>(resolve => { finish = resolve })
+    mocks.refresh.mockReturnValueOnce(pending)
+    app.toggleAttribute.mockClear()
+    try {
+      secondTicks.forEach(tick => tick())
+      secondTicks.forEach(tick => tick())
+      await act('scout-refresh')
+      expect(mocks.refresh).toHaveBeenCalledOnce()
+      expect(app.toggleAttribute).not.toHaveBeenCalledWith('inert', true)
+    } finally {
+      finish(true)
+      await pending
+    }
   })
   it('服务器错误显示通知且不改本地数据', async () => {
     mocks.online = true

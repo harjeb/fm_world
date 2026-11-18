@@ -35,15 +35,14 @@ describe('赛后休整窗口与日历', () => {
     expect(gameDateOf(start, start + 61 * GAME_DAY_MS).label).toBe('2027/01/01')
   })
 
-  it('每个赛季在常规赛之后留 12 个游戏日给升级杯，下一赛季接着开始', () => {
-    // 北京时间 12:00 开始的赛季：38 轮踢 18 天 8 小时，再过 8 小时进入休整，休整 3 天。
-    const start = Date.UTC(2026, 10, 1, 4)
-    expect(POSTSEASON_GAME_DAYS).toBe(12)
-    expect(seasonEndAt(start) - postseasonStartAt(start)).toBe(12 * GAME_DAY_MS)
+  it('每个赛季在常规赛之后留 16 小时给升级杯，整赛季 168 小时（7 天），下一赛季接着开始', () => {
+    const start = Date.UTC(2026, 10, 1, 2)
+    expect(POSTSEASON_GAME_DAYS).toBe(8)
+    expect(seasonEndAt(start) - postseasonStartAt(start)).toBe(8 * GAME_DAY_MS)
     expect(seasonStartAt(start, 1)).toBe(start)
     expect(seasonStartAt(start, 2)).toBe(seasonEndAt(start))
-    expect(seasonGameDays(start)).toBe(88)
-    expect(gameDateOf(start, seasonStartAt(start, 2)).gameDay).toBe(88)
+    expect(seasonGameDays(start)).toBe(84)
+    expect(gameDateOf(start, seasonStartAt(start, 2)).gameDay).toBe(84)
   })
 
   it('赛季结束后不能立刻开新赛季，要等休整窗口走完', () => {
@@ -53,7 +52,7 @@ describe('赛后休整窗口与日历', () => {
     const blocked = startNextSeasonAction(game, postseasonStartAt(started) + GAME_DAY_MS)
     expect(blocked.ok).toBe(false)
     expect(blocked.error).toContain('赛后休整')
-    expect(nextSeasonCountdown(game, postseasonStartAt(started) + GAME_DAY_MS)).toContain('天')
+    expect(nextSeasonCountdown(game, postseasonStartAt(started) + GAME_DAY_MS)).toContain('小时')
     expect(inPostseason(game, seasonEndAt(started))).toBe(false)
   })
 
@@ -80,8 +79,8 @@ describe('赛后休整窗口与日历', () => {
     const partner = game.roster.find((p) => p.id !== initialId)!
     const season1End = seasonEndAt(game.season.startedAt)
 
-    // 换季前：第 1 赛季休整刚结束，游戏日期在 2027 年 1 月末
-    expect(gameDateOf(game.world!.calendarStartAt!, season1End).label).toBe('2027/01/28')
+    // 换季前：第 1 赛季休整刚结束（84 个内部基准单位）
+    expect(gameDateOf(game.world!.calendarStartAt!, season1End).gameDay).toBe(84)
 
     // 赛末留有 30 个游戏日的伤病与一段队友默契
     const injuredKey = youngPlayer.seedId || youngPlayer.id

@@ -7,7 +7,7 @@ import { createAppServer, type AppServer } from '../server/app.ts'
 import { FREE_MARKET_TARGET, marketDayOf, refreshFreeMarket, refreshLocalFreeMarket } from '../src/game/free-market.ts'
 import { isOnMarketToday } from '../src/game/market-window.ts'
 import { buyFreeAgent } from '../src/game/market.ts'
-import { GAME_DAY_MS } from '../src/game/calendar.ts'
+import { DAY_MS } from '../src/game/calendar.ts'
 import { economyOf } from '../src/game/economy.ts'
 import { createWorldGame } from '../src/game/world.ts'
 import type { Player } from '../src/game/types.ts'
@@ -17,7 +17,7 @@ const visibleCount = (pool: Player[], anchor: Parameters<typeof isOnMarketToday>
 describe('自由市场每日补充', () => {
   it('先算当天挂牌的球星，不足 200 人用随机球员补满；球星都留着', () => {
     const game = createWorldGame(3101)
-    const now = game.world!.calendarStartAt! + 3 * GAME_DAY_MS + 1000
+    const now = game.world!.calendarStartAt! + 3 * DAY_MS + 1000
     const stars = [...game.freeStars]
     const { pool, changed } = refreshFreeMarket({ pool: stars, anchor: game, now, seed: game.seed })
     expect(changed).toBe(true)
@@ -36,7 +36,7 @@ describe('自由市场每日补充', () => {
     const kept = dayOne[0]
     const sizes: number[] = []
     for (let day = 1; day <= 6; day++) {
-      const now = start + day * GAME_DAY_MS
+      const now = start + day * DAY_MS
       pool = refreshFreeMarket({ pool, anchor: game, now, seed: game.seed, busy: (id) => id === kept.id }).pool
       expect(visibleCount(pool, game, now)).toBeGreaterThanOrEqual(FREE_MARKET_TARGET)
       sizes.push(pool.length)
@@ -49,7 +49,7 @@ describe('自由市场每日补充', () => {
 
   it('同一天、同一个世界补出来的人完全一样', () => {
     const game = createWorldGame(3103)
-    const now = game.world!.calendarStartAt! + 5 * GAME_DAY_MS
+    const now = game.world!.calendarStartAt! + 5 * DAY_MS
     const a = refreshFreeMarket({ pool: [...game.freeStars], anchor: game, now, seed: game.seed }).pool.map((player) => [player.id, player.name])
     const b = refreshFreeMarket({ pool: [...game.freeStars], anchor: game, now, seed: game.seed }).pool.map((player) => [player.id, player.name])
     expect(a).toEqual(b)
@@ -68,9 +68,9 @@ describe('自由市场每日补充', () => {
     expect(buyFreeAgent(game, filler.id).ok).toBe(true)
     const signed = game.roster.find((player) => player.id === filler.id)!
     expect(signed.marketDay).toBeUndefined()
-    refreshLocalFreeMarket(game, now + 2 * GAME_DAY_MS)
+    refreshLocalFreeMarket(game, now + 2 * DAY_MS)
     expect(game.roster.some((player) => player.id === filler.id)).toBe(true)
-    expect(game.freeStars.some((player) => player.marketDay !== undefined && player.marketDay < marketDayOf(game, now + 2 * GAME_DAY_MS))).toBe(false)
+    expect(game.freeStars.some((player) => player.marketDay !== undefined && player.marketDay < marketDayOf(game, now + 2 * DAY_MS))).toBe(false)
   })
 
   it('联机账号的存档不在本地补（由服务器补）', () => {

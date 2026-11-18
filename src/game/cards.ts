@@ -225,6 +225,7 @@ export function equipCard(game: GameState, playerId: string, cardId: string | nu
   if (game.activeMatch) return fail('比赛进行中不能换卡')
   const player = game.roster.find((item) => item.id === playerId)
   if (!player) return fail('球员不在你的阵容')
+  if (player.youthOrigin && player.youthOrigin.promotedAt === undefined) return fail('青训球员正式提拔后才能装备球员卡')
   const card = cardId === null ? null : cardsOf(game).find((item) => item.id === cardId)
   if (card === undefined) return fail('球员卡不存在')
   if (card && card.playerId !== playerId) return fail('只能装备这名球员自己的卡')

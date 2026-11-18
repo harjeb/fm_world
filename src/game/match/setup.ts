@@ -12,6 +12,7 @@ import { applyAITacticsToLineup, defaultAIAutoSubs, defaultAITacticsStage } from
 import { injuryUntil, prepareMatchInjuries } from '../injury.ts'
 import { suspendedPlayerIds } from '../discipline.ts'
 import { rotatePreMatch } from '../pre-match-rotation.ts'
+import { emptyAutoSubs } from './management.ts'
 import { LOGIC_MATCH_SECONDS } from './time.ts'
 import { matchPerformanceOf } from '../economy.ts'
 import { performanceRating } from './performance.ts'
@@ -264,10 +265,11 @@ function playersAtFullCondition(players: Player[]): Player[] {
 
 /** 联赛按开球前已结算的体能轮换；挑战赛本来就是满体能，不需要轮换。 */
 export function preparePlayerMatch(game: GameState, context: MatchContext, now: number): ReturnType<typeof rotatePreMatch> {
-  if (!context.isLeague || game.autoSubs?.preMatchStaminaBelow == null) return { lineup: game.lineup, autoSubs: game.autoSubs, changes: [] }
+  const effectivePlan = game.autoSubs ?? emptyAutoSubs()
+  if (!context.isLeague || effectivePlan.preMatchStaminaBelow == null) return { lineup: game.lineup, autoSubs: effectivePlan, changes: [] }
   const unavailable = suspendedPlayerIds(game)
   for (const player of game.roster) if (injuryUntil(game, player, now) !== null) unavailable.add(player.id)
-  return rotatePreMatch(game.roster, game.lineup, game.autoSubs, unavailable)
+  return rotatePreMatch(game.roster, game.lineup, effectivePlan, unavailable)
 }
 
 export function buildMatchEngineForGame(game: GameState, context: MatchContext, ai: AITeam, now = Date.now(), suspended?: Set<string>, rulesVersion?: number, prepared = preparePlayerMatch(game, context, now)): GameEngine {
@@ -288,7 +290,7 @@ export function buildMatchEngineForGame(game: GameState, context: MatchContext, 
     },
     { tacticsStage: game.economy?.tactics ?? 1 },
   )
-  if (prepared.autoSubs) playerInput.autoSubs = structuredClone(prepared.autoSubs)
+  playerInput.autoSubs = structuredClone(prepared.autoSubs ?? game.autoSubs ?? emptyAutoSubs())
   // 对手是电脑球队：体能低于 80 的先休息，并按俱乐部战术室阶段（或阵容强度估算）计算战术熟练度。
   const aiClubTactics = game.aiClubs?.[ai.id]?.economy.tactics
   const aiInput = teamInputFromAI(ai, suspended, { rotate: true, tacticsStage: aiClubTactics })

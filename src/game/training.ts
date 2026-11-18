@@ -150,12 +150,13 @@ export const TRAINING_ACTION_INFO: { id: TrainingActionId; label: string; desc: 
 export const TRAINING_ENERGY_COST = 30
 
 /**
- * 游戏内 1 天恢复 50 点精力（游戏日按 4 倍速 = 现实 6 小时），按经过的时间连续恢复：
- * 精力从 0 到够开一轮培养（30 点）约 0.6 个游戏日，到满 2 个游戏日。见 energy.ts。
+ * 训练精力按时间连续恢复：每现实小时恢复 25 点（2 小时恢复 50 点，4 小时回满 100 点）：
+ * 精力从 0 到够开一轮培养（30 点）约 72 分钟。见 energy.ts。
  */
+export const ENERGY_RECOVERY_PER_HOUR = 25
 export const ENERGY_RECOVERY_PER_GAME_DAY = 50
 export const GAME_MINUTES_PER_DAY = 24 * 60
-export const REAL_MINUTES_PER_GAME_DAY = 6 * 60
+export const REAL_MINUTES_PER_GAME_DAY = 2 * 60
 export const ENERGY_RECOVERY_PER_GAME_MINUTE = ENERGY_RECOVERY_PER_GAME_DAY / GAME_MINUTES_PER_DAY
 export const ENERGY_RECOVERY_PER_REAL_MINUTE = ENERGY_RECOVERY_PER_GAME_DAY / REAL_MINUTES_PER_GAME_DAY
 

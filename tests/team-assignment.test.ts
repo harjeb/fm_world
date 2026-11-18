@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createOwnerlessWorld, expandWorldConference, pickFreeClubForNewAccount, worldSlots } from '../src/game/world.ts'
-import type { WorldState } from '../src/game/types.ts'
+import { conferenceLabel } from '../src/game/data/world-clubs.ts'
+import type { ConferenceId, WorldState } from '../src/game/types.ts'
 
 const world = (): WorldState => createOwnerlessWorld(1, Date.now()).world
 
@@ -73,5 +74,25 @@ describe('新账号球队分配', () => {
     const target = world()
     const { owners, picked } = assignTimes(target, 12)
     expect(worldSlots(target, owners, Object.values(owners))).toEqual({ total: 80, taken: picked.length, free: 80 - picked.length })
+  })
+
+  it('连续扩出的赛区依次使用 东区/西区 等无数字命名，球队均带英文原名且中文名 ≤ 7 字无重名', () => {
+    const target = world()
+    const expandedConferences: ConferenceId[] = []
+    for (let step = 0; step < 5; step++) {
+      const { conference } = expandWorldConference(target, 100 + step)
+      expandedConferences.push(conference)
+    }
+    expect(expandedConferences).toEqual(['zone3', 'zone4', 'zone5', 'zone6', 'zone7'])
+    const labels = expandedConferences.map((conf) => conferenceLabel(conf))
+    expect(labels).toEqual(['东区', '西区', '中区', '大西洋区', '太平洋区'])
+    expect(labels.every((label) => !/\d/.test(label))).toBe(true)
+
+    const allNames = target.clubs.map((club) => club.name)
+    expect(new Set(allNames).size).toBe(target.clubs.length)
+    const expandedClubs = target.clubs.filter((club) => club.id.startsWith('d2z'))
+    expect(expandedClubs).toHaveLength(100)
+    expect(expandedClubs.every((club) => typeof club.enName === 'string' && club.enName.length > 0)).toBe(true)
+    expect(expandedClubs.every((club) => club.name.length <= 7 && !/\d/.test(club.name))).toBe(true)
   })
 })

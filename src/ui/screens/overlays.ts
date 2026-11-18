@@ -1,10 +1,14 @@
 import type { Player } from '../../game/types.ts'
+import { youthBadge } from '../components.ts'
+import { isYouthTrainee, youthCA } from '../../game/youth.ts'
+import { youthRatingSummary } from '../stars.ts'
 import { ATTR_GROUPS } from '../../game/data/attributes.ts'
 import { aiTransferOffers, bestMarketValue } from '../../game/market.ts'
 import { equippedCard, playerCards, untrainedPlayer } from '../../game/cards.ts'
 import { attrRating, initialDisplayCA, mainAttrsFor } from '../../game/rating.ts'
 import { MAIN_FIELD_ATTRS, MAIN_GK_ATTRS } from '../../game/scale.ts'
 import { worldTransferTeams, type ClubPreview } from '../../game/world.ts'
+import { conferenceLabel } from '../../game/data/world-clubs.ts'
 import { aiTransferMarket, isOnlineMode, marketState, onlineState, publicConfig, registrationClubs } from '../../online.ts'
 import { AUCTION_EXTEND_MS, auctionRaiseFee } from '../../game/auction.ts'
 import { previewClubSigning } from '../../game/market.ts'
@@ -84,14 +88,16 @@ export function renderDetailOverlay(): string {
   const player = transferPreview ? untrainedPlayer(source) : source
   const transferClub = transferPreview && ui.transferTab === 'ai' ? aiTransferOffers({ ...game, aiTeams: worldTransferTeams(game) }).find(item => item.player.id === player.id)?.team.id : undefined
   const gk = player.positions.GK > 0
+  const youthMember = ui.screen === 'youth' ? [...(game.youth?.members ?? []), ...(game.youth?.intake.candidates ?? [])].find(m => m.player.id === player.id) : undefined
+  const detailOwned = owned && !youthMember
   const head = `<header class="profile-head">
     <div class="profile-id">${posBadge(primaryPosition(player))}<div>
-      <h1>${esc(player.name)} <small>${esc(player.enName)}</small></h1>
+      <h1>${esc(player.name)}${youthBadge(player)} <small>${esc(player.enName)}</small></h1>
       <p class="muted">球员详情 · ${[countryLabel(player), player.era === 'random' ? '' : player.era, gk ? '门将' : '外场'].filter(Boolean).map(esc).join(' · ')}</p>
     </div></div>
-    <div class="big-ca"><span>${transferPreview ? '原始 CA' : 'CA'}</span><b>${caHeat(playerCA(player), 1)}</b><small>${transferPreview ? '转会不包含球员卡' : `原始 CA ${initialDisplayCA(player).toFixed(1)}`}</small></div>
+    ${youthMember ? youthRatingSummary(youthCA(player), youthMember.ceiling) : `<div class="big-ca"><span>${transferPreview ? '原始 CA' : 'CA'}</span><b>${caHeat(playerCA(player), 1)}</b><small>${transferPreview ? '转会不包含球员卡' : `原始 CA ${initialDisplayCA(player).toFixed(1)}`}</small></div>`}
   </header>`
-  if (ui.playerDetailView !== 'profile' && (owned || ui.playerDetailView !== 'compare')) {
+  if (ui.playerDetailView !== 'profile' && (detailOwned || ui.playerDetailView !== 'compare')) {
     const candidates = comparisonCandidates()
     const opponent = candidates.find((candidate) => candidate.id === ui.playerCompareId)
     const content = ui.playerDetailView === 'performance'
@@ -100,7 +106,7 @@ export function renderDetailOverlay(): string {
     return `<div class="overlay" data-action="close-detail">
       <div class="modal profile player-analysis-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="${esc(player.name)} 球员详情">
         <button class="modal-close" data-action="close-detail" aria-label="关闭">${icon('close', 16)}</button>
-        ${head}${detailNavigation(owned)}${content}
+        ${head}${detailNavigation(detailOwned)}${content}
       </div>
     </div>`
   }
@@ -141,7 +147,7 @@ export function renderDetailOverlay(): string {
     <div class="overlay" data-action="close-detail">
       <div class="modal profile" data-stop="true" role="dialog" aria-modal="true" aria-label="${esc(player.name)} 球员详情">
         <button class="modal-close" data-action="close-detail" aria-label="关闭">${icon('close', 16)}</button>
-        ${head}${detailNavigation(owned)}
+        ${head}${detailNavigation(detailOwned)}
         ${!owned && ui.screen === 'transfer' && (ui.transferTab === 'free' || transferClub) ? renderScoutControls(player.id, ui.transferTab === 'free' ? 'market' : 'transfer', transferClub) : ''}
         ${injury ? `<div class="banner bad">${icon('cross', 16)}<span>${injury}；带伤比赛能力下降 30%，不影响精力或培养。</span></div>` : ''}
         <div class="profile-grid">
@@ -157,10 +163,10 @@ export function renderDetailOverlay(): string {
             <h3>特性与技能</h3>
             <div class="tag-row">${traitLabel(player.traitId, true)}</div>
             ${skillGroups(player)}
-            ${owned ? `<h3>队友默契</h3>${chemistryPartners(player)}<p class="hint">配合越多，默契越高；换卡保留。超过 180 个游戏日未合作会移除。</p>` : ''}
+            ${owned ? `<h3>队友默契</h3>${chemistryPartners(player)}<p class="hint">配合越多，默契越高；换卡保留。超过 21 天未合作会移除。</p>` : ''}
           </section>
           <section class="profile-col">
-            ${owned ? `<h3>球员卡</h3>${cardRows(player)}` : ''}
+            ${owned && !isYouthTrainee(player) ? `<h3>球员卡</h3>${cardRows(player)}` : ''}
             <h3>档案</h3>
             <dl class="facts">${facts.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>
             ${statsBlock(player)}
@@ -171,7 +177,7 @@ export function renderDetailOverlay(): string {
             </div>` : ''}
             <h3>性格</h3>
             <div class="profile-meters">${personality.map(([label, value]) => `<div><span>${label}</span><span class="meter-wrap"><span class="meter neutral"><i style="width:${Math.max(0, Math.min(100, value))}%"></i></span><span class="meter-value">${Math.round(value)}</span></span></div>`).join('')}</div>
-            ${owned ? (session || candidate
+            ${isYouthTrainee(player) ? `<p class="hint">在营青年通过青训页面培养基础能力；正式提拔后才能培养角色卡。</p><button class="btn wide" data-nav="youth">前往青训</button>` : owned ? (session || candidate
               ? `<div class="banner good compact split"><b>${candidate || session?.completed ? '培养出了新球员卡' : '正在培养'}</b><button class="btn primary small" data-action="open-training" data-player="${esc(player.id)}">查看培养</button></div>`
               : `<button class="btn primary wide" data-action="open-training" data-player="${esc(player.id)}">${icon('play', 14)}培养角色卡</button>`) : '<p class="hint">这名球员不在你的阵容中。</p>'}
           </section>
@@ -215,10 +221,10 @@ export function renderAccountOverlay(): string {
           ${registering ? `
             <div class="form-row"><label for="account-club">执教球队</label><select id="account-club">
               <option value="">${registrationClubs === null ? '正在加载球队…' : clubs.length ? '请选择一支空缺的二级球队' : '暂无空缺球队'}</option>
-              ${clubs.map((club) => `<option value="${esc(club.id)}" ${selectedClub?.id === club.id ? 'selected' : ''}>${esc(club.name)} · ${esc(CONFERENCE_LABELS[club.conference ?? ''] ?? '')} · RANK ${club.rating ?? '—'}</option>`).join('')}
+              ${clubs.map((club) => `<option value="${esc(club.id)}" ${selectedClub?.id === club.id ? 'selected' : ''}>${esc(club.name)} · ${esc(conferenceLabel(club.conference))} · RANK ${club.rating ?? '—'}</option>`).join('')}
             </select></div>
             ${selectedClub ? `<p class="hint">${[...selectedClub.players].sort((a, b) => b.ca - a.ca).slice(0, 3).map((player) => `${posBadge(primaryPosition(player))} ${esc(player.name)} · CA ${player.ca.toFixed(0)}`).join(' / ')}</p>` : ''}
-            <p class="hint">球队在注册时确定，注册后不允许换队；直接继承球队已有战绩，不因注册另算比赛。开赛时间固定为北京时间 12:00 / 20:00。</p>
+            <p class="hint">球队在注册时确定，注册后不允许换队；直接继承球队已有战绩，不因注册另算比赛。联赛每天固定 6 轮（北京时间 02/06/10/14/18/22 点）。</p>
             <button class="btn ghost small" data-action="registration-clubs-refresh">刷新球队列表</button>
           ` : ''}
           ${registering && publicConfig.turnstileSiteKey ? '<div class="turnstile-slot" id="turnstile-slot" data-morph-skip></div>' : ''}
@@ -403,8 +409,6 @@ export function renderNegotiationOverlay(): string {
       </div>
     </div>`
 }
-
-const CONFERENCE_LABELS: Record<string, string> = { north: '北区', south: '南区' }
 
 export function renderChangelogOverlay(): string {
   if (!ui.changelogOpen) return ''

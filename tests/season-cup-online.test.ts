@@ -83,8 +83,8 @@ describe('联机赛季杯赛', () => {
     let one = await load(home.token), two = await load(away.token)
     const fixtures = one.game.world!.seasonCups!.cups.flatMap(cup => cup.rounds.flatMap(round => round.fixtures))
     expect(fixtures.every(fixture => !fixture.played && !fixture.score)).toBe(true)
-    const delayed = one.game.season.fixtures.find(fixture => fixture.round === world.seasonCups!.delayedLeagueRounds[0])!
-    expect(delayed.kickoffAt).toBe(cupAt + 4 * 3600_000)
+    const nextLeague = one.game.season.fixtures.find(fixture => fixture.kickoffAt! > cupAt)!
+    expect(nextLeague.kickoffAt).toBe(cupAt + 2 * 3600_000)
     expect(one.game.challengeHistory).toHaveLength(0)
     clock = cupAt
     one = await load(home.token); two = await load(away.token)
@@ -136,7 +136,7 @@ describe('联机赛季杯赛', () => {
   }, 120_000)
 
   it('冠军和亚军各得参赛金，冠军额外金币与上限在重启后不重复发放', async () => {
-    const seed = 712, start = Date.UTC(2026, 10, 9, 12), cupAt = Date.UTC(2026, 10, 15, 10)
+    const seed = 712, start = Date.UTC(2026, 10, 9, 10), cupAt = Date.UTC(2026, 10, 15, 12)
     const { world, freeStars, reserveStars } = createOwnerlessWorld(seed, start)
     const [homeId, awayId] = world.divisions.find(division => division.divisionId === 'd2-north')!.clubIds!.slice(0, 2)
     for (const division of world.divisions) {

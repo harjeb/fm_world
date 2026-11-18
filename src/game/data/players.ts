@@ -1,6 +1,7 @@
 import type { AttrKey, Attributes, BaseTraitId, Foot, Position, PositionTable, Player, SkillId, StyleId, TraitId } from '../types.ts'
 import { starTraitId, traitNameOf } from './star-traits.ts'
 import { inferDetailedPositions } from '../detailed-positions.ts'
+import { backfillNaturalPlayer } from '../natural-positions.ts'
 import { ALL_ATTRIBUTES, GK_ATTRIBUTES, POSITIONS } from '../types.ts'
 import { caCeilingOf, caOf } from '../ca.ts'
 import { attrLimit, attrMax, attrStorage } from '../scale.ts'
@@ -498,7 +499,7 @@ export function createPlayerFromSeed(seed: PlayerSeed): Player {
   const rolledSkill = rng() < skillChance
   const signatureSkill = seed.era === 'random' ? undefined : STYLE_SKILL[seed.style]
   const skills: SkillId[] = signatureSkill ? [signatureSkill] : rolledSkill ? [STYLE_SKILL[seed.style]] : []
-  return {
+  const player = {
     id: seed.id,
     seedId: seed.id,
     name: seed.name,
@@ -532,6 +533,8 @@ export function createPlayerFromSeed(seed: PlayerSeed): Player {
     basePersonality: { ...personality },
     style: seed.style,
   } as Player
+  if (seed.era !== 'random') backfillNaturalPlayer(player)
+  return player
 }
 
 export const PLAYER_SEEDS: PlayerSeed[] = SEEDS.map((tuple, index) => {

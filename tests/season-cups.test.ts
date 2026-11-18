@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { createOwnerlessWorld, expandWorldConference } from '../src/game/world.ts'
 import { kickoffAtForRound } from '../src/game/calendar.ts'
-import { advanceSeasonCup, applySeasonCupPlan, completedWorldRound, planSeasonCups, seasonCupEntrants, seasonRoundKickoff } from '../src/game/season-cups.ts'
+import { advanceSeasonCup, applySeasonCupPlan, completedWorldRound, planSeasonCups, rescheduleActiveSeasonCups, seasonCupEntrants, seasonRoundKickoff } from '../src/game/season-cups.ts'
 import type { WorldState } from '../src/game/types.ts'
 import { recordForClub, seasonCupJobId, type MatchJob, type MatchJobResult } from '../server/match-job.ts'
 
-const start = Date.UTC(2026, 10, 9, 12) // 北京时间 20:00
+const start = Date.UTC(2026, 10, 9, 2) // 北京时间 10:00
 function setup(round = 6): WorldState {
   const world = createOwnerlessWorld(123, start).world
   for (const division of world.divisions) for (const fixture of division.fixtures) {
@@ -36,7 +36,7 @@ describe('赛季杯赛资格、赛程和轮空', () => {
     expect(plan.createdAt).toBe(now)
   })
 
-  it('四项赛事从同一榜单确定，分级杯并行、跨级杯错日，未来联赛统一延至 22:00', () => {
+  it('四项赛事从同一榜单确定，分级杯并行、跨级杯错时，插入 12:00 / 20:00 黄金档且不顺延联赛', () => {
     const world = setup()
     const original = structuredClone(world)
     const now = kickoffAtForRound(start, 6) + 600_000
@@ -45,16 +45,15 @@ describe('赛季杯赛资格、赛程和轮空', () => {
     expect(plan.cups.map(cup => [cup.id, cup.entrants.length, cup.dates.length])).toEqual([
       ['community', 16, 4], ['league', 20, 5], ['champions', 20, 5], ['cross', 32, 5],
     ])
-    expect(plan.delayedLeagueRounds).toHaveLength(10)
-    expect(new Set(plan.delayedLeagueRounds).size).toBe(10)
+    expect(plan.delayedLeagueRounds).toEqual([])
     const [community, league, champions, cross] = plan.cups
     expect(community.dates).toEqual(league.dates.slice(0, 4))
     expect(champions.dates).toEqual(league.dates)
     expect(cross.dates.every(date => !league.dates.includes(date))).toBe(true)
     for (const cup of plan.cups) {
       expect(new Set(cup.entrants).size).toBe(cup.entrants.length)
-      expect(cup.dates[0]).toBeGreaterThanOrEqual(now + 24 * 3600_000)
-      expect(cup.dates.every(date => new Date(date + 8 * 3600_000).getUTCHours() === 18)).toBe(true)
+      expect(cup.dates[0]).toBeGreaterThanOrEqual(now + 2 * 3600_000)
+      expect(cup.dates.every(date => [12, 20].includes(new Date(date + 8 * 3600_000).getUTCHours()))).toBe(true)
     }
     expect(community.rounds[0].fixtures).toHaveLength(8)
     expect(league.rounds[0].byes).toEqual(league.entrants.slice(0, 12))
@@ -64,9 +63,9 @@ describe('赛季杯赛资格、赛程和轮空', () => {
     applySeasonCupPlan(world, plan)
     for (const division of world.divisions) for (const fixture of division.fixtures) {
       const before = original.divisions.find(item => item.divisionId === division.divisionId)!.fixtures.find(item => item.round === fixture.round && item.homeId === fixture.homeId && item.awayId === fixture.awayId)!
-      expect(fixture.kickoffAt).toBe(before.kickoffAt! + (plan.delayedLeagueRounds.includes(fixture.round) ? 2 * 3600_000 : 0))
+      expect(fixture.kickoffAt).toBe(before.kickoffAt)
     }
-    expect(seasonRoundKickoff(world.divisions[0], plan.delayedLeagueRounds[0])).toBe(kickoffAtForRound(start, plan.delayedLeagueRounds[0]) + 2 * 3600_000)
+    expect(seasonRoundKickoff(world.divisions[0], 8)).toBe(kickoffAtForRound(start, 8))
     expect(planSeasonCups(world, 77, now)).toBeUndefined()
   })
 
@@ -99,16 +98,25 @@ describe('赛季杯赛资格、赛程和轮空', () => {
     expect(cup).toEqual(finished)
   })
 
-  it('赛程顺延在 20:00 不能提前推进联赛轮号，22:00 才推进', async () => {
-    const world = setup()
-    const plan = planSeasonCups(world, 77, kickoffAtForRound(start, 6) + 600_000)!
-    applySeasonCupPlan(world, plan)
-    const round = plan.delayedLeagueRounds[0]
-    const before = kickoffAtForRound(start, round)
-    const { worldRoundsKickedOff } = await import('../src/game/season-cups.ts')
-    expect(worldRoundsKickedOff(world, before)).toBe(round - 1)
-    expect(worldRoundsKickedOff(world, before + 2 * 3600_000 - 1)).toBe(round - 1)
-    expect(worldRoundsKickedOff(world, before + 2 * 3600_000)).toBe(round)
+  it('进行中杯赛重排时保留已赛首轮，未赛轮次全部排在常规赛结束前', () => {
+    const world = setup(15)
+    const plan = planSeasonCups(setup(6), 77, kickoffAtForRound(start, 6) + 600_000)!
+    world.seasonCups = structuredClone(plan)
+    world.seasonCups.delayedLeagueRounds = [15, 17, 19]
+    for (const cup of world.seasonCups.cups.filter(c => c.id !== 'cross')) {
+      for (const f of cup.rounds[0].fixtures) { f.played = true; f.score = { home: 1, away: 0 }; f.winnerId = f.homeId }
+      advanceSeasonCup(cup, world.seasonIndex, 77)
+    }
+    const now = kickoffAtForRound(start, 15) + 3600_000
+    expect(rescheduleActiveSeasonCups(world, now)).toBe(true)
+    expect(world.seasonCups.delayedLeagueRounds).toEqual([])
+    for (const cup of world.seasonCups.cups) {
+      const unplayed = cup.id === 'cross' ? cup.dates : cup.dates.slice(1)
+      expect(unplayed.every(d => d >= now + 2 * 3600_000 && [12, 16, 20].includes(new Date(d + 8 * 3600_000).getUTCHours()))).toBe(true)
+      const activeRound = cup.rounds.at(-1)!
+      expect(activeRound.kickoffAt).toBe(cup.dates[activeRound.round - 1])
+      expect(activeRound.fixtures.every(f => f.kickoffAt === activeRound.kickoffAt)).toBe(true)
+    }
   })
 
   it('新二级赛区每区前八进入社区杯，跨级杯最多 32 队并无重复', () => {
@@ -124,7 +132,6 @@ describe('赛季杯赛资格、赛程和轮空', () => {
     expect(community.rounds[0].fixtures).toHaveLength(8)
     expect(cross.entrants).toHaveLength(32)
     expect(new Set(cross.entrants).size).toBe(32)
-    expect(plan.delayedLeagueRounds).toHaveLength(10)
   })
 
   it('剩余日期不够时不改历史联赛，也不伪造杯赛', () => {

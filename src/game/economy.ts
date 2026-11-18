@@ -1,5 +1,6 @@
 import type { EconomyState, FacilityId, GameState, TierId } from './types.ts'
 import { opponentRankShare } from './club-rating.ts'
+import { observeYouthFacility } from './youth.ts'
 export type { EconomyState, FacilityId } from './types.ts'
 
 /** 每个等级拆成 5 个阶段，所以五个等级一共 25 个阶段。 */
@@ -225,6 +226,7 @@ export function upgradeFacility(game: GameState, id: FacilityId): { ok: boolean;
   if (economy.balance < cost) return { ok: false, error: '余额不足' }
   economy.balance -= cost
   economy[id]++
+  if (id === 'academy') observeYouthFacility(game, Date.now())
   return { ok: true }
 }
 

@@ -6,7 +6,8 @@ import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
 import { loadPveContent } from '../src/game/pve-content.ts'
 import { finishMatch, restoreActiveEngine } from '../src/game/actions.ts'
-import { GAME_DAY_MS, gameDayIndex } from '../src/game/calendar.ts'
+import { nextBeijingMidnight } from '../src/game/calendar.ts'
+import { PEAK_DAILY_LIMIT } from '../src/game/peak-attempts.ts'
 import type { GameState } from '../src/game/types.ts'
 
 beforeAll(loadPveContent)
@@ -67,7 +68,7 @@ describe('联机巅峰次数与存档保护', () => {
     expect(state.game.challengeHistory.some(row => row.id === record.id)).toBe(true)
     expect(state.game.pve!.peak.dailyAttempts?.count).toBe(1)
 
-    for (const attempt of [2, 3]) {
+    for (let attempt = 2; attempt <= PEAK_DAILY_LIMIT; attempt++) {
       const response = await start()
       expect(response.status).toBe(200)
       state = await get()
@@ -78,13 +79,13 @@ describe('联机巅峰次数与存档保护', () => {
     }
     const exhausted = await start()
     expect(exhausted.status).toBe(400)
-    expect((await exhausted.json()).error).toContain('3 次')
+    expect((await exhausted.json()).error).toContain(`${PEAK_DAILY_LIMIT} 次`)
     state = await get()
     const fake = structuredClone(state.game)
     fake.activeMatch = { context: first, engineState: {}, instructions: [], lineup: fake.lineup, startedAt: clock, coachPausesLeft: 3 }
     expect((await save(fake, state.revision)).status).toBe(409)
     state = await get()
-    expect(state.game.pve!.peak.dailyAttempts?.count).toBe(3)
+    expect(state.game.pve!.peak.dailyAttempts?.count).toBe(PEAK_DAILY_LIMIT)
     // 正常停服、重启后同一天不能重新刷次数。
     await app.flush()
     await app.shutdown()
@@ -95,12 +96,11 @@ describe('联机巅峰次数与存档保护', () => {
     base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`
     expect((await start()).status).toBe(400)
     state = await get()
-    expect(state.game.pve!.peak.dailyAttempts?.count).toBe(3)
-    const anchor = state.game.world?.calendarStartAt ?? state.game.createdAt
-    clock = anchor + (gameDayIndex(anchor, clock) + 1) * GAME_DAY_MS
+    expect(state.game.pve!.peak.dailyAttempts?.count).toBe(PEAK_DAILY_LIMIT)
+    clock = nextBeijingMidnight(clock)
     expect((await start()).status).toBe(200)
     state = await get()
     expect(state.game.pve!.peak.dailyAttempts?.count).toBe(1)
-    expect(state.game.pve!.peak.attemptCounter).toBe(4)
+    expect(state.game.pve!.peak.attemptCounter).toBe(PEAK_DAILY_LIMIT + 1)
   }, 120_000)
 })

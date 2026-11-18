@@ -3,6 +3,8 @@ import { detailedPositionForSlot, isDetailedPosition, readDetailedPositions, slo
 import { MAX_SCOUT_REPORTS, SCOUT_LEVELS, deleteScoutReport, startScouting, visibleScoutReports, type ScoutReport, type ScoutSource, type ScoutTarget, type VisibleScoutReport } from '../src/game/scouting.ts'
 import { preferredPositionRatings } from '../src/game/scout-rating.ts'
 import { cupCeilingBonus } from '../src/game/cup-rewards.ts'
+import { youthView } from '../src/game/youth.ts'
+import { applyYouthAction } from '../src/game/youth-actions.ts'
 import type { TrainingRequest } from '../src/game/training.ts'
 import { trainingDate, trainingOptions, type TrainingActivityId } from '../src/game/training-calendar.ts'
 import type { SkillId } from '../src/game/types.ts'
@@ -187,6 +189,7 @@ export function playerView(player: GameState['roster'][number], game: GameState,
     primaryPosition: primaryPosition(player),
     ca: displayCA(caOf(player.attrs, isGk)),
     initialCA: initialDisplayCA(player),
+    youthOrigin: player.youthOrigin ?? null,
     positions: player.positions,
     detailedPositions: readDetailedPositions(player),
     ...visibleAttrs(player),
@@ -455,6 +458,7 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
     // AI 俱乐部发来的报价：pending 的要在 expiresAt 前用 respond_offer 回复，过期算拒绝；高价（≥ 身价 1.3 倍）被拒绝球员会不满。
     transferOffers: (game.transferOffers ?? []).map((offer) => ({ ...offer, high: offer.amount >= offer.value * 1.3 })),
     teams: game.aiTeams.map((team) => ({ id: team.id, name: team.name, strength: team.strength, style: team.style, formationId: team.formationId })),
+    youth: youthView(game, now),
     roster: game.roster.map((player) => playerView(player, game, now)),
     lineup: game.lineup,
     autoSubs: game.autoSubs ?? emptyAutoSubs(),
@@ -742,6 +746,7 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
   const body = asRecord(rawBody)
   const action = text(body.action)
   switch (action) {
+    case 'youth_action': return applyYouthAction(game, body.youth, now)
     case 'get_player': {
       const player = game.roster.find((item) => item.id === text(body.playerId))
       return player ? { ok: true, result: playerDetailView(player, game, now) } : { ok: false, error: '球员不存在' }

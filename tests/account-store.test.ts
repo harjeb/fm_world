@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { ACCOUNT_DB_FILE, AccountStore, type Account } from '../server/account-store.ts'
+import { ACCOUNT_DB_FILE, ACCOUNT_WRITE_BATCH_SIZE, AccountStore, type Account } from '../server/account-store.ts'
 import type { GameState } from '../src/game/types.ts'
 
 const dirs: string[] = []
@@ -121,6 +121,24 @@ describe('SQLite 账号存储', () => {
     expect(next.sessions).toEqual({ token: alice.id })
     expect(fs.existsSync(path.join(dir, 'accounts.json'))).toBe(false)
     expect(fs.existsSync(path.join(dir, 'sessions.json'))).toBe(false)
+  })
+
+  it('全员恢复时分小批序列化，最后提交跨批账号会话，并保留并发的新修改', async () => {
+    const dir = directory()
+    const store = open(dir)
+    const players = Array.from({ length: ACCOUNT_WRITE_BATCH_SIZE * 3 + 1 }, (_, i) => account(`batch_${i}`))
+    for (const player of players) { store.save(player); store.setSession(`token_${player.id}`, player.id) }
+    const flushing = store.flush()
+    const firstBatch = (store as unknown as { inFlight: { accounts: Account[] } }).inFlight
+    expect(firstBatch.accounts).toHaveLength(ACCOUNT_WRITE_BATCH_SIZE)
+    players[0].revision++
+    players[0].game.clubName = '写入期间更新'
+    store.save(players[0])
+    await Promise.all([flushing, store.flush()])
+    store.close()
+    const restarted = open(dir)
+    expect(restarted.accounts).toEqual(players)
+    expect(restarted.sessions).toEqual(Object.fromEntries(players.map(p => [`token_${p.id}`, p.id])))
   })
 
   it('定时器自动后台写入，不需要手动 flush', async () => {

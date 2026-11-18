@@ -12,7 +12,7 @@
  */
 import type { AIClubState, Lineup, Player } from './types.ts'
 import { derivedRng, splitSeed } from './rng.ts'
-import { GAME_DAY_MS } from './calendar.ts'
+import { GAME_DAY_MS, HOUR_MS } from './calendar.ts'
 
 /** AI 俱乐部一个赛季最多买进几个人（竞拍、直接签自由球员、挖人都算）。 */
 export const AI_SEASON_BUY_LIMIT = 5
@@ -28,12 +28,16 @@ export const BENCH_WARMER_SHARE = 0.15
 export const YOUNG_STARTER_LOW_SHARE = 0.35
 /** 报价不低于身价的这个倍数算“高价”：拒绝高价报价，球员会不满。 */
 export const HIGH_OFFER_RATIO = 1.3
-/** 不满持续几个游戏日（现实 2 天）。 */
-export const UNHAPPY_GAME_DAYS = 8
-/** 不满期间精力恢复只剩这么多（平时每轮够开 3 轮培养，不满时最多 1 轮）。 */
+/** 不满持续现实小时数（16 小时 = 4 轮联赛）。 */
+export const UNHAPPY_HOURS = 16
+export const UNHAPPY_MS = UNHAPPY_HOURS * HOUR_MS
+export const UNHAPPY_GAME_DAYS = UNHAPPY_MS / GAME_DAY_MS
+/** 不满期间精力恢复只剩这么多。 */
 export const UNHAPPY_ENERGY_RATE = 0.1
-/** AI 给玩家球队的报价，4 个游戏日（现实 24 小时）内不回复就算拒绝。 */
-export const OFFER_RESPONSE_GAME_DAYS = 4
+/** AI 给玩家球队的报价，现实 24 小时内不回复就算拒绝。 */
+export const OFFER_RESPONSE_HOURS = 24
+export const OFFER_RESPONSE_MS = OFFER_RESPONSE_HOURS * HOUR_MS
+export const OFFER_RESPONSE_GAME_DAYS = OFFER_RESPONSE_MS / GAME_DAY_MS
 
 export type SquadStatus = 'key' | 'rotation' | 'fringe'
 export type AgeBand = 'young' | 'prime' | 'veteran'
@@ -175,9 +179,9 @@ export function noteAIBuy(state: AIClubState, season: number): void {
 
 /* ---------- 不满 ---------- */
 
-/** 拒绝高价报价后球员不满：之后 8 个游戏日精力恢复只剩一成。连续拒绝会把时间续满，不叠加。 */
+/** 拒绝高价报价后球员不满：之后 16 小时内精力恢复只剩一成。连续拒绝会把时间续满，不叠加。 */
 export function makeUnhappy(player: Player, reason: string, now: number): void {
-  const until = now + UNHAPPY_GAME_DAYS * GAME_DAY_MS
+  const until = now + UNHAPPY_MS
   player.unhappy = { until: Math.max(player.unhappy?.until ?? 0, until), reason }
 }
 

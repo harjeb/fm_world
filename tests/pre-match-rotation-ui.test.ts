@@ -13,11 +13,14 @@ const field = (value: string, scope = 'lineup', disabled = false) => ({
 const select = (html: string) => html.match(/<select id="auto-sub-pre-match-stamina"[\s\S]*?<\/select>/)?.[0] ?? ''
 
 describe('赛前轮换界面', () => {
-  it('阵容设置独立显示关闭和全部 1–99% 阈值并正确选中', () => {
+  it('阵容设置默认选中 65%，独立显示关闭和全部 1–99% 阈值并正确切换', () => {
     const plan = emptyAutoSubs()
     let html = select(editor(plan))
-    expect(html).toContain('<option value="" selected>关闭</option>')
+    expect(html).toContain('<option value="65" selected>65%</option>')
     for (let i = 1; i <= 99; i++) expect(html).toContain(`value="${i}"`)
+    plan.preMatchStaminaBelow = null
+    html = select(editor(plan))
+    expect(html).toContain('<option value="" selected>关闭</option>')
     plan.preMatchStaminaBelow = 67
     html = select(editor(plan))
     expect(html).toContain('<option value="67" selected>67%</option>')

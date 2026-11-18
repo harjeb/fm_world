@@ -8,6 +8,9 @@ import { setRemoteSaver, saveGame } from './game/state.ts'
 import { dueRound } from './game/season.ts'
 
 const TOKEN_KEY = 'fm-online-token'
+const SAVE_TIMEOUT_MS = 12_000
+const ACTION_TIMEOUT_MS = 10_000
+const RECOVERY_TIMEOUT_MS = 5_000
 
 export type OnlineUser = { id: string; username: string }
 export type OnlineStatus = 'offline' | 'connecting' | 'online'
@@ -29,7 +32,7 @@ export const onlineState: {
 }
 
 /** 全服自由市场。只有联机时有内容；单机还是用存档里的 freeStars。 */
-export type WorldPublicPlayer = Pick<Player, 'id' | 'name' | 'enName' | 'country' | 'era' | 'age' | 'foot' | 'height' | 'positions' | 'detailedPositions' | 'traitId' | 'skills' | 'skillTiers'> & { attrs: Partial<Attributes>; ca: number; baseCa?: number }
+export type WorldPublicPlayer = Pick<Player, 'youthOrigin' | 'id' | 'name' | 'enName' | 'country' | 'era' | 'age' | 'foot' | 'height' | 'positions' | 'detailedPositions' | 'traitId' | 'skills' | 'skillTiers'> & { attrs: Partial<Attributes>; ca: number; baseCa?: number }
 export type AITransferOffer = {
   teamId: string
   teamName: string
@@ -206,12 +209,33 @@ function syncServerClock(serverTime: unknown): void {
   if (typeof serverTime === 'number' && Number.isFinite(serverTime)) marketState.serverOffset = serverTime - Date.now()
 }
 
-async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, { ...init, headers: { ...(init?.headers ?? {}), ...authHeaders() } })
-  const data = await response.json().catch(() => ({}))
-  syncServerClock((data as { serverTime?: unknown } | null)?.serverTime)
-  if (!response.ok) throw new Error((data as { error?: string }).error ?? `请求失败 (${response.status})`)
-  return data as T
+class OnlineTimeoutError extends Error {
+  constructor() { super('服务器响应超时，请检查网络连接。') }
+}
+
+async function withRequestTimeout<T>(ms: number, request: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(new OnlineTimeoutError()), ms)
+  try {
+    return await request(controller.signal)
+  } catch (error) {
+    controller.signal.throwIfAborted()
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function requestJson<T>(url: string, init?: RequestInit, timeoutMs?: number): Promise<T> {
+  const request = async (signal = init?.signal) => {
+    const response = await fetch(url, { ...init, signal, headers: { ...(init?.headers ?? {}), ...authHeaders() } })
+    const data = await response.json().catch(() => ({}))
+    signal?.throwIfAborted()
+    syncServerClock((data as { serverTime?: unknown } | null)?.serverTime)
+    if (!response.ok) throw new Error((data as { error?: string }).error ?? `请求失败 (${response.status})`)
+    return data as T
+  }
+  return timeoutMs ? withRequestTimeout(timeoutMs, request) : request()
 }
 
 function clearAITransferMarket(): void {
@@ -516,7 +540,7 @@ async function flushSave(): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
       // 联赛直播回放是服务器下发的副本，不存回服务器（几十 KB 的初始引擎状态）。
       body: JSON.stringify({ game: game.activeMatch?.preplayed ? { ...game, activeMatch: undefined } : game, baseRevision }),
-    })
+    }, SAVE_TIMEOUT_MS)
     if (pendingGame && pendingRevision === baseRevision) pendingRevision = result.revision
     onlineState.revision = Math.max(onlineState.revision, result.revision)
     onlineState.lastSync = result.updatedAt
@@ -527,7 +551,7 @@ async function flushSave(): Promise<void> {
     onlineState.status = 'offline'
     if (onlineState.error.includes('另一设备')) {
       try {
-        const current = await requestJson<{ game: GameState; revision: number }>('/api/game')
+        const current = await requestJson<{ game: GameState; revision: number }>('/api/game', undefined, RECOVERY_TIMEOUT_MS)
         onlineState.revision = current.revision
         remoteGameHandler?.(current.game)
         onlineState.status = 'online'
@@ -620,17 +644,19 @@ export async function respondOfferOnline(offerId: string, accept: boolean): Prom
 
 /** 响应丢失或并发失败时先取回权威状态：请求可能已提交，不能盲目在本地重做。 */
 async function protectedGameAction(endpoint: string, body: Record<string, unknown> | (() => Record<string, unknown>)): Promise<GameState> {
+  await requireSyncedOnline()
   try {
-    return await onlineGameAction(endpoint, body)
+    return await submitGameAction(endpoint, body, ACTION_TIMEOUT_MS)
   } catch (error) {
     try {
-      const current = await requestJson<{ game: GameState; revision: number }>('/api/game')
+      const current = await requestJson<{ game: GameState; revision: number }>('/api/game', undefined, RECOVERY_TIMEOUT_MS)
       if (current.revision >= onlineState.revision) {
         onlineState.revision = current.revision
         remoteGameHandler?.(current.game)
         notify()
       }
     } catch { /* 保留原始错误，用户可手动刷新检查。 */ }
+    if (error instanceof OnlineTimeoutError) throw new Error('服务器响应超时，操作结果尚未确认。请刷新检查后再操作。')
     throw error
   }
 }
@@ -661,16 +687,18 @@ export async function refreshGameOnline(currentGame: () => GameState): Promise<b
   await flushOnlineNow()
   if (sessionEpoch !== epoch || token !== requestToken || onlineState.user?.id !== user) return false
   if (!currentSession() || onlineState.error) throw new Error(onlineState.error || '请先连接服务器')
-  let response: Response
-  let data: { reports?: VisibleScoutReport[]; serverTime?: number; error?: string }
+  let result: { response: Response; data: { reports?: VisibleScoutReport[]; serverTime?: number; error?: string } }
   try {
-    response = await fetch('/api/scouting/reports', { headers: { Authorization: `Bearer ${requestToken}`, 'X-FM-Client': clientId } })
-    data = await response.json()
+    result = await withRequestTimeout(ACTION_TIMEOUT_MS, async (signal) => {
+      const response = await fetch('/api/scouting/reports', { signal, headers: { Authorization: `Bearer ${requestToken}`, 'X-FM-Client': clientId } })
+      return { response, data: await response.json() }
+    })
   } catch (error) {
     if (!currentSession()) return false
     throw error
   }
   if (!currentSession()) return false
+  const { response, data } = result
   if (!response.ok) throw new Error(data.error ?? `请求失败 (${response.status})`)
   if (!Array.isArray(data.reports) || typeof data.serverTime !== 'number' || !Number.isFinite(data.serverTime)) throw new Error('报告响应无效')
   const reports = data.reports
@@ -686,6 +714,10 @@ export async function refreshGameOnline(currentGame: () => GameState): Promise<b
   return true
 }
 
+export async function youthActionOnline(body: import('./game/youth-actions.ts').YouthAction): Promise<GameState> {
+  return protectedGameAction('/api/youth/action', () => ({ ...body, baseRevision: onlineState.revision }))
+}
+
 export async function startTrainingOnline(playerId: string, bookKeys: string[], points: number): Promise<GameState> {
   return protectedGameAction('/api/training/start', { playerId, bookKeys, points })
 }
@@ -696,14 +728,23 @@ export async function nextWorldSeasonOnline(): Promise<GameState> {
   return next
 }
 
-async function onlineGameAction(endpoint: string, body: Record<string, unknown> | (() => Record<string, unknown>)): Promise<GameState> {
+async function requireSyncedOnline(): Promise<void> {
   await flushOnlineNow()
   if (onlineState.status !== 'online' || onlineState.error) throw new Error(onlineState.error || '请先连接服务器')
+}
+
+async function onlineGameAction(endpoint: string, body: Record<string, unknown>): Promise<GameState> {
+  await requireSyncedOnline()
+  return submitGameAction(endpoint, body)
+}
+
+async function submitGameAction(endpoint: string, body: Record<string, unknown> | (() => Record<string, unknown>), timeoutMs?: number): Promise<GameState> {
   const result = await requestJson<{ revision: number; game: GameState }>(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(typeof body === 'function' ? body() : body),
-  })
+  }, timeoutMs)
+  if (!Number.isSafeInteger(result.revision) || !result.game) throw new Error('服务器返回的存档无效，请刷新检查。')
   if (result.revision >= onlineState.revision) {
     onlineState.revision = result.revision
     onlineState.lastSync = Date.now()

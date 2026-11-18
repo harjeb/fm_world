@@ -1,0 +1,25 @@
+.youth-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+.youth-overview > div { border: 1px solid var(--line); background: var(--panel); padding: 16px; border-radius: 8px; display: flex; flex-direction: column; gap: 8px; }
+.youth-overview span { font-size: 12px; color: var(--muted); }
+.youth-overview b { font-size: 26px; }
+.youth-overview small { font-size: 14px; color: var(--muted); }
+.youth-overview .youth-countdown { font-size: 18px; }
+.youth-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr)); gap: 16px; }
+.youth-card { border: 1px solid var(--line); border-radius: 8px; padding: 18px; min-width: 0; }
+.youth-genius { border-color: var(--gold, #bda065); background: linear-gradient(135deg, rgba(189,160,101,.08), transparent); }
+.youth-card-head { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+.youth-card-head small { display: block; margin-top: 6px; color: var(--muted); }
+.youth-badge { display: inline-block; font-size: 10px; line-height: 16px; padding: 0 4px; margin-left: 5px; border: 1px solid currentColor; border-radius: 3px; color: var(--good, #8ac7a0); font-weight: 500; white-space: nowrap; vertical-align: middle; }
+.youth-status { display: flex; align-items: center; gap: 10px; margin: 14px 0; font-size: 12px; color: var(--muted); }
+.youth-plan { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.youth-plan label, .youth-recruit label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+.youth-plan select { width: 100%; min-width: 0; }
+.youth-growth { display: flex; gap: 24px; padding-top: 14px; font-size: 12px; color: var(--muted); }
+.youth-growth b { color: var(--good); margin-left: 4px; }
+.youth-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.youth-log { margin-top: 14px; font-size: 12px; }
+.youth-log summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
+.youth-recruit { display: flex; align-items: flex-end; gap: 10px; }
+.youth-rules { font-size: 13px; line-height: 1.8; }
+.youth-rules p { margin: 8px 0; }
+@media (max-width: 650px) { .youth-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); } .youth-card { padding: 14px; } }

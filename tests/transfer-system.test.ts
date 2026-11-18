@@ -232,7 +232,7 @@ describe('AI 给玩家报价', () => {
     const clubs = localMarketClubs(game)
     const now = Date.now()
     const offer = firstOffer(game, clubs, now)
-    expect(offer.expiresAt - offer.createdAt).toBe(4 * GAME_DAY_MS)
+    expect(offer.expiresAt - offer.createdAt).toBe(24 * 3600_000)
     const buyer = clubs.find((club) => club.id === offer.clubId)!
     const balance = economyOf(game).balance
     const result = respondToOffer(game, offer.id, true, now + 1000, buyer, game.season.index)
@@ -271,7 +271,7 @@ describe('AI 给玩家报价', () => {
     expect(other.unhappy).toBeUndefined()
   })
 
-  it('4 个游戏日内不回复算拒绝（高价同样会不满）；转会窗口关闭时对方撤回', () => {
+  it('24 小时内不回复算拒绝（高价同样会不满）；球员离队时撤回报价', () => {
     const game = createWorldGame(2403)
     const clubs = localMarketClubs(game)
     const now = Date.now()
@@ -284,7 +284,7 @@ describe('AI 给玩家报价', () => {
     expect(game.roster.find((item) => item.id === offer.playerId)!.unhappy).toBeDefined()
 
     const next = firstOffer(game, clubs, now)
-    game.season.round = 15
+    game.roster = game.roster.filter((item) => item.id !== next.playerId)
     expireOffers(game, now)
     expect(next.status).toBe('withdrawn')
   })

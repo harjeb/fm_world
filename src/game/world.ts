@@ -16,7 +16,8 @@ import type {
 } from './types.ts'
 import { PLAYER_SEEDS, createPlayerFromSeed, seedById } from './data/players.ts'
 import { LEGACY_SQUAD_SIZE, buildNameBook, createRandomPlayer, randomSquadPositionTemplate, type SquadName } from './data/random-players.ts'
-import { DIVISION_IDS, WORLD_CLUB_DEFS, conferenceLabel, conferenceOfDivision, divisionIdForTier, type WorldClubDef } from './data/world-clubs.ts'
+import { allocateNaturalSquad, neededNaturalPosition } from './natural-positions.ts'
+import { DIVISION_IDS, WORLD_CLUB_DEFS, conferenceLabel, conferenceOfDivision, divisionIdForTier, pickExpandedZoneClubs, type WorldClubDef } from './data/world-clubs.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION } from './names.ts'
 import { FULL_SQUAD, MIN_SQUAD, autoFillLineup, repairLineup, validateLineup } from './squad.ts'
 import { applyAITacticsToLineup } from './ai-tactics.ts'
@@ -24,6 +25,7 @@ import { equipAICards, mergeSignings, seedAIClubs } from './ai-club.ts'
 import { caOf } from './ca.ts'
 import { derivedRng, splitSeed, hashString } from './rng.ts'
 import { simulateAIvsAIState } from './match/setup.ts'
+import { emptyAutoSubs } from './match/management.ts'
 import { economyOf, payWageBill } from './economy.ts'
 import { AVERAGE_ROUND_GAME_DAYS, GAME_DAY_MS, KICKOFF_SCHEDULE, calendarStartForSeason, gameDayOfRound, kickoffAtForRound, latestKickoffAt, roundsKickedOff, seasonEndAt } from './calendar.ts'
 
@@ -113,6 +115,7 @@ export function createWorld(seed: number, requestedClubId?: string, startedAt = 
   const freeStars = remaining.slice(0, 250)
   const reserveStars = remaining.slice(250)
   const world: WorldState = {
+    positionGenerationVersion: 1,
     version: 1,
     seasonIndex: 1,
     seasonStartedAt: startedAt,
@@ -318,16 +321,20 @@ function teamFromClub(world: WorldState, club: WorldClub, seed: number, playerTe
   }
   const players: Player[] = []
   const template = randomSquadPositionTemplate()
+  const modern = world.positionGenerationVersion === 1
+  const natural = modern ? allocateNaturalSquad(stars, splitSeed(seed, `positions-${club.squadKey ?? club.id}`)) : undefined
   const squadKey = club.squadKey ?? club.id
   const names = book[CLUB_INDEX.get(squadKey) ?? hashString(squadKey) % book.length]
   for (let slot = 0; slot < template.length; slot++) {
     const position = template[slot]
-    const star = byPosition.get(position)?.shift()
+    const star = natural ? natural.stars.get(slot) : byPosition.get(position)?.shift()
     if (star) players.push(star)
     else {
       players.push(createRandomPlayer({
         seed: splitSeed(seed, `club-${squadKey}-${world.seasonIndex}-${slot}`),
         position,
+        modernPositions: modern,
+        detailedPosition: natural?.positions[slot],
         tier: club.strength >= 5 ? 4 : club.strength >= 3 ? 3 : 2,
         fixedName: names[slot],
         idPrefix: `${club.id}-${slot + 1}`,
@@ -389,6 +396,7 @@ function createWorldGameFromSetup(setup: WorldSetup, seed: number, startedAt: nu
     clubName: playerTeam.name,
     roster: playerRoster,
     lineup: playerLineup,
+    autoSubs: emptyAutoSubs(),
     training: {},
     candidates: {},
     cards: [],
@@ -455,15 +463,15 @@ export function previewD2Clubs(seed: number): ClubPreview[] {
   })
 }
 
-const transferCache = new WeakMap<GameState, { world: WorldState; season: number; count: number; clubs: GameState['aiClubs']; teams: Record<string, AITeam> }>()
+const transferCache = new WeakMap<GameState, { world: WorldState; season: number; count: number; generation: number; clubs: GameState['aiClubs']; teams: Record<string, AITeam> }>()
 
 /** 单机世界转会名单；本赛区和已修改的卖方始终优先。 */
 export function worldTransferTeams(game: GameState): AITeam[] {
   const world = game.world
   if (!world || game.shared) return game.aiTeams
   let cached = transferCache.get(game)
-  if (!cached || cached.world !== world || cached.season !== world.seasonIndex || cached.count !== world.clubs.length || cached.clubs !== game.aiClubs) {
-    cached = { world, season: world.seasonIndex, count: world.clubs.length, clubs: game.aiClubs, teams: buildOwnerlessTeams(world, game.seed) }
+  if (!cached || cached.world !== world || cached.season !== world.seasonIndex || cached.count !== world.clubs.length || cached.generation !== (world.positionGenerationVersion ?? 0) || cached.clubs !== game.aiClubs) {
+    cached = { world, season: world.seasonIndex, count: world.clubs.length, generation: world.positionGenerationVersion ?? 0, clubs: game.aiClubs, teams: buildOwnerlessTeams(world, game.seed) }
     transferCache.set(game, cached)
   }
   const result: AITeam[] = []
@@ -504,7 +512,7 @@ const ownerlessCache = new Map<string, { clubCount: number; teams: Record<string
  * 同一赛季内重复调用不必每次重新生成 1400 名球员。
  */
 export function cachedOwnerlessTeams(world: WorldState, seed: number, aiClubs?: Record<string, AIClubState>): Record<string, AITeam> {
-  const key = `${seed}|${world.seasonIndex}|${world.clubs.length}|${aiClubs ? Object.keys(aiClubs).length : 0}`
+  const key = `${seed}|${world.seasonIndex}|${world.clubs.length}|${aiClubs ? Object.keys(aiClubs).length : 0}|positions:${world.positionGenerationVersion ?? 0}`
   const hit = ownerlessCache.get(key)
   if (hit) return world.transferTeams ? { ...hit.teams, ...world.transferTeams } : hit.teams
   const teams = buildOwnerlessTeams(world, seed, aiClubs)
@@ -543,14 +551,17 @@ export function createOwnerlessWorld(seed: number, startedAt = Date.now()): { wo
   return { world: setup.world, freeStars: setup.freeStars, reserveStars: setup.reserveStars }
 }
 
-/** 新区球队名：用固定的中文词根拼，保证同一种子每次生成都一样。 */
-const ZONE_CITIES = ['蓝港', '白河', '石桥', '青松', '赤岩', '东浦', '西岭', '南湾', '北岸', '云川', '金滩', '铁山', '沙洲', '湖畔', '长堤', '海湾', '松林', '雪原', '远洋', '望江']
-const ZONE_SUFFIXES = ['竞技', '联队', '城', '体育', '流浪者', '勇士', '航海', '铁路', '青年', '大学']
-const ZONE_COLORS = ['#2f6fed', '#e0592a', '#1f9d55', '#8b5cf6', '#d4a017', '#0f766e', '#b91c1c', '#475569']
+const EXPAND_TACTICS = [
+  { attack: 'balanced', passing: 'mixed', tempo: 'normal', line: 'mid', press: 'mid' },
+  { attack: 'wing', passing: 'direct', tempo: 'fast', line: 'high', press: 'high' },
+  { attack: 'middle', passing: 'short', tempo: 'slow', line: 'mid', press: 'mid' },
+  { attack: 'balanced', passing: 'direct', tempo: 'normal', line: 'low', press: 'mid' },
+  { attack: 'middle', passing: 'short', tempo: 'normal', line: 'mid', press: 'low' },
+] as const
 
 /**
- * 二级联赛满员后开一个新赛区：20 支新球队、同样的双循环赛程。
- * 只在服务器注册新账号时调用；`seed` 决定名字和队服颜色。
+ * 二级联赛满员后开一个新赛区：20 支真实低级别球队、同样的双循环赛程。
+ * 只在服务器注册或预览空位时按需调用。
  */
 export function expandWorldConference(world: WorldState, seed: number): { conference: ConferenceId; divisionId: string } {
   const used = new Set(world.clubs.map((club) => club.name))
@@ -558,40 +569,37 @@ export function expandWorldConference(world: WorldState, seed: number): { confer
   while (world.clubs.some((club) => club.conference === `zone${zoneNo}`)) zoneNo++
   const conference: ConferenceId = `zone${zoneNo}`
   const rng = derivedRng(seed, 'world-expand', zoneNo)
-  const created: WorldClub[] = []
-  for (let index = 0; index < 20; index++) {
-    let name = ''
-    for (let tries = 0; tries < 40 && (!name || used.has(name)); tries++) {
-      name = `${ZONE_CITIES[rng.int(ZONE_CITIES.length)]}${ZONE_SUFFIXES[rng.int(ZONE_SUFFIXES.length)]}`
-    }
-    while (!name || used.has(name)) name = `${ZONE_CITIES[rng.int(ZONE_CITIES.length)]}${ZONE_SUFFIXES[rng.int(ZONE_SUFFIXES.length)]}${created.length + 1}`
-    used.add(name)
-    const id = `d2z${zoneNo}_${String(index + 1).padStart(2, '0')}`
-    created.push({
-      id,
-      name,
-      short: name.slice(0, 2),
-      color: ZONE_COLORS[rng.int(ZONE_COLORS.length)],
-      accent: '#0b1220',
-      style: rng.pick(['balanced', 'attack', 'defend', 'press']),
-      formationId: rng.pick(['4-4-2', '4-3-3', '4-2-3-1', '3-5-2', '5-3-2', '4-1-4-1', '3-4-3', '4-1-2-1-2'] as const),
-      tactics: { attack: 'balanced', passing: 'mixed', tempo: 'normal', line: 'mid', press: 'mid' },
-      strength: index < 5 ? 3 : index < 14 ? 2 : 1,
-      playerNames: [],
-      tier: 'division2',
-      conference,
-      starPlayerIds: [],
-      starCount: 0,
-    })
-  }
+  const identities = pickExpandedZoneClubs(zoneNo, used, 20)
+  const created: WorldClub[] = identities.map(([name, enName, color], index) => ({
+    id: `d2z${zoneNo}_${String(index + 1).padStart(2, '0')}`,
+    name,
+    enName,
+    short: name.slice(0, 2),
+    color,
+    accent: '#0f172a',
+    style: '二级联赛球队。',
+    formationId: rng.pick(['4-4-2', '4-3-3', '4-2-3-1', '3-5-2', '5-3-2', '4-1-4-1', '3-4-3', '4-1-2-1-2'] as const),
+    tactics: { ...rng.pick(EXPAND_TACTICS) },
+    strength: index < 5 ? 3 : index < 14 ? 2 : 1,
+    playerNames: [],
+    tier: 'division2',
+    conference,
+    starPlayerIds: [],
+    starCount: 0,
+  }))
   world.clubs.push(...created)
   const divisionId = divisionIdForTier('division2', conference)
   const division = buildWorldDivision(world, divisionId, splitSeed(seed, `zone-${zoneNo}`), world.seasonStartedAt, world.seasonIndex)
-  // 扩区后的联赛必须继承全服已经公布的顺延时间。
+  // 扩区后的联赛必须继承全服统一的赛程时钟与已经公布的顺延时间。
   const prior = world.divisions[0]
-  if (world.seasonCups && prior) for (const fixture of division.fixtures) {
-    const reference = prior.fixtures.find(item => item.round === fixture.round)
-    if (reference) { fixture.kickoffAt = reference.kickoffAt; fixture.gameDay = reference.gameDay }
+  if (prior) {
+    division.gameDayMs = prior.gameDayMs
+    division.roundGameDays = prior.roundGameDays
+    division.kickoffSchedule = prior.kickoffSchedule
+    for (const fixture of division.fixtures) {
+      const reference = prior.fixtures.find((item) => item.round === fixture.round)
+      if (reference) { fixture.kickoffAt = reference.kickoffAt; fixture.gameDay = reference.gameDay }
+    }
   }
   world.divisions.push(division)
   return { conference, divisionId }
@@ -791,6 +799,36 @@ export function createWorldGameFromWorld(
   }, seed, startedAt, clubName, {})
   game.shared = true
   return game
+}
+
+/** 新开赛区在赛季中途创建时，立即把全服已公布完的轮次抽象补算完，避免产生过期比赛任务或卡住杯赛抽签。 */
+export function catchUpExpandedDivision(
+  world: WorldState,
+  division: SeasonState,
+  throughRound: number,
+  seed = world.seasonStartedAt,
+): void {
+  const completed = Math.min(38, Math.max(0, throughRound))
+  const clubs = new Map(world.clubs.map((club) => [club.id, club]))
+  for (const fixture of division.fixtures) {
+    if (fixture.round > completed || fixture.played) continue
+    const home = clubs.get(fixture.homeId)
+    const away = clubs.get(fixture.awayId)
+    if (!home || !away) continue
+    const matchSeed = splitSeed(division.seed, `ownerless-${fixture.round}-${fixture.homeId}-${fixture.awayId}`)
+    const score = abstractScore(home, away, matchSeed)
+    fixture.score = score
+    fixture.played = true
+    fixture.autoSimulated = true
+    const tally = abstractTally(seed, world.seasonIndex, fixture.homeId, fixture.awayId, score, matchSeed)
+    fixture.scorers = tally.scorers
+    fixture.assisters = tally.assisters
+  }
+  const names = new Map(division.clubIds?.map((id) => [id, clubs.get(id)?.name ?? id]) ?? [])
+  division.table = computeWorldTable(division.clubIds ?? [], division.fixtures, names)
+  division.round = world.divisions[0]?.round ?? Math.min(38, Math.max(1, completed))
+  division.finished = division.fixtures.every((fixture) => fixture.played)
+  if (division.finished) division.champion = division.table[0]?.teamId ?? null
 }
 
 /** 服务器共享世界按现实时间抽象推进；返回是否有变化。 */
@@ -1153,6 +1191,7 @@ function retireAndRegen(game: GameState): void {
   const rng = derivedRng(game.seed, 'retirement', world.seasonIndex)
   const retired: Player[] = []
   for (const player of all.values()) {
+    if (player.youthOrigin && player.youthOrigin.promotedAt === undefined) continue
     player.age = (player.age ?? 24) + 1
     if (player.starKey) world.starAges[player.id] = player.age
     const age = player.age
@@ -1231,7 +1270,7 @@ function ensurePlayerSquad(game: GameState, rng: ReturnType<typeof derivedRng>):
   while (game.roster.length < FULL_SQUAD) {
     const template = randomSquadPositionTemplate()
     const position = template[slot % template.length]
-    const player = createRandomPlayer({ seed: rng.int(0x7fffffff), position, tier: 2, usedNames: used, idPrefix: `youth-${game.season.index}-${slot}` })
+    const player = createRandomPlayer({ seed: rng.int(0x7fffffff), position, detailedPosition: neededNaturalPosition(game.roster, position, game.seed + slot), tier: 2, usedNames: used, idPrefix: `youth-${game.season.index}-${slot}` })
     player.age = 16 + rng.int(5)
     player.contract = { clubId: 'player', wage: wageForPlayer(player), expiresSeason: game.season.index + 3 }
     game.roster.push(player)
@@ -1264,6 +1303,7 @@ function expireContracts(game: GameState): void {
   const index = game.world.seasonIndex
   const expired: Player[] = []
   game.roster = game.roster.filter((player) => {
+    if (player.youthOrigin && player.youthOrigin.promotedAt === undefined) return true
     if (!player.contract || player.contract.clubId !== 'player' || player.contract.expiresSeason > index) return true
     if (game.roster.length <= MIN_SQUAD) {
       player.contract.expiresSeason = index + 2
@@ -1325,6 +1365,7 @@ export function advanceWorldSeason(game: GameState, now = Date.now(), protectedC
   // 跨赛区卖方快照只代表上一赛季；新赛季按现有世界数据重新生成，已签走的球星不会留在原队。
   delete world.transferTeams
   world.seasonIndex++
+  world.positionGenerationVersion = 1
   world.seasonStartedAt = Math.min(now, scheduledStart) > 0 ? scheduledStart : now
   const nextCalendarStart = calendarStartForSeason(world.seasonStartedAt, world.seasonIndex)
   const offseasonDelta = Math.max(0, previousCalendarStart - nextCalendarStart)

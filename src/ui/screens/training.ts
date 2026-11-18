@@ -19,6 +19,8 @@ import { activityColor, attrColor, attributeRadar, attrHeat, caHeat, cardName, c
 import { attrLabel, attrValue, caDelta, displayEventHint, esc, gainText, pct, playerCA, positionLabel, skillName, trainingLogText } from '../format.ts'
 import { game, ui } from '../state.ts'
 import { filterTrainingBookIds } from '../training-books.ts'
+import { isYouthTrainee } from '../../game/youth.ts'
+import { youthBadge } from '../components.ts'
 
 const DAY_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 
@@ -369,6 +371,7 @@ function attrList(player: Pick<Player, 'attrs' | 'positions'>): string {
 }
 
 function renderTrainingPlayer(player: Player): string {
+  if (isYouthTrainee(player)) return panel(`${esc(player.name)}${youthBadge(player)}`, `<p class="hint">在营青年继续培养基础能力，正式提拔后才能制作球员卡。</p><button class="btn primary" data-nav="youth">前往青训</button>`)
   const session = game.training[player.id]
   const candidate = game.candidates[player.id]
   if (!session && !candidate) return renderTrainingStart(player)

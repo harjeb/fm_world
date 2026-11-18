@@ -1,4 +1,6 @@
-import type { Player, Position, StyleId } from '../types.ts'
+import { backfillNaturalPlayer, initializeNaturalPositions, naturalStyle, randomNaturalPosition } from '../natural-positions.ts'
+import { DETAILED_TO_POSITION } from '../detailed-positions.ts'
+import type { DetailedPosition, Player, Position, StyleId } from '../types.ts'
 import { POSITIONS } from '../types.ts'
 import { caOf } from '../ca.ts'
 import { derivedRng } from '../rng.ts'
@@ -20,6 +22,10 @@ export type SquadName = ReturnType<typeof pickRandomName>
 export type RandomPlayerOptions = {
   seed: number
   position: Position
+  /** Explicit intake/team role; generation uses a separate random stream. */
+  detailedPosition?: DetailedPosition
+  /** false only for rebuilding existing legacy-world identities. */
+  modernPositions?: boolean
   /** 1-4；随机球员默认不超过 4，潜力低于世界级。 */
   tier: number
   usedNames?: Set<string>
@@ -80,7 +86,10 @@ export function createRandomPlayer(options: RandomPlayerOptions): Player {
   used.add(name)
   used.add(enName)
   used.add(`姓:${picked.family}`)
-  const style = rng.pick(STYLES[position])
+  const oldStyle = rng.pick(STYLES[position]) // Keep legacy draws/identity stable.
+  const detailed = options.detailedPosition ?? randomNaturalPosition(position, seed)
+  if (DETAILED_TO_POSITION[detailed] !== position) throw new Error('具体位置与球员位置类型不符')
+  const style = options.modernPositions === false ? oldStyle : naturalStyle(detailed, seed)
   const foot = position === 'GK' || position === 'CB' ? (rng.chance(0.2) ? 'L' : 'R') : (rng.chance(0.25) ? 'L' : 'R')
   const height = position === 'GK' ? 185 + rng.int(18) : position === 'CB' ? 181 + rng.int(15) : position === 'ST' ? 175 + rng.int(18) : 168 + rng.int(17)
   const playerSeed: PlayerSeed = {
@@ -103,6 +112,8 @@ export function createRandomPlayer(options: RandomPlayerOptions): Player {
   player.condition = 100
   player.energy = 100
   player.age = 16 + rng.int(9)
+  if (options.modernPositions === false) backfillNaturalPlayer(player)
+  else initializeNaturalPositions(player, detailed)
   return player
 }
 

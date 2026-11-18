@@ -5,7 +5,7 @@ import { GAME_DAY_MS } from '../src/game/calendar.ts'
 import { skipToMatchday } from '../src/game/season.ts'
 import { ALL_ATTRIBUTES, GK_ATTRIBUTES } from '../src/game/types.ts'
 import { isMainAttr } from '../src/game/scale.ts'
-import { MAX_SCOUT_REPORTS, SCOUT_LEVELS, startScouting, visibleScoutReports } from '../src/game/scouting.ts'
+import { MAX_SCOUT_REPORTS, SCOUT_LEVELS, scoutMarketGraceMs, startScouting, visibleScoutReports } from '../src/game/scouting.ts'
 
 function setup() {
   const game = createInitialGame(123)
@@ -24,7 +24,7 @@ describe('scouting', () => {
       const result = startScouting(game, player, target, config.level, 100)
       expect(result.ok).toBe(true)
       const report = result.report!
-      expect(report.readyAt).toBe(100 + config.days * GAME_DAY_MS)
+      expect(report.readyAt).toBe(100 + Math.round(config.days * GAME_DAY_MS))
       expect(game.economy!.balance).toBe(100_000 - config.fee)
       expect(report.clubId).toBe('opponent')
       for (const key of ALL_ATTRIBUTES) {
@@ -60,7 +60,7 @@ describe('scouting', () => {
     game.season.gameDayMs = 60_000
     const base = startScouting(game, player, { source: 'market' }, 1, now).report!
     const within = { ...base, readyAt: now - 1, startedAt: now - 100_000 }
-    const boundary = { ...base, readyAt: now - game.season.gameDayMs, startedAt: now - 400_000 }
+    const boundary = { ...base, readyAt: now - scoutMarketGraceMs(game.season.gameDayMs), startedAt: now - 400_000 }
     const club = { ...within, source: 'club' as const }
     game.scoutReports = [base, within, boundary, club]
     const before = game.scoutReports.map(r => ({ startedAt: r.startedAt, readyAt: r.readyAt }))

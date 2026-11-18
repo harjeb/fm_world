@@ -65,7 +65,7 @@ function legacyHistory(game: GameState): string {
 
 /** 独立杯赛页只读取服务器已公布的签表和统计，不模拟或报名。 */
 export function renderSeasonCups(game: GameState, selected: SeasonCupId = 'community'): string {
-  const heading = pageHead({ kicker: `第 ${game.season.index} 赛季 · 正式赛事`, title: '杯赛', sub: '每场 18:00 开赛，杯赛日当晚联赛顺延至 22:00。赛前 30 分钟锁阵，杯赛消耗体能并产生伤病。' })
+  const heading = pageHead({ kicker: `第 ${game.season.index} 赛季 · 正式赛事`, title: '杯赛', sub: '在北京时间 12:00 / 20:00 黄金档加赛（联赛固定走每天 6 轮不顺延）。赛前 30 分钟锁阵，杯赛消耗体能并产生伤病。' })
   if (game.world?.seasonCupMode !== 1) return heading + panel('赛季杯赛', '<p class="hint pad">正式赛季杯赛目前仅在联机共享世界开放。</p>', { flush: true })
   const season = game.world.seasonCups
   if (!season || season.seasonIndex !== game.season.index) return heading + panel('赛季杯赛', '<p class="hint pad">第 6 轮结束后确定参赛资格；赛程将在确认后公布。</p>', { flush: true }) + legacyHistory(game)

@@ -6,9 +6,9 @@ import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
 import { readStoredAccounts, writeStoredAccounts } from './account-storage-helpers.ts'
 import { applyAgentAction } from '../server/agent.ts'
-import { createWorldGame } from '../src/game/world.ts'
-import { seasonStartForRound } from '../src/game/calendar.ts'
-import type { GameState } from '../src/game/types.ts'
+import { computeWorldTable, createWorldGame } from '../src/game/world.ts'
+import { kickoffAtForRound, seasonStartForRound } from '../src/game/calendar.ts'
+import type { GameState, WorldState } from '../src/game/types.ts'
 import type { WorldPublicClub, WorldPublicSnapshot } from '../src/online.ts'
 
 const servers: AppServer[] = []
@@ -123,5 +123,91 @@ describe('注册时选队，注册后不能换队', () => {
     game.season.startedAt = seasonStartForRound(now, 2)
     const due = applyAgentAction(game, { action: 'start_league' }, now)
     expect(due.ok, due.error).toBe(true)
+  })
+
+  it('二级 40 支全满后预览空缺球队会自动扩出第 3 区并补算前序轮次，第 41 人可直接选队注册', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-club-pick-'))
+    dirs.push(dataDir)
+    let clock = Date.UTC(2026, 10, 9, 8, 15)
+    const open = async () => {
+      const app = createAppServer({ dataDir, staticDir: path.resolve('dist'), tickMs: 0, now: () => clock })
+      servers.push(app)
+      await new Promise<void>((resolve) => app.server.listen(0, '127.0.0.1', resolve))
+      return { base: `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`, app }
+    }
+    const first = await open()
+    const seedRes = await register(first.base, 'seed_owner')
+    expect(seedRes.status).toBe(201)
+    first.app.close()
+    servers.splice(servers.indexOf(first.app), 1)
+
+    const worldFile = path.join(dataDir, 'world.json')
+    const storedWorld = JSON.parse(fs.readFileSync(worldFile, 'utf8')) as {
+      startedAt: number
+      owners: Record<string, string>
+      world: WorldState
+      cupOpening: unknown
+      aiRound?: number
+    }
+    const opening = structuredClone(storedWorld.cupOpening)
+    const storedAccounts = readStoredAccounts(dataDir)
+    const templateAccount = storedAccounts.accounts[0]
+    const d2Ids = storedWorld.world.clubs.filter((club) => club.tier === 'division2').map((club) => club.id)
+    expect(d2Ids).toHaveLength(40)
+    for (const clubId of d2Ids) {
+      if (storedWorld.owners[clubId]) continue
+      const fake = structuredClone(templateAccount)
+      fake.id = `fake-${clubId}`
+      fake.username = `u_${clubId}`
+      storedWorld.owners[clubId] = fake.id
+      storedAccounts.accounts.push(fake)
+    }
+    const clubNames = new Map(storedWorld.world.clubs.map((club) => [club.id, club.name]))
+    for (const division of storedWorld.world.divisions) {
+      for (const fixture of division.fixtures) {
+        if (fixture.round <= 6) {
+          fixture.played = true
+          fixture.score = { home: 1, away: 0 }
+        }
+      }
+      division.round = 6
+      division.table = computeWorldTable(division.clubIds!, division.fixtures, clubNames)
+    }
+    storedWorld.aiRound = 6
+    fs.writeFileSync(worldFile, JSON.stringify(storedWorld))
+    writeStoredAccounts(dataDir, storedAccounts)
+    clock = kickoffAtForRound(storedWorld.startedAt, 6) + 15 * 60_000
+
+    const restarted = await open()
+    const free1 = await choices(restarted.base)
+    expect(free1).toHaveLength(20)
+    expect(free1.every((club) => club.tier === 'division2' && club.conference === 'zone3' && !club.managed)).toBe(true)
+
+    // 重复打开注册选队预览不会重复扩第 4 区。
+    const free2 = await choices(restarted.base)
+    expect(free2.map((club) => club.id)).toEqual(free1.map((club) => club.id))
+
+    const worldRes = await (await fetch(`${restarted.base}/api/world`)).json() as {
+      clubs: { id: string; tier: string; conference?: string }[]
+      divisions: { id: string; round: number }[]
+    }
+    expect(worldRes.clubs).toHaveLength(100)
+    expect(worldRes.divisions.find((d) => d.id === 'd2-zone3')?.round).toBe(6)
+
+    const target = free1[0]
+    const reg41 = await register(restarted.base, 'coach_41', target.id)
+    expect(reg41.status).toBe(201)
+    const body41 = await reg41.json() as { game: GameState }
+    expect(body41.game.season.divisionId).toBe('d2-zone3')
+    expect(body41.game.season.conference).toBe('zone3')
+    expect(body41.game.season.fixtures.filter((f) => f.round <= 6).every((f) => f.played && !!f.score)).toBe(true)
+    expect(body41.game.season.fixtures.filter((f) => f.round >= 7).every((f) => !f.played)).toBe(true)
+
+    const freeAfter = await choices(restarted.base)
+    expect(freeAfter).toHaveLength(19)
+    expect(freeAfter.some((club) => club.id === target.id)).toBe(false)
+
+    const worldAfter = JSON.parse(fs.readFileSync(worldFile, 'utf8')) as { cupOpening: unknown }
+    expect(worldAfter.cupOpening).toEqual(opening)
   })
 })

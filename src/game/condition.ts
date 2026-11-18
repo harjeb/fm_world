@@ -1,23 +1,25 @@
 /**
  * 球员体能（condition，1–100）：比赛消耗、按时间恢复。单机结算和联机服务器结算共用这里的数。
  *
- * - 消耗：只有联赛扣。踢满 90 分钟掉 70 点（满体能 100 → 30），按上场分钟同比例；加时赛也按分钟继续算。
+ * - 消耗：联赛和正式杯赛扣。踢满 90 分钟掉 70 点（满体能 100 → 30），按上场分钟同比例；加时赛也按分钟继续算。
  *   挑战里的比赛（友谊赛、单场挑战、世界挑战）不扣体能。
- * - 恢复：一个游戏日（现实 6 小时）恢复 30 点，每过一小时（游戏日的六分之一）按比例结算一次 +5，满 100 为止。
- *   每名球员记着上次结算到的时间（recoveryAt），只按整小时往前走，不足一小时的部分留到下次。
+ * - 恢复：现实每小时恢复 30 点，每 20 分钟结算一次 +10，满 100 为止；离线同样恢复。
+ *   每名球员记着上次结算到的时间（recoveryAt），只按完整周期往前走，不足一周期留到下次。
  *
- * 体能越低，下一场开场时的体力越低（见 match/team.ts），所以每天两场都踢满的球员会越来越累，要轮换。
+ * 体能越低，下一场开场时的体力越低（见 match/team.ts）；不改变比赛内体力、训练体力或培养精力。
  */
 import type { Player } from './types.ts'
-import { GAME_DAY_MS } from './calendar.ts'
+import { GAME_DAY_MS, HOUR_MS } from './calendar.ts'
 
 /** 踢满一场（90 分钟）消耗的体能。 */
 export const MATCH_CONDITION_LOSS = 70
 /** 一场比赛的分钟数（消耗按这个折算）。 */
 export const FULL_MATCH_MINUTES = 90
-/** 每个游戏日（现实 6 小时）恢复的体能。 */
-export const CONDITION_RECOVERY_PER_GAME_DAY = 30
-/** 一个游戏日分几次结算恢复（现实每小时一次）。 */
+/** 现实每小时恢复的比赛体能。 */
+export const CONDITION_RECOVERY_PER_HOUR = 30
+/** 内部时间基准的恢复量；保留 gameDayMs 参数用于测试加速与存档时钟。 */
+export const CONDITION_RECOVERY_PER_GAME_DAY = CONDITION_RECOVERY_PER_HOUR * GAME_DAY_MS / HOUR_MS
+/** 一个内部时间基准分几次结算恢复（默认现实每 20 分钟一次）。 */
 export const CONDITION_SETTLES_PER_GAME_DAY = 6
 
 const MIN_CONDITION = 1
@@ -34,13 +36,13 @@ export function applyConditionLoss(player: Pick<Player, 'condition'>, minutes: n
   player.condition = Math.max(MIN_CONDITION, Math.min(MAX_CONDITION, (player.condition ?? MAX_CONDITION) - matchConditionLoss(minutes, factor)))
 }
 
-/** 一次结算的时长（默认现实 1 小时）。 */
+/** 一次结算的时长（默认现实 20 分钟）。 */
 export function conditionSettleMs(gameDayMs = GAME_DAY_MS): number {
   return gameDayMs / CONDITION_SETTLES_PER_GAME_DAY
 }
 
 /**
- * 把这名球员的体能恢复结算到 now：过了几个整小时就恢复几次，每次 30 / 6 = 5 点。
+ * 把这名球员的体能恢复结算到 now：每过完整 20 分钟恢复 10 点，不足一个周期留到下次。
  * 第一次结算只记时间（旧存档不倒补）；也可以传 since 指定从哪个时间开始算（比如上一场比赛的开球时间）。
  * 返回体能或结算时间有没有变化。
  */

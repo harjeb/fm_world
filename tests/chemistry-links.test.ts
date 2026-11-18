@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chemistryKey, recordMatchChemistry } from '../src/game/chemistry.ts'
+import { CHEMISTRY_EXPIRY_DAYS, chemistryKey, recordMatchChemistry } from '../src/game/chemistry.ts'
 import { GAME_DAY_MS } from '../src/game/calendar.ts'
 import type { Chemistry, PlayerMatchStats } from '../src/game/types.ts'
 import { selectChemistryLinks } from '../src/ui/chemistry-links.ts'
@@ -38,7 +38,7 @@ describe('tactics chemistry links', () => {
 
   it('excludes expired relationships and players outside the current starters', () => {
     const store = relationships([['a', 'b', 90], ['a', 'bench', 90], ['b', 'c', 90]])
-    store[chemistryKey('a', 'b')].lastAt -= 180 * GAME_DAY_MS + 1
+    store[chemistryKey('a', 'b')].lastAt -= CHEMISTRY_EXPIRY_DAYS * GAME_DAY_MS + 1
     const links = selectChemistryLinks(store, ['a', 'b', 'c'].map(id => player(id)), now)
     expect(links.map(p => [p.a.id, p.b.id])).toEqual([['b', 'c']])
     expect(links[0].minutes).toBe(90)

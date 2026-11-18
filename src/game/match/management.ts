@@ -53,8 +53,35 @@ const VALID_PREFER_BY = new Set<string>(['proficiency', 'stamina', 'ca'])
 const VALID_TARGET_KINDS = new Set<string>(['any', 'position', 'slot', 'player'])
 const VALID_POSITIONS = new Set<string>(POSITIONS)
 
+export const DEFAULT_STAMINA_BELOW = 35
+export const DEFAULT_PRE_MATCH_STAMINA_BELOW = 65
+
 export function emptyAutoSubs(): AutoSubPlan {
-  return { timed: [], staminaBelow: null, onInjury: false }
+  return {
+    timed: [],
+    staminaBelow: DEFAULT_STAMINA_BELOW,
+    preMatchStaminaBelow: DEFAULT_PRE_MATCH_STAMINA_BELOW,
+    onInjury: true,
+  }
+}
+
+/** 阵容/转会变动后清理失效的球员引用，保留体力与伤病自动换人配置。 */
+export function sanitizeAutoSubPlan(roster: Player[], lineup: Lineup, plan: AutoSubPlan | undefined): AutoSubPlan {
+  if (!plan) return emptyAutoSubs()
+  const next = structuredClone(plan)
+  const starters = new Set(lineup.starters.map((s) => s.playerId))
+  const bench = new Set(lineup.bench)
+  const slotIds = new Set((FORMATIONS[lineup.formationId]?.slots ?? []).map((s) => s.id))
+  next.timed = (next.timed ?? []).filter((r) => starters.has(r.outId) && bench.has(r.inId))
+  if (next.conditionRules) {
+    next.conditionRules = next.conditionRules.filter((r) => {
+      if (r.targetKind === 'player' && (!r.targetValue || !starters.has(r.targetValue))) return false
+      if (r.targetKind === 'slot' && (!r.targetValue || !slotIds.has(r.targetValue))) return false
+      if (r.inId && !bench.has(r.inId)) return false
+      return true
+    })
+  }
+  return validateAutoSubPlan(roster, lineup, next).length === 0 ? next : emptyAutoSubs()
 }
 
 export function autoSubDisplaySeconds(rule: { atMinute?: number; atSeconds?: number }): number {

@@ -1,7 +1,6 @@
 import { economyOf } from '../../game/economy.ts'
 import { transferWindowOpen } from '../../game/market.ts'
 import { PLAYER_TEAM_ID, inPostseason, matchdayCountdown, nextMatchCountdown, nextSeasonCountdown, playerFixture, seasonRoundLabel } from '../../game/season.ts'
-import { gameDateOf } from '../../game/calendar.ts'
 import { APP_VERSION } from '../../game/changelog.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
 import { chatState, isOnlineMode, marketState, onlineKickoffPending, onlineState, serverNow } from '../../online.ts'
@@ -31,6 +30,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { id: 'lineup', label: '战术', icon: 'lineup' },
       { id: 'academy', label: '球员', icon: 'academy' },
+      { id: 'youth', label: '青训', icon: 'training' },
       { id: 'inventory', label: '库存', icon: 'cards' },
       { id: 'training', label: '培养', icon: 'training', badge: trainingAttention },
     ],
@@ -50,13 +50,6 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     { id: 'transfer', label: '转会', icon: 'swap', alert: pendingOffers, badge: () => (isOnlineMode() ? marketState.auctions.length : 0) },
   ] },
 ]
-
-/** 游戏内日期：每个赛季从当年 11/01 起算，每个真实 6 小时过一天。 */
-function dateLabel(): string {
-  const start = game.world?.calendarStartAt ?? game.createdAt
-  const now = isOnlineMode() ? serverNow() : Date.now()
-  return gameDateOf(start, now).label
-}
 
 function divisionText(): string {
   if (!game.world) return '联赛'
@@ -107,7 +100,7 @@ function continueAction(): string {
   }
   const fixture = playerFixture(game)
   if (fixture && !fixture.played) {
-    return `<button class="btn primary continue" data-action="start-league" title="把游戏日历快进到本轮比赛日，体能按跳过的天数恢复">${icon('play', 14)}跳至比赛日</button>`
+    return `<button class="btn primary continue" data-action="start-league" title="快进到本轮开赛时刻，全队体能与精力按时间恢复">${icon('play', 14)}跳至下一轮</button>`
   }
   return `<span class="continue-wait">${icon('clock', 14)}等待下一轮</span>`
 }
@@ -133,7 +126,7 @@ export function renderTopbar(): string {
   const sync = online ? (onlineState.connected ? '已同步' : '连接中') : ''
   return `<header class="topbar">
     <div class="top-stats">
-      <div class="top-stat optional"><span>${esc(dateLabel())}</span><b>${esc(seasonRoundLabel(game))}</b></div>
+      <div class="top-stat optional"><span>当前进度</span><b>${esc(seasonRoundLabel(game))}</b></div>
       <div class="top-stat"><span>第 ${game.season.index} 赛季</span><b>${esc(divisionText())}</b></div>
       ${game.season.finished
         ? (inPostseason(game) ? `<div class="top-stat"><span>赛后休整</span><b>${esc(nextSeasonCountdown(game))}</b></div>` : '')

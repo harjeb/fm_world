@@ -24,6 +24,8 @@ export type Account = {
 }
 
 export const ACCOUNT_DB_FILE = 'accounts.sqlite'
+/** Keep serialization/worker copies bounded when a recovery tick dirties every large save. */
+export const ACCOUNT_WRITE_BATCH_SIZE = 2
 const ACCOUNT_SQL = `INSERT INTO accounts
   (id, username, username_key, salt, password_hash, agent_token, game_json, revision,
    last_user_revision, applied_match_ids, offer_key, last_online_at, ai_takeover_key, created_at, updated_at)
@@ -112,7 +114,7 @@ export class AccountStore {
       if (!columns.has('last_online_at')) this.db.exec('ALTER TABLE accounts ADD COLUMN last_online_at INTEGER')
       if (!columns.has('ai_takeover_key')) this.db.exec('ALTER TABLE accounts ADD COLUMN ai_takeover_key TEXT')
       this.migrateLegacy(dataDir)
-      this.accounts = this.db.prepare('SELECT * FROM accounts ORDER BY rowid').all().map((row) => ({
+      this.accounts = Array.from(this.db.prepare('SELECT * FROM accounts ORDER BY rowid').iterate(), (row) => ({
         id: row.id as string,
         username: row.username as string,
         salt: row.salt as string,
@@ -258,8 +260,9 @@ export class AccountStore {
     while (!this.closed) {
       if (!this.inFlight) {
         if (!this.dirty.size && !this.dirtySessions.size) return
-        const accounts = [...this.dirty.values()]
-        const sessions = new Map(this.dirtySessions)
+        const accounts = [...this.dirty.values()].slice(0, ACCOUNT_WRITE_BATCH_SIZE)
+        // Session foreign keys may refer to accounts in a later batch: commit them last.
+        const sessions = accounts.length === this.dirty.size ? new Map(this.dirtySessions) : new Map<string, string | null>()
         // 先序列化成功再清脏标记，异常不会吞掉待保存数据。
         const values = accounts.map(accountValues)
         const worker = this.getWorker()
@@ -267,8 +270,8 @@ export class AccountStore {
         let complete!: () => void
         const done = new Promise<void>((resolve) => { complete = resolve })
         const status = new Int32Array(new SharedArrayBuffer(4))
-        this.dirty.clear()
-        this.dirtySessions.clear()
+        for (const account of accounts) this.dirty.delete(account.id)
+        for (const token of sessions.keys()) this.dirtySessions.delete(token)
         const id = ++this.nextBatchId
         this.inFlight = { id, accounts, sessions, status, done, complete }
         try { worker.postMessage({ id, accounts: values, sessions: [...sessions], status: status.buffer }) }
@@ -294,12 +297,13 @@ export class AccountStore {
       }
       this.finishBatch(batch)
     }
-    const accounts = [...this.dirty.values()].map(accountValues)
+    const accounts = [...this.dirty.values()]
     const sessions = [...this.dirtySessions]
     if (!accounts.length && !sessions.length) return
     transaction(this.db, () => {
       const save = this.db.prepare(ACCOUNT_SQL)
-      for (const values of accounts) save.run(...values)
+      // Serialize one save at a time, not the entire account database in memory.
+      for (const account of accounts) save.run(...accountValues(account))
       const set = this.db.prepare(SESSION_SQL)
       const remove = this.db.prepare(DELETE_SESSION_SQL)
       for (const [token, id] of sessions) {

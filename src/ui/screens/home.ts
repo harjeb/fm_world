@@ -191,7 +191,7 @@ function inboxItems(): InboxItem[] {
   if (expiring.length) items.push({ tone: 'warn', icon: 'coach', title: `${expiring.length} 份合同本赛季到期`, detail: expiring.slice(0, 3).map((player) => player.name).join('、'), attrs: 'data-action="go-club" data-tab="contracts"' })
   const listings = game.market?.listings.length ?? 0
   if (listings) items.push({ tone: 'info', icon: 'coin', title: `${listings} 名球员挂牌中`, detail: '下一轮结算时可能成交。', attrs: 'data-action="go-transfer" data-tab="market"' })
-  if (game.world) items.push({ tone: 'info', icon: 'swap', title: transferWindowOpen(game) ? '转会窗口开放中' : '转会窗口已关闭', detail: '开放轮次：第 1-10 轮、第 20-30 轮。', attrs: 'data-action="go-transfer" data-tab="free"' })
+  if (game.world) items.push({ tone: 'info', icon: 'swap', title: '转会窗口常开', detail: '随时可参与自由球员竞拍或向 AI 球队谈判买人。', attrs: 'data-action="go-transfer" data-tab="free"' })
   return items
 }
 

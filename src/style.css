@@ -1815,7 +1815,3 @@ circle.pm-5 { fill: var(--h6); }
 .scout-report p { margin: .4rem 0; }
 .scout-attrs { display: flex; flex-wrap: wrap; gap: .5rem 1rem; }
 .scout-ratings { display: grid; gap: 4px; }
-.scout-stars { display: inline-flex; letter-spacing: 1px; }
-.scout-star { color: var(--line); }
-.scout-star.full { color: #e6b856; }
-.scout-star.half { color: transparent; background: linear-gradient(90deg, #e6b856 50%, var(--line) 50%); background-clip: text; }

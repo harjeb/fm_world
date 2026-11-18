@@ -129,7 +129,7 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     goal: goalSchema, role: roleSchema,
   }, (args) => action('sign_club_player', args))
 
-  register('respond_offer', '回复报价', 'AI 俱乐部给你球员的报价（state.transferOffers 里 status 为 pending 的）：accept=true 接受（球员转走、钱到账），false 拒绝。4 个游戏日（现实 24 小时）不回复算拒绝；拒绝高价报价（high=true，不低于身价 1.3 倍）球员会不满 8 个游戏日，精力恢复只剩一成。', {
+  register('respond_offer', '回复报价', 'AI 俱乐部给你球员的报价（state.transferOffers 里 status 为 pending 的）：accept=true 接受（球员转走、钱到账），false 拒绝。现实 24 小时内不回复算拒绝；拒绝高价报价（high=true，不低于身价 1.3 倍）球员会不满 16 小时，期间精力恢复只剩一成。', {
     offerId: z.string().min(1),
     accept: z.boolean(),
   }, (args) => action('respond_offer', args))
@@ -169,6 +169,18 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     playerId: z.string(),
     bookKeys: z.array(z.string()).max(4),
   }, (args) => action('set_training_books', args))
+
+  register('youth_action', '管理青训', '读取 get_state.youth 后操作青训：设置位置与能力方向、招募、临时征召、返回、正式提拔或解约。正式提拔永久停止基础成长；解约不返资源。', {
+    youth: z.object({
+      action: z.enum(['plan', 'recruit_position', 'sign', 'call_up', 'return', 'promote', 'release']),
+      playerId: z.string().optional(),
+      position: z.enum(['GK', 'DL', 'DC', 'DR', 'WBL', 'WBR', 'DM', 'ML', 'MC', 'MR', 'AML', 'AMC', 'AMR', 'ST']).optional(),
+      plan: z.object({
+        position: z.enum(['GK', 'DL', 'DC', 'DR', 'WBL', 'WBR', 'DM', 'ML', 'MC', 'MR', 'AML', 'AMC', 'AMR', 'ST']),
+        focus: z.enum(['balanced', 'pace', 'strength', 'endurance', 'dribbling', 'passing', 'finishing', 'defending', 'saves', 'handling', 'distribution']),
+      }).optional(),
+    }),
+  }, (args) => action('youth_action', args))
 
   register('start_training', '开始培养', '每轮从原始属性开始，产出球员卡；省略 bookKeys 时使用保存的技能卡配置，传入时同时保存。可投入共享培养点提高品质。', {
     playerId: z.string(),

@@ -37,4 +37,31 @@ describe('注册选队预览', () => {
     expect(html.indexOf('第二位')).toBeLessThan(html.indexOf('第三位'))
     expect(online.registrationClubs![0].players.map((player) => player.ca)).toEqual([201.24, 198.99, 200.51, 199.49])
   })
+
+  it('扩展赛区在注册下拉框中显示为 东区、西区 等名称（无数字）', async () => {
+    const positions = { GK: 0, CB: 0, W: 0, CM: 99, ST: 0 }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        clubs: [
+          { id: 'd2z3_01', name: '罗斯托克', tier: 'division2', conference: 'zone3', rating: 750, players: [{ name: '主力', ca: 80, positions }] },
+          { id: 'd2z4_01', name: '温布尔登', tier: 'division2', conference: 'zone4', rating: 740, players: [{ name: '主力', ca: 79, positions }] },
+        ],
+      }),
+    }))
+    const online = await import('../src/online.ts')
+    const { ui } = await import('../src/ui/state.ts')
+    const { renderAccountOverlay } = await import('../src/ui/screens/overlays.ts')
+    online.publicConfig.registration = 'invite'
+    online.onlineState.status = 'offline'
+    await online.refreshRegistrationClubs()
+    ui.accountOpen = true
+    ui.authMode = 'register'
+    ui.registrationClubId = 'd2z3_01'
+
+    const html = renderAccountOverlay()
+    expect(html).toContain('罗斯托克 · 东区 · RANK 750')
+    expect(html).toContain('温布尔登 · 西区 · RANK 740')
+    expect(html).not.toContain('第 3 区')
+  })
 })

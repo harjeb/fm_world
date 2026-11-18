@@ -50,8 +50,8 @@ describe('赛季杯赛任务调度', () => {
     expect(world.seasonCups).toBeDefined()
     const cups = world.seasonCups!.cups
     const date = cups[0].dates[0]
-    const delayedRound = world.seasonCups!.delayedLeagueRounds[0]
-    expect(seasonRoundKickoff(world.divisions[0], delayedRound)).toBe(date + 4 * 3600_000)
+    const nextLeague = world.divisions[0].fixtures.find(f => f.kickoffAt! > date)!
+    expect(seasonRoundKickoff(world.divisions[0], nextLeague.round)).toBe(date + 2 * 3600_000)
     const first = cups.flatMap(cup => cup.rounds[0].kickoffAt === date ? cup.rounds[0].fixtures : [])
     expect(first).toHaveLength(16)
     // 有更早的联赛未完成时不能锁杯赛。

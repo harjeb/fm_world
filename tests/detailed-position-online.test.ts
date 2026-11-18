@@ -44,12 +44,14 @@ it('rejects pre-migration revisions and migrates subsequent legacy PUTs after ca
   const create = await fetch(`${second.base}/api/game`, { method: 'PUT', headers, body: JSON.stringify({ game: next.game, baseRevision: next.revision }) })
   expect(create.status).toBe(200)
   const withCard = await (await fetch(`${second.base}/api/game`, { headers })).json() as any
+  const expectedDetails = structuredClone(withCard.game.cards[0].detailedPositions)
+  expect(expectedDetails).toMatchObject(card.detailedPositions) // Existing learned entries survive new natural-position floors.
   const legacyOwner = withCard.game.roster.find((player: any) => player.id === p.id)
   delete legacyOwner.detailedPositions; delete legacyOwner.detailedPositionsVersion
   delete withCard.game.cards[0].detailedPositions; delete withCard.game.cards[0].detailedPositionsVersion
   const update = await fetch(`${second.base}/api/game`, { method: 'PUT', headers, body: JSON.stringify({ game: withCard.game, baseRevision: withCard.revision }) })
   expect(update.status).toBe(200)
   const restored = await (await fetch(`${second.base}/api/game`, { headers })).json() as any
-  expect(restored.game.cards[0].detailedPositions).toEqual(card.detailedPositions)
-  expect(restored.game.roster.find((player: any) => player.id === p.id).detailedPositions).toEqual(card.detailedPositions)
+  expect(restored.game.cards[0].detailedPositions).toEqual(expectedDetails)
+  expect(restored.game.roster.find((player: any) => player.id === p.id).detailedPositions).toEqual(expectedDetails)
 })

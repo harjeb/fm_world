@@ -6,14 +6,17 @@ import { ENERGY_RECOVERY_PER_GAME_DAY } from './training.ts'
 import { RECENT_MATCHES } from './transfer-rules.ts'
 import { settleSquadEnergy, shiftEnergyClock } from './energy.ts'
 import { applyConditionLoss, settleConditions, shiftConditionClock } from './condition.ts'
+import { settleYouth, recordYouthMatch, shiftYouthClock } from './youth.ts'
 import { matchPlanConditionFactor, type MatchPlanId } from './pes/match-plan.ts'
 import { expireOffers, runLocalTransfers } from './transfers.ts'
 import { refreshLocalFreeMarket } from './free-market.ts'
 import { awardSeasonPrize } from './economy.ts'
 import { squadLimitError } from './market.ts'
-import { AVERAGE_ROUND_GAME_DAYS, GAME_DAY_MS, KICKOFF_SCHEDULE, calendarStartForSeason, latestKickoffAt, elapsedGameDays, gameDayOfRound, kickoffAtForRound, seasonEndAt, roundsKickedOff, roundGapGameDays } from './calendar.ts'
+import { AVERAGE_ROUND_GAME_DAYS, DAY_MS, GAME_DAY_MS, KICKOFF_SCHEDULE, calendarStartForSeason, latestKickoffAt, elapsedGameDays, gameDayOfRound, kickoffAtForRound, seasonEndAt, roundsKickedOff, roundGapGameDays } from './calendar.ts'
 import { seasonRoundKickoff, worldRoundsKickedOff } from './season-cups.ts'
 import { recordMatchInjuries } from './injury.ts'
+import { scoutMarketGraceMs } from './scouting.ts'
+import { emptyAutoSubs } from './match/management.ts'
 import { applyPveResult, ensurePve } from './pve.ts'
 import { awardRoundIncome, economyOf } from './economy.ts'
 import { playerMarketValue, settleMarket } from './market.ts'
@@ -245,11 +248,11 @@ export function nextMatchdayAt(game: GameState): number {
   return roundKickoffAt(game, game.season.round + 1)
 }
 
-/** 赛后休整还要多久（升级附加赛窗口）。 */
+/** 赛后休整还要多久（按真实时间显示）。 */
 export function nextSeasonCountdown(game: GameState, now = Date.now()): string {
   const diff = Math.max(0, seasonEndAt(game.season.startedAt, game.season.clockShift) - now)
-  const days = Math.floor(diff / GAME_DAY_MS)
-  const hours = Math.floor((diff % GAME_DAY_MS) / 3_600_000)
+  const days = Math.floor(diff / DAY_MS)
+  const hours = Math.floor((diff % DAY_MS) / 3_600_000)
   const minutes = Math.floor((diff % 3_600_000) / 60_000)
   if (days > 0) return `${days} 天 ${hours} 小时`
   if (hours > 0) return `${hours} 小时 ${minutes} 分`
@@ -275,7 +278,9 @@ export function matchdayCountdown(game: GameState, now = Date.now()): string {
  */
 export function settleGameConditions(game: GameState, at: number): boolean {
   const players = [...game.roster, ...game.aiTeams.flatMap((team) => team?.players ?? [])]
-  return settleConditions(players, at, game.season?.gameDayMs ?? GAME_DAY_MS)
+  const rested = settleConditions(players, at, game.season?.gameDayMs ?? GAME_DAY_MS)
+  const youthChanged = !game.shared && settleYouth(game, at)
+  return rested || youthChanged
 }
 
 /** 电脑球队的训练精力按轮间隔补（一线队的按时间连续恢复，见 energy.ts）。体能按时间结算，不在这里。 */
@@ -331,6 +336,7 @@ function skipCalendar(game: GameState, delta: number, now: number): { ok: boolea
   // 体能同理：先结算到现在，再把结算时间往回拨，跳过的这段按休息恢复。
   settleGameConditions(game, now)
   shiftCalendar(game, delta)
+  shiftYouthClock(game, delta)
   for (const pair of Object.values(game.chemistry ?? {})) {
     pair.lastAt -= delta
     if (pair.trainingAt !== undefined) pair.trainingAt -= delta
@@ -341,7 +347,7 @@ function skipCalendar(game: GameState, delta: number, now: number): { ok: boolea
   shiftConditionClock([...game.roster, ...game.aiTeams.flatMap((team) => team.players)], delta)
   // 未完成的报告及市场宽限期内的报告随游戏时间推进；过期历史报告保持原样。
   for (const report of game.scoutReports ?? []) {
-    if (report.readyAt <= now && !(report.source === 'market' && now < report.readyAt + game.season.gameDayMs)) continue
+    if (report.readyAt <= now && !(report.source === 'market' && now < report.readyAt + scoutMarketGraceMs(game.season.gameDayMs))) continue
     report.startedAt -= delta
     report.readyAt -= delta
   }
@@ -430,13 +436,15 @@ export function simulateFixture(game: GameState, fixture: Fixture, auto = false,
     durationSeconds: LEAGUE_MATCH_SECONDS,
   }
   // 旧补赛流程由调用方结算体能；启用赛前轮换时，直接调用本函数也必须按开球时的体能判断。
-  if (game.autoSubs?.preMatchStaminaBelow != null) settleGameConditions(game, now)
+  if ((game.autoSubs ?? emptyAutoSubs()).preMatchStaminaBelow != null) settleGameConditions(game, now)
   const prepared = preparePlayerMatch(game, context, now)
   const engine = buildMatchEngineForGame(game, context, homeAI ?? awayAI!, now, suspendedPlayerIds(game), auto ? 2 : undefined, prepared)
   const state = engine.simulate()
   recordMatchInjuries(game, state, now, auto)
   if (game.world) recordMatchDiscipline(game, state)
   const record = createMatchRecord({ season: game.season, lineup: prepared.lineup }, state, context)
+  record.createdAt = now
+  recordYouthMatch(game, record)
   recordMatchChemistry(game, record.playerStats, now, game.season.gameDayMs)
   if (auto) record.autoSimulated = true
   fixture.played = true
@@ -775,6 +783,8 @@ export function finishActiveMatch(game: GameState, engine: GameEngine, now = Dat
   economyOf(game)
   if (active.context.isLeague) recordMatchInjuries(game, state, active.startedAt, true)
   const record = createMatchRecord({ season: game.season, lineup: active.lineup ?? game.lineup }, state, active.context)
+  record.createdAt = active.startedAt
+  recordYouthMatch(game, record)
   recordMatchChemistry(game, record.playerStats, now, game.season.gameDayMs)
   // 只有联赛扣体能：挑战里的比赛（友谊赛、单场挑战、世界挑战）都不扣。
   if (active.context.isLeague) applyMatchConditions(game, record.playerStats, state.teams)

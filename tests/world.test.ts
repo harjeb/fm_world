@@ -150,8 +150,8 @@ describe('三级共享世界', () => {
     expect(releasePlayer(game, player.id).ok).toBe(true)
     expect(game.freeStars).toContain(player)
     game.season.round = 11
-    expect(transferWindowOpen(game)).toBe(false)
-    expect(buyFreeAgent(game, game.freeStars[1].id).ok).toBe(false)
+    expect(transferWindowOpen(game)).toBe(true)
+    expect(transferWindowOpen({ ...game, season: { ...game.season, round: 35 } })).toBe(true)
     game.world!.seasonIndex = 2
     const economy = game.economy!
     const wage = game.roster.reduce((sum, item) => sum + (item.contract?.wage ?? 0), 0)

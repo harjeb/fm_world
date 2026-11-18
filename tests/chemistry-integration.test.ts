@@ -81,7 +81,7 @@ describe('chemistry integration', () => {
     expect(game.chemistry).toEqual(before)
     expect(saveGame(game)).toBe(true)
     expect(loadGame()!.chemistry).toEqual(before)
-    vi.spyOn(Date, 'now').mockReturnValue(now + 180 * GAME_DAY_MS + 1)
+    vi.spyOn(Date, 'now').mockReturnValue(now + 252 * GAME_DAY_MS + 1)
     expect(loadGame()!.chemistry).toEqual({})
   })
 })

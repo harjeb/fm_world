@@ -16,7 +16,7 @@ import { advanceSeasonRound, finishActiveMatch, skipToMatchday, startChallenge, 
 import { cachedOwnerlessTeams } from './world.ts'
 import { legendTeamById } from './legend.ts'
 import { PEAK_STAGE_COUNT, buildPeakTeam } from './peak.ts'
-import { nextPeakAttempt, peakDailyStatus, recordPeakAttempt } from './peak-attempts.ts'
+import { PEAK_DAILY_LIMIT, nextPeakAttempt, peakDailyStatus, recordPeakAttempt } from './peak-attempts.ts'
 import { ensurePve } from './pve.ts'
 import { cupPlayerFixture, cupTeam, enterCup } from './cup-run.ts'
 import type { CupId } from './data/cup-config.ts'
@@ -39,6 +39,7 @@ import { MAX_BOOKS } from './data/legend-skills.ts'
 import { cupCeilingBonus, effectiveTrainingCeilings } from './cup-rewards.ts'
 import { MAIN_ATTR_HARD_MAX, mainAttrsFor } from './rating.ts'
 import { settleEnergy } from './energy.ts'
+import { isYouthTrainee } from './youth.ts'
 
 /** 保存的配置按球员区分；开始时再校验库存和本轮原始技能。 */
 export function trainingBookLoadout(game: GameState, playerId: string): string[] {
@@ -76,6 +77,7 @@ export function startTraining(game: GameState, playerId: string, seed?: number, 
   if (running && !running.completed) return { ok: false, error: '该球员已有一轮培养' }
   const player = game.roster.find((item) => item.id === playerId)
   if (!player) return { ok: false, error: '球员不存在' }
+  if (isYouthTrainee(player)) return { ok: false, error: '青训球员正式提拔后才能培养球员卡' }
   const keys = bookKeys ?? trainingBookLoadout(game, playerId)
   const checked = validateTrainingBooks(game, playerId, keys)
   if (checked.error) return { ok: false, error: checked.error }
@@ -85,7 +87,7 @@ export function startTraining(game: GameState, playerId: string, seed?: number, 
   const energy = settledPlayer.energy ?? 100
   if (!Number.isFinite(energy) || energy < TRAINING_ENERGY_COST) {
     const unhappy = player.unhappy ? `（他正在闹情绪：${player.unhappy.reason}，精力恢复很慢）` : ''
-    return { ok: false, error: `精力不足：开始一轮培养需要 ${TRAINING_ENERGY_COST} 点，当前 ${Math.round(energy)} 点；每个游戏日恢复 50 点${unhappy}。` }
+    return { ok: false, error: `精力不足：开始一轮培养需要 ${TRAINING_ENERGY_COST} 点，当前 ${Math.round(energy)} 点；每小时恢复 25 点${unhappy}。` }
   }
   // 上一轮的新卡已经在库存里，不需要先处理结果页才能开始下一轮。
   if (running?.completed || game.candidates[playerId]) closeFinishedTraining(game, playerId)
@@ -925,7 +927,7 @@ export function startPeakChallenge(game: GameState, stage: number, now = Date.no
   if (target < 1 || target > PEAK_STAGE_COUNT) return { ok: false, error: '关卡不存在' }
   if (target > cleared + 1) return { ok: false, error: `只能挑战已通关或当前第 ${cleared + 1} 关` }
   const quota = peakDailyStatus(game, now)
-  if (quota.remaining <= 0) return { ok: false, error: '本游戏日巅峰挑战次数已用完（每天 3 次），请在下个游戏日再来' }
+  if (quota.remaining <= 0) return { ok: false, error: `今日巅峰挑战次数已用完（每天 ${PEAK_DAILY_LIMIT} 次），请在北京时间 00:00 重置后再来` }
   const ai = buildPeakTeam(target)
   const attempt = nextPeakAttempt(game)
   const result = startChallengeAgainstTeam(game, ai, attempt.seed, now, 'peak', target, attempt.recordKey)

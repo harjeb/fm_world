@@ -4,7 +4,6 @@ import { worldDivisionLabel } from '../../game/world.ts'
 import { clubRatings } from '../../game/club-rating.ts'
 import { leaderPanels } from '../leaderboard.ts'
 import { renderRankTrendChart } from '../rank-chart.ts'
-import { gameDateOf } from '../../game/calendar.ts'
 import { isOnlineMode, onlineKickoffPending, serverNow } from '../../online.ts'
 import { clubLook, clubName, crest, emptyState, fixtureRow, icon, leagueTable, ownName, pageHead, panel, teamForm, resultPill, tag, type FormResult } from '../components.ts'
 import { cupRoundLabel, esc, kickoffTimeLabel } from '../format.ts'
@@ -150,7 +149,7 @@ export function renderSeason(): string {
     !season.finished && fixture && !fixture.played && !game.activeMatch
       ? (isOnlineMode()
         ? `<span class="continue-wait">${icon('clock', 14)}下场比赛倒计时 · ${esc(nextMatchCountdown(game, serverNow()))}</span>`
-        : `<button class="btn primary" data-action="start-league">${icon('play', 14)}跳至比赛日 · 对阵 ${esc(teamName(game, fixture.homeId === PLAYER_TEAM_ID ? fixture.awayId : fixture.homeId))}</button>`)
+        : `<button class="btn primary" data-action="start-league">${icon('play', 14)}跳至下一轮 · 对阵 ${esc(teamName(game, fixture.homeId === PLAYER_TEAM_ID ? fixture.awayId : fixture.homeId))}</button>`)
       : '',
     !fixture && !season.finished && !game.activeMatch ? '<button class="btn" data-action="sim-round">模拟本轮</button>' : '',
   ].join('')
@@ -158,7 +157,7 @@ export function renderSeason(): string {
     ${pageHead({
       kicker: `第 ${season.index} 赛季 · ${esc(division)}`,
       title: season.finished ? '赛季结束' : `第 ${season.round} / 38 轮`,
-      sub: `20 队双循环：每天北京时间 12:00、20:00 各踢一轮${game.world?.seasonCups ? '；杯赛日晚上联赛顺延到 22:00' : ''}，一个赛季约 19 天；联赛允许平局，比赛显示 90 分钟（现实约 10 分钟）。${season.finished ? '' : `距下一轮自动结算：${esc(matchdayCountdown(game))}。`}${tierNote()}`,
+      sub: `20 队双循环：每天北京时间 02:00 / 06:00 / 10:00 / 14:00 / 18:00 / 22:00 固定 6 轮（每 4 小时一轮，一周一赛季）；杯赛在 12:00 / 20:00 额外加赛。联赛允许平局，比赛显示 90 分钟（现实约 10 分钟）。${season.finished ? '' : `距下一轮自动结算：${esc(matchdayCountdown(game))}。`}${tierNote()}`,
       actions,
     })}
     ${season.finished ? `<div class="banner ${inPostseason(game) ? 'info' : 'good'}">${icon(inPostseason(game) ? 'clock' : 'star', 18)}<b>${inPostseason(game) ? `赛后休整 · 还剩 ${esc(nextSeasonCountdown(game))}` : '赛季结束'}</b><span>冠军：${ownName(teamName(game, season.champion ?? ''), season.champion === PLAYER_TEAM_ID)} · 你的最终排名：第 ${season.playerFinish ?? '—'} 名${inPostseason(game) ? ' · 休整期间可以约友谊赛，升级杯正在进行' : ''}</span></div>` : ''}

@@ -5,7 +5,7 @@ import { buildLeague } from './data/ai-teams.ts'
 import { autoFillLineup, refreshAILineups, validateLineup } from './squad.ts'
 import { elevenFormationFor } from './data/formations.ts'
 import { upgradeElevenASide } from './eleven.ts'
-import { validateAutoSubPlan } from './match/management.ts'
+import { emptyAutoSubs, sanitizeAutoSubPlan, validateAutoSubPlan } from './match/management.ts'
 import { createSeason } from './season.ts'
 import { ensureWorldCalendar } from './world.ts'
 import { migrateGameSchedule } from './schedule.ts'
@@ -17,7 +17,7 @@ import { ensureCards } from './cards.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION, upgradeBurstAttr, upgradeNames, upgradeStarTraits } from './names.ts'
 import { ensurePve } from './pve.ts'
 import { pruneChemistry } from './chemistry.ts'
-import { migrateGamePositions } from './detailed-positions.ts'
+import { migratePositionProfiles } from './position-profile-migration.ts'
 
 // 游戏改名后仍沿用旧键，改了已有存档就读不到了。
 export const SAVE_KEY = 'fm-seven-a-side-save-v3'
@@ -67,6 +67,7 @@ export function createInitialGame(seed?: number, clubName = '青石'): GameState
     clubName: playerTeam.name,
     roster,
     lineup,
+    autoSubs: emptyAutoSubs(),
     training: {},
     candidates: {},
     cards: [],
@@ -157,7 +158,7 @@ export function loadGame(): GameState | null {
       // 越位规则固定开启：旧存档里关掉过的也改回来。
       parsed.settings = { ...(parsed.settings ?? {}), offside: true }
     }
-    const positionsMigrated = migrateGamePositions(parsed)
+    const positionsMigrated = migratePositionProfiles(parsed)
     // 一天一轮的旧赛程换成一天两轮（北京时间 12:00、20:00），当前该踢的轮次不变。
     const rescheduled = migrateGameSchedule(parsed, Date.now())
     // 7 人制存档迁移到 11 人制：补随机球员、换阵型（只在还有旧阵型时动手）。
@@ -244,7 +245,9 @@ function repairLoadedLineup(game: GameState): boolean {
   if (validateLineup(game.roster, game.lineup).valid) return false
   const formation = elevenFormationFor(game.lineup.formationId)
   game.lineup = autoFillLineup(game.roster, formation, game.lineup.tactics)
-  if (game.autoSubs && validateAutoSubPlan(game.roster, game.lineup, game.autoSubs).length) delete game.autoSubs
+  if (game.autoSubs && validateAutoSubPlan(game.roster, game.lineup, game.autoSubs).length) {
+    game.autoSubs = sanitizeAutoSubPlan(game.roster, game.lineup, game.autoSubs)
+  }
   return true
 }
 
