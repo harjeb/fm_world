@@ -331,17 +331,18 @@ async function restoreSession(): Promise<GameState | null> {
   onlineState.status = 'connecting'
   notify()
   try {
-    const me = await requestJson<{ user: OnlineUser; revision: number }>('/api/me')
-    onlineState.user = me.user
-    const game = await requestJson<{ game: GameState; revision: number }>('/api/game')
-    onlineState.revision = game.revision
+    const snapshot = await requestJson<{ user?: OnlineUser; game: GameState; revision: number }>('/api/game', { cache: 'no-store' }, 30_000)
+    if (!snapshot.game || !Number.isSafeInteger(snapshot.revision)) throw new Error('服务器返回的存档无效，请重试。')
+    // 滚动更新期间旧服务端尚未在快照里附带账号信息。
+    onlineState.user = snapshot.user ?? (await requestJson<{ user: OnlineUser }>('/api/me', undefined, ACTION_TIMEOUT_MS)).user
+    onlineState.revision = snapshot.revision
+    onlineState.error = ''
     onlineState.status = 'online'
     onlineState.lastSync = Date.now()
     setRemoteSaver((next) => queueSave(next))
     connectEvents()
     notify()
-    void refreshPublicWorld()
-    return game.game
+    return snapshot.game
   } catch (error) {
     onlineState.status = 'offline'
     onlineState.error = error instanceof Error ? error.message : '连接服务器失败'
@@ -397,12 +398,14 @@ function connectEvents(): void {
       if (data.type !== 'state' || !data.game) return
       syncServerClock(data.serverTime)
       if (data.revision < onlineState.revision) return
-      onlineState.revision = data.revision
       onlineState.lastSync = Date.now()
       onlineState.connected = true
-      if (data.source !== clientId) {
-        if (saving || pendingGame) deferredState = data
-        else remoteGameHandler?.(data.game)
+      if (data.source !== clientId && (saving || pendingGame)) {
+        // 尚未应用的推送不能先提高本地版本，否则保存结束时会把它当作旧档丢掉。
+        if (!deferredState || data.revision >= deferredState.revision) deferredState = data
+      } else {
+        onlineState.revision = data.revision
+        if (data.source !== clientId) remoteGameHandler?.(data.game)
       }
       if (publicWorld && data.game.world?.seasonIndex !== publicWorld.seasonIndex) void refreshPublicWorld()
       notify()
@@ -565,7 +568,10 @@ async function flushSave(): Promise<void> {
     saveFinished = null
     if (!pendingGame && deferredState) {
       // 自己保存成功后，保存前收到的同版本 SSE 不能覆盖已推进的本地比赛。
-      if (deferredState.revision > onlineState.revision) remoteGameHandler?.(deferredState.game)
+      if (deferredState.revision > onlineState.revision) {
+        onlineState.revision = deferredState.revision
+        remoteGameHandler?.(deferredState.game)
+      }
       deferredState = null
     }
     notify()

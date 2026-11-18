@@ -1,5 +1,5 @@
 import type { AttrKey, AutoSubPlan, DetailedPosition, GameState, Lineup, Position, SkillId } from '../game/types.ts'
-import { loadGame, saveGame, setTeamPickPending } from '../game/state.ts'
+import { loadGame, setTeamPickPending } from '../game/state.ts'
 import { createWorldGame, type ClubPreview } from '../game/world.ts'
 import { ensurePve } from '../game/pve.ts'
 import { restoreActiveEngine } from '../game/actions.ts'
@@ -154,14 +154,15 @@ export type UIState = {
 
 const SAVE_SCREEN: Screen[] = ['youth', 'club', 'transfer', 'home', 'academy', 'inventory', 'training', 'lineup', 'season', 'cups', 'world', 'challenge', 'review', 'match']
 
-const saved = loadGame()
-/** 当前存档。其他模块通过 live binding 读到最新值，替换时用 setGame。 */
-export let game: GameState = saved ?? createWorldGame()
-ensurePve(game)
-if (!saved) {
-  saveGame(game)
-  // 这支球队是系统随手分的：玩家选离线模式时会先让他自己挑一支。
-  setTeamPickPending(true)
+/** 模式选定后才初始化；启动页不读取、迁移或生成离线世界。 */
+export let game: GameState
+
+export function startOfflineGame(): void {
+  const saved = loadGame()
+  game = saved ?? createWorldGame()
+  ensurePve(game)
+  if (!saved) setTeamPickPending(true)
+  restoreSavedScreen()
 }
 
 export function setGame(next: GameState): void {
@@ -262,10 +263,15 @@ export const ui: UIState = {
   newGamePreview: null,
 }
 
-const initialScreen = game.ui?.screen as Screen | undefined
-if (initialScreen && SAVE_SCREEN.includes(initialScreen)) ui.screen = initialScreen
-if (ui.screen === 'match' && !game.activeMatch) ui.screen = 'home'
-if (ui.screen === 'match') ui.matchEngine = restoreActiveEngine(game)
+export function restoreSavedScreen(): void {
+  const initialScreen = game.ui?.screen as Screen | undefined
+  ui.screen = initialScreen && SAVE_SCREEN.includes(initialScreen) ? initialScreen : 'home'
+  if (ui.screen === 'match' && !game.activeMatch) ui.screen = 'home'
+  ui.matchEngine = ui.screen === 'match' ? restoreActiveEngine(game) : null
+}
+
+// 服务端独立渲染页面时没有浏览器模式选择器，使用离线世界。
+if (import.meta.env?.SSR ?? typeof document === 'undefined') startOfflineGame()
 
 export const replay = { id: '', index: 0, playing: false, speed: 1, timer: null as number | null }
 

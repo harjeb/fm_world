@@ -88,7 +88,7 @@ import { morph } from './morph.ts'
 import { installTooltips, syncTooltip } from './tooltip.ts'
 import { drawPitch, pitchPlaybackPending, resetPitchView } from './pitch-canvas.ts'
 import { isPesEngine, setPesViewHooks } from './pes-pitch.ts'
-import { game, replay, resetReplay, setGame, stopReplay, ui, type ClubTab, type Screen, type SquadSortKey, type TransferTab } from './state.ts'
+import { game, replay, resetReplay, restoreSavedScreen, setGame, startOfflineGame, stopReplay, ui, type ClubTab, type Screen, type SquadSortKey, type TransferTab } from './state.ts'
 import { renderAcademy } from './screens/academy.ts'
 import { renderYouth } from './screens/youth.ts'
 import { ensureYouth, settleYouth, type YouthPlan } from '../game/youth.ts'
@@ -307,7 +307,18 @@ function syncNoticeTimer(): void {
   }, 6000)
 }
 
+function renderNotice(): string {
+  return ui.notice ? `<div class="toast" data-action="dismiss-notice" role="status">${icon('info', 15)}<span class="toast-text">${esc(ui.notice)}</span><span class="toast-close">${icon('close', 13)}</span></div>` : ''
+}
+
+let restoringGame = false
 function render(): void {
+  if (ui.bootGate) {
+    morph(app, `${ui.accountOpen ? renderAccountOverlay() : renderBootGate()}${renderNotice()}`)
+    syncNoticeTimer()
+    mountTurnstile()
+    return
+  }
   // 服务器确认写入前锁住交互，避免其它操作用旧状态提交存档。
   app.toggleAttribute('inert', trainingStartPending || cardActionPending)
   app.setAttribute('aria-busy', String(trainingStartPending || cardActionPending))
@@ -333,7 +344,6 @@ function render(): void {
         <footer class="footer">真实球星和俱乐部名称仅用于原型玩法测试；正式发行需取得相应授权。固定 PCG32 随机；同种子同输入可复现。<span class="muted"> · 构建 ${BUILD_ID}</span></footer>
       </div>
     </div>
-    ${renderBootGate()}
     ${renderChatDrawer()}
     ${renderDetailOverlay()}
     ${renderNegotiationOverlay()}
@@ -342,7 +352,7 @@ function render(): void {
     ${renderAutoStrategyOverlay()}
     ${renderNewGameOverlay()}
     ${renderChangelogOverlay()}
-    ${ui.notice ? `<div class="toast" data-action="dismiss-notice" role="status">${icon('info', 15)}<span class="toast-text">${esc(ui.notice)}</span><span class="toast-close">${icon('close', 13)}</span></div>` : ''}
+    ${renderNotice()}
   `)
   for (const select of document.querySelectorAll<HTMLSelectElement>(`${matchSelects}, ${youthSelects}`)) {
     const value = selections.get(select.id)
@@ -453,10 +463,11 @@ function announceNewOffers(before: ReadonlySet<string>): void {
 const pendingOfferIds = (): Set<string> => new Set((game.transferOffers ?? []).filter((offer) => offer.status === 'pending').map((offer) => offer.id))
 
 function applyOnlineGame(next: GameState, notice?: string): void {
-  const offersBefore = pendingOfferIds()
-  const previous = game.activeMatch
+  const firstLoad = ui.bootGate
+  const offersBefore = firstLoad ? new Set<string>() : pendingOfferIds()
+  const previous = game?.activeMatch
   const wasMatch = ui.screen === 'match'
-  const clubChanged = next.clubName !== game.clubName || next.season.index !== game.season.index
+  const clubChanged = firstLoad || next.clubName !== game.clubName || next.season.index !== game.season.index
   if (clubChanged) {
     ui.recycleSelectedIds = []
     ui.recycleConfirm = false
@@ -464,8 +475,10 @@ function applyOnlineGame(next: GameState, notice?: string): void {
   }
   if (ui.trainingPointSpend > (next.trainingPoints ?? 0)) ui.trainingPointSpend = 0
   setGame(next)
-  announceNewOffers(offersBefore)
-  // 服务器存档也写一份本地缓存：刷新时在服务器恢复之前不会先看到旧离线存档。
+  if (firstLoad) {
+    restoreSavedScreen()
+    ui.bootGate = false
+  } else announceNewOffers(offersBefore)
   // 联赛实时推送每秒一次，没必要每次都写整个存档，换队/换季时立刻写，其余最多 10 秒一次。
   const stamp = Date.now()
   if (clubChanged || stamp - lastOnlineCacheAt > 10_000) {
@@ -482,6 +495,7 @@ function applyOnlineGame(next: GameState, notice?: string): void {
   if (notice) ui.notice = notice
   maybeOpenChangelog()
   render()
+  if ((ui.screen === 'world' || ui.screen === 'cups') && !publicWorld) void refreshPublicWorld()
 }
 
 async function submitAccount(): Promise<void> {
@@ -523,7 +537,6 @@ async function submitAccount(): Promise<void> {
       }
       const data = await registerOnline(username, password, { inviteCode, turnstileToken: ui.turnstileToken, clubId })
       ui.accountOpen = false
-      ui.bootGate = false
       ui.turnstileToken = ''
       ui.registrationClubId = ''
       ui.recycleSelectedIds = []
@@ -534,7 +547,6 @@ async function submitAccount(): Promise<void> {
     }
     const data = await loginOnline(username, password)
     ui.accountOpen = false
-    ui.bootGate = false
     ui.recycleSelectedIds = []
     ui.recycleConfirm = false
     ui.trainingPointSpend = 0
@@ -554,7 +566,7 @@ async function submitAccount(): Promise<void> {
  * 不写进存档，也不记住选择——刷新页面会再问。
  */
 function renderBootGate(): string {
-  if (!ui.bootGate) return ''
+  if (restoringGame) return `<div class="overlay boot-gate"><div class="modal boot-modal" role="status"><h1>正在读取联机存档…</h1><p class="hint">正在向服务器获取最新进度。</p></div></div>`
   const online = hasOnlineSession()
   const name = onlineState.user ? esc(onlineState.user.username) : ''
   return `<div class="overlay boot-gate">
@@ -624,11 +636,21 @@ function bootOnline(): void {
 }
 
 /** 启动页选了「登录 / 继续联机」才去连服务器；离线模式完全不建立在线会话。 */
-function joinOnline(): void {
-  void initOnline().then((remote) => {
+async function joinOnline(): Promise<void> {
+  restoringGame = true
+  ui.notice = ''
+  render()
+  try {
+    const remote = await initOnline()
     if (remote) applyOnlineGame(remote, '已从服务器载入最新存档。')
-    else render()
-  })
+    else {
+      ui.notice = onlineState.error || '未能读取联机存档，请重试。'
+      ui.accountOpen = !hasOnlineSession()
+    }
+  } finally {
+    restoringGame = false
+    if (ui.bootGate) render()
+  }
 }
 
 function scheduleReplay(): void {
@@ -2291,12 +2313,8 @@ document.addEventListener('click', async (event) => {
       break
     case 'boot-online':
       onlineSessionRequested = true
-      ui.bootGate = false
-      if (hasOnlineSession()) {
-        joinOnline()
-        maybeOpenChangelog()
-        render()
-      } else {
+      if (hasOnlineSession()) void joinOnline()
+      else {
         ui.accountOpen = true
         render()
       }
@@ -2304,12 +2322,16 @@ document.addEventListener('click', async (event) => {
     case 'boot-offline':
       // 保留令牌，但这次不连服务器：不会建立 remote saver，存档只留在本机。
       onlineSessionRequested = false
+      startOfflineGame()
       ui.bootGate = false
       ui.notice = '离线模式：本次不会连接服务器。'
-      if (ensureYouth(game)) persist()
       // 本地存档是系统自动建的、还没自己选过球队：先让玩家挑一支。
       if (teamPickPending()) openNewGamePicker(true)
-      else maybeOpenChangelog()
+      else {
+        autoAdvanceSeason()
+        if (ensureYouth(game)) persist()
+        maybeOpenChangelog()
+      }
       render()
       break
     case 'match-coach':
@@ -2814,8 +2836,13 @@ document.addEventListener('keydown', (event) => {
   }
 })
 
+/** 等玩家选择离线模式，不能在等登录时用缓存档推进。 */
+function offlineProgressAllowed(): boolean {
+  return !ui.bootGate && !ui.newGameRequired && !onlineSessionRequested && !onlineState.user && !isOnlineMode()
+}
+
 function autoAdvanceSeason(): void {
-  if (isOnlineMode()) return
+  if (!offlineProgressAllowed()) return
   // 体能每小时按比例恢复一次：比赛进行中、赛季结束后也照常结算（联机由服务器结算）。
   if (game.activeMatch || game.season.finished) {
     if (settleGameConditions(game, Date.now())) persist()
@@ -2835,6 +2862,7 @@ function autoAdvanceSeason(): void {
 }
 
 function tickRealtimeLeague(): void {
+  if (ui.bootGate) return
   const active = game.activeMatch
   if (!active || (!active.context.isLeague && !active.preplayed)) return
   // 服务器预先算好的回放：浏览器自己按时钟追，比分、数据条和文字直播每秒跟着画面刷新一次。
@@ -2842,7 +2870,7 @@ function tickRealtimeLeague(): void {
     if (ui.screen === 'match') render()
     return
   }
-  if (!isOnlineMode() && advanceLeagueRealtime(game)) {
+  if (offlineProgressAllowed() && advanceLeagueRealtime(game)) {
     if (game.activeMatch && ui.screen === 'match') ui.matchEngine = restoreActiveEngine(game)
     else if (!game.activeMatch) openFinishedLeague(active)
     persist()
@@ -2856,6 +2884,7 @@ function tickRealtimeLeague(): void {
 }
 
 window.addEventListener('beforeunload', () => {
+  if (ui.bootGate || (!isOnlineMode() && !offlineProgressAllowed())) return
   if (ui.screen) game.ui = { screen: ui.screen }
   if (ui.screen === 'match' && ui.matchEngine && game.activeMatch && !game.activeMatch.context.isLeague && !game.activeMatch.preplayed) game.activeMatch.engineState = ui.matchEngine.serialize()
   saveGame(game)
@@ -2875,6 +2904,7 @@ setPesViewHooks({
 window.setInterval(tickRealtimeLeague, 1000)
 // 竞拍倒计时每秒走，不用整页重绘。
 window.setInterval(() => {
+  if (ui.bootGate) return
   // 联机待办只在服务器持有估计值，到期后自动拉取一次；失败后限频，仍可手动刷新。
   const at = serverNow()
   if (isOnlineMode() && !scoutRefreshPending && !cardActionPending && !trainingStartPending && at - lastScoutRefreshAttempt >= 30_000 &&
@@ -2897,6 +2927,5 @@ window.setInterval(autoAdvanceSeason, 30_000)
 window.setInterval(() => { if (ui.screen !== 'match') render() }, 30_000)
 window.setInterval(() => { if (ui.screen === 'world' || ui.screen === 'cups') void refreshPublicWorld() }, 120_000)
 installTooltips()
-autoAdvanceSeason()
 render()
 bootOnline()

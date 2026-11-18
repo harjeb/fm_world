@@ -92,8 +92,6 @@ try {
   await send('Log.enable')
   await send('Page.navigate', { url: BASE })
   await waitFor(`document.readyState === 'complete'`)
-  await waitFor(`!!document.querySelector('[data-action="account-open"]')`)
-
   // 启动页：联机流程直接选「登录」。
   await click('[data-action="boot-online"]')
   await waitFor(`!!document.querySelector('#account-username')`)
@@ -115,7 +113,7 @@ try {
 
   // 刷新后应能用持久化 token 恢复账号和联机存档。
   await send('Page.reload')
-  await waitFor(`document.readyState === 'complete'`)
+  await click('[data-action="boot-online"]')
   await waitFor(`document.body.innerText.includes(${JSON.stringify(username)})`, 20000)
   await waitFor(`!!document.querySelector('[data-action="account-open"]')`)
   const restoredToken = await evaluate(`localStorage.getItem('fm-online-token')`)

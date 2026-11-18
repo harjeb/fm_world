@@ -49,7 +49,7 @@ afterAll(() => {
 })
 beforeEach(() => {
   setGame(createWorldGame(20241107))
-  Object.assign(ui, originalUi, { screen: 'transfer', notice: '' })
+  Object.assign(ui, originalUi, { bootGate: false, screen: 'transfer', notice: '' })
   Object.assign(onlineState, { status: 'offline', user: null, error: '' })
   mocks.online = false
   mocks.save.mockReset().mockReturnValue(true)

@@ -3,6 +3,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { gzip } from 'node:zlib'
+import { promisify } from 'node:util'
 import { createInitialGame, GAME_VERSION, upgradeLegacySignatures } from '../src/game/state.ts'
 import { addTrainedCard, ensureCards, equipCard, playerCards, recyclePlayerCards, setCardRecycleLock, untrainedPlayer } from '../src/game/cards.ts'
 import { ensurePve } from '../src/game/pve.ts'
@@ -134,6 +136,7 @@ export type AppServer = {
   runMatchQueue: () => Promise<void>
 }
 
+const gzipAsync = promisify(gzip)
 const WORLD_FILE = 'world.json'
 const CHAT_FILE = 'chat.json'
 
@@ -2330,7 +2333,13 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
     if (url.pathname === '/api/game' && req.method === 'GET') {
       advanceAccount(account)
-      json(res, 200, { game: publicGame(account), revision: account.revision, serverTime: now() })
+      const snapshot = { user: publicAccount(account), game: publicGame(account), revision: account.revision, serverTime: now() }
+      res.setHeader('Vary', 'Accept-Encoding')
+      if (acceptsGzip(req.headers['accept-encoding'])) {
+        const body = await gzipAsync(JSON.stringify(snapshot), { level: 1 })
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Encoding': 'gzip' })
+        res.end(body)
+      } else json(res, 200, snapshot)
       return
     }
 
@@ -2856,6 +2865,13 @@ function writeJson(file: string, value: unknown): void {
   // 存档已经是几十 MB：缩进会让每次保存多写一倍以上，并长时间占用事件循环。
   fs.writeFileSync(tmp, JSON.stringify(value))
   fs.renameSync(tmp, file)
+}
+
+function acceptsGzip(header = ''): boolean {
+  return header.split(',').some(entry => {
+    const [coding, weight = 'q=1'] = entry.trim().toLowerCase().split(/\s*;\s*/)
+    return coding === 'gzip' && weight.startsWith('q=') && Number(weight.slice(2)) > 0
+  })
 }
 
 function json(res: ServerResponse, status: number, value: unknown): void {

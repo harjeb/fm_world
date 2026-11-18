@@ -31,18 +31,20 @@ describe('联机保存与 SSE', () => {
     const game = createInitialGame(7)
     let sentRevision = 0
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      if (url === '/api/me') return Response.json({ user: { id: '1', username: 'u' }, revision: 1 })
-      if (url === '/api/game' && init?.method !== 'PUT') return Response.json({ game, revision: 1 })
+      if (url === '/api/game' && init?.method !== 'PUT') return Response.json({ user: { id: '1', username: 'u' }, game, revision: 1 })
       const body = JSON.parse(String(init!.body)) as { game: typeof game; baseRevision: number }
       sentRevision = body.baseRevision
       const source = (init!.headers as Record<string, string>)['X-FM-Client']
-      FakeEvents.current.emit({ type: 'state', revision: 3, source, game: body.game })
-      return Response.json({ ok: true, revision: 3, updatedAt: Date.now() })
+      const revision = sentRevision + 2
+      FakeEvents.current.emit({ type: 'state', revision, source, game: body.game })
+      return Response.json({ ok: true, revision, updatedAt: Date.now() })
     }))
     const online = await import('../src/online.ts')
     const handler = vi.fn()
     online.setRemoteGameHandler(handler)
-    await online.initOnline()
+    expect((await online.initOnline())?.clubName).toBe(game.clubName)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(online.onlineState.user?.id).toBe('1')
     game.clubName = '尚未保存的修改'
     saveGame(game)
     FakeEvents.current.emit({ type: 'state', revision: 2, game: { ...game, clubName: '旧服务器状态' } })
@@ -54,6 +56,13 @@ describe('联机保存与 SSE', () => {
     FakeEvents.current.emit({ type: 'state', revision: 4, game: { ...game, clubName: '其他设备修改' } })
     expect(handler).toHaveBeenCalledOnce()
     expect(handler.mock.calls[0][0].clubName).toBe('其他设备修改')
+    // 保存期间收到比本次保存回执还新的快照，不能等下一条 SSE 才显示。
+    saveGame(game)
+    FakeEvents.current.emit({ type: 'state', revision: 7, game: { ...game, clubName: '最新跨设备进度' } })
+    expect(online.onlineState.revision).toBe(4)
+    await online.flushOnlineNow()
+    expect(online.onlineState.revision).toBe(7)
+    expect(handler).toHaveBeenLastCalledWith(expect.objectContaining({ clubName: '最新跨设备进度' }))
   })
 })
 
