@@ -76,7 +76,7 @@ function auctionTab(): string {
   const me = onlineState.user?.id ?? ''
   const committed = committedFunds(marketState.auctions, me)
   const available = economy.balance - committed
-  const canTrade = transferWindowOpen(game) && !game.activeMatch
+  const canTrade = transferWindowOpen(game) && (!game.activeMatch || !!game.activeMatch.context.isLeague)
   const running = marketState.auctions.filter((auction) => marketState.pool.some((player) => player.id === auction.playerId))
   const auctionRows = running.map((auction) => {
     const player = marketState.pool.find((item) => item.id === auction.playerId)!
@@ -104,6 +104,11 @@ function auctionTab(): string {
   ui.clubPage = Math.min(ui.clubPage, pages - 1)
   const rows = agents.slice(ui.clubPage * pageSize, ui.clubPage * pageSize + pageSize).map((player) => {
     const opening = Math.max(minimumBid(player), bestMarketValue(game, player))
+    const disabledReason = !canTrade
+      ? '比赛进行中不能出价'
+      : available < opening
+        ? (committed > 0 ? `可用余额不足（其他竞拍已占用 ${committed.toLocaleString()}）` : '余额不足')
+        : ''
     return `<tr class="clickable" data-action="detail" data-player="${esc(player.id)}" data-key="${esc(player.id)}">
       <td>${posBadge(primaryPosition(player))}</td>
       ${nameCell(player)}
@@ -112,7 +117,7 @@ function auctionTab(): string {
       <td class="num strong">${caHeat(initialDisplayCA(player))}</td>
       <td>${traitLabel(player.traitId, true)}</td>
       <td class="num">${opening.toLocaleString()}</td>
-      <td class="num"><button class="btn small" data-action="auction-bid" data-player="${esc(player.id)}" data-amount="${opening}" ${canTrade && available >= opening && game.roster.length < 25 ? '' : 'disabled'}>出价</button></td>
+      <td class="num"><button class="btn small" data-action="auction-bid" data-player="${esc(player.id)}" data-amount="${opening}" ${disabledReason ? `disabled title="${esc(disabledReason)}"` : ''}>出价</button></td>
     </tr>`
   }).join('')
   const logRows = marketState.log.slice(0, 8).map((item) => `<li>${item.club ? `<b>${ownName(item.club, item.club === game.clubName)}</b> 以 ${item.amount.toLocaleString()} 签下 ${esc(item.playerName)}` : `${esc(item.playerName)} 流拍，回到市场`}</li>`).join('')
@@ -126,6 +131,7 @@ function auctionTab(): string {
         <button class="btn small" data-action="club-search">搜索</button>
         <span class="muted small">阵容 ${game.roster.length} / ${SQUAD_LIMIT} · 余额 ${economy.balance.toLocaleString()}</span>
       </div>
+      ${game.roster.length > SQUAD_LIMIT ? `<p class="warn-text">阵容 ${game.roster.length} / ${SQUAD_LIMIT}，已超编：必须裁掉 ${game.roster.length - SQUAD_LIMIT} 人才能进入比赛。</p>` : ''}
       ${rows ? `<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th>国籍</th><th class="num">龄</th><th class="num">原始 CA</th><th>特性</th><th class="num">起拍价</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : `<p class="muted pad">${marketState.pool.length ? '没有符合条件的球员。' : '正在加载自由市场…'}</p>`}
       <div class="pager"><button class="btn small" data-action="club-prev" ${ui.clubPage === 0 ? 'disabled' : ''}>${icon('left', 13)}上一页</button><span class="muted small">${ui.clubPage + 1} / ${pages}</span><button class="btn small" data-action="club-next" data-pages="${pages}" ${ui.clubPage >= pages - 1 ? 'disabled' : ''}>下一页${icon('right', 13)}</button></div>
     `, { flush: true })}

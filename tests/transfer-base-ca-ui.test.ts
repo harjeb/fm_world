@@ -127,4 +127,21 @@ describe('转会市场展示原始 CA', () => {
     marketState.auctions = [{ playerId: player.id, playerName: player.name, startedAt: Date.now(), endsAt: Date.now() + 60_000, bids: [{ accountId: 'buyer', club: '买方', amount: 1_000_000, at: Date.now() }] }]
     expect(rowFor(renderTransfer(), player.id)).toContain(caHeat(initialDisplayCA(player)))
   })
+
+  it('全服竞拍在阵容达到 25 人时仍可出价，且余额不足时展示禁用原因', async () => {
+    const { game, player, ui, marketState, onlineState, renderTransfer } = await setup()
+    onlineState.status = 'online'
+    ui.transferTab = 'free'
+    expect(game.roster.length).toBeGreaterThanOrEqual(25)
+    marketState.pool = [player]
+    marketState.auctions = []
+    game.economy!.balance = 100_000_000
+    const enabledBtn = rowFor(renderTransfer(), player.id).match(/<button[^>]*data-action="auction-bid"[^>]*>/)![0]
+    expect(enabledBtn).not.toContain('disabled')
+
+    game.economy!.balance = 1
+    const disabledBtn = rowFor(renderTransfer(), player.id).match(/<button[^>]*data-action="auction-bid"[^>]*>/)![0]
+    expect(disabledBtn).toContain('disabled')
+    expect(disabledBtn).toContain('title="余额不足"')
+  })
 })
