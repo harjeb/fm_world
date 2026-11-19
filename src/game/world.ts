@@ -137,18 +137,27 @@ function buildFixtures(teamIds: string[], startedAt: number, playerId = 'player'
   const fixtures: Fixture[] = []
   let order = [...ids]
   const matches: { round: number; a: string; b: string }[] = []
-  for (let round = 1; round <= ids.length - 1; round++) {
+  const halfRounds = ids.length - 1
+  for (let round = 1; round <= halfRounds; round++) {
     for (let index = 0; index < ids.length / 2; index++) {
       const a = order[index]
       const b = order[ids.length - 1 - index]
-      const homeId = (round + index) % 2 === 0 ? a : b
-      const awayId = homeId === a ? b : a
+      // 固定位按轮次奇偶交替，其余配对按槽位奇偶固定，避免轮转抵消导致连续十几轮主/客场。
+      const homeFirst = index === 0 ? round % 2 === 0 : index % 2 === 1
+      const homeId = homeFirst ? a : b
+      const awayId = homeFirst ? b : a
       matches.push({ round, a: homeId, b: awayId })
     }
     order = [order[0], order[order.length - 1], ...order.slice(1, order.length - 1)]
   }
-  const second = matches.map((match) => ({ round: match.round + ids.length - 1, a: match.b, b: match.a }))
-  for (const match of [...matches, ...second]) {
+  // 次循环主客场对调并将第 1 轮后移至末轮，消除半程交界处的 3 连主/3 连客且不连遇同一对手。
+  const second = matches.map((match) => ({
+    round: halfRounds > 1 ? (match.round === 1 ? halfRounds * 2 : halfRounds + match.round - 1) : 2,
+    a: match.b,
+    b: match.a,
+  }))
+  const allMatches = [...matches, ...second].sort((x, y) => x.round - y.round)
+  for (const match of allMatches) {
     fixtures.push({
       round: match.round,
       homeId: match.a,

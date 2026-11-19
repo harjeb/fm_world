@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ELEVEN_SQUAD_SIZE } from '../src/game/eleven.ts'
 import { createWorldGame, payWorldWages, d2ClubChoices, createOwnerlessWorld, createWorldGameFromWorld, advanceOwnerlessWorld, worldTransferTeams } from '../src/game/world.ts'
-import { startLeagueMatch, startNextSeason, updateSeasonTable } from '../src/game/season.ts'
+import { createSeason, startLeagueMatch, startNextSeason, updateSeasonTable } from '../src/game/season.ts'
 import { seasonEndAt, seasonStartForRound } from '../src/game/calendar.ts'
 import { aiTransferOffers, buyFreeAgent, joinRoster, releasePlayer, renewContract, sellerSquadError, signWorldClubPlayer, transferWindowOpen, playerMarketValue } from '../src/game/market.ts'
 import { negotiationDemands } from '../src/game/negotiation.ts'
@@ -185,5 +185,41 @@ describe('三级共享世界', () => {
     expect(cards).toBeGreaterThan(0)
     const off = new MatchEngine({ seed: 9, home: inputFor(roster, lineup, 'h', 'H'), away: inputFor(roster, lineup, 'a', 'A'), knockout: false, offside: false }).simulate()
     expect(off.log.some((entry) => entry.offside)).toBe(false)
+  })
+
+  it('联赛赛程对全部 20 支球队主客场交替编排，不存在 3 连主/3 连客或背靠背连遇同一对手', () => {
+    const assertBalanced = (ids: string[], fixtures: GameState['season']['fixtures']) => {
+      expect(fixtures).toHaveLength(ids.length * (ids.length - 1))
+      for (let i = 1; i < fixtures.length; i++) {
+        expect(fixtures[i].round).toBeGreaterThanOrEqual(fixtures[i - 1].round)
+      }
+      const directed = new Set(fixtures.map((f) => `${f.homeId}|${f.awayId}`))
+      expect(directed.size).toBe(ids.length * (ids.length - 1))
+      for (const id of ids) {
+        const list = fixtures.filter((f) => f.homeId === id || f.awayId === id).sort((a, b) => a.round - b.round)
+        expect(list).toHaveLength((ids.length - 1) * 2)
+        const homeCount = list.filter((f) => f.homeId === id).length
+        expect(homeCount).toBe(ids.length - 1)
+        let curH = 0
+        let curA = 0
+        let prevOpp = ''
+        for (const f of list) {
+          const isHome = f.homeId === id
+          const opp = isHome ? f.awayId : f.homeId
+          expect(opp).not.toBe(prevOpp)
+          prevOpp = opp
+          if (isHome) { curH++; curA = 0 } else { curA++; curH = 0 }
+          expect(curH).toBeLessThanOrEqual(2)
+          expect(curA).toBeLessThanOrEqual(2)
+        }
+      }
+    }
+
+    const game = createWorldGame(42)
+    for (const division of game.world!.divisions) {
+      assertBalanced(division.clubIds!, division.fixtures)
+    }
+    const single = createSeason(42, game.aiTeams, game.clubName)
+    assertBalanced(['player', ...game.aiTeams.map((t) => t.id)], single.fixtures)
   })
 })
