@@ -1,6 +1,6 @@
 import type { AttrKey, Attributes, Player } from './types.ts'
 import { FIELD_ATTRIBUTES, GK_ATTRIBUTES } from './types.ts'
-import { attrMax, attrRating, MAX_ATTR_RATING } from './scale.ts'
+import { attrHardLimit, attrRating, MAX_ATTR_RATING } from './scale.ts'
 
 export const CA_SCALE = 1500
 export const POSITION_FLOOR = 0.6
@@ -43,8 +43,8 @@ export type GainResult = {
 }
 
 /**
- * 按给定参数截断成长；当前培养按属性类型使用 1500 或 20 上限和最大 CA，不使用球员 PA。
- * 内部保留小数，显示层再取整；预览与正式应用共用。
+ * 按给定参数截断成长；单项成长受传入 ceilings 与硬上限（主属性 2000、隐藏属性 20）约束，
+ * 整体受 pa（当前培养为 CA_MAX）约束。内部保留小数，显示层再取整；预览与正式应用共用。
  */
 export function applyGains(
   attrs: Attributes,
@@ -113,7 +113,7 @@ function scaleGains(gains: Partial<Record<AttrKey, number>>, scale: number): Par
 function addAttrs(attrs: Attributes, gains: Partial<Record<AttrKey, number>>, isGk: boolean): Attributes {
   const out = { ...attrs }
   for (const [key, value] of Object.entries(gains) as [AttrKey, number][]) {
-    if (value) out[key] = Math.max(0, Math.min(attrMax(key, isGk), out[key] + value))
+    if (value) out[key] = Math.max(0, Math.min(attrHardLimit(key, isGk), out[key] + value))
   }
   return out
 }

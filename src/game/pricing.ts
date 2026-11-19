@@ -1,6 +1,6 @@
 import type { Player } from './types.ts'
 import { ALL_ATTRIBUTES } from './types.ts'
-import { attrMax } from './scale.ts'
+import { attrHardLimit, attrMax } from './scale.ts'
 import { caOf } from './ca.ts'
 
 /**
@@ -15,7 +15,7 @@ export const VALUE_CAP = 20_000_000
 export function playerMarketValue(player: Pick<Player, 'attrs' | 'positions'>): number {
   if (!player || !player.positions || !player.attrs) return 0
   const gk = player.positions.GK > 0
-  if (ALL_ATTRIBUTES.some(key => !Number.isFinite(player.attrs[key]) || player.attrs[key] < 0 || player.attrs[key] > attrMax(key, gk))) return 0
+  if (ALL_ATTRIBUTES.some(key => !Number.isFinite(player.attrs[key]) || player.attrs[key] < 0 || player.attrs[key] > Math.max(attrMax(key, gk), attrHardLimit(key, gk)))) return 0
   const ca = caOf(player.attrs, gk)
   const raw = VALUE_AT_CA_205 * Math.pow(VALUE_GROWTH_PER_CA, ca - 205)
   return Math.max(1_000, Math.min(VALUE_CAP, Math.round(raw / 1_000) * 1_000))

@@ -404,7 +404,19 @@ h3:first-child { margin-top: 0; }
 .tag.good { color: var(--good); border-color: rgba(79, 208, 138, 0.5); }
 .tag.skill-silver { color: #cbd5e1; border-color: rgba(203, 213, 225, 0.45); background: rgba(203, 213, 225, 0.08); }
 .tag.skill-gold { color: var(--warn); border-color: rgba(242, 184, 75, 0.5); background: rgba(242, 184, 75, 0.08); }
-.tag.skill-rainbow { color: var(--h6); border-color: rgba(79, 214, 214, 0.55); background: rgba(79, 214, 214, 0.1); }
+.tag.skill-rainbow {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--panel-2), var(--panel-2)) padding-box,
+    linear-gradient(95deg, #ff6b9d, #ffd166, #6ef2a5, #60c8ff, #c084fc) border-box;
+}
+.tag.skill-rainbow .skill-label {
+  background: linear-gradient(90deg, #ff7eb3 0%, #ffd166 26%, #7cf5a4 52%, #67d4ff 76%, #d094ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 600;
+}
 .tag-row { display: inline-flex; flex-wrap: wrap; gap: 3px; align-items: center; }
 .skill-group { margin-top: 8px; }
 .skill-title { display: block; color: var(--text-3); font-size: 11.5px; margin-bottom: 4px; }
@@ -635,7 +647,11 @@ button.nm-recent:hover { background: var(--raised); }
 .training-book-option { align-items: flex-start; flex: 1 1 280px; padding: 9px 10px; background: var(--panel-2); border: 1px solid var(--line); border-left-width: 3px; border-radius: var(--radius); }
 .training-book-option.tier-silver { border-left-color: #cbd5e1; }
 .training-book-option.tier-gold { border-left-color: var(--warn); }
-.training-book-option.tier-rainbow { border-left-color: var(--h6); }
+.training-book-option.tier-rainbow {
+  border-color: var(--line);
+  border-left-color: #e879f9;
+  background: linear-gradient(90deg, rgba(255, 126, 179, 0.07), rgba(103, 212, 255, 0.05) 55%, var(--panel-2));
+}
 .training-book-option input { margin-top: 3px; }
 .training-book-option small { display: block; line-height: 1.45; margin-top: 3px; }
 .book-option-head { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }

@@ -3,6 +3,7 @@ import { detailedPositionForSlot, isDetailedPosition, readDetailedPositions, slo
 import { MAX_SCOUT_REPORTS, SCOUT_LEVELS, deleteScoutReport, startScouting, visibleScoutReports, type ScoutReport, type ScoutSource, type ScoutTarget, type VisibleScoutReport } from '../src/game/scouting.ts'
 import { preferredPositionRatings } from '../src/game/scout-rating.ts'
 import { cupCeilingBonus } from '../src/game/cup-rewards.ts'
+import { MAIN_ATTR_HARD_MAX } from '../src/game/scale.ts'
 import { PEAK_STAGES } from '../src/game/data/peak-stages.generated.ts'
 import { PEAK_STAGE_COUNT, buildPeakTeam } from '../src/game/peak.ts'
 import { PEAK_DAILY_LIMIT, peakDailyStatus } from '../src/game/peak-attempts.ts'
@@ -820,7 +821,7 @@ function matchResult(record: NonNullable<ReturnType<typeof finishMatch>>) {
 
 const SEASON_GOALS = Object.keys(SEASON_GOAL_LABELS) as SeasonGoal[]
 const SQUAD_ROLES = Object.keys(SQUAD_ROLE_LABELS) as SquadRole[]
-const AUTO_TARGET_MAX = 1500
+const AUTO_TARGET_MAX = MAIN_ATTR_HARD_MAX
 
 /** 谈判时的承诺；不填和手动谈判框的默认值一样（冲击上游 / 常规首发）。 */
 function negotiationAnswers(body: Record<string, unknown>): { goal: SeasonGoal; role: SquadRole } | null {

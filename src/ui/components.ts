@@ -228,7 +228,7 @@ export function skillTierLabel(player: Pick<Player, 'skillTiers'>, skill: SkillI
 export function skillTag(player: Pick<Player, 'skillTiers'>, skill: SkillId): string {
   const tier = getSkillTier(player, skill)
   const tip = tipAttrs(`${skillName(skill)} · ${skillTierLabel(player, skill)}`, `${skillEffectText(skill, tier)}\n${skillTierNote(skill)}`)
-  return `<span class="tag skill-${tier}" ${tip}>${esc(skillName(skill))} · ${skillTierLabel(player, skill)}</span>`
+  return `<span class="tag skill-${tier}" ${tip}><span class="skill-label">${esc(skillName(skill))}</span></span>`
 }
 
 /** 特性名字带上效果提示；tag 为 true 时显示成标签。 */
@@ -346,6 +346,7 @@ export function emptyState(text: string): string {
 }
 
 export function tag(text: string, tone = ''): string {
+  if (tone.includes('skill-rainbow')) return `<span class="tag ${tone}"><span class="skill-label">${text}</span></span>`
   return `<span class="tag ${tone}">${text}</span>`
 }
 

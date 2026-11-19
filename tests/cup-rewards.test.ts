@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
 import { startTraining } from '../src/game/actions.ts'
 import { applyCupCeilingReward, cupCeilingBonus, effectiveClubCeilings, ensureCupCeilingClaims, CUP_CEILING_BONUS } from '../src/game/cup-rewards.ts'
-import { attrHardLimit, mainAttrsFor } from '../src/game/rating.ts'
+import { applyGains } from '../src/game/ca.ts'
+import { simulateAITrainingRound } from '../src/game/ai-training.ts'
+import { bestMarketValue, playerMarketValue } from '../src/game/market.ts'
+import { attrHardLimit, CA_MAX, mainAttrsFor } from '../src/game/rating.ts'
 import type { TrophyRecord } from '../src/game/types.ts'
 import { createPlayerFromSeed, seedById } from '../src/game/data/players.ts'
 
@@ -140,5 +143,39 @@ describe('杯赛冠军俱乐部上限奖励', () => {
     expect(effectiveClubCeilings(game.roster[0], cupCeilingBonus(game)).passing).toBe(before + 150)
     expect(game.pve!.cupCeilingClaims?.league).toBe(true)
     expect(ensureCupCeilingClaims(game)).toBe(false)
+  })
+
+  it('获得奖杯上限加成后，applyGains 与真实培养能够突破 1500 最高达 2000，且估值保持合法', () => {
+    const baseGame = createInitialGame(79)
+    const player = structuredClone(baseGame.roster.find((item) => item.positions.GK === 0)!)
+    const baseVal = bestMarketValue({ cards: [] }, player)
+    expect(baseVal).toBeGreaterThan(0)
+    // 模拟 1485 顶格主属性 + 星联杯 +250 奖杯上限 = 1735
+    player.ceilings.shooting = 1485
+    const boostedCeilings = effectiveClubCeilings(player, 250)
+    expect(boostedCeilings.shooting).toBe(1735)
+
+    const before = { ...player.attrs, shooting: 1450 }
+    const gained = applyGains(before, boostedCeilings, CA_MAX, { shooting: 350 }, false)
+    expect(gained.attrs.shooting).toBe(1735)
+    expect(gained.cappedByCeiling).toBe(true)
+
+    // 即使单项突破 1500（1501..2000），估值仍按原始属性正常返回而非判非法变 0
+    const trained = { ...player, attrs: gained.attrs }
+    expect(playerMarketValue(trained)).toBeGreaterThan(0)
+    expect(bestMarketValue({ cards: [] }, trained)).toBe(baseVal)
+
+    // 端到端完整培养（满设施 + 奖杯上限 +450）能实际练出 > 1500 的主属性
+    const elite = structuredClone(player)
+    for (const key of mainAttrsFor(false)) {
+      elite.baseAttrs[key] = 1150
+      elite.attrs[key] = 1150
+      elite.ceilings[key] = 1485
+    }
+    const maxFacilities = { stadium: 25, academy: 25, medical: 25, shop: 25, sponsor: 25, psychology: 25, tactics: 25 }
+    const afterTrain = simulateAITrainingRound(elite, 9001, maxFacilities, 1, 450)
+    const maxTrained = Math.max(...mainAttrsFor(false).map((key) => afterTrain.attrs[key]))
+    expect(maxTrained).toBeGreaterThan(1500)
+    expect(maxTrained).toBeLessThanOrEqual(2000)
   })
 })
