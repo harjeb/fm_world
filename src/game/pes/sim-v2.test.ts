@@ -396,4 +396,55 @@ describe('simV2 2D 动画与 AI 演进回归', () => {
     expect(runCarry(0.95, 0.65, false)).toBeGreaterThan(runCarry(0.25, 0.65, false) + 0.5)
     expect(runCarry(0.65, 0.95, true)).toBeGreaterThan(runCarry(0.65, 0.25, true) + 0.3)
   })
+
+  it('高评分均势对抗零膨胀：95v95 下 simV2 的受压射门、封堵率与受压传球不向进攻方单边虚高', () => {
+    const setup95 = (simV2: boolean) => {
+      const { home, away } = baselineTeams(1)
+      const g = new PesGame({ seed: 725, home: structuredClone(home), away: structuredClone(away), offside: true, noInjuries: true, rules: { ...GAME_RULES, simV2 } })
+      const hTeam = g.state.teams[0]
+      const aTeam = g.state.teams[1]
+      const att = hTeam.players.find((p) => p.position !== 'GK')!
+      const mate = hTeam.players.find((p) => p.position !== 'GK' && p !== att)!
+      const def = aTeam.players.find((p) => p.position === 'CB')!
+      const gk = aTeam.players.find((p) => p.position === 'GK')!
+      for (const p of [att, mate, def, gk]) {
+        for (const a of ['shooting', 'composure', 'dribbling', 'strength', 'tackling', 'heading', 'anticipation', 'defPos', 'offBall', 'speed', 'acceleration', 'agility', 'firstTouch', 'passing', 'reflexes', 'oneOnOne', 'handling', 'rushing'] as AttrKey[]) {
+          p.attrs[a] = 95
+        }
+        p.skills = []; p.traitId = 'star_none'; p.foot = 'R'; p.stamina = p.maxStamina; p.positions[p.position] = 100; p.detailedPosition = undefined
+      }
+      for (const p of aTeam.players) if (p !== def && p !== gk) { p.x = 20; p.y = 32 }
+      att.x = 89; att.y = 32
+      mate.x = 82; mate.y = 22
+      def.x = 91; def.y = 32.4
+      gk.x = 99.5; gk.y = 32
+      return { k: g.settlement.settlementKernel, hTeam, aTeam, att, mate, def, gk }
+    }
+
+    const v2 = setup95(true)
+    const v1 = setup95(false)
+    const opts = { point: { x: 89, y: 32 }, header: false, penalty: false, freeKick: false, foot: 'right' as const }
+
+    // 95 vs 95 均势受压射门：finishScore、block、onTarget、pGoal 不出现单边虚高
+    const s2 = v2.k.shotModel(v2.att, v2.hTeam, v2.aTeam, opts)
+    const s1 = v1.k.shotModel(v1.att, v1.hTeam, v1.aTeam, opts)
+    expect(s2.finishScore).toBeCloseTo(s1.finishScore, 5)
+    expect(s2.block).toBeCloseTo(s1.block, 5)
+    expect(s2.onTarget).toBeCloseTo(s1.onTarget, 5)
+    expect(s2.pGoal).toBeCloseTo(s1.pGoal, 5)
+
+    // 95 vs 95 均势受压传球：c 与 p 同样保持零膨胀
+    const p2 = v2.k.passModel(v2.att, v2.mate, 'short', v2.aTeam, v2.att, v2.mate, false)
+    const p1 = v1.k.passModel(v1.att, v1.mate, 'short', v1.aTeam, v1.att, v1.mate, false)
+    expect(p2.c).toBeCloseTo(p1.c, 5)
+    expect(p2.p).toBeCloseTo(p1.p, 5)
+
+    // 真正存在属性优势（95 vs 55）时，simV2 仍给出更强的盘带/力量/镇定破局收益
+    v2.def.attrs.tackling = 55; v2.def.attrs.agility = 55; v2.def.attrs.strength = 55; v2.def.attrs.composure = 55
+    v1.def.attrs.tackling = 55; v1.def.attrs.agility = 55; v1.def.attrs.strength = 55; v1.def.attrs.composure = 55
+    const s2Adv = v2.k.shotModel(v2.att, v2.hTeam, v2.aTeam, opts)
+    const s1Adv = v1.k.shotModel(v1.att, v1.hTeam, v1.aTeam, opts)
+    expect(s2Adv.block).toBeLessThan(s1Adv.block - 0.04)
+    expect(s2Adv.pGoal).toBeGreaterThan(s1Adv.pGoal + 0.02)
+  })
 })

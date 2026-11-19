@@ -437,7 +437,7 @@ export class PesMatch {
 
   private maxAccel(p: PesPlayer): number {
     // simV2 拉开爆发力（acceleration+agility）梯度：高爆发起速/变向明显更快，低爆发重型球员起步更沉
-    return this.v2 ? (2.6 + p.ab.accel * 6.4) : (3.5 + p.ab.accel * 4.5) // v1: 3.5~8.0, v2: 2.6~9.0 m/s²
+    return this.v2 ? (2.8 + p.ab.accel * 5.6) : (3.5 + p.ab.accel * 4.5) // v1: 3.5~8.0, v2: 2.8~8.4 m/s²
   }
 
   private reactionTime(p: PesPlayer): number {
@@ -2433,7 +2433,7 @@ export class PesMatch {
       const side = { x: -toGoal.y, y: toGoal.x }
       const wig = (this.rng.float() - 0.5) * 0.45
       const drib = p.ab.dribbling ?? p.ab.control
-      const stepAng = clamp(0.26 + drib * 0.28, 0.28, 0.52)
+      const stepAng = clamp(0.18 + drib * 0.16, 0.20, 0.34)
       let dirVec = toGoal
       if (blockedAhead) {
         let bestScore = -1e9
@@ -2722,8 +2722,8 @@ export class PesMatch {
         // simV2：盘带直接提升带球速度与灵活度，力量决定贴身对抗下的抗减速护球能力；
         // 真单刀时由速度+爆发+盘带+控球共同决定高速推球，且不受身后追兵减速
         want *= isBreakaway
-          ? (0.78 + 0.05 * p.ab.control + 0.06 * pDrib + 0.06 * p.ab.pace + 0.04 * p.ab.accel)
-          : (0.74 + 0.08 * p.ab.control + 0.14 * pDrib)
+          ? (0.78 + 0.04 * p.ab.control + 0.04 * pDrib + 0.07 * p.ab.pace + 0.05 * p.ab.accel)
+          : (0.72 + 0.06 * p.ab.control + 0.14 * pDrib)
         let close = 0
         for (const o of this.other(t).players) {
           const rx = o.pos.x - p.pos.x
@@ -2777,7 +2777,7 @@ export class PesMatch {
       }
     }
 
-    const carryTurnMul = this.v2 && this.ball.owner === p.pid ? (0.82 + 0.36 * pDrib) : 1
+    const carryTurnMul = this.v2 && this.ball.owner === p.pid && !isBreakaway ? (0.76 + 0.24 * pDrib) : 1
     const accMul = gkDiving
       ? 2.2
       : (this.v2 && (isBreakaway || burstActive) ? (1 + 0.35 * p.ab.accel) * carryTurnMul : carryTurnMul)
@@ -2878,10 +2878,10 @@ export class PesMatch {
         const td = dist(d.pos, att.pos)
         if (this.v2) {
           const toDef = td > 1e-4 ? { x: (d.pos.x - att.pos.x) / td, y: (d.pos.y - att.pos.y) / td } : { x: 0, y: 0 }
-          const behind = toDef.x * att.facing.x + toDef.y * att.facing.y < -0.60
+          const behind = toDef.x * att.facing.x + toDef.y * att.facing.y < -0.70
           // 力量对抗身位：更强壮的防守人更容易挤入对抗圈，更强壮的持球人则能多顶开一步护球空间
           const strShift = clamp(((d.ab.strength ?? 0.65) - (att.ab.strength ?? 0.65)) * 0.22, -0.18, 0.18)
-          if (td < (behind ? 1.50 : 1.65) + strShift) this.tryTackle(d, att)
+          if (td < (behind ? 1.56 : 1.70) + strShift) this.tryTackle(d, att)
         } else if (td < 1.7) {
           this.tryTackle(d, att)
         }
@@ -2950,7 +2950,7 @@ export class PesMatch {
   private tryTackle(def: PesPlayer, att: PesPlayer): void {
     if (def.tackleCd > 0 || att.role === 'GK' || att.noClaim > 0.05) return
     const d = dist(def.pos, att.pos)
-    if (d > (this.v2 ? 1.85 : 1.6)) return
+    if (d > (this.v2 ? 1.90 : 1.6)) return
 
     def.tackleCd = 0.75 + this.rng.float() * 0.35
 

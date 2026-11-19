@@ -173,9 +173,10 @@ export class SettlementKernel {
     const nearestToReceiver = this.nearestOpponent(opp, receiver)
     c += nearestToReceiver ? Math.min(5, distance(nearestToReceiver, receiver) * 0.25) : 3
     c -= pressure * 0.8
-    if (this.hooks.simV2 && pressure > 2) {
-      // 高压逼抢下，镇定高的持球人更冷静地完成出球
-      c += (this.ratings.eff(carrier, 'composure') - 50) * 0.018 * Math.min(pressure, 6)
+    if (this.hooks.simV2 && pressure > 2 && pressureDist) {
+      // 高压逼抢下，持球人镇定 vs 逼抢者抢断/敏捷的相对优势（零和，避免全员高评分整体膨胀）
+      const oppPress = 0.6 * this.ratings.eff(pressureDist, 'tackling') + 0.4 * this.ratings.eff(pressureDist, 'agility')
+      c += (this.ratings.eff(carrier, 'composure') - oppPress) * 0.022 * Math.min(pressure, 6)
     }
     if (weak) c -= 4
     if (type === 'cross') c += 2
@@ -488,6 +489,7 @@ export class SettlementKernel {
     const effComp = this.ratings.eff(shooter, 'composure', { inBox: inBoxShot })
     let finishScore: number
     let precision: number
+    let nearestDef: MatchPlayerState | null = null
     if (simV2) {
       if (opts.penalty) {
         // 点球高度考验镇定：射术与镇定各占 50%
@@ -510,11 +512,22 @@ export class SettlementKernel {
         finishScore = 0.70 * effShoot + 0.30 * effComp
         precision = 0.68 * this.ratings.eff(shooter, 'shooting') + 0.32 * this.ratings.eff(shooter, 'composure')
       }
-      // 贴身受压射门：高镇定稳住心态、高力量抗对抗、高盘带摆脱半步起脚空间
+      // 贴身受压射门：按射手 vs 贴身防守人/门将的相对差值结算（零和），高评分均势对抗不虚高进球
       if (!opts.penalty && !opts.freeKick && chance.pressure > 0.15) {
+        let bestD = Infinity
+        for (const p of opp.players) {
+          if (!p.onPitch || p.position === 'GK') continue
+          const d = distance(p, opts.point)
+          if (d < bestD) { bestD = d; nearestDef = p }
+        }
+        const defStr = nearestDef ? this.ratings.eff(nearestDef, 'strength') : 50
+        const defTkl = nearestDef ? this.ratings.eff(nearestDef, 'tackling') : 50
+        const gkComp = gk ? this.ratings.eff(gk, 'composure') : defTkl
         const effStr = this.ratings.eff(shooter, 'strength')
         const effDrib = this.ratings.eff(shooter, 'dribbling')
-        finishScore += ((effComp - 50) * 0.16 + (effStr - 50) * 0.18 + (opts.header ? 0 : (effDrib - 50) * 0.12)) * chance.pressure
+        finishScore += ((effComp - (0.5 * defTkl + 0.5 * gkComp)) * 0.18
+          + (effStr - defStr) * 0.22
+          + (opts.header ? 0 : (effDrib - defTkl) * 0.16)) * chance.pressure
       }
     } else {
       finishScore = opts.header
@@ -528,7 +541,7 @@ export class SettlementKernel {
     const attributeAdjust = simV2
       ? (opts.penalty
         ? clamp((precision - 50) * 0.0045, -0.22, 0.14)
-        : clamp((precision - 50) * 0.002 + (!opts.freeKick && chance.pressure > 0.15 ? (effComp - 50) * 0.0012 * chance.pressure : 0), -0.12, 0.12))
+        : clamp((precision - 50) * 0.002 + (nearestDef ? (effComp - (0.5 * this.ratings.eff(nearestDef, 'tackling') + 0.5 * this.ratings.eff(nearestDef, 'composure'))) * 0.0014 * chance.pressure : 0), -0.1, 0.1))
       : clamp((precision - 50) * 0.002, -0.1, 0.1)
     const weakAdjust = weak ? -0.02 : 0
     let onTarget = clamp(chance.base + attributeAdjust + weakAdjust, chance.floor, chance.ceiling)
@@ -688,8 +701,20 @@ export class SettlementKernel {
         const score = blockers[0]
         block = clamp(0.015 + Math.max(0, score - 30) * 0.008, 0.01, 0.42)
         if (simV2 && !opts.header && !opts.freeKick) {
-          // 高盘带球员更容易在起脚前扣开半步角度、降低被封堵概率
-          block *= clamp(1 - (this.ratings.eff(shooter, 'dribbling') - 50) * 0.0045, 0.75, 1.22)
+          // 高盘带相对封堵者的抢断/敏捷占优时，更容易扣开半步角度、降低被封堵概率（零和，不随高评分单边减封堵）
+          let mainBlocker: MatchPlayerState | null = null
+          let bestBlkD = Infinity
+          for (const player of opp.players) {
+            if (!player.onPitch || player.position === 'GK') continue
+            const bd = distanceToSegment(player, opts.point, target)
+            if (bd > 5.2) continue
+            const between = (player.x - opts.point.x) * (target.x - opts.point.x) >= 0 && (player.x - opts.point.x) * (target.x - opts.point.x) <= (target.x - opts.point.x) ** 2 + 0.1
+            if (between && bd < bestBlkD) { bestBlkD = bd; mainBlocker = player }
+          }
+          const blkSkill = mainBlocker
+            ? 0.5 * this.ratings.eff(mainBlocker, 'tackling') + 0.5 * this.ratings.eff(mainBlocker, 'agility')
+            : 50
+          block *= clamp(1 - (this.ratings.eff(shooter, 'dribbling') - blkSkill) * 0.0055, 0.72, 1.28)
         }
       }
       if (opts.freeKick) block += 0.05
