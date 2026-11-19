@@ -876,6 +876,8 @@ export type MatchRecord = {
   hasReplay?: boolean
   /** 联机联赛赛后技能书掉落（只给真人执教的球队，服务器判定）。 */
   bookDrops?: LeagueBookDrop[]
+  /** 联机精简模式：文字解说、关键事件、技能统计等复盘明细按需从 /api/match/record 拉取。 */
+  detailDeferred?: true
 }
 
 export type MatchInstruction = {
@@ -940,6 +942,8 @@ export type SeasonState = {
   kickoffSchedule?: number
   /** 单机“跳至比赛日”累计把存档时钟往前拨了多少毫秒；开赛时间点按存档时钟算（联机永远是 0）。 */
   clockShift?: number
+  /** 联机精简模式：本赛区赛程与 game.season.fixtures 相同，客户端接收后直接复原。 */
+  fixturesFromSeason?: true
 }
 
 export type AITeamDef = {
@@ -1122,6 +1126,8 @@ export type PveState = {
   cups: Record<string, CupRun>
   /** Season-opening opponents; only the current season is retained. */
   cupSeason?: import('./cup.ts').CupSeasonState
+  /** 联机浏览器视图：需要时从服务器取得冻结对手，不在本地重建。 */
+  cupSeasonDeferred?: true
   cupHistory?: CupRun[]
   /** 已获得的俱乐部奖杯上限加成，每种杯赛只计一次。 */
   cupCeilingClaims?: Partial<Record<string, true>>

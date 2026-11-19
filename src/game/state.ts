@@ -1,3 +1,4 @@
+import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate'
 import type { Attributes, GameState, Player } from './types.ts'
 import { ALL_ATTRIBUTES } from './types.ts'
 import { isMainAttr } from './scale.ts'
@@ -22,6 +23,8 @@ import { migratePositionProfiles } from './position-profile-migration.ts'
 // 游戏改名后仍沿用旧键，改了已有存档就读不到了。
 export const SAVE_KEY = 'fm-seven-a-side-save-v3'
 export const LEGACY_SAVE_KEY = 'fm-seven-a-side-save-v2'
+export const ONLINE_CACHE_KEY = 'fm-online-game-cache-v1'
+const COMPRESSED_SAVE_PREFIX = 'gzip-v1:'
 /** 本地存档是系统自动建的、玩家还没亲自选过球队：离线模式进来时要先让他选一支。 */
 export const TEAM_PICK_PENDING_KEY = 'fm-seven-a-side-team-pick-pending'
 
@@ -86,7 +89,6 @@ export function createInitialGame(seed?: number, clubName = '青石'): GameState
   return game
 }
 
-/** 只写本地缓存（联机存档来自服务器时用，避免把服务器状态再推回去）。 */
 /**
  * 联赛直播回放（activeMatch.preplayed）只活在服务器下发的存档副本里：
  * 不落本地缓存，否则离线重开会把已经结束的比赛当成“进行中”。
@@ -95,26 +97,29 @@ export function withoutReplay(game: GameState): GameState {
   return game.activeMatch?.preplayed ? { ...game, activeMatch: undefined } : game
 }
 
-export function cacheGameLocally(game: GameState): void {
+/** 只写本地缓存。空间不足时无损压缩，不裁剪名册、战报或培养记录。 */
+export function cacheGameLocally(game: GameState, key = SAVE_KEY): boolean {
   try {
-    if (typeof localStorage !== 'undefined') localStorage.setItem(SAVE_KEY, JSON.stringify(withoutReplay(game)))
+    if (typeof localStorage === 'undefined') return false
+    const raw = JSON.stringify(withoutReplay(game))
+    try {
+      localStorage.setItem(key, raw)
+    } catch (error) {
+      if (!(error instanceof DOMException) || error.name !== 'QuotaExceededError') return false
+      const bytes = gzipSync(strToU8(raw), { level: 3, mtime: 0 })
+      // 原地替换由浏览器保证原子性，两次写入都失败时也不会丢掉旧档。
+      localStorage.setItem(key, COMPRESSED_SAVE_PREFIX + btoa(strFromU8(bytes, true)))
+    }
+    return true
   } catch {
-    // 本地缓存失败不影响服务器同步。
+    return false
   }
 }
 
 export function saveGame(game: GameState): boolean {
   pruneChemistry(game.chemistry, Date.now(), game.season.gameDayMs)
   game.ui = { ...(game.ui ?? { screen: 'home' }) }
-  let local = false
-  try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(SAVE_KEY, JSON.stringify(withoutReplay(game)))
-      local = true
-    }
-  } catch {
-    local = false
-  }
+  const local = remoteSaver ? cacheOnlineGame(game) : cacheGameLocally(game)
   try {
     remoteSaver?.(game)
     return local || !!remoteSaver
@@ -123,12 +128,27 @@ export function saveGame(game: GameState): boolean {
   }
 }
 
+/** 联机缓存独立于离线存档，只留本队进度；再次联机时以服务器为准。 */
+export function cacheOnlineGame(game: GameState): boolean {
+  const pve = game.pve && { ...game.pve, cupSeason: undefined }
+  return cacheGameLocally({ ...game, pve, aiTeams: [], aiClubs: undefined, freeStars: [], reserveStars: undefined, world: undefined }, ONLINE_CACHE_KEY)
+}
+
+/** 只在服务端已经协商支持按需加载时，省略联机上传里的冻结名单。 */
+export function withoutDeferredCupPool(game: GameState): GameState {
+  return game.pve?.cupSeasonDeferred && game.pve.cupSeason
+    ? { ...game, pve: { ...game.pve, cupSeason: undefined } } : game
+}
+
 export function loadGame(): GameState | null {
   try {
     if (typeof localStorage === 'undefined') return null
     const raw = localStorage.getItem(SAVE_KEY) ?? localStorage.getItem(LEGACY_SAVE_KEY)
     if (!raw) return null
-    const parsed = JSON.parse(raw) as GameState
+    const json = raw.startsWith(COMPRESSED_SAVE_PREFIX)
+      ? strFromU8(gunzipSync(strToU8(atob(raw.slice(COMPRESSED_SAVE_PREFIX.length)), true)))
+      : raw
+    const parsed = JSON.parse(json) as GameState
     const migrated = parsed?.version === 2
     if (migrated) migrateV2(parsed)
     if (!parsed || parsed.version !== GAME_VERSION || !Array.isArray(parsed.roster) || parsed.roster.length < 10) return null

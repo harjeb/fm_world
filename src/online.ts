@@ -1,10 +1,11 @@
 import type { Auction, AuctionResult } from './game/auction.ts'
 import type { ScoutLevel, ScoutSource, VisibleScoutReport } from './game/scouting.ts'
+import type { CupSeasonState } from './game/cup.ts'
 import { CHAT_HISTORY_LIMIT, appendChatMessage, isValidChatMessage, type ChatMessage, type ChatSseMessage } from './game/chat.ts'
-import type { AITeam, Attributes, FacilityId, GameState, Player, SeasonTableRow, Fixture, TierId, ConferenceId } from './game/types.ts'
+import type { AITeam, Attributes, FacilityId, GameState, MatchRecord, Player, SeasonTableRow, Fixture, TierId, ConferenceId } from './game/types.ts'
 import type { ReleaseAssessment } from './game/transfer-rules.ts'
 import type { NegotiationDemands } from './game/negotiation.ts'
-import { setRemoteSaver, saveGame } from './game/state.ts'
+import { setRemoteSaver, saveGame, withoutDeferredCupPool } from './game/state.ts'
 import { dueRound } from './game/season.ts'
 
 const TOKEN_KEY = 'fm-online-token'
@@ -51,7 +52,7 @@ export type AITransferOffer = {
 /** 市场列表是临时公开快照，不加入账号的本赛区赛程或保存数据。 */
 export const aiTransferMarket: { offers: AITransferOffer[]; loading: boolean; loaded: boolean; error: string } = { offers: [], loading: false, loaded: false, error: '' }
 let aiTransferRequest = 0
-export type WorldPublicClub = Pick<AITeam, 'id' | 'name' | 'color' | 'formationId'> & { tier: TierId; conference?: ConferenceId; managed?: boolean; /** 教练已超过 3 天未上线，当前由 AI 临时接管。 */ aiTakeover?: boolean; /** RANK：首发 CA 之和。 */ rating?: number; players: WorldPublicPlayer[]; /** 设施阶段（1–25）；电脑球队公开，玩家管理的球队不公开。 */ facilities?: Partial<Record<FacilityId, number>> }
+export type WorldPublicClub = Pick<AITeam, 'id' | 'name' | 'color' | 'formationId'> & { rosterDeferred?: true; tier: TierId; conference?: ConferenceId; managed?: boolean; /** 教练已超过 3 天未上线，当前由 AI 临时接管。 */ aiTakeover?: boolean; /** RANK：首发 CA 之和。 */ rating?: number; players: WorldPublicPlayer[]; /** 设施阶段（1–25）；电脑球队公开，玩家管理的球队不公开。 */ facilities?: Partial<Record<FacilityId, number>> }
 export type WorldPublicSnapshot = {
   seasonIndex: number
   ownClubId: string | null
@@ -62,6 +63,24 @@ export type WorldPublicSnapshot = {
 /** 只包含公开球员资料，不接收体能、精力或教练存档。 */
 export let publicWorld: WorldPublicSnapshot | null = null
 let publicWorldRequest = 0
+let pendingWorld: { epoch: number; promise: Promise<void> } | undefined
+let publicClubRequest = 0
+let viewedClub: { epoch: number; seasonIndex: number; requested: string; club: WorldPublicClub } | undefined
+
+export function loadedPublicClub(id: string, season: number): WorldPublicClub | undefined {
+  return viewedClub?.epoch === sessionEpoch && viewedClub.seasonIndex === season && (viewedClub.requested === id || viewedClub.club.id === id) ? viewedClub.club : undefined
+}
+
+export async function refreshPublicClub(id: string): Promise<void> {
+  if (!isOnlineMode()) return
+  const request = ++publicClubRequest
+  const epoch = sessionEpoch
+  const data = await requestJson<{ club: WorldPublicClub; seasonIndex: number }>(`/api/world/club?id=${encodeURIComponent(id)}`, undefined, ACTION_TIMEOUT_MS)
+  if (epoch !== sessionEpoch || request !== publicClubRequest || !isOnlineMode()) return
+  if (!Number.isSafeInteger(data.seasonIndex) || !data.club || !Array.isArray(data.club.players) || (id !== 'player' && id !== data.club.id)) throw new Error('球队名单响应无效')
+  viewedClub = { epoch, requested: id, ...data }
+  notify()
+}
 
 /** 注册前的空缺球队预览；球队仅在注册提交成功时分配。 */
 export let registrationClubs: WorldPublicClub[] | null = null
@@ -72,19 +91,22 @@ export async function refreshRegistrationClubs(): Promise<void> {
   notify()
 }
 
-export async function refreshPublicWorld(): Promise<void> {
-  if (onlineState.status !== 'online') return
+export function refreshPublicWorld(): Promise<void> {
+  if (!isOnlineMode()) return Promise.resolve()
+  const epoch = sessionEpoch
+  if (pendingWorld?.epoch === epoch) return pendingWorld.promise
   const request = ++publicWorldRequest
-  try {
-    const data = await requestJson<WorldPublicSnapshot>('/api/world/teams')
-    if (request === publicWorldRequest && onlineState.status === 'online') {
+  const promise = requestJson<WorldPublicSnapshot>('/api/world/teams', { headers: { 'X-FM-World-Summary': '1' } }, ACTION_TIMEOUT_MS).then(data => {
+    if (request === publicWorldRequest && sessionEpoch === epoch && isOnlineMode() && Array.isArray(data.clubs) && Array.isArray(data.divisions)) {
       publicWorld = data
       onlineState.clubCoaches = Object.fromEntries(data.clubs.filter(club => club.managed).map(club => [club.id, club.aiTakeover ? 'takeover' : 'human']))
       notify()
     }
-  } catch {
+  }).catch(() => {
     // 网络中断时保留最近一次快照，下次打开世界页再重试。
-  }
+  }).finally(() => { if (pendingWorld?.promise === promise) pendingWorld = undefined })
+  pendingWorld = { epoch, promise }
+  return promise
 }
 
 export const marketState = {
@@ -171,12 +193,29 @@ export async function loadPublicConfig(): Promise<PublicConfig> {
 
 type AuthResponse = CoachSnapshot & { token: string; user: OnlineUser; revision: number; game: GameState }
 type StateResponse = CoachSnapshot & { type: 'state'; revision: number; serverTime?: number; game: GameState; source?: string }
+type StateSyncResponse = CoachSnapshot & { type: 'state-sync'; revision: number; serverTime?: number; source?: string }
+type StatePatchResponse = CoachSnapshot & {
+  type: 'state-patch'
+  baseRevision: number
+  revision: number
+  serverTime?: number
+  patch: Record<string, unknown>
+  prepend?: { matchHistory?: MatchRecord[]; challengeHistory?: MatchRecord[] }
+  remove?: string[]
+  source?: string
+}
+type StateStaleResponse = CoachSnapshot & { type: 'state-stale'; revision: number; serverTime?: number; source?: string }
+type SsePayload = StateResponse | StateSyncResponse | StatePatchResponse | StateStaleResponse | MarketMessage | ChatSseMessage
 
 const clientId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 let token = typeof localStorage === 'undefined' ? null : localStorage.getItem(TOKEN_KEY)
 let sessionEpoch = 0
 let eventSource: EventSource | null = null
 let deferredState: StateResponse | null = null
+let deferredPatches: StatePatchResponse[] = []
+let deferredResync = false
+let syncedGame: GameState | null = null
+let resyncPending: Promise<void> | null = null
 let pendingGame: GameState | null = null
 let pendingRevision = 0
 let saveTimer: number | null = null
@@ -207,7 +246,75 @@ function setToken(next: string | null): void {
 }
 
 function authHeaders(): Record<string, string> {
-  return token ? { Authorization: `Bearer ${token}`, 'X-FM-Client': clientId } : {}
+  return {
+    'X-FM-Lazy-Cup': '1',
+    'X-FM-Slim': '1',
+    ...(token ? { Authorization: `Bearer ${token}`, 'X-FM-Client': clientId } : {}),
+  }
+}
+
+/** 还原联机精简模式省略的本赛区重复赛程，并合并已按需加载的杯赛名单和战报明细。 */
+export function hydrateOnlineGame<T extends GameState | null | undefined>(game: T): T {
+  if (!game) return game
+  if (game.world?.divisions && game.season?.fixtures) {
+    for (const division of game.world.divisions) {
+      if (division.fixturesFromSeason) {
+        division.fixtures = game.season.fixtures
+        delete division.fixturesFromSeason
+      }
+    }
+  }
+  applyLoadedCupSeason(game)
+  applyLoadedMatchRecords(game)
+  return game
+}
+
+function applyStatePatch(base: GameState, data: StatePatchResponse): GameState {
+  const next = { ...base, ...(data.patch as Partial<GameState>) } as GameState & Record<string, unknown>
+  if (data.prepend?.matchHistory?.length) {
+    const existing = new Set((next.matchHistory ?? []).map((item) => item.id))
+    const fresh = data.prepend.matchHistory.filter((item) => !existing.has(item.id))
+    next.matchHistory = [...fresh, ...(next.matchHistory ?? [])]
+  }
+  if (data.prepend?.challengeHistory?.length) {
+    const existing = new Set((next.challengeHistory ?? []).map((item) => item.id))
+    const fresh = data.prepend.challengeHistory.filter((item) => !existing.has(item.id))
+    next.challengeHistory = [...fresh, ...(next.challengeHistory ?? [])]
+  }
+  if (data.remove?.length) {
+    for (const key of data.remove) delete next[key]
+  }
+  return hydrateOnlineGame(next as GameState)
+}
+
+function triggerResyncFromServer(): void {
+  if (!token || !isOnlineMode() || resyncPending) return
+  const epoch = sessionEpoch
+  const run = requestJson<CoachSnapshot & { game: GameState; revision: number }>('/api/game', { cache: 'no-store' }, 20_000)
+    .then((current) => {
+      if (epoch !== sessionEpoch || !isOnlineMode() || !current.game || !Number.isSafeInteger(current.revision)) return
+      hydrateOnlineGame(current.game)
+      if (current.clubCoaches) onlineState.clubCoaches = current.clubCoaches
+      if (saving || pendingGame) {
+        if (!deferredState || current.revision >= deferredState.revision) {
+          deferredState = { type: 'state', revision: current.revision, game: current.game, clubCoaches: current.clubCoaches }
+        }
+        return
+      }
+      if (current.revision >= onlineState.revision) {
+        onlineState.revision = current.revision
+        onlineState.lastSync = Date.now()
+        syncedGame = current.game
+        remoteGameHandler?.(current.game)
+        if (publicWorld && current.game.world?.seasonIndex !== publicWorld.seasonIndex) void refreshPublicWorld()
+        notify()
+      }
+    })
+    .catch(() => {
+      // 留到下一次 SSE 或用户手动刷新。
+    })
+    .finally(() => { if (resyncPending === run) resyncPending = null })
+  resyncPending = run
 }
 
 /** 对准服务器时钟。联赛直播回放按它算“比赛踢到第几分钟”，所以必须在应用存档之前就同步好。 */
@@ -316,6 +423,11 @@ export async function logoutOnline(): Promise<void> {
   eventSource?.close()
   eventSource = null
   deferredState = null
+  deferredPatches = []
+  deferredResync = false
+  syncedGame = null
+  loadedMatchRecords.clear()
+  matchRecordRequests.clear()
   setRemoteSaver(null)
   setToken(null)
   onlineState.status = 'offline'
@@ -335,16 +447,25 @@ export async function logoutOnline(): Promise<void> {
 async function restoreSession(): Promise<GameState | null> {
   if (!token) return null
   ++sessionEpoch
+  ++publicWorldRequest
+  publicWorld = null
+  loadedMatchRecords.clear()
+  matchRecordRequests.clear()
+  deferredState = null
+  deferredPatches = []
+  deferredResync = false
   onlineState.clubCoaches = null
   onlineState.status = 'connecting'
   notify()
   try {
     const snapshot = await requestJson<CoachSnapshot & { user?: OnlineUser; game: GameState; revision: number }>('/api/game', { cache: 'no-store' }, 30_000)
     if (!snapshot.game || !Number.isSafeInteger(snapshot.revision)) throw new Error('服务器返回的存档无效，请重试。')
+    hydrateOnlineGame(snapshot.game)
     // 滚动更新期间旧服务端尚未在快照里附带账号信息。
     onlineState.user = snapshot.user ?? (await requestJson<{ user: OnlineUser }>('/api/me', undefined, ACTION_TIMEOUT_MS)).user
     onlineState.clubCoaches = snapshot.clubCoaches ?? null
     onlineState.revision = snapshot.revision
+    syncedGame = snapshot.game
     onlineState.error = ''
     onlineState.status = 'online'
     onlineState.lastSync = Date.now()
@@ -366,11 +487,20 @@ async function restoreSession(): Promise<GameState | null> {
 
 function acceptSession(data: AuthResponse): void {
   ++sessionEpoch
+  ++publicWorldRequest
+  publicWorld = null
+  loadedMatchRecords.clear()
+  matchRecordRequests.clear()
+  deferredState = null
+  deferredPatches = []
+  deferredResync = false
   clearAITransferMarket()
+  hydrateOnlineGame(data.game)
   setToken(data.token)
   onlineState.clubCoaches = data.clubCoaches ?? null
   onlineState.user = data.user
   onlineState.revision = data.revision
+  syncedGame = data.game ?? null
   onlineState.status = 'online'
   onlineState.connected = false
   onlineState.error = ''
@@ -378,13 +508,23 @@ function acceptSession(data: AuthResponse): void {
   setRemoteSaver((next) => queueSave(next))
   connectEvents()
   notify()
-  void refreshPublicWorld()
 }
 
 function connectEvents(): void {
   if (!token || typeof EventSource === 'undefined') return
   eventSource?.close()
-  eventSource = new EventSource(`/api/events?token=${encodeURIComponent(token)}&client=${encodeURIComponent(clientId)}`)
+  const params = new URLSearchParams({
+    token,
+    client: clientId,
+    lazyCup: '1',
+    slim: '1',
+    delta: '1',
+  })
+  if (syncedGame && Number.isSafeInteger(onlineState.revision) && onlineState.revision > 0) {
+    params.set('sinceRevision', String(onlineState.revision))
+    params.set('hasLive', syncedGame.activeMatch?.preplayed ? '1' : '0')
+  }
+  eventSource = new EventSource(`/api/events?${params.toString()}`)
   eventSource.onopen = () => {
     onlineState.connected = true
     notify()
@@ -395,7 +535,7 @@ function connectEvents(): void {
   }
   eventSource.onmessage = (event) => {
     try {
-      const parsed = JSON.parse(event.data) as StateResponse | MarketMessage | ChatSseMessage
+      const parsed = JSON.parse(event.data) as SsePayload
       if (parsed.type === 'market') {
         applyMarket(parsed as MarketMessage)
         return
@@ -404,18 +544,71 @@ function connectEvents(): void {
         applyChat(parsed as ChatSseMessage)
         return
       }
+      if (parsed.type === 'state-sync') {
+        syncServerClock(parsed.serverTime)
+        if (parsed.revision < onlineState.revision) return
+        if (parsed.clubCoaches) onlineState.clubCoaches = parsed.clubCoaches
+        onlineState.lastSync = Date.now()
+        onlineState.connected = true
+        if (!(saving || pendingGame)) onlineState.revision = parsed.revision
+        notify()
+        return
+      }
+      if (parsed.type === 'state-stale') {
+        syncServerClock(parsed.serverTime)
+        if (parsed.clubCoaches) onlineState.clubCoaches = parsed.clubCoaches
+        onlineState.connected = true
+        if (parsed.revision > onlineState.revision || !syncedGame) {
+          if (saving || pendingGame) deferredResync = true
+          else triggerResyncFromServer()
+        }
+        notify()
+        return
+      }
+      if (parsed.type === 'state-patch') {
+        syncServerClock(parsed.serverTime)
+        if (parsed.revision < onlineState.revision) return
+        if (parsed.clubCoaches) onlineState.clubCoaches = parsed.clubCoaches
+        onlineState.lastSync = Date.now()
+        onlineState.connected = true
+        if (parsed.source === clientId) {
+          if (!(saving || pendingGame)) onlineState.revision = parsed.revision
+          notify()
+          return
+        }
+        if (saving || pendingGame) {
+          deferredPatches.push(parsed)
+          notify()
+          return
+        }
+        if (!syncedGame || parsed.baseRevision !== onlineState.revision) {
+          triggerResyncFromServer()
+          notify()
+          return
+        }
+        const next = applyStatePatch(syncedGame, parsed)
+        syncedGame = next
+        onlineState.revision = parsed.revision
+        remoteGameHandler?.(next)
+        if (publicWorld && next.world?.seasonIndex !== publicWorld.seasonIndex) void refreshPublicWorld()
+        notify()
+        return
+      }
       const data = parsed as StateResponse
       if (data.type !== 'state' || !data.game) return
       syncServerClock(data.serverTime)
       if (data.revision < onlineState.revision) return
+      hydrateOnlineGame(data.game)
       if (data.clubCoaches) onlineState.clubCoaches = data.clubCoaches
       onlineState.lastSync = Date.now()
       onlineState.connected = true
       if (data.source !== clientId && (saving || pendingGame)) {
         // 尚未应用的推送不能先提高本地版本，否则保存结束时会把它当作旧档丢掉。
         if (!deferredState || data.revision >= deferredState.revision) deferredState = data
+        deferredPatches = []
       } else {
         onlineState.revision = data.revision
+        syncedGame = data.game
         if (data.source !== clientId) remoteGameHandler?.(data.game)
       }
       if (publicWorld && data.game.world?.seasonIndex !== publicWorld.seasonIndex) void refreshPublicWorld()
@@ -553,10 +746,11 @@ async function flushSave(): Promise<void> {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       // 联赛直播回放是服务器下发的副本，不存回服务器（几十 KB 的初始引擎状态）。
-      body: JSON.stringify({ game: game.activeMatch?.preplayed ? { ...game, activeMatch: undefined } : game, baseRevision }),
+      body: JSON.stringify({ game: withoutDeferredCupPool(game.activeMatch?.preplayed ? { ...game, activeMatch: undefined } : game), baseRevision }),
     }, SAVE_TIMEOUT_MS)
     if (pendingGame && pendingRevision === baseRevision) pendingRevision = result.revision
     onlineState.revision = Math.max(onlineState.revision, result.revision)
+    syncedGame = game
     onlineState.lastSync = result.updatedAt
     onlineState.error = ''
     onlineState.status = 'online'
@@ -566,7 +760,9 @@ async function flushSave(): Promise<void> {
     if (onlineState.error.includes('另一设备')) {
       try {
         const current = await requestJson<{ game: GameState; revision: number }>('/api/game', undefined, RECOVERY_TIMEOUT_MS)
+        hydrateOnlineGame(current.game)
         onlineState.revision = current.revision
+        syncedGame = current.game
         remoteGameHandler?.(current.game)
         onlineState.status = 'online'
       } catch {
@@ -577,13 +773,37 @@ async function flushSave(): Promise<void> {
     saving = false
     finishSave()
     saveFinished = null
-    if (!pendingGame && deferredState) {
-      // 自己保存成功后，保存前收到的同版本 SSE 不能覆盖已推进的本地比赛。
-      if (deferredState.revision > onlineState.revision) {
-        onlineState.revision = deferredState.revision
-        remoteGameHandler?.(deferredState.game)
+    if (!pendingGame) {
+      if (deferredState) {
+        // 自己保存成功后，保存前收到的同版本 SSE 不能覆盖已推进的本地比赛。
+        if (deferredState.revision > onlineState.revision) {
+          onlineState.revision = deferredState.revision
+          syncedGame = deferredState.game
+          remoteGameHandler?.(deferredState.game)
+        }
+        deferredState = null
       }
-      deferredState = null
+      if (deferredPatches.length) {
+        const queued = deferredPatches
+        deferredPatches = []
+        let applied = false
+        for (const patch of queued) {
+          if (patch.revision <= onlineState.revision) continue
+          if (syncedGame && patch.baseRevision === onlineState.revision) {
+            syncedGame = applyStatePatch(syncedGame, patch)
+            onlineState.revision = patch.revision
+            applied = true
+          } else {
+            deferredResync = true
+            break
+          }
+        }
+        if (applied && !deferredResync && syncedGame) remoteGameHandler?.(syncedGame)
+      }
+      if (deferredResync) {
+        deferredResync = false
+        triggerResyncFromServer()
+      }
     }
     notify()
     if (pendingGame) {
@@ -633,7 +853,9 @@ export async function startPeakOnline(stage: number): Promise<GameState> {
     try {
       const current = await requestJson<{ game: GameState; revision: number }>('/api/game')
       if (current.revision >= onlineState.revision) {
+        hydrateOnlineGame(current.game)
         onlineState.revision = current.revision
+        syncedGame = current.game
         remoteGameHandler?.(current.game)
         notify()
       }
@@ -645,7 +867,7 @@ export async function startPeakOnline(stage: number): Promise<GameState> {
 /** 联机改俱乐部名字：服务器检查字数和重名，成功后全服看到的新名字一起更新。 */
 export async function renameClubOnline(name: string): Promise<GameState> {
   const game = await onlineGameAction('/api/club/rename', { name })
-  void refreshPublicWorld()
+  if (publicWorld) void refreshPublicWorld()
   return game
 }
 
@@ -668,7 +890,9 @@ async function protectedGameAction(endpoint: string, body: Record<string, unknow
     try {
       const current = await requestJson<{ game: GameState; revision: number }>('/api/game', undefined, RECOVERY_TIMEOUT_MS)
       if (current.revision >= onlineState.revision) {
+        hydrateOnlineGame(current.game)
         onlineState.revision = current.revision
+        syncedGame = current.game
         remoteGameHandler?.(current.game)
         notify()
       }
@@ -731,6 +955,84 @@ export async function refreshGameOnline(currentGame: () => GameState): Promise<b
   return true
 }
 
+let cupSnapshot: { epoch: number; value: CupSeasonState } | undefined
+let cupRequest: { epoch: number; season: number; pending: Promise<void> } | undefined
+const loadedMatchRecords = new Map<string, MatchRecord>()
+const matchRecordRequests = new Map<string, Promise<MatchRecord>>()
+
+/** Keep loaded match details across SSE updates, cleared on logout or account switch. */
+export function applyLoadedMatchRecords(game: GameState): void {
+  if (!loadedMatchRecords.size) return
+  if (Array.isArray(game.matchHistory)) {
+    for (let i = 0; i < game.matchHistory.length; i++) {
+      const rec = game.matchHistory[i]
+      if (rec?.detailDeferred) {
+        const full = loadedMatchRecords.get(rec.id)
+        if (full) game.matchHistory[i] = full
+      }
+    }
+  }
+  if (Array.isArray(game.challengeHistory)) {
+    for (let i = 0; i < game.challengeHistory.length; i++) {
+      const rec = game.challengeHistory[i]
+      if (rec?.detailDeferred) {
+        const full = loadedMatchRecords.get(rec.id)
+        if (full) game.challengeHistory[i] = full
+      }
+    }
+  }
+}
+
+export function isMatchRecordLoading(id: string): boolean {
+  return matchRecordRequests.has(id)
+}
+
+export function loadMatchRecordOnline(id: string): Promise<MatchRecord> {
+  const epoch = sessionEpoch
+  if (!token || !isOnlineMode()) return Promise.reject(new Error('请先连接服务器'))
+  const cached = loadedMatchRecords.get(id)
+  if (cached) return Promise.resolve(cached)
+  const existing = matchRecordRequests.get(id)
+  if (existing) return existing
+  const pending = requestJson<{ record: MatchRecord }>(`/api/match/record?id=${encodeURIComponent(id)}`, undefined, ACTION_TIMEOUT_MS)
+    .then(({ record }) => {
+      if (epoch !== sessionEpoch || !isOnlineMode()) throw new Error('会话已变化')
+      if (!record || record.id !== id) throw new Error('战报响应无效')
+      loadedMatchRecords.set(id, record)
+      while (loadedMatchRecords.size > 16) loadedMatchRecords.delete(loadedMatchRecords.keys().next().value!)
+      if (syncedGame) applyLoadedMatchRecords(syncedGame)
+      return record
+    })
+    .finally(() => {
+      if (matchRecordRequests.get(id) === pending) matchRecordRequests.delete(id)
+      notify()
+    })
+  matchRecordRequests.set(id, pending)
+  notify()
+  return pending
+}
+
+/** Keep loaded opponents across state broadcasts, but never across a new login or season. */
+export function applyLoadedCupSeason(game: GameState): void {
+  if (game.pve?.cupSeasonDeferred && !game.pve.cupSeason && cupSnapshot?.epoch === sessionEpoch && cupSnapshot.value.seasonIndex === game.season.index) {
+    game.pve.cupSeason = cupSnapshot.value
+  }
+}
+
+export function loadCupSeasonOnline(season: number): Promise<void> {
+  const epoch = sessionEpoch
+  if (!token || !isOnlineMode()) return Promise.reject(new Error('请先连接服务器'))
+  if (cupSnapshot?.epoch === epoch && cupSnapshot.value.seasonIndex === season) return Promise.resolve()
+  if (cupRequest?.epoch === epoch && cupRequest.season === season) return cupRequest.pending
+  const pending = requestJson<{ cupSeason: CupSeasonState }>(`/api/pve/cup-season?season=${season}`, undefined, ACTION_TIMEOUT_MS).then(({ cupSeason }) => {
+    if (cupRequest?.pending !== pending || sessionEpoch !== epoch || !isOnlineMode()) return
+    if (cupSeason?.version !== 1 || cupSeason.seasonIndex !== season || !cupSeason.fields || !cupSeason.worldTeams) throw new Error('杯赛对手数据无效')
+    cupSnapshot = { epoch, value: cupSeason }
+  }).finally(() => { if (cupRequest?.pending === pending) cupRequest = undefined })
+  cupRequest = { epoch, season, pending }
+  return pending
+}
+
 export async function youthActionOnline(body: import('./game/youth-actions.ts').YouthAction): Promise<GameState> {
   return protectedGameAction('/api/youth/action', () => ({ ...body, baseRevision: onlineState.revision }))
 }
@@ -741,7 +1043,7 @@ export async function startTrainingOnline(playerId: string, bookKeys: string[], 
 
 export async function nextWorldSeasonOnline(): Promise<GameState> {
   const next = await onlineGameAction('/api/world/next-season', {})
-  void refreshPublicWorld()
+  if (publicWorld) void refreshPublicWorld()
   return next
 }
 
@@ -762,9 +1064,11 @@ async function submitGameAction(endpoint: string, body: Record<string, unknown> 
     body: JSON.stringify(typeof body === 'function' ? body() : body),
   }, timeoutMs)
   if (!Number.isSafeInteger(result.revision) || !result.game) throw new Error('服务器返回的存档无效，请刷新检查。')
+  hydrateOnlineGame(result.game)
   if (result.revision >= onlineState.revision) {
     onlineState.revision = result.revision
     onlineState.lastSync = Date.now()
+    syncedGame = result.game
     remoteGameHandler?.(result.game)
     notify()
   }

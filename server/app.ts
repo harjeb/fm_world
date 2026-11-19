@@ -3,8 +3,24 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
-import { gzip } from 'node:zlib'
-import { promisify } from 'node:util'
+import zlib from 'node:zlib'
+import {
+  buildGameDelta,
+  compareTeamPlayers,
+  createMemoryMonitor,
+  createSseSink,
+  deepEqual,
+  digestGameSections,
+  fingerprintValue,
+  negotiateEncoding,
+  projectAiTeam,
+  sendCompressedJson,
+  slimMatchRecord,
+  writeJsonChunkedAsync,
+  writeJsonChunkedSync,
+  type GameSectionDigest,
+  type SseSink,
+} from './state-sync.ts'
 import { createInitialGame, GAME_VERSION, upgradeLegacySignatures } from '../src/game/state.ts'
 import { addTrainedCard, ensureCards, equipCard, playerCards, recyclePlayerCards, setCardRecycleLock, untrainedPlayer } from '../src/game/cards.ts'
 import { ensurePve } from '../src/game/pve.ts'
@@ -111,6 +127,7 @@ export type AppServerOptions = {
   matchQueue?: MatchQueueOptions
   /** 赛季杯赛开发期显式启用，默认关闭以保护现有生产赛程。 */
   seasonCups?: boolean
+  compactAccountWrites?: boolean
   now?: () => number
   /** 注册入口：open 谁都能注册；invite 需要邀请码；closed 只能登录。默认 open。 */
   registration?: RegistrationMode
@@ -122,6 +139,8 @@ export type AppServerOptions = {
   turnstileSiteKey?: string
   /** 单 IP 每小时注册次数上限；0 或不填表示不限。 */
   registerLimitPerHour?: number
+  /** 测试用内存压力钩子；省略时按 RSS / 堆占比 / 可用物理内存自动判定。 */
+  memoryPressure?: () => boolean
 }
 
 export type AppServer = {
@@ -136,7 +155,6 @@ export type AppServer = {
   runMatchQueue: () => Promise<void>
 }
 
-const gzipAsync = promisify(gzip)
 const WORLD_FILE = 'world.json'
 const CHAT_FILE = 'chat.json'
 
@@ -144,6 +162,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   const dataDir = path.resolve(options.dataDir ?? 'data')
   const staticDir = path.resolve(options.staticDir ?? 'dist')
   const now = options.now ?? Date.now
+  const tickMs = options.tickMs ?? 30_000
+  const memoryMonitor = createMemoryMonitor(options.memoryPressure)
   const registrationMode: RegistrationMode = options.registration ?? 'open'
   const inviteCode = options.inviteCode?.trim() ?? ''
   const turnstileSecret = options.turnstileSecret?.trim() ?? ''
@@ -153,7 +173,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   if (registrationMode === 'invite' && !inviteCode) throw new Error('registration=invite 需要配置 inviteCode')
   fs.mkdirSync(dataDir, { recursive: true })
 
-  const accountStore = new AccountStore(dataDir)
+  const accountStore = new AccountStore(dataDir, undefined, options.compactAccountWrites)
   const db = { accounts: accountStore.accounts }
   const persistAccount = (account: Account) => accountStore.save(account)
   // 关键操作未确认落盘时，不能通过 GET、SSE 或 Agent 把内存里的结果当作已提交。
@@ -334,8 +354,116 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       Object.assign(sharedWorld.matchBook.appearances, account.game?.appearances)
     }
   }
-  writeJson(worldPath, sharedWorld)
-  const persistWorld = () => writeJson(worldPath, sharedWorld)
+  let sharedWorldVersion = 1
+  let sharedTeamsPublicVersion = 1
+  let sharedMatchBookVersion = 1
+  let worldDirty = false
+  let worldWriteUrgent = false
+  let worldWriteGen = 0
+  let worldWriteTimer: ReturnType<typeof setTimeout> | null = null
+  let worldWriteTimerDelayMs = 0
+  let worldWriteInFlight: Promise<void> | null = null
+  let worldPersistDeferDepth = 0
+
+  function flushWorldSync(): void {
+    if (worldWriteTimer) { clearTimeout(worldWriteTimer); worldWriteTimer = null; worldWriteTimerDelayMs = 0 }
+    if (!worldDirty) return
+    worldDirty = false
+    worldWriteUrgent = false
+    worldWriteGen++
+    writeJsonChunkedSync(worldPath, sharedWorld)
+  }
+
+  async function flushWorldAsync(): Promise<void> {
+    if (worldWriteTimer) { clearTimeout(worldWriteTimer); worldWriteTimer = null; worldWriteTimerDelayMs = 0 }
+    while (worldWriteInFlight || worldDirty) {
+      if (worldWriteInFlight) { await worldWriteInFlight; continue }
+      if (!worldDirty) break
+      worldDirty = false
+      worldWriteUrgent = false
+      const gen = ++worldWriteGen
+      const run = writeJsonChunkedAsync(worldPath, sharedWorld, memoryMonitor.isUnderPressure, () => gen === worldWriteGen)
+        .catch((error) => {
+          if (gen === worldWriteGen) worldDirty = true
+          console.error('world.json 异步写入失败', error)
+          throw error
+        })
+        .finally(() => { if (worldWriteInFlight === run) worldWriteInFlight = null })
+      worldWriteInFlight = run
+      await run
+    }
+  }
+
+  const WORLD_WRITE_URGENT_MS = 300
+  const WORLD_WRITE_LAZY_MS = 5 * 60_000
+  function scheduleWorldWrite(): void {
+    if (closed || worldWriteInFlight) return
+    const delayMs = worldWriteUrgent ? WORLD_WRITE_URGENT_MS : WORLD_WRITE_LAZY_MS
+    if (worldWriteTimer) {
+      if (delayMs >= worldWriteTimerDelayMs) return
+      clearTimeout(worldWriteTimer)
+      worldWriteTimer = null
+    }
+    worldWriteTimerDelayMs = delayMs
+    worldWriteTimer = setTimeout(() => {
+      worldWriteTimer = null
+      worldWriteTimerDelayMs = 0
+      if (!worldDirty || closed) return
+      void flushWorldAsync().catch(() => {
+        if (!closed) scheduleWorldWrite()
+      })
+    }, delayMs)
+    worldWriteTimer.unref?.()
+  }
+
+  type PersistWorldReason = { world?: boolean; teams?: boolean; matchBook?: boolean; immediate?: boolean; lowPriority?: boolean }
+  function persistWorld(reason: PersistWorldReason = { world: true, teams: true, matchBook: true }): void {
+    if (reason.world) sharedWorldVersion++
+    if (reason.teams) sharedTeamsPublicVersion++
+    if (reason.matchBook) sharedMatchBookVersion++
+    worldDirty = true
+    if (!reason.lowPriority) worldWriteUrgent = true
+    if (worldPersistDeferDepth > 0 && !reason.immediate) return
+    if (tickMs === 0 || reason.immediate) {
+      flushWorldSync()
+    } else {
+      scheduleWorldWrite()
+    }
+  }
+
+  function withDeferredWorldPersist<T>(fn: () => T): T {
+    worldPersistDeferDepth++
+    try {
+      return fn()
+    } finally {
+      worldPersistDeferDepth--
+      if (worldPersistDeferDepth === 0 && worldDirty) {
+        if (tickMs === 0) flushWorldSync()
+        else scheduleWorldWrite()
+      }
+    }
+  }
+
+  writeJsonChunkedSync(worldPath, sharedWorld)
+
+  type AccountSyncState = {
+    worldVer: number
+    fixturesVer: number
+    teamsVer: number
+    marketVer: number
+    matchBookVer: number
+    worldSeason: number
+    migratedGame?: GameState
+  }
+  const accountSync = new WeakMap<Account, AccountSyncState>()
+  const syncOf = (account: Account): AccountSyncState => {
+    let state = accountSync.get(account)
+    if (!state) {
+      state = { worldVer: 0, fixturesVer: 0, teamsVer: 0, marketVer: 0, matchBookVer: 0, worldSeason: -1 }
+      accountSync.set(account, state)
+    }
+    return state
+  }
   const chatPath = path.join(dataDir, CHAT_FILE)
   const loadedChat = readJson<unknown>(chatPath, [])
   const chatMessages: ChatMessage[] = Array.isArray(loadedChat)
@@ -345,8 +473,20 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   const chatLastSentAt = new Map<string, number>()
   let chatSeq = 0
   const sessions = accountStore.sessions
-  const clients = new Map<string, Set<ServerResponse>>()
-  const eventClientIds = new Map<ServerResponse, string>()
+  type EventClient = {
+    res: ServerResponse
+    sink: SseSink
+    id: string
+    lazyCup: boolean
+    slim: boolean
+    delta: boolean
+    lastRevision: number
+    lastDigest: GameSectionDigest | null
+    queue: Promise<void>
+    pendingBroadcast: { source?: string } | null
+    closed: boolean
+  }
+  const clients = new Map<string, Set<EventClient>>()
   const registerAttempts = new Map<string, number[]>()
   let closed = false
 
@@ -381,12 +521,20 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       persistAccount(account)
     }
   }
+  let cachedCupOpening: { seasonIndex: number; teams: Record<string, AITeam>; list: AITeam[] } | null = null
   function cupOpeningTeams(): AITeam[] {
     if (sharedWorld.cupOpening?.seasonIndex !== sharedWorld.world.seasonIndex) {
       sharedWorld.cupOpening = { seasonIndex: sharedWorld.world.seasonIndex, teams: structuredClone(sharedWorld.teams ?? {}) }
-      persistWorld()
+      persistWorld({ world: false, teams: false, matchBook: false })
     }
-    return Object.values(sharedWorld.cupOpening.teams)
+    if (!cachedCupOpening || cachedCupOpening.seasonIndex !== sharedWorld.cupOpening.seasonIndex || cachedCupOpening.teams !== sharedWorld.cupOpening.teams) {
+      cachedCupOpening = {
+        seasonIndex: sharedWorld.cupOpening.seasonIndex,
+        teams: sharedWorld.cupOpening.teams,
+        list: Object.values(sharedWorld.cupOpening.teams),
+      }
+    }
+    return cachedCupOpening.list
   }
   const matchQueue = new MatchQueue(path.join(dataDir, 'match-jobs'), options.matchQueue)
   // 升级前已公布的杯赛可以从已保存的任务补齐榜单；绝不读取未公开比赛。
@@ -415,9 +563,15 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       }
     }
     if (season && rewardBackfill && complete) { season.aiRewardVersion = 1; changed = true }
-    if (changed) persistWorld()
+    if (changed) persistWorld({ world: true, teams: false, matchBook: false, immediate: true })
   }
-  const matchScheduler = new MatchScheduler(matchQueue, sharedWorld, lockedTeamFor, persistWorld, options.seasonCups === true)
+  const matchScheduler = new MatchScheduler(
+    matchQueue,
+    sharedWorld,
+    lockedTeamFor,
+    () => persistWorld({ world: true, teams: true, matchBook: true, immediate: true }),
+    options.seasonCups === true,
+  )
   const market: FreeMarket = {
     pool: sharedWorld.freeStars,
     auctions: sharedWorld.auctions ?? [],
@@ -429,7 +583,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     sharedWorld.auctions = market.auctions
     sharedWorld.auctionLog = market.log
     sharedWorld.marketVersion = market.version
-    persistWorld()
+    persistWorld({ world: false, teams: false, matchBook: false })
   }
   function advanceSharedWorld(): boolean {
     const changed = matchScheduler.refresh(now())
@@ -511,10 +665,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const buysLeft = aiBuysLeft(club.state, serverSeason(), aiLeadingAuctions(club.id))
     if (buysLeft <= 0 || club.team.players.length >= AI_SQUAD_LIMIT) return false
     const nowMs = now()
-    const anchor = { world: sharedWorld.world, createdAt: sharedWorld.startedAt }
+    const keptIds = collectScoutKeptIds(nowMs)
     const committed = market.auctions.reduce((sum, item) => (item.bids.length && leadingBid(item).accountId === `ai:${club.id}` ? sum + leadingBid(item).amount : sum), 0)
     const open = market.pool
-      .filter((player) => !market.auctions.some((auction) => auction.playerId === player.id) && sharedAvailable(player, nowMs))
+      .filter((player) => !market.auctions.some((auction) => auction.playerId === player.id) && sharedAvailable(player, nowMs, keptIds))
       .sort((a, b) => playerValue(b) - playerValue(a))
       .slice(0, 30)
     for (const player of open) {
@@ -582,7 +736,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         }
       }
     }
-    if (aiFeesChanged) persistWorld()
+    if (aiFeesChanged) persistWorld({ world: false, teams: false, matchBook: false })
     if (changed) {
       persistMarket()
       broadcastMarket()
@@ -659,42 +813,53 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const clubId = ownedClubId(account)
     if (!clubId) return { changed: false, rewardChanged: false }
     const game = account.game
+    const sync = syncOf(account)
     const applied = new Set(account.appliedMatchIds ?? [])
     let changed = false
     let rewardChanged = false
     const needsCupBackfill = game.pve?.seasonCupGoldVersion !== 1
     let cupBackfillReady = true
     let coachedMatch = false
-    for (const fixture of game.season.fixtures.filter((item) => item.isPlayer && item.played).sort((a, b) => a.round - b.round)) {
+    const t = now()
+    for (const fixture of game.season.fixtures) {
+      if (!fixture.isPlayer || !fixture.played) continue
       const id = fixture.matchId
       if (!id?.startsWith('q-') || applied.has(id) || !matchQueue.ready(id)) continue
-      const { input, result } = matchQueue.read(id)
-      // 开球后还要“直播” 10 分钟，比赛公布（比分、战报、收入）之前不能提前结算。
-      if (input.kickoffAt + LEAGUE_REALTIME_MS > now()) continue
-      const coached = input.kickoffAt > account.createdAt
-      coachedMatch ||= coached
-      if (coached && !game.matchHistory.some((record) => record.id === id)) game.matchHistory.unshift(recordForClub(input, result, clubId))
-      if (coached) {
-        recordYouthMatch(game, recordForClub(input, result, clubId))
-        // 真人执教球队独立判定：双方场上球员都可能掉书，已收集（同档或更高档）的不再掉。
-        const drops = awardLeagueBookDrops(game, {
-          players: [...input.home.team.players, ...input.away.team.players],
-          stats: result.record.playerStats,
-          seed: input.seed,
-          label: `${id}|${clubId}`,
-        })
-        const record = game.matchHistory.find((item) => item.id === id)
-        if (record) record.bookDrops = drops
+      // 按轮次排序只在确实存在未应用已赛场次时再走完整排序路径。
+      const dueFixtures = game.season.fixtures
+        .filter((item) => item.isPlayer && item.played && item.matchId?.startsWith('q-') && !applied.has(item.matchId) && matchQueue.ready(item.matchId))
+        .sort((a, b) => a.round - b.round)
+      for (const due of dueFixtures) {
+        const matchId = due.matchId!
+        const { input, result } = matchQueue.read(matchId)
+        // 开球后还要“直播” 10 分钟，比赛公布（比分、战报、收入）之前不能提前结算。
+        if (input.kickoffAt + LEAGUE_REALTIME_MS > t) continue
+        const coached = input.kickoffAt > account.createdAt
+        coachedMatch ||= coached
+        if (coached && !game.matchHistory.some((record) => record.id === matchId)) game.matchHistory.unshift(recordForClub(input, result, clubId))
+        if (coached) {
+          recordYouthMatch(game, recordForClub(input, result, clubId))
+          // 真人执教球队独立判定：双方场上球员都可能掉书，已收集（同档或更高档）的不再掉。
+          const drops = awardLeagueBookDrops(game, {
+            players: [...input.home.team.players, ...input.away.team.players],
+            stats: result.record.playerStats,
+            seed: input.seed,
+            label: `${matchId}|${clubId}`,
+          })
+          const record = game.matchHistory.find((item) => item.id === matchId)
+          if (record) record.bookDrops = drops
+        }
+        const economy = economyOf(game)
+        if (coached && due.round > economy.lastIncomeRound) {
+          awardRoundIncome(game, due.round)
+          // 先补欠薪再发本轮工资，钱不够的记成欠薪（欠薪期间球员只发挥一半，见 world.ts）。
+          if (game.season.index > 1) payWageBill(economy, worldWageBill(game))
+          settleMarket(game, due.round)
+        }
+        applied.add(matchId)
+        changed = true
       }
-      const economy = economyOf(game)
-      if (coached && fixture.round > economy.lastIncomeRound) {
-        awardRoundIncome(game, fixture.round)
-        // 先补欠薪再发本轮工资，钱不够的记成欠薪（欠薪期间球员只发挥一半，见 world.ts）。
-        if (game.season.index > 1) payWageBill(economy, worldWageBill(game))
-        settleMarket(game, fixture.round)
-      }
-      applied.add(id)
-      changed = true
+      break
     }
     // 正式杯赛在全服世界中公布；双方教练从同一个任务结果同步，不产生联赛收入。
     for (const cup of sharedWorld.world.seasonCups?.cups ?? []) for (const round of cup.rounds) for (const fixture of round.fixtures) {
@@ -742,17 +907,46 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (coachedMatch && game.season.finished) awardSeasonPrize(game)
     }
     const book = sharedWorld.matchBook!
-    const ids = new Set([...game.roster, ...game.aiTeams.flatMap((team) => team.players)].map((player) => player.id))
-    const before = JSON.stringify([game.injuries, game.suspensions, game.yellowCounts, game.appearances, game.chemistry])
-    game.chemistry = chemistryForPlayers(book.chemistry, new Set(game.roster.map(p => p.id)), now(), game.season.gameDayMs)
-    for (const [id, until] of Object.entries(book.injuries)) (game.injuries ??= {})[id] = Math.max(game.injuries?.[id] ?? 0, until)
-    for (const id of ids) {
-      if (book.suspensions[id]) (game.suspensions ??= {})[id] = structuredClone(book.suspensions[id])
-      else if (book.conditionAt[id] !== undefined) delete game.suspensions?.[id]
-      if (book.yellowCounts[id] !== undefined) (game.yellowCounts ??= {})[id] = book.yellowCounts[id]
-      if (book.appearances[id]) (game.appearances ??= {})[id] = [...book.appearances[id]]
+    let bookChanged = false
+    const nextChemistry = chemistryForPlayers(book.chemistry, new Set(game.roster.map(p => p.id)), t, game.season.gameDayMs)
+    if (!deepEqual(game.chemistry, nextChemistry)) {
+      game.chemistry = nextChemistry
+      bookChanged = true
     }
-    return { changed: changed || before !== JSON.stringify([game.injuries, game.suspensions, game.yellowCounts, game.appearances, game.chemistry]), rewardChanged }
+    if (changed || sync.matchBookVer !== sharedMatchBookVersion) {
+      for (const [id, until] of Object.entries(book.injuries)) {
+        const prev = game.injuries?.[id] ?? 0
+        const next = Math.max(prev, until)
+        if (next !== prev || !(id in (game.injuries ?? {}))) {
+          (game.injuries ??= {})[id] = next
+          bookChanged = true
+        }
+      }
+      const ids = new Set<string>()
+      for (const player of game.roster) ids.add(player.id)
+      for (const team of game.aiTeams) for (const player of team.players) ids.add(player.id)
+      for (const id of ids) {
+        if (book.suspensions[id]) {
+          if (!deepEqual(game.suspensions?.[id], book.suspensions[id])) {
+            (game.suspensions ??= {})[id] = structuredClone(book.suspensions[id])
+            bookChanged = true
+          }
+        } else if (book.conditionAt[id] !== undefined && game.suspensions && id in game.suspensions) {
+          delete game.suspensions[id]
+          bookChanged = true
+        }
+        if (book.yellowCounts[id] !== undefined && game.yellowCounts?.[id] !== book.yellowCounts[id]) {
+          (game.yellowCounts ??= {})[id] = book.yellowCounts[id]
+          bookChanged = true
+        }
+        if (book.appearances[id] && !deepEqual(game.appearances?.[id], book.appearances[id])) {
+          (game.appearances ??= {})[id] = [...book.appearances[id]]
+          bookChanged = true
+        }
+      }
+      sync.matchBookVer = sharedMatchBookVersion
+    }
+    return { changed: changed || bookChanged, rewardChanged }
   }
 
   /** 其他分区的赛程与积分同样以全服快照为准，不保留各账号各自抽象模拟的比分。 */
@@ -760,9 +954,16 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const clubId = ownedClubId(account)
     if (!clubId || !account.game.world || account.game.season.index !== sharedWorld.world.seasonIndex) return false
     if (account.game.world.clubs.find((club) => club.id === 'player')?.squadKey !== clubId) return false
+    const sync = syncOf(account)
+    if (sync.worldVer === sharedWorldVersion && sync.marketVer === market.version && sync.worldSeason === sharedWorld.world.seasonIndex) {
+      return false
+    }
     const canonical = worldForClub(sharedWorld.world, clubId)
     for (const player of market.pool) delete canonical.starAges[player.id]
-    if (JSON.stringify(account.game.world) === JSON.stringify(canonical)) return false
+    sync.worldVer = sharedWorldVersion
+    sync.marketVer = market.version
+    sync.worldSeason = sharedWorld.world.seasonIndex
+    if (deepEqual(account.game.world, canonical)) return false
     account.game.world = canonical
     return true
   }
@@ -773,12 +974,19 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const clubId = ownedClubId(account)
     const division = sharedWorld.world.divisions.find((item) => item.divisionId === season.divisionId && item.index === season.index)
     if (!clubId || !division) return false
+    const sync = syncOf(account)
+    const hasLegacyLeague = !!account.game.activeMatch?.context.isLeague
+    if (!hasLegacyLeague && sync.fixturesVer === sharedWorldVersion && sync.worldSeason === sharedWorld.world.seasonIndex) {
+      return false
+    }
+    const canonicalMap = new Map<string, (typeof division.fixtures)[number]>()
+    for (const item of division.fixtures) canonicalMap.set(`${item.round}|${item.homeId}|${item.awayId}`, item)
     let changed = false
     for (const fixture of season.fixtures) {
       const mine = fixture.homeId === 'player' || fixture.awayId === 'player'
       const homeId = fixture.homeId === 'player' ? clubId : fixture.homeId
       const awayId = fixture.awayId === 'player' ? clubId : fixture.awayId
-      const canonical = division.fixtures.find((item) => item.round === fixture.round && item.homeId === homeId && item.awayId === awayId)
+      const canonical = canonicalMap.get(`${fixture.round}|${homeId}|${awayId}`)
       // 所有已赛结果都以全服为准，包括接管前的 AI 战绩和本账号自己的旧比分。
       // 仅保留旧版正在进行中的这一场，不让异步刷新中断比赛。
       if (mine && account.game.activeMatch?.context.isLeague && account.game.activeMatch.context.round === fixture.round) continue
@@ -795,11 +1003,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         scorers: canonical.scorers?.map((item) => ({ ...item, teamId: item.teamId === clubId ? 'player' : item.teamId })),
         assisters: canonical.assisters?.map((item) => ({ ...item, teamId: item.teamId === clubId ? 'player' : item.teamId })),
       }
-      if (JSON.stringify(next) === JSON.stringify(fixture)) continue
+      if (deepEqual(next, fixture)) continue
       Object.assign(fixture, next)
       changed = true
     }
-    if (!account.game.activeMatch?.context.isLeague && season.round !== division.round) { season.round = division.round; changed = true }
+    if (!hasLegacyLeague && season.round !== division.round) { season.round = division.round; changed = true }
     if (season.gameDayMs !== division.gameDayMs) { season.gameDayMs = division.gameDayMs; changed = true }
     if (season.kickoffSchedule !== division.kickoffSchedule) { season.kickoffSchedule = division.kickoffSchedule; changed = true }
     if (changed) {
@@ -811,27 +1019,54 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const local = account.game.world?.divisions.find((item) => item.divisionId === season.divisionId)
       if (local) { local.fixtures = season.fixtures; local.table = season.table }
     }
+    if (!hasLegacyLeague) {
+      sync.fixturesVer = sharedWorldVersion
+      sync.worldSeason = sharedWorld.world.seasonIndex
+    }
     return changed
   }
 
+  const AI_TEAM_COMPARE_IGNORE = new Set(['condition', 'energy', 'recoveryAt', 'energyAt'])
   function pullSharedTeams(account: Account): boolean {
+    const sync = syncOf(account)
+    if (sync.teamsVer === sharedTeamsPublicVersion && sync.worldSeason === sharedWorld.world.seasonIndex) {
+      return false
+    }
     const ids = account.game.season.clubIds ?? []
     const teams = ids.filter((id) => id !== 'player').map((id) => sharedWorld.teams?.[id]).filter((team): team is AITeam => !!team)
     if (teams.length !== ids.length - 1) return false
     let changed = false
+    const localClubs = new Map(account.game.world?.clubs.map((club) => [club.id, club]) ?? [])
+    const sharedClubs = new Map(sharedWorld.world.clubs.map((club) => [club.id, club]))
     for (const team of teams) {
-      const local = account.game.world?.clubs.find((club) => club.id === team.id)
-      const shared = sharedWorld.world.clubs.find((club) => club.id === team.id)
-      if (local && shared && JSON.stringify(local.starPlayerIds) !== JSON.stringify(shared.starPlayerIds)) {
+      const local = localClubs.get(team.id)
+      const shared = sharedClubs.get(team.id)
+      if (local && shared && !deepEqual(local.starPlayerIds, shared.starPlayerIds)) {
         local.starPlayerIds = [...shared.starPlayerIds]
         changed = true
       }
       if (local && shared && local.name !== shared.name) { local.name = shared.name; changed = true }
     }
-    if (JSON.stringify(account.game.aiTeams) !== JSON.stringify(teams)) {
-      account.game.aiTeams = structuredClone(teams)
+    const current = account.game.aiTeams
+    let teamsChanged = current.length !== teams.length
+    if (!teamsChanged) {
+      for (let i = 0; i < teams.length; i++) {
+        if (!deepEqual(current[i], teams[i], AI_TEAM_COMPARE_IGNORE)) {
+          teamsChanged = true
+          break
+        }
+      }
+    }
+    if (teamsChanged) {
+      account.game.aiTeams = teams.map((team, index) => (
+        current[index] && deepEqual(current[index], team, AI_TEAM_COMPARE_IGNORE)
+          ? current[index]
+          : structuredClone(team)
+      ))
       changed = true
     }
+    sync.teamsVer = sharedTeamsPublicVersion
+    sync.worldSeason = sharedWorld.world.seasonIndex
     return changed
   }
 
@@ -840,28 +1075,42 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const clubId = ownedClubId(account)
     if (!clubId || !sharedWorld.teams?.[clubId] || account.game.world?.clubs.find((item) => item.id === 'player')?.squadKey !== clubId) return
     const team = sharedWorld.teams[clubId]
-    let changed = false
+    let anyChanged = false
+    let worldChanged = false
+    let teamsPublicChanged = false
+    let matchBookChanged = false
     const book = sharedWorld.matchBook!
-    const beforeChemistry = JSON.stringify(book.chemistry)
+    const beforeChemistry = fingerprintValue(book.chemistry)
     const ownPlayers = new Set(account.game.roster.map(p => p.id))
     mergeChemistryTraining(book, account.game.chemistry, ownPlayers, now(), account.game.season.gameDayMs)
     account.game.chemistry = chemistryForPlayers(book.chemistry, ownPlayers, now(), account.game.season.gameDayMs)
-    if (beforeChemistry !== JSON.stringify(book.chemistry)) changed = true
-    if (JSON.stringify(team.players) !== JSON.stringify(account.game.roster) || JSON.stringify(team.lineup) !== JSON.stringify(account.game.lineup) || team.name !== account.game.clubName) {
+    if (beforeChemistry !== fingerprintValue(book.chemistry)) {
+      anyChanged = true
+      matchBookChanged = true
+    }
+    const rosterDiff = compareTeamPlayers(team.players, account.game.roster)
+    const lineupChanged = !deepEqual(team.lineup, account.game.lineup)
+    const nameChanged = team.name !== account.game.clubName
+    if (rosterDiff.anyChanged || lineupChanged || nameChanged) {
       sharedWorld.teams[clubId] = { ...team, name: account.game.clubName, players: structuredClone(account.game.roster), lineup: structuredClone(account.game.lineup) }
-      changed = true
+      anyChanged = true
+      if (rosterDiff.publicChanged || lineupChanged || nameChanged) teamsPublicChanged = true
     }
     const sharedClub = sharedWorld.world.clubs.find((item) => item.id === clubId)
+    let clubNameChanged = false
     if (sharedClub) {
-      if (sharedClub.name !== account.game.clubName) { sharedClub.name = account.game.clubName; changed = true }
+      if (sharedClub.name !== account.game.clubName) { sharedClub.name = account.game.clubName; anyChanged = true; worldChanged = true; clubNameChanged = true }
       const stars = account.game.roster.filter((player) => player.starKey)
-      if (JSON.stringify(sharedClub.starPlayerIds) !== JSON.stringify(stars.map((player) => player.id))) {
-        sharedClub.starPlayerIds = stars.map((player) => player.id)
-        changed = true
+      const starIds = stars.map((player) => player.id)
+      if (!deepEqual(sharedClub.starPlayerIds, starIds)) {
+        sharedClub.starPlayerIds = starIds
+        anyChanged = true
+        worldChanged = true
       }
       for (const player of stars) if (sharedWorld.world.starAges[player.id] !== (player.age ?? 24)) {
         sharedWorld.world.starAges[player.id] = player.age ?? 24
-        changed = true
+        anyChanged = true
+        worldChanged = true
       }
     }
     const division = sharedWorld.world.divisions.find((item) => item.divisionId === account.game.season.divisionId && item.index === account.game.season.index)
@@ -881,15 +1130,19 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         canonical.reportedBy = account.id
         fixturesChanged = true
       }
-      if (fixturesChanged || changed) {
+      if (fixturesChanged || clubNameChanged) {
         const names = new Map(sharedWorld.world.clubs.map((club) => [club.id, club.name]))
         division.table = computeWorldTable(division.clubIds ?? [], division.fixtures, names)
         division.finished = division.fixtures.every((fixture) => fixture.played)
         division.champion = division.finished ? division.table[0]?.teamId ?? null : null
-        changed = true
+        anyChanged = true
+        worldChanged = true
       }
     }
-    if (changed) persistWorld()
+    if (anyChanged) {
+      const conditionOnly = !worldChanged && !teamsPublicChanged && !matchBookChanged
+      persistWorld({ world: worldChanged, teams: teamsPublicChanged, matchBook: matchBookChanged, lowPriority: conditionOnly })
+    }
   }
 
   function publicFacilities(economy: AIClubState['economy'] | undefined) {
@@ -926,11 +1179,27 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (removedPreparation) persistAccount(account)
   }
 
+  function enqueueClientTask(client: EventClient, task: () => Promise<void> | void): void {
+    client.queue = client.queue
+      .then(() => {
+        if (client.closed || client.sink.isClosed()) return
+        return task()
+      })
+      .catch(() => {})
+  }
+
+  function sendClientRaw(client: EventClient, text: string): void {
+    enqueueClientTask(client, () => {
+      if (!client.closed && !client.sink.isClosed()) client.sink.writeRaw(text)
+    })
+  }
+
   /** 全服广播用的竞拍信息：不含账号 ID 以外的隐私，也不带完整球员池，池子变了客户端按 version 重新拉。 */
   const marketPayload = () => ({ type: 'market', auctions: market.auctions, log: market.log, version: market.version, serverTime: now() })
   function broadcastMarket(): void {
+    if (clients.size === 0) return
     const message = `data: ${JSON.stringify(marketPayload())}\n\n`
-    for (const group of clients.values()) for (const res of group) res.write(message)
+    for (const group of clients.values()) for (const client of group) sendClientRaw(client, message)
   }
 
   const onSomeRoster = (playerId: string, except?: Account) =>
@@ -969,22 +1238,36 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
    * 全服自由市场每个游戏日补到 200 人：先算当天挂牌的球星和留在市场上的球员，不足的用当天生成的随机球员补；
    * 前几天没人要的随机球员销毁（正在竞拍的等竞拍结束）。每个游戏日只做一次。
    */
+  function collectScoutKeptIds(t: number): Set<string> {
+    const kept = new Set<string>()
+    for (const account of db.accounts) {
+      const reports = account.game?.scoutReports
+      if (!reports?.length) continue
+      for (const report of reports) {
+        if (report.source === 'market' && scoutKeepsOnMarket(account.game, report.playerId, t)) kept.add(report.playerId)
+      }
+    }
+    return kept
+  }
+
   function sharedScoutKeeps(playerId: string, t: number): boolean {
     return db.accounts.some(account => account.game && scoutKeepsOnMarket(account.game, playerId, t))
   }
 
-  function sharedAvailable(player: Player, t: number): boolean {
+  function sharedAvailable(player: Player, t: number, keptIds?: ReadonlySet<string>): boolean {
     const anchor = { world: sharedWorld.world, createdAt: sharedWorld.startedAt }
-    const kept = sharedScoutKeeps(player.id, t)
+    const kept = keptIds ? keptIds.has(player.id) : sharedScoutKeeps(player.id, t)
     return (player.marketDay === undefined || player.marketDay >= marketDayOf(anchor, t) || kept) &&
       (kept || isOnMarketToday(anchor, player, t))
   }
 
   function refreshSharedFreeMarket(): void {
     const anchor = { world: sharedWorld.world, createdAt: sharedWorld.startedAt }
-    const day = marketDayOf(anchor, now())
     const t = now()
-    const busy = (id: string) => market.auctions.some((auction) => auction.playerId === id) || sharedScoutKeeps(id, t)
+    const day = marketDayOf(anchor, t)
+    const keptIds = collectScoutKeptIds(t)
+    const auctionIds = new Set(market.auctions.map((auction) => auction.playerId))
+    const busy = (id: string) => auctionIds.has(id) || keptIds.has(id)
     if (sharedWorld.freeMarketDay === day) {
       const pool = market.pool.filter(player => player.marketDay === undefined || player.marketDay >= day || busy(player.id))
       if (pool.length !== market.pool.length) {
@@ -1002,13 +1285,15 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       market.version += 1
       persistMarket()
       broadcastMarket()
-    } else persistWorld()
+    } else persistWorld({ world: false, teams: false, matchBook: false })
   }
 
   let visibleMarketIds: string | undefined
   function syncMarketVisibility(): void {
     const t = now()
-    const ids = market.pool.filter(p => market.auctions.some(a => a.playerId === p.id) || sharedAvailable(p, t)).map(p => p.id).sort().join('\n')
+    const keptIds = collectScoutKeptIds(t)
+    const auctionIds = new Set(market.auctions.map((auction) => auction.playerId))
+    const ids = market.pool.filter(p => auctionIds.has(p.id) || sharedAvailable(p, t, keptIds)).map(p => p.id).sort().join('\n')
     if (visibleMarketIds !== undefined && visibleMarketIds !== ids) {
       market.version++
       persistMarket()
@@ -1023,8 +1308,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (!market.auctions.some((auction) => auction.endsAt <= now())) return
     const results = settleAuctions(market, (id) => db.accounts.find((account) => account.id === id)?.game, now(), aiBidder)
     if (!results.length) return
+    let aiWon = false
     for (const { winnerId } of results) {
-      if (winnerId && aiClubIdOf(winnerId)) continue
+      if (winnerId && aiClubIdOf(winnerId)) { aiWon = true; continue }
       const winner = winnerId ? db.accounts.find((account) => account.id === winnerId) : undefined
       if (!winner) continue
       publishClub(winner)
@@ -1034,6 +1320,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       persistAccount(winner)
       broadcast(winner)
     }
+    if (aiWon) sharedTeamsPublicVersion++
     persistMarket()
     broadcastMarket()
   }
@@ -1093,28 +1380,29 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   }
 
   const publicAccount = (account: Account) => ({ id: account.id, username: account.username })
-  /** 世界页 / 球队详情看到的全服快照；手动界面和 Agent 的 get_world 共用。 */
-  function worldSnapshot(account?: Account) {
+  function publicWorldClub(club: WorldClub, includeRoster: boolean) {
+    const owner = db.accounts.find((item) => item.id === sharedWorld.owners[club.id])
+    const team = sharedWorld.teams?.[club.id]
+    const validOwner = owner?.game.world?.clubs.find((item) => item.id === 'player')?.squadKey === club.id
+    return {
+      id: club.id, name: validOwner ? owner.game.clubName : club.name, color: club.color,
+      tier: club.tier, conference: club.conference, managed: !!owner, aiTakeover: !!owner && isAccountAITakeover(owner),
+      formationId: validOwner ? owner.game.lineup.formationId : team?.formationId ?? club.formationId,
+      players: includeRoster ? (validOwner ? owner.game.roster : team?.players ?? []).map(publicPlayer) : [],
+      ...(includeRoster ? {} : { rosterDeferred: true }),
+      // RANK and public facilities do not reveal cards or finances of managed clubs.
+      rating: validOwner ? Math.round(lineupRating(owner.game.roster, owner.game.lineup)) : team ? Math.round(lineupRating(team.players, team.lineup)) : undefined,
+      facilities: owner ? undefined : publicFacilities(sharedWorld.aiClubs?.[club.id]?.economy),
+    }
+  }
+
+  /** Summary requests return standings and club metadata without every player's attributes. */
+  function worldSnapshot(account?: Account, includeRosters = true) {
     advanceAllMatches()
     return {
       seasonIndex: sharedWorld.world.seasonIndex,
       ownClubId: account ? ownedClubId(account) ?? null : null,
-      clubs: sharedWorld.world.clubs.map((club) => {
-        const owner = db.accounts.find((item) => item.id === sharedWorld.owners[club.id])
-        const team = sharedWorld.teams?.[club.id]
-        const validOwner = owner?.game.world?.clubs.find((item) => item.id === 'player')?.squadKey === club.id
-        const aiTakeover = !!owner && isAccountAITakeover(owner)
-        return {
-          id: club.id, name: validOwner ? owner.game.clubName : club.name, color: club.color,
-          tier: club.tier, conference: club.conference, managed: !!owner, aiTakeover,
-          formationId: validOwner ? owner.game.lineup.formationId : team?.formationId ?? club.formationId,
-          players: (validOwner ? owner.game.roster : team?.players ?? []).map(publicPlayer),
-          // RANK：首发 CA 之和。玩家管理的球队只按身上装备的属性算，不暴露库存里的卡。
-          rating: validOwner ? Math.round(lineupRating(owner.game.roster, owner.game.lineup)) : team ? Math.round(lineupRating(team.players, team.lineup)) : undefined,
-          // 电脑球队的设施公开；玩家管理的球队不公开经营数据。
-          facilities: owner ? undefined : publicFacilities(sharedWorld.aiClubs?.[club.id]?.economy),
-        }
-      }),
+      clubs: sharedWorld.world.clubs.map(club => publicWorldClub(club, includeRosters)),
       divisions: sharedWorld.world.divisions.map((division) => ({ id: division.divisionId, tier: division.tier, conference: division.conference, round: division.round, table: division.table, fixtures: division.fixtures.map(({ reportedBy: _reporter, ...fixture }) => fixture) })),
       ...(sharedWorld.world.seasonCups ? { seasonCups: structuredClone(sharedWorld.world.seasonCups) } : {}),
     }
@@ -1143,14 +1431,16 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   })
 
   function broadcastChatSnapshot(): void {
+    if (clients.size === 0) return
     const payload = `data: ${JSON.stringify(chatSnapshotPayload())}\n\n`
-    for (const group of clients.values()) for (const res of group) res.write(payload)
+    for (const group of clients.values()) for (const client of group) sendClientRaw(client, payload)
   }
 
   function broadcastChatAppend(message: ChatMessage): void {
+    if (clients.size === 0) return
     const event: ChatSseMessage = { type: 'chat', mode: 'append', message, serverTime: now() }
     const payload = `data: ${JSON.stringify(event)}\n\n`
-    for (const group of clients.values()) for (const res of group) res.write(payload)
+    for (const group of clients.values()) for (const client of group) sendClientRaw(client, payload)
   }
 
   /** 发送全服聊天消息：校验字数与冷却，仅保留最新 50 条并实时推送。 */
@@ -1309,6 +1599,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       staged.aiTeams = previousTeams.map(team => team.id === teamId ? structuredClone(updated) : team)
       staged.appearances = account.game.appearances
       account.game = staged
+      accountSync.delete(account)
       sharedWorld.teams![teamId] = structuredClone(updated)
       const worldClub = sharedWorld.world.clubs.find(club => club.id === teamId)
       if (worldClub) worldClub.starPlayerIds = [...updated.starPlayerIds]
@@ -1427,16 +1718,51 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     return undefined
   }
 
-  /** 对手的实时体能只存在服务器；账号存档的公开副本不能带回这些字段。 */
-  function publicGame(account: Account): GameState {
-    const game = structuredClone(account.game)
+  /** 对手的实时体能只存在服务器；账号存档的公开副本不能带回这些字段。零全量克隆投影，slim 模式进一步瘦身。 */
+  type ProjectOptions = { lazyCup?: boolean; slim?: boolean }
+  const projectedAiTeamCache = new WeakMap<AITeam, { epoch: string; full?: AITeam; slim?: AITeam }>()
+  function projectAiTeamCached(team: AITeam, slim: boolean, epoch: string): AITeam {
+    let entry = projectedAiTeamCache.get(team)
+    if (!entry || entry.epoch !== epoch) {
+      entry = { epoch }
+      projectedAiTeamCache.set(team, entry)
+    }
+    if (slim) return (entry.slim ??= projectAiTeam(team, true))
+    return (entry.full ??= projectAiTeam(team, false))
+  }
+
+  function projectGame(account: Account, options: boolean | ProjectOptions = false): GameState {
+    const lazyCup = typeof options === 'boolean' ? options : options.lazyCup === true
+    const slim = typeof options === 'boolean' ? false : options.slim === true
+    const original = account.game
+    // Keep the pool in an ongoing legacy cup match so reload can finish its simulation.
+    const match = original.activeMatch
+    const legacyMatch = match?.context.mode === 'cup' && !match.context.cupId?.startsWith('season-')
+    const pve = lazyCup && original.pve?.cupSeason
+      ? { ...original.pve, cupSeason: legacyMatch ? original.pve.cupSeason : undefined, cupSeasonDeferred: true as const }
+      : original.pve
+    const game: GameState = { ...original, ...(pve !== original.pve ? { pve } : {}) }
+    if (lazyCup) delete game.reserveStars
     delete (game as GameState & { recycledCardIds?: string[] }).recycledCardIds
     // Pending reports are deliberately incomplete on the wire, although GameState's
     // offline type describes the complete, server-side report.
-    game.scoutReports = visibleScoutReports(account.game, now()) as GameState['scoutReports']
-    for (const team of game.aiTeams) for (const player of team.players) {
-      delete (player as Partial<Player>).condition
-      delete (player as Partial<Player>).energy
+    game.scoutReports = visibleScoutReports(original, now()) as GameState['scoutReports']
+    const cacheEpoch = `${original.namesVersion ?? 0}:${original.traitsVersion ?? 0}:${original.attrsVersion ?? 0}:${sharedTeamsPublicVersion}`
+    game.aiTeams = original.aiTeams.map((team) => projectAiTeamCached(team, slim, cacheEpoch))
+    if (slim) {
+      game.matchHistory = original.matchHistory.map(slimMatchRecord)
+      game.challengeHistory = original.challengeHistory.map(slimMatchRecord)
+      if (original.world) {
+        const ownDivId = original.season.divisionId ?? original.world.playerDivisionId
+        game.world = {
+          ...original.world,
+          divisions: original.world.divisions.map((division) =>
+            division.divisionId === ownDivId
+              ? { ...division, fixtures: [], fixturesFromSeason: true as const }
+              : division,
+          ),
+        }
+      }
     }
     // 直播回放只放在下发的副本里，不写回账号存档。
     if (!game.activeMatch) {
@@ -1446,12 +1772,28 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     return game
   }
 
+  function fastSectionTokens(account: Account, slim: boolean): { worldRef?: object; worldToken?: string } {
+    const sync = syncOf(account)
+    if (account.game.world && account.game.shared && !account.game.activeMatch?.context.isLeague && sync.worldVer === sharedWorldVersion && sync.fixturesVer === sharedWorldVersion && sync.marketVer === market.version) {
+      return {
+        worldRef: account.game.world,
+        worldToken: `w:${sharedWorldVersion}:${market.version}:${account.game.season.round}:${account.game.season.finished ? 1 : 0}:${account.game.clubName}:${slim ? 1 : 0}:${account.game.world.seasonIndex}`,
+      }
+    }
+    return {}
+  }
+
   /** 开球那一刻把直播推给在线的教练（存档本身没有变化，不会触发普通的状态推送）。 */
   const liveAnnounced = new Set<string>()
   function announceLiveMatches(): void {
     const t = now()
+    if (!inLiveWindow(t)) {
+      if (memoryMonitor.isUnderPressure() && liveStates.size > 0) liveStates.clear()
+      return
+    }
     for (const key of liveAnnounced) if (Number(key.split('@')[1]) + 60 * 60_000 <= t) liveAnnounced.delete(key)
     for (const account of db.accounts) {
+      if (!clients.has(account.id)) continue
       const live = liveMatchFor(account)
       if (!live) continue
       const key = `${account.id}@${live.startedAt}`
@@ -1460,21 +1802,91 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       broadcast(account)
     }
   }
+
   // serverTime：客户端在应用存档（含直播回放）之前先对准服务器时钟，本机时钟不准也不会把回放放到错的时刻。
-  const statePayload = (account: Account, source?: string) => ({ type: 'state', revision: account.revision, clubCoaches: clubCoaches(), serverTime: now(), game: publicGame(account), ...(source ? { source } : {}) })
-
-  function sendState(res: ServerResponse, account: Account, source?: string): void {
-    res.write(`data: ${JSON.stringify(statePayload(account, source))}\n\n`)
-  }
-
   function broadcast(account: Account, source?: string): void {
     if (pendingAccountCommits.has(account.id)) return
     const group = clients.get(account.id)
-    if (!group) return
-    for (const res of group) {
-      // 保存方本地已经是最新状态；回推 2–3MB 的完整存档只会让页面卡住。
-      if (source && eventClientIds.get(res) === source) continue
-      sendState(res, account, source)
+    if (!group || group.size === 0) return
+    for (const client of group) {
+      if (client.closed || client.sink.isClosed()) continue
+      // 保存方本地已经是最新状态；回推完整存档只会让页面卡住，但需要同步其增量基线以便下次差分。
+      if (source && client.id === source) {
+        if (client.delta) {
+          const projected = projectGame(account, { lazyCup: client.lazyCup, slim: client.slim })
+          client.lastDigest = digestGameSections(projected, fastSectionTokens(account, client.slim))
+          client.lastRevision = account.revision
+        }
+        continue
+      }
+      if (client.pendingBroadcast) {
+        client.pendingBroadcast = { source }
+        continue
+      }
+      client.pendingBroadcast = { source }
+      enqueueClientTask(client, async () => {
+        const pending = client.pendingBroadcast
+        client.pendingBroadcast = null
+        if (!pending || client.closed || client.sink.isClosed()) return
+        const projected = projectGame(account, { lazyCup: client.lazyCup, slim: client.slim })
+        const coaches = clubCoaches()
+        const serverTime = now()
+        const rev = account.revision
+        const sourceField = pending.source ? { source: pending.source } : {}
+
+        if (client.delta && client.lastDigest) {
+          const nextDigest = digestGameSections(projected, fastSectionTokens(account, client.slim))
+          const delta = buildGameDelta(client.lastDigest, projected, nextDigest)
+          const baseRevision = client.lastRevision
+          if (!delta.changed) {
+            client.lastRevision = rev
+            client.lastDigest = nextDigest
+            client.sink.writeRaw(`id: ${rev}\ndata: ${JSON.stringify({ type: 'state-sync', revision: rev, clubCoaches: coaches, serverTime, ...sourceField })}\n\n`)
+            return
+          }
+          if (delta.heavy && memoryMonitor.isUnderPressure()) {
+            client.lastDigest = null
+            client.lastRevision = rev
+            client.sink.writeRaw(`id: ${rev}\ndata: ${JSON.stringify({ type: 'state-stale', revision: rev, clubCoaches: coaches, serverTime, ...sourceField })}\n\n`)
+            return
+          }
+          client.lastRevision = rev
+          client.lastDigest = nextDigest
+          await client.sink.writeEventAsync(
+            rev,
+            {
+              type: 'state-patch',
+              baseRevision,
+              revision: rev,
+              clubCoaches: coaches,
+              serverTime,
+              patch: delta.patch,
+              ...(delta.prepend ? { prepend: delta.prepend } : {}),
+              ...(delta.remove ? { remove: delta.remove } : {}),
+              ...sourceField,
+            },
+            memoryMonitor.isUnderPressure,
+          )
+          return
+        }
+
+        if (client.delta && memoryMonitor.isUnderPressure()) {
+          client.lastDigest = null
+          client.lastRevision = rev
+          client.sink.writeRaw(`id: ${rev}\ndata: ${JSON.stringify({ type: 'state-stale', revision: rev, clubCoaches: coaches, serverTime, ...sourceField })}\n\n`)
+          return
+        }
+
+        if (client.delta) {
+          client.lastDigest = digestGameSections(projected, fastSectionTokens(account, client.slim))
+          client.lastRevision = rev
+        }
+        await client.sink.writeEventAsync(
+          rev,
+          { type: 'state', revision: rev, clubCoaches: coaches, serverTime, game: projected, ...sourceField },
+          memoryMonitor.isUnderPressure,
+        )
+      })
     }
   }
 
@@ -1546,17 +1958,20 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   function advanceAccount(account: Account): boolean {
     try {
       if (!account.game) return false
+      const sync = syncOf(account)
+      const needsMigration = sync.migratedGame !== account.game
       // 7 人制存档迁移到 11 人制（只在还有旧阵型时动手）。
-      const elevenUpgraded = upgradeElevenASide(account.game)
+      const elevenUpgraded = needsMigration ? upgradeElevenASide(account.game) : false
       // 联机账号的世界、电脑球队和自由市场由服务器维护：打上标记，本地的单机逻辑就不会另算一份。
       const markedShared = !account.game.shared
       if (markedShared) account.game.shared = true
-      const signaturesAdded = upgradeLegacySignatures(account.game)
+      const signaturesAdded = needsMigration ? upgradeLegacySignatures(account.game) : false
       const cardsAdded = ensureCards(account.game)
       const pveAdded = ensurePve(account.game, cupOpeningTeams())
-      const namesUpgraded = upgradeNames(account.game)
-      const traitsUpgraded = upgradeStarTraits(account.game)
-      const attrsUpgraded = upgradeBurstAttr(account.game)
+      const namesUpgraded = needsMigration ? upgradeNames(account.game) : false
+      const traitsUpgraded = needsMigration ? upgradeStarTraits(account.game) : false
+      const attrsUpgraded = needsMigration ? upgradeBurstAttr(account.game) : false
+      if (needsMigration) sync.migratedGame = account.game
       const sharedTeamsChanged = pullSharedTeams(account)
       const sharedFixturesChanged = pullSharedFixtures(account)
       const sharedWorldChanged = pullSharedWorld(account)
@@ -1624,14 +2039,17 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (sharedWorld.owners[clubId]) continue
       for (const player of team.players) if (settleCondition(player, now(), sharedGameDayMs(), book.conditionAt[player.id])) changed = true
     }
-    if (changed) persistWorld()
+    // 无主 AI 的隐藏体能变化可按时钟确定性重算，低优先级合批落盘，避免每 30 秒重写整份 19 MB world.json。
+    if (changed) persistWorld({ world: false, teams: false, matchBook: false, lowPriority: true })
   }
 
   /** 同步全服公开赛果；仿真只在后台队列子进程中运行，和是否有人在线无关。 */
   function advanceAllMatches(): void {
-    advanceSharedWorld()
-    settleSharedConditions()
-    for (const account of db.accounts) advanceAccount(account)
+    withDeferredWorldPersist(() => {
+      advanceSharedWorld()
+      settleSharedConditions()
+      for (const account of db.accounts) advanceAccount(account)
+    })
   }
 
   /** 最近一次全服换季的时间，用来让“开始下一赛季”请求在自动换季后保持幂等。 */
@@ -1700,6 +2118,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       for (const { account, game } of drafts) {
         ensurePve(game, cupOpeningTeams())
         account.game = game
+        accountSync.delete(account)
         account.appliedMatchIds = []
         account.revision++
         account.lastUserRevision = account.revision
@@ -1724,7 +2143,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       sharedWorld.matchBook!.cupDiscipline = {}
       // 电脑球队也过了一个赛季：清掉已经并进名单的签入，账本和设施继续滚。
       for (const state of Object.values(sharedWorld.aiClubs ?? {})) state.signings = []
-      persistWorld()
+      persistWorld({ world: true, teams: true, matchBook: true, immediate: true })
       for (const { account } of drafts) {
         persistAccount(account)
         broadcast(account)
@@ -1944,11 +2363,18 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   }
 
   async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+    // Older clients continue to receive the full GameState.
+    const publicGame = (account: Account) => projectGame(account, {
+      lazyCup: req.headers['x-fm-lazy-cup'] === '1',
+      slim: req.headers['x-fm-slim'] === '1',
+    })
+    const sendJson = (status: number, value: unknown, stream = false) =>
+      sendCompressedJson(req, res, status, value, { stream, isUnderPressure: memoryMonitor.isUnderPressure })
     advanceSharedWorld()
     autoRollSharedSeason()
     autoPlayoff()
     if (url.pathname === '/api/health') {
-      json(res, 200, { ok: true, accounts: db.accounts.length, version: GAME_VERSION, worldSeasonStartedAt: sharedWorld.startedAt })
+      json(res, 200, { ok: true, accounts: db.accounts.length, version: GAME_VERSION, worldSeasonStartedAt: sharedWorld.startedAt, memory: memoryMonitor.snapshot() })
       return
     }
 
@@ -1958,7 +2384,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         const owner = db.accounts.find((item) => item.id === sharedWorld.owners[club.id])
         return owner && isAccountAITakeover(owner) ? [club.id] : []
       })
-      json(res, 200, {
+      await sendJson(200, {
         seed: sharedWorld.seed,
         startedAt: sharedWorld.startedAt,
         owners: sharedWorld.owners,
@@ -1975,9 +2401,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     /* 自由市场全服可见，不用登录也能看。 */
     if (url.pathname === '/api/market' && req.method === 'GET') {
       settleDueAuctions()
-      const anchor = { world: sharedWorld.world, createdAt: sharedWorld.world.calendarStartAt ?? now() }
-      const onAuction = (id: string) => market.auctions.some((item) => item.playerId === id)
-      json(res, 200, { ...marketPayload(), pool: market.pool.filter((player) => onAuction(player.id) || sharedAvailable(player, now())) })
+      const t = now()
+      const keptIds = collectScoutKeptIds(t)
+      const onAuction = new Set(market.auctions.map((item) => item.playerId))
+      await sendJson(200, { ...marketPayload(), pool: market.pool.filter((player) => onAuction.has(player.id) || sharedAvailable(player, t, keptIds)) }, true)
       return
     }
 
@@ -1998,7 +2425,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       advanceAllMatches()
       ensureFreeD2Club()
       const clubs = worldSnapshot().clubs.filter((club) => club.tier === 'division2' && !club.managed)
-      json(res, 200, { clubs })
+      await sendJson(200, { clubs }, true)
       return
     }
 
@@ -2038,7 +2465,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (!club) return json(res, 503, { error: '服务器席位已满：新赛区也没能开出空位，请稍后再试' })
       const accountId = crypto.randomUUID()
       sharedWorld.owners[club.id] = accountId
-      persistWorld()
+      persistWorld({ world: false, teams: false, matchBook: false, immediate: true })
       const account: Account = {
         id: accountId,
         username,
@@ -2073,7 +2500,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       persistAccount(account)
       advanceAccount(account)
       await accountStore.flush()
-      json(res, 201, { token, user: publicAccount(account), revision: account.revision, clubCoaches: clubCoaches(), serverTime: now(), game: publicGame(account) })
+      await sendJson(201, { token, user: publicAccount(account), revision: account.revision, clubCoaches: clubCoaches(), serverTime: now(), game: publicGame(account) }, true)
       return
     }
 
@@ -2088,7 +2515,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const token = createSession(account.id)
       advanceAccount(account)
       await accountStore.flush()
-      json(res, 200, { token, user: publicAccount(account), revision: account.revision, clubCoaches: clubCoaches(), serverTime: now(), game: publicGame(account) })
+      await sendJson(200, { token, user: publicAccount(account), revision: account.revision, clubCoaches: clubCoaches(), serverTime: now(), game: publicGame(account) }, true)
       return
     }
 
@@ -2135,7 +2562,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (url.pathname === '/api/agent/state' && req.method === 'GET') {
         advanceAccount(agentAccount)
         settleDueAuctions()
-        json(res, 200, { revision: agentAccount.revision, game: agentState() })
+        await sendJson(200, { revision: agentAccount.revision, game: agentState() }, true)
         return
       }
       if (url.pathname === '/api/agent/action' && req.method === 'POST') {
@@ -2149,18 +2576,20 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
             : now() - lastRollAt < 15_000
               ? { ok: true, alreadyRolled: true }
               : { ok: false, error: '本赛季尚未结束' }
-          json(res, outcome.ok ? 200 : 400, { ...outcome, revision: agentAccount.revision, game: agentState() })
+          await sendJson(outcome.ok ? 200 : 400, { ...outcome, revision: agentAccount.revision, game: agentState() }, true)
           return
         }
         if (body.action === 'start_league' || body.action === 'simulate_round') return json(res, 400, { error: '联赛由服务器提前排队计算、开球 10 分钟后统一公布，不能手动开赛或模拟' })
         if (['auto_lineup', 'set_lineup', 'set_auto_subs'].includes(String(body.action)) && officialLineupLocked(agentAccount, now())) {
-          return json(res, 400, { ok: false, error: '阵容已锁定：开赛前 30 分钟内不能修改，比赛由服务器自动结算', revision: agentAccount.revision, game: agentState() })
+          await sendJson(400, { ok: false, error: '阵容已锁定：开赛前 30 分钟内不能修改，比赛由服务器自动结算', revision: agentAccount.revision, game: agentState() }, true)
+          return
         }
         if (body.action === 'youth_action') {
           const game = structuredClone(agentAccount.game)
           const outcome = applyYouthAction(game, body.youth, now(), officialLineupLocked(agentAccount, now()) || !!liveMatchFor(agentAccount))
           if (outcome.ok) {
             agentAccount.game = game
+            accountSync.delete(agentAccount)
             agentAccount.revision++
             agentAccount.lastUserRevision = agentAccount.revision
             agentAccount.updatedAt = now()
@@ -2170,36 +2599,37 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
             publishClub(agentAccount)
             broadcast(agentAccount)
           }
-          return json(res, outcome.ok ? 200 : 400, { ...outcome, revision: agentAccount.revision, game: agentState() })
+          await sendJson(outcome.ok ? 200 : 400, { ...outcome, revision: agentAccount.revision, game: agentState() }, true)
+          return
         }
         if (body.action === 'buy_free_agent') return json(res, 400, { error: '联机时自由球员要竞拍，请用 bid_free_agent 出价' })
         if (body.action === 'bid_free_agent') {
           const bid = bidFor(agentAccount, body.playerId, body.amount)
-          json(res, bid.ok ? 200 : 400, { ...bid, revision: agentAccount.revision, game: agentState() })
+          await sendJson(bid.ok ? 200 : 400, { ...bid, revision: agentAccount.revision, game: agentState() }, true)
           return
         }
         /** 全服信息：世界页、球队详情里能看到的所有球队名单、积分榜与赛程。 */
         if (body.action === 'get_world') {
-          json(res, 200, { ok: true, result: worldSnapshot(agentAccount), revision: agentAccount.revision, game: agentState() })
+          await sendJson(200, { ok: true, result: worldSnapshot(agentAccount), revision: agentAccount.revision, game: agentState() }, true)
           return
         }
         if (body.action === 'get_chat') {
-          json(res, 200, { ok: true, result: { messages: chatMessages }, revision: agentAccount.revision, game: agentState() })
+          await sendJson(200, { ok: true, result: { messages: chatMessages }, revision: agentAccount.revision, game: agentState() }, true)
           return
         }
         if (body.action === 'send_chat') {
           const sent = postChat(agentAccount, body.text)
-          json(res, sent.ok ? 200 : sent.status, { ...sent, ...(sent.ok ? { result: { message: sent.message, messages: chatMessages } } : {}), revision: agentAccount.revision, game: agentState() })
+          await sendJson(sent.ok ? 200 : sent.status, { ...sent, ...(sent.ok ? { result: { message: sent.message, messages: chatMessages } } : {}), revision: agentAccount.revision, game: agentState() }, true)
           return
         }
         if (body.action === 'sign_club_player' || body.action === 'respond_offer') {
           const reply = body.action === 'sign_club_player' ? buyFromAIClub(agentAccount, body) : answerOffer(agentAccount, body)
-          json(res, reply.status, { ...reply.payload, result: reply.payload, revision: agentAccount.revision, game: agentState() })
+          await sendJson(reply.status, { ...reply.payload, result: reply.payload, revision: agentAccount.revision, game: agentState() }, true)
           return
         }
         if (body.action === 'rename_club') {
           const renamed = renameClub(agentAccount, body.name)
-          json(res, renamed.ok ? 200 : renamed.status, { ...renamed, revision: agentAccount.revision, game: agentState() })
+          await sendJson(renamed.ok ? 200 : renamed.status, { ...renamed, revision: agentAccount.revision, game: agentState() }, true)
           return
         }
         if (body.action === 'choose_club') {
@@ -2226,7 +2656,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
           broadcast(agentAccount)
         }
         absorbInto(agentAccount)
-        json(res, outcome.ok ? 200 : 400, { ...outcome, revision: agentAccount.revision, game: agentState() })
+        await sendJson(outcome.ok ? 200 : 400, { ...outcome, revision: agentAccount.revision, game: agentState() }, true)
         return
       }
       json(res, 404, { error: 'Agent 接口不存在' })
@@ -2249,7 +2679,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         : now() - lastRollAt < 15_000
           ? { ok: true, alreadyRolled: true }
           : { ok: false, error: '本赛季尚未结束' }
-      json(res, outcome.ok ? 200 : 400, { ...outcome, revision: account.revision, game: publicGame(account) })
+      await sendJson(outcome.ok ? 200 : 400, { ...outcome, revision: account.revision, game: publicGame(account) }, true)
       return
     }
 
@@ -2259,7 +2689,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const body = await readJsonBody(req)
       const found = friendlyTeamFor(account, String(body.clubId ?? ''))
       if ('error' in found) return json(res, found.status, { error: found.error })
-      json(res, 200, { team: found.team })
+      await sendJson(200, { team: found.team })
       return
     }
 
@@ -2270,20 +2700,21 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
     if (url.pathname === '/api/transfer/ai-offers' && req.method === 'GET') {
       advanceAccount(account)
-      return json(res, 200, { offers: transferOffers(account) })
+      await sendJson(200, { offers: transferOffers(account) }, true)
+      return
     }
 
     if (url.pathname === '/api/transfer/ai-buy' && req.method === 'POST') {
       advanceAccount(account)
       const reply = buyFromAIClub(account, await readJsonBody(req))
-      json(res, reply.status, { ...reply.payload, revision: account.revision, game: publicGame(account) })
+      await sendJson(reply.status, { ...reply.payload, revision: account.revision, game: publicGame(account) }, true)
       return
     }
 
     if (url.pathname === '/api/transfer/offer' && req.method === 'POST') {
       advanceAccount(account)
       const reply = answerOffer(account, await readJsonBody(req))
-      json(res, reply.status, { ...reply.payload, revision: account.revision, game: publicGame(account) })
+      await sendJson(reply.status, { ...reply.payload, revision: account.revision, game: publicGame(account) }, true)
       return
     }
 
@@ -2292,12 +2723,21 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const body = await readJsonBody(req)
       const renamed = renameClub(account, body.name)
       if (!renamed.ok) return json(res, renamed.status, { error: renamed.error })
-      json(res, 200, { revision: account.revision, game: publicGame(account) })
+      await sendJson(200, { revision: account.revision, game: publicGame(account) }, true)
       return
     }
 
     if (url.pathname === '/api/world/teams' && req.method === 'GET') {
-      json(res, 200, worldSnapshot(account))
+      await sendJson(200, worldSnapshot(account, req.headers['x-fm-world-summary'] !== '1'), true)
+      return
+    }
+    if (url.pathname === '/api/world/club' && req.method === 'GET') {
+      advanceAllMatches()
+      const requested = url.searchParams.get('id')
+      const id = requested === 'player' ? ownedClubId(account) : requested
+      const club = sharedWorld.world.clubs.find(item => item.id === id)
+      if (!club) return json(res, 404, { error: '找不到这支球队' })
+      await sendJson(200, { club: publicWorldClub(club, true), seasonIndex: sharedWorld.world.seasonIndex })
       return
     }
 
@@ -2334,24 +2774,37 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (!clubId || !record?.hasReplay || !matchQueue.ready(id)) return json(res, 404, { error: '没有这场比赛的 2D 回放' })
       const { input, state } = liveStateOf(id)
       if (!state) return json(res, 404, { error: '没有这场比赛的 2D 回放' })
-      json(res, 200, { id, engineState: state, homeAway: input.home.team.id === clubId ? 'home' : 'away', durationSeconds: LOGIC_MATCH_SECONDS })
+      await sendJson(200, { id, engineState: state, homeAway: input.home.team.id === clubId ? 'home' : 'away', durationSeconds: LOGIC_MATCH_SECONDS }, true)
+      return
+    }
+
+    // 复盘明细按需加载：联机精简模式（X-FM-Slim: 1）打开某场战报时再拉完整解说/关键事件/技能统计。
+    if (url.pathname === '/api/match/record' && req.method === 'GET') {
+      const id = url.searchParams.get('id') ?? ''
+      const record = id ? [...account.game.matchHistory, ...account.game.challengeHistory].find((item) => item.id === id) : undefined
+      if (!record) return json(res, 404, { error: '找不到这场比赛战报' })
+      await sendJson(200, { record })
       return
     }
 
     if (url.pathname === '/api/scouting/reports' && req.method === 'GET') {
       const serverTime = now()
-      return json(res, 200, { reports: visibleScoutReports(account.game, serverTime), serverTime })
+      await sendJson(200, { reports: visibleScoutReports(account.game, serverTime), serverTime })
+      return
+    }
+
+    if (url.pathname === '/api/pve/cup-season' && req.method === 'GET') {
+      advanceAccount(account)
+      const cupSeason = account.game.pve?.cupSeason
+      if (!cupSeason || cupSeason.seasonIndex !== account.game.season.index || String(cupSeason.seasonIndex) !== url.searchParams.get('season')) return json(res, 409, { error: '杯赛赛季已变化，请同步后重试' })
+      await sendJson(200, { cupSeason, serverTime: now() }, true)
+      return
     }
 
     if (url.pathname === '/api/game' && req.method === 'GET') {
       advanceAccount(account)
       const snapshot = { user: publicAccount(account), game: publicGame(account), revision: account.revision, clubCoaches: clubCoaches(), serverTime: now() }
-      res.setHeader('Vary', 'Accept-Encoding')
-      if (acceptsGzip(req.headers['accept-encoding'])) {
-        const body = await gzipAsync(JSON.stringify(snapshot), { level: 1 })
-        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Encoding': 'gzip' })
-        res.end(body)
-      } else json(res, 200, snapshot)
+      await sendJson(200, snapshot, true)
       return
     }
 
@@ -2360,12 +2813,13 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
       advanceAccount(account)
       if (typeof body.reportId !== 'string' || !body.reportId || !Number.isSafeInteger(body.baseRevision)) return json(res, 400, { error: '报告或版本无效' })
-      if (body.baseRevision !== account.revision) return json(res, 409, { error: '存档已变化，请刷新报告', revision: account.revision, game: publicGame(account) })
+      if (body.baseRevision !== account.revision) { await sendJson(409, { error: '存档已变化，请刷新报告', revision: account.revision, game: publicGame(account) }, true); return }
       const game = structuredClone(account.game)
       const marketReport = game.scoutReports?.find(r => r.id === body.reportId)?.source === 'market'
       const outcome = deleteScoutReport(game, body.reportId, now())
-      if (!outcome.ok) return json(res, 400, { error: outcome.error, revision: account.revision, game: publicGame(account) })
+      if (!outcome.ok) { await sendJson(400, { error: outcome.error, revision: account.revision, game: publicGame(account) }, true); return }
       account.game = game
+      accountSync.delete(account)
       account.revision++
       account.lastUserRevision = account.revision
       account.updatedAt = now()
@@ -2374,7 +2828,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (!await confirmAccountCommit(account)) return json(res, 503, { error: '服务器保存失败，操作状态未确认，请稍后刷新存档检查' })
       broadcast(account, String(req.headers['x-fm-client'] ?? '').slice(0, 128))
       if (marketReport) syncMarketVisibility()
-      return json(res, 200, { ok: true, revision: account.revision, game: publicGame(account), serverTime: now() })
+      await sendJson(200, { ok: true, revision: account.revision, game: publicGame(account), serverTime: now() }, true)
+      return
     }
 
     if (url.pathname === '/api/scouting/start' && req.method === 'POST') {
@@ -2411,10 +2866,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       }
       const game = structuredClone(account.game)
       const outcome = startScouting(game, player, { source: source as 'club' | 'transfer' | 'market', ...(id ? { clubId: id } : {}) }, level, now())
-      if (!outcome.ok) return json(res, 400, { error: outcome.error, revision: account.revision, game: publicGame(account) })
+      if (!outcome.ok) { await sendJson(400, { error: outcome.error, revision: account.revision, game: publicGame(account) }, true); return }
       // Scope IDs to the authoritative account; world seeds and clocks can be shared.
       if (outcome.report) outcome.report.id = `scout-${account.id}-${outcome.report.id}`
       account.game = game
+      accountSync.delete(account)
       account.revision++
       account.lastUserRevision = account.revision
       account.updatedAt = now()
@@ -2424,18 +2880,20 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       broadcast(account, String(req.headers['x-fm-client'] ?? '').slice(0, 128))
       if (source === 'market') syncMarketVisibility()
       // Never return outcome.report: it contains the complete, private snapshot.
-      return json(res, 200, { ok: true, revision: account.revision, game: publicGame(account), serverTime: now() })
+      await sendJson(200, { ok: true, revision: account.revision, game: publicGame(account), serverTime: now() }, true)
+      return
     }
 
     if (url.pathname === '/api/youth/action' && req.method === 'POST') {
       const body = await readJsonBody(req)
       if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
       advanceAccount(account)
-      if (!Number.isSafeInteger(body.baseRevision) || body.baseRevision !== account.revision) return json(res, 409, { error: '青训状态已变化，请刷新后重试', revision: account.revision, game: publicGame(account) })
+      if (!Number.isSafeInteger(body.baseRevision) || body.baseRevision !== account.revision) { await sendJson(409, { error: '青训状态已变化，请刷新后重试', revision: account.revision, game: publicGame(account) }, true); return }
       const game = structuredClone(account.game)
       const outcome = applyYouthAction(game, body, now(), officialLineupLocked(account, now()) || !!liveMatchFor(account))
-      if (!outcome.ok) return json(res, 400, { error: outcome.error, revision: account.revision, game: publicGame(account) })
+      if (!outcome.ok) { await sendJson(400, { error: outcome.error, revision: account.revision, game: publicGame(account) }, true); return }
       account.game = game
+      accountSync.delete(account)
       account.revision++
       account.lastUserRevision = account.revision
       account.updatedAt = now()
@@ -2444,7 +2902,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (!await confirmAccountCommit(account)) return json(res, 503, { error: '服务器保存尚未确认，请刷新检查，勿重复操作' })
       publishClub(account)
       broadcast(account, String(req.headers['x-fm-client'] ?? '').slice(0, 128))
-      return json(res, 200, { ...outcome, revision: account.revision, game: publicGame(account), serverTime: now() })
+      await sendJson(200, { ...outcome, revision: account.revision, game: publicGame(account), serverTime: now() }, true)
+      return
     }
 
     if (['/api/cards/recycle', '/api/cards/lock', '/api/training/start'].includes(url.pathname) && req.method === 'POST') {
@@ -2458,7 +2917,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       let outcome: { ok: boolean; error?: string }
       if (url.pathname === '/api/cards/recycle') {
         if (!Array.isArray(body.cardIds) || !body.cardIds.every(id => typeof id === 'string') || !Number.isSafeInteger(body.baseRevision)) return json(res, 400, { error: '球员卡列表或预览版本无效' })
-        if (body.baseRevision !== account.revision) return json(res, 409, { error: '存档已变化，请重新预览球员卡', revision: account.revision, game: publicGame(account) })
+        if (body.baseRevision !== account.revision) { await sendJson(409, { error: '存档已变化，请重新预览球员卡', revision: account.revision, game: publicGame(account) }, true); return }
         outcome = recyclePlayerCards(game, body.cardIds as string[])
         if (outcome.ok) {
           const privateGame = game as GameState & { recycledCardIds?: string[] }
@@ -2471,8 +2930,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         if (typeof body.playerId !== 'string' || !body.playerId || !Array.isArray(body.bookKeys) || !body.bookKeys.every(key => typeof key === 'string') || typeof body.points !== 'number') return json(res, 400, { error: '培养参数无效' })
         outcome = startTrainingWithSupport(game, body.playerId, undefined, body.bookKeys as string[], body.points as number, false)
       }
-      if (!outcome.ok) return json(res, 400, { error: outcome.error, revision: account.revision, game: publicGame(account) })
+      if (!outcome.ok) { await sendJson(400, { error: outcome.error, revision: account.revision, game: publicGame(account) }, true); return }
       account.game = game
+      accountSync.delete(account)
       account.revision++
       account.lastUserRevision = account.revision
       account.updatedAt = now()
@@ -2483,21 +2943,23 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         return json(res, 503, { error: '服务器保存失败，操作状态未确认，请稍后刷新存档检查' })
       }
       broadcast(account, String(req.headers['x-fm-client'] ?? '').slice(0, 128))
-      return json(res, 200, { ...outcome, revision: account.revision, game: publicGame(account), serverTime: now() })
+      await sendJson(200, { ...outcome, revision: account.revision, game: publicGame(account), serverTime: now() }, true)
+      return
     }
 
     if (url.pathname === '/api/peak/start' && req.method === 'POST') {
       const body = await readJsonBody(req)
       advanceAccount(account)
-      if (!account.game.activeMatch && liveMatchFor(account)) return json(res, 400, { error: '联赛直播期间不能开始巅峰挑战', revision: account.revision, game: publicGame(account), serverTime: now() })
+      if (!account.game.activeMatch && liveMatchFor(account)) { await sendJson(400, { error: '联赛直播期间不能开始巅峰挑战', revision: account.revision, game: publicGame(account), serverTime: now() }, true); return }
       const outcome = startPeakChallenge(account.game, Number(body.stage), now())
-      if (!outcome.ok) return json(res, 400, { error: outcome.error, revision: account.revision, game: publicGame(account), serverTime: now() })
+      if (!outcome.ok) { await sendJson(400, { error: outcome.error, revision: account.revision, game: publicGame(account), serverTime: now() }, true); return }
       account.revision++
       account.lastUserRevision = account.revision
       account.updatedAt = now()
       persistAccount(account)
       broadcast(account, String(req.headers['x-fm-client'] ?? '').slice(0, 128))
-      return json(res, 200, { ok: true, revision: account.revision, game: publicGame(account), serverTime: now() })
+      await sendJson(200, { ok: true, revision: account.revision, game: publicGame(account), serverTime: now() }, true)
+      return
     }
 
     if (url.pathname === '/api/match/action' && req.method === 'POST') {
@@ -2513,7 +2975,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         persistAccount(account)
         broadcast(account, String(req.headers['x-fm-client'] ?? '').slice(0, 128))
       }
-      json(res, outcome.ok ? 200 : 400, { ...outcome, revision: account.revision, game: publicGame(account) })
+      await sendJson(outcome.ok ? 200 : 400, { ...outcome, revision: account.revision, game: publicGame(account) }, true)
       return
     }
 
@@ -2526,8 +2988,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       // 开赛前 30 分钟锁阵容：只拦阵容 / 自动换人，训练、转会、经济等其它改动照常保存。
       if (officialLineupLocked(account, now())) {
         const incoming = body.game as GameState | undefined
-        const lineupChanged = JSON.stringify(incoming?.lineup ?? null) !== JSON.stringify(account.game.lineup)
-        const subsChanged = JSON.stringify(incoming?.autoSubs ?? null) !== JSON.stringify(account.game.autoSubs ?? null)
+        const lineupChanged = !deepEqual(incoming?.lineup ?? null, account.game.lineup)
+        const subsChanged = !deepEqual(incoming?.autoSubs ?? null, account.game.autoSubs ?? null)
         if (lineupChanged || subsChanged) {
           return json(res, 409, { error: '阵容已锁定：开赛前 30 分钟内不能修改，比赛由服务器自动结算' })
         }
@@ -2538,21 +3000,22 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const serverAdvanced = baseRevision >= (account.lastUserRevision ?? account.revision)
       const onlyLeagueProgress = account.game.activeMatch?.context.isLeague && serverAdvanced && baseRevision < account.revision
       if (!Number.isInteger(baseRevision) || baseRevision > account.revision || (baseRevision !== account.revision && !serverAdvanced && !onlyLeagueProgress)) {
-        json(res, 409, { error: '存档已在另一设备更新', revision: account.revision, game: publicGame(account) })
+        await sendJson(409, { error: '存档已在另一设备更新', revision: account.revision, game: publicGame(account) }, true)
         return
       }
       if (!isGameState(body.game)) return json(res, 400, { error: '无效的游戏存档' })
       if (!body.game.training || typeof body.game.training !== 'object' || Array.isArray(body.game.training) || Object.values(body.game.training).some(session => session != null && (typeof session !== 'object' || Array.isArray(session)))) return json(res, 400, { error: '无效的培养状态' })
       preservePositionProfiles(account.game, body.game)
       const youthError = preserveYouthState(account.game, body.game, now())
-      if (youthError) return json(res, 400, { error: youthError, revision: account.revision, game: publicGame(account) })
+      if (youthError) { await sendJson(400, { error: youthError, revision: account.revision, game: publicGame(account) }, true); return }
+      if (account.game.shared) body.game.reserveStars = account.game.reserveStars
       // The private ledger lives in game_json so it is committed atomically with the
       // balance. Never trust a ledger supplied by the client.
       const previousPrivate = account.game as GameState & { recycledCardIds?: string[] }
       const incomingPrivate = body.game as GameState & { recycledCardIds?: string[] }
       const recycled = previousPrivate.recycledCardIds ?? []
       const recycledIds = new Set(recycled)
-      if ((body.game.cards ?? []).some(card => recycledIds.has(card.id))) return json(res, 409, { error: '存档包含已回收的球员卡，请重新加载', revision: account.revision, game: publicGame(account) })
+      if ((body.game.cards ?? []).some(card => recycledIds.has(card.id))) { await sendJson(409, { error: '存档包含已回收的球员卡，请重新加载', revision: account.revision, game: publicGame(account) }, true); return }
       incomingPrivate.recycledCardIds = [...recycled]
       body.game.scoutReports = structuredClone(account.game.scoutReports)
       ;(body.game as GameState & { scoutReportSeq?: number }).scoutReportSeq = (account.game as GameState & { scoutReportSeq?: number }).scoutReportSeq
@@ -2567,13 +3030,14 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       }
       if (body.game.activeMatch?.preplayed && !account.game.activeMatch) delete body.game.activeMatch
       const peakError = validatePeakSave(account.game, body.game)
-      if (peakError) return json(res, 409, { error: peakError, revision: account.revision, game: publicGame(account) })
+      if (peakError) { await sendJson(409, { error: peakError, revision: account.revision, game: publicGame(account) }, true); return }
       const legacyCupError = sharedWorld.world.seasonCupMode ? validateLegacyCupSave(account.game, body.game) : undefined
-      if (legacyCupError) return json(res, 409, { error: legacyCupError, revision: account.revision, game: publicGame(account) })
+      if (legacyCupError) { await sendJson(409, { error: legacyCupError, revision: account.revision, game: publicGame(account) }, true); return }
       // 比赛公布会改变收入、球迷、市场等：不能把公布前的整份旧经济覆盖回去。
       // 这种少见的并发保存需要客户端重新加载权威存档，而不是静默丢失服务器结算。
       if (body.game.economy && account.game.economy && body.game.economy.lastIncomeRound < account.game.economy.lastIncomeRound) {
-        return json(res, 409, { error: '存档已在另一设备更新：比赛已结算，请重新加载', revision: account.revision, game: publicGame(account) })
+        await sendJson(409, { error: '存档已在另一设备更新：比赛已结算，请重新加载', revision: account.revision, game: publicGame(account) }, true)
+        return
       }
       // 旧页面再次保存时也不能把已取消的新账号准备期带回来。
       if (body.game.settings) delete (body.game.settings as { autoSettle?: unknown }).autoSettle
@@ -2618,9 +3082,22 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       // 联赛赛程、比分和战报只由服务器产生；旧页面保存不能回滚已赛结果、伪造未来比分或重踢。
       body.game.season = account.game.season
       body.game.matchHistory = account.game.matchHistory
-      // 正式杯赛战报与荣誉由服务器发布；旧客户端不能伪造或覆盖。
+      // 正式杯赛战报与荣誉由服务器发布；旧客户端不能伪造或覆盖。精简模式上传的延迟摘要恢复服务器完整战报。
+      const previousChallengesById = new Map(account.game.challengeHistory.map(item => [item.id, item]))
       const officialRecords = account.game.challengeHistory.filter(item => item.cupId?.startsWith('season-'))
-      body.game.challengeHistory = [...(body.game.challengeHistory ?? []).filter(item => !item.cupId?.startsWith('season-')), ...officialRecords].sort((a, b) => b.createdAt - a.createdAt)
+      const restoredChallenges = (body.game.challengeHistory ?? [])
+        .filter(item => !item.cupId?.startsWith('season-'))
+        .map(item => {
+          if (item.detailDeferred) {
+            const existing = previousChallengesById.get(item.id)
+            if (existing) return existing
+            const cleaned = { ...item }
+            delete cleaned.detailDeferred
+            return cleaned
+          }
+          return item
+        })
+      body.game.challengeHistory = [...restoredChallenges, ...officialRecords].sort((a, b) => b.createdAt - a.createdAt)
       if (body.game.world && account.game.world) body.game.world = account.game.world
       // 联机改名只能走 /api/club/rename（要查重名和字数），普通保存不能顺手改掉。
       if (body.game.world) body.game.clubName = account.game.clubName
@@ -2628,7 +3105,12 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       body.game.injuries = { ...(body.game.injuries ?? {}), ...(account.game.injuries ?? {}) }
       upgradeLegacySignatures(body.game)
       ensureCards(body.game)
-      ensurePve(body.game)
+      // The frozen pool belongs to this account/season, not to a client upload or the live world.
+      if (account.game.pve?.cupSeason) {
+        body.game.pve = { ...(body.game.pve ?? account.game.pve), cupSeason: account.game.pve.cupSeason }
+      }
+      if (body.game.pve) delete body.game.pve.cupSeasonDeferred
+      ensurePve(body.game, cupOpeningTeams())
       if (body.game.pve && account.game.pve) {
         const officialTrophies = account.game.pve.trophies.filter(item => item.cupId.startsWith('season-'))
         body.game.pve.trophies = [...(body.game.pve.trophies ?? []).filter(item => !item.cupId.startsWith('season-')), ...officialTrophies]
@@ -2688,6 +3170,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         else delete player.unhappy
       }
       account.game = body.game
+      accountSync.delete(account)
       observeYouthFacility(account.game, now())
       pullSharedTeams(account)
       publishClub(account)
@@ -2719,32 +3202,89 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     json(res, 404, { error: '接口不存在' })
   }
 
+  function parseEventRevision(value: string | string[] | null | undefined): number | undefined {
+    const raw = Array.isArray(value) ? value[0] : value
+    if (!raw) return undefined
+    const parsed = Number(raw.trim())
+    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined
+  }
+
   function openEvents(req: IncomingMessage, res: ServerResponse, account: Account, url: URL): void {
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    })
-    res.write('retry: 3000\n\n')
+    const sink = createSseSink(req, res)
     let group = clients.get(account.id)
     if (!group) {
       group = new Set()
       clients.set(account.id, group)
     }
-    group.add(res)
-    eventClientIds.set(res, url.searchParams.get('client') ?? '')
-    sendState(res, account)
-    res.write(`data: ${JSON.stringify(marketPayload())}\n\n`)
-    res.write(`data: ${JSON.stringify(chatSnapshotPayload())}\n\n`)
+    const client: EventClient = {
+      res,
+      sink,
+      id: url.searchParams.get('client') ?? '',
+      lazyCup: url.searchParams.get('lazyCup') === '1',
+      slim: url.searchParams.get('slim') === '1',
+      delta: url.searchParams.get('delta') === '1',
+      lastRevision: 0,
+      lastDigest: null,
+      queue: Promise.resolve(),
+      pendingBroadcast: null,
+      closed: false,
+    }
+    group.add(client)
+    const clientRev = parseEventRevision(req.headers['last-event-id']) ?? parseEventRevision(url.searchParams.get('sinceRevision'))
+    const hasLiveParam = url.searchParams.get('hasLive')
+
+    enqueueClientTask(client, async () => {
+      if (client.closed || client.sink.isClosed()) return
+      client.sink.writeRaw('retry: 3000\n\n')
+      const projected = projectGame(account, { lazyCup: client.lazyCup, slim: client.slim })
+      const coaches = clubCoaches()
+      const serverTime = now()
+      const rev = account.revision
+
+      if (client.delta && clientRev !== undefined && clientRev === rev) {
+        const digest = digestGameSections(projected, fastSectionTokens(account, client.slim))
+        client.lastRevision = rev
+        client.lastDigest = digest
+        if (projected.activeMatch && hasLiveParam === '0') {
+          await client.sink.writeEventAsync(
+            rev,
+            { type: 'state-patch', baseRevision: rev, revision: rev, clubCoaches: coaches, serverTime, patch: { activeMatch: projected.activeMatch } },
+            memoryMonitor.isUnderPressure,
+          )
+        } else if (!projected.activeMatch && hasLiveParam === '1') {
+          client.sink.writeRaw(`id: ${rev}\ndata: ${JSON.stringify({ type: 'state-patch', baseRevision: rev, revision: rev, clubCoaches: coaches, serverTime, patch: {}, remove: ['activeMatch'] })}\n\n`)
+        } else {
+          client.sink.writeRaw(`id: ${rev}\ndata: ${JSON.stringify({ type: 'state-sync', revision: rev, clubCoaches: coaches, serverTime })}\n\n`)
+        }
+      } else if (client.delta && clientRev !== undefined && memoryMonitor.isUnderPressure()) {
+        client.lastRevision = rev
+        client.lastDigest = null
+        client.sink.writeRaw(`id: ${rev}\ndata: ${JSON.stringify({ type: 'state-stale', revision: rev, clubCoaches: coaches, serverTime })}\n\n`)
+      } else {
+        if (client.delta) {
+          client.lastDigest = digestGameSections(projected, fastSectionTokens(account, client.slim))
+          client.lastRevision = rev
+        }
+        await client.sink.writeEventAsync(
+          rev,
+          { type: 'state', revision: rev, clubCoaches: coaches, serverTime, game: projected },
+          memoryMonitor.isUnderPressure,
+        )
+      }
+      if (client.closed || client.sink.isClosed()) return
+      client.sink.writeRaw(`data: ${JSON.stringify(marketPayload())}\n\n`)
+      client.sink.writeRaw(`data: ${JSON.stringify(chatSnapshotPayload())}\n\n`)
+    })
+
     const heartbeat = setInterval(() => {
       touchAccountOnline(account)
-      res.write(': ping\n\n')
+      sendClientRaw(client, ': ping\n\n')
     }, 15_000)
     const cleanup = () => {
+      if (client.closed) return
+      client.closed = true
       clearInterval(heartbeat)
-      group!.delete(res)
-      eventClientIds.delete(res)
+      group!.delete(client)
       if (group!.size === 0) {
         clients.delete(account.id)
         touchAccountOnline(account, true)
@@ -2765,6 +3305,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     return `fm_${crypto.randomBytes(24).toString('hex')}`
   }
 
+  const COMPRESSIBLE_EXTS = new Set(['.html', '.js', '.css', '.json', '.svg'])
   function serveStatic(req: IncomingMessage, res: ServerResponse, url: URL): void {
     if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'Method not allowed' })
     const pathname = decodeURIComponent(url.pathname)
@@ -2784,9 +3325,38 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
     const ext = path.extname(target).toLowerCase()
     const type = CONTENT_TYPES[ext] ?? 'application/octet-stream'
-    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable' })
-    if (req.method === 'HEAD') res.end()
-    else res.end(fs.readFileSync(target))
+    const stat = fs.statSync(target)
+    const encoding = COMPRESSIBLE_EXTS.has(ext) && stat.size >= 1024 ? negotiateEncoding(req.headers['accept-encoding']) : null
+    const headers: Record<string, string> = {
+      'Content-Type': type,
+      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
+      Vary: 'Accept-Encoding',
+      ...(encoding ? { 'Content-Encoding': encoding } : {}),
+    }
+    res.writeHead(200, headers)
+    if (req.method === 'HEAD') { res.end(); return }
+    const fileStream = fs.createReadStream(target)
+    fileStream.on('error', () => { if (!res.destroyed) res.destroy() })
+    if (encoding === 'br') {
+      const compressor = zlib.createBrotliCompress({
+        params: {
+          [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT,
+          [zlib.constants.BROTLI_PARAM_QUALITY]: 4,
+          [zlib.constants.BROTLI_PARAM_LGWIN]: 18,
+        },
+      })
+      compressor.on('error', () => { if (!res.destroyed) res.destroy() })
+      res.once('close', () => { if (!compressor.destroyed) compressor.destroy(); fileStream.destroy() })
+      fileStream.pipe(compressor).pipe(res)
+    } else if (encoding === 'gzip') {
+      const compressor = zlib.createGzip({ level: 4, memLevel: 6 })
+      compressor.on('error', () => { if (!res.destroyed) res.destroy() })
+      res.once('close', () => { if (!compressor.destroyed) compressor.destroy(); fileStream.destroy() })
+      fileStream.pipe(compressor).pipe(res)
+    } else {
+      res.once('close', () => fileStream.destroy())
+      fileStream.pipe(res)
+    }
   }
 
   async function runMatchQueue(): Promise<void> {
@@ -2796,14 +3366,17 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (closed) return
     const published = matchScheduler.refresh(now())
     // 空闲或仅在提前计算时，不必每秒复制所有账号的整份存档。
-    if (changed || published) for (const account of db.accounts) advanceAccount(account)
+    if (changed || published) {
+      withDeferredWorldPersist(() => {
+        for (const account of db.accounts) advanceAccount(account)
+      })
+    }
     announceLiveMatches()
     autoRollSharedSeason()
     autoPlayoff()
   }
 
   const server = http.createServer((req, res) => void handle(req, res))
-  const tickMs = options.tickMs ?? 30_000
   const timer = tickMs > 0
     ? setInterval(() => {
         advanceAllMatches()
@@ -2828,6 +3401,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   advanceAllMatches()
   autoRollSharedSeason()
   autoPlayoff()
+  flushWorldSync()
   accountStore.flushSync()
 
   let stopped: Promise<void> | null = null
@@ -2837,8 +3411,14 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (timer) clearInterval(timer)
     if (matchTimer) clearInterval(matchTimer)
     if (jobTimer) clearInterval(jobTimer)
+    if (worldWriteTimer) { clearTimeout(worldWriteTimer); worldWriteTimer = null }
     matchQueue.close()
-    for (const group of clients.values()) for (const res of group) res.end()
+    for (const group of clients.values()) {
+      for (const client of group) {
+        client.closed = true
+        client.sink.end()
+      }
+    }
     clients.clear()
     stopped = new Promise<void>((resolve) => server.close(() => resolve()))
     return stopped
@@ -2846,13 +3426,19 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
   return {
     server,
-    flush: () => accountStore.flush(),
+    flush: async () => {
+      await accountStore.flush()
+      await flushWorldAsync()
+    },
     shutdown: async () => {
       await stopServer()
+      if (worldWriteInFlight) await worldWriteInFlight.catch(() => {})
+      flushWorldSync()
       accountStore.close()
     },
     close: () => {
       void stopServer()
+      flushWorldSync()
       accountStore.close()
     },
     accountCount: () => db.accounts.length,
@@ -2873,17 +3459,7 @@ function readJson<T>(file: string, fallback: T): T {
 }
 
 function writeJson(file: string, value: unknown): void {
-  const tmp = `${file}.tmp`
-  // 存档已经是几十 MB：缩进会让每次保存多写一倍以上，并长时间占用事件循环。
-  fs.writeFileSync(tmp, JSON.stringify(value))
-  fs.renameSync(tmp, file)
-}
-
-function acceptsGzip(header = ''): boolean {
-  return header.split(',').some(entry => {
-    const [coding, weight = 'q=1'] = entry.trim().toLowerCase().split(/\s*;\s*/)
-    return coding === 'gzip' && weight.startsWith('q=') && Number(weight.slice(2)) > 0
-  })
+  writeJsonChunkedSync(file, value)
 }
 
 function json(res: ServerResponse, status: number, value: unknown): void {

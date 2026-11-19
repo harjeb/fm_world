@@ -4,7 +4,7 @@ import { FACILITIES, facilityLevel, facilityStageInLevel } from '../game/economy
 import { buildOwnerlessTeams } from '../game/world.ts'
 import { ATTR_GROUPS } from '../game/data/attributes.ts'
 import { attrRating, mainAttrsFor } from '../game/rating.ts'
-import { publicWorld, onlineState, type WorldPublicClub, type WorldPublicPlayer } from '../online.ts'
+import { loadedPublicClub, publicWorld, onlineState, type WorldPublicClub, type WorldPublicPlayer } from '../online.ts'
 import { PLAYER_TEAM_ID } from '../game/season.ts'
 import { attrHeat, attributeRadar, caHeat, humanMark, icon, ownName, panel, posBadge, positionMap, primaryPosition, skillGroups, tag, traitLabel } from './components.ts'
 import { attrLabel, esc, playerCA } from './format.ts'
@@ -49,6 +49,7 @@ export function divisionRatings(world: WorldState, teamIds: string[]): Map<strin
       ratings.set(id, known)
       continue
     }
+    if (onlineState.status === 'online') continue // 等服务器榜单，不在联机页面临时生成对手。
     const team = (ownerless ??= ownerlessTeamsNow(world))[id]
     if (team) ratings.set(id, lineupRating(team.players, team.lineup))
   }
@@ -58,15 +59,20 @@ export function divisionRatings(world: WorldState, teamIds: string[]): Map<strin
 /** 任意界面点开一支球队时用的公开资料；联机时以服务器快照为准。 */
 export function publicClubFor(world: WorldState | undefined, id: string): WorldPublicClub | null {
   const snapshot = onlineState.status === 'online' ? publicWorld : null
+  if (onlineState.status === 'online') {
+    const loaded = loadedPublicClub(id, game.season.index)
+    if (loaded) return loaded
+  }
   const found = snapshot?.clubs.find((club) => club.id === id || (id === 'player' && club.id === snapshot.ownClubId))
   if (found) return found
   if (snapshot) return null
   if (!world) return null
   const club = world.clubs.find((item) => item.id === id)
   if (!club) return null
+  const deferred = onlineState.status === 'online' && id !== PLAYER_TEAM_ID
   const roster = id === PLAYER_TEAM_ID
     ? game.roster
-    : game.aiTeams.find((item) => item.id === id)?.players ?? ownerlessTeamsNow(world)[id]?.players ?? []
+    : deferred ? [] : game.aiTeams.find((item) => item.id === id)?.players ?? ownerlessTeamsNow(world)[id]?.players ?? []
   return {
     id,
     name: id === PLAYER_TEAM_ID ? game.clubName : club.name,
@@ -74,6 +80,7 @@ export function publicClubFor(world: WorldState | undefined, id: string): WorldP
     tier: club.tier,
     conference: club.conference,
     formationId: club.formationId,
+    ...(deferred ? { rosterDeferred: true as const } : {}),
     facilities: id === PLAYER_TEAM_ID ? undefined : publicFacilityStages(game.aiClubs?.[id]?.economy),
     players: roster.map(({ youthOrigin, id: playerId, name, enName, country, era, age, foot, height, positions, detailedPositions, attrs, baseAttrs, traitId, skills, skillTiers }) => ({
       id: playerId, name, enName, country, era, age, foot, height, positions, detailedPositions, youthOrigin,
@@ -128,6 +135,7 @@ function equippedCardCell(player: WorldPublicPlayer): string {
 
 /** 任意界面点击球队后弹出的名单（世界页也复用同一份）。 */
 export function clubRosterPanel(club: WorldPublicClub, selectedId?: string | null): string {
+  if (club.rosterDeferred) return '<p class="hint pad" role="status">正在加载球队名单；如未加载成功，可重新打开该球队。</p>'
   const selected = selectedId ? club.players.find((player) => player.id === selectedId) : undefined
   const rows = [...club.players].sort((a, b) => b.ca - a.ca).map((player) => `<tr class="${player.id === selectedId ? 'me' : ''}">
     <td>${posBadge(primaryPosition(player))}</td>

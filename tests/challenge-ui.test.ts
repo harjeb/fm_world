@@ -41,13 +41,13 @@ describe('挑战页面', () => {
     try {
       game.activeMatch = undefined
       game.pve!.peak.cleared = 30
-      game.pve!.peak.dailyAttempts = { day: peakDailyStatus(game).day, count: 3 }
+      game.pve!.peak.dailyAttempts = { day: peakDailyStatus(game).day, count: 10 }
       ui.challengeMode = 'peak'
       ui.peakPreviewStage = 30
       const html = renderChallenge()
-      expect(html).toContain('本游戏日剩余')
-      expect(html).toContain('0 / 3')
-      expect(html).toContain('现实 6 小时')
+      expect(html).toContain('今日剩余')
+      expect(html).toContain('0 / 10')
+      expect(html).toContain('北京时间 00:00 重置')
       expect(html).toContain('次数已用完')
       expect(html).toContain('金币 50,000')
       expect(html).toContain('属性突破卡 ×1')

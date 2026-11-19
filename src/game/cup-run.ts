@@ -62,6 +62,7 @@ export function enterCup(game: GameState, cupId: CupId): { ok: boolean; error?: 
   const old = game.pve?.cups[cupId]
   if (old?.seasonIndex === game.season.index && old.status !== 'void') return { ok: false, error: `本季已经参加过${def.name}` }
   if (!game.pve) return { ok: false, error: '存档缺少 PvE 数据' }
+  if (game.pve.cupSeasonDeferred && game.pve.cupSeason?.seasonIndex !== game.season.index) return { ok: false, error: '杯赛对手尚未加载，请重试' }
   const field = buildCupField(cupId, game, game.season.index)
   if (field.length !== def.size || new Set(field.map((team) => team.id)).size !== def.size) return { ok: false, error: '可用参赛球队不足，无法报名' }
   const groups = buildCupGroups(cupId, field, game.season.index)

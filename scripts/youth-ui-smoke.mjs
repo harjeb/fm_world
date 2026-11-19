@@ -39,6 +39,11 @@ try {
     if (msg.method === 'Page.javascriptDialogOpening') void send('Page.handleJavaScriptDialog', { accept: true })
   }
   await send('Page.enable'); await send('Runtime.enable')
+  await send('Page.addScriptToEvaluateOnNewDocument', { source: `
+    window.fmRequests = [];
+    const fetchOriginal = window.fetch;
+    window.fetch = (url, init) => { window.fmRequests.push(String(url)); return fetchOriginal(url, init) };
+  ` })
   const response = await fetch(`${base}/api/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: `youthsmoke${Date.now()}`, password: 'secret123' }) })
   if (response.status !== 201) throw new Error(`Registration failed: ${await response.text()}`)
   const { token } = await response.json()
@@ -48,6 +53,19 @@ try {
   await send('Page.reload')
   await click('[data-action="boot-online"]')
   await wait("document.body.innerText.includes('已同步')")
+  if (await evaluate("window.fmRequests.some(url => url.includes('pve-snapshots') || url.startsWith('/api/pve/') || url.startsWith('/api/world/'))")) throw new Error('Login fetched world or opponents eagerly')
+  await click('[data-nav="challenge"]')
+  if (await evaluate("!!document.querySelector('[data-challenge-mode=\"cup\"]')")) {
+    await click('[data-challenge-mode="cup"]')
+    await wait("window.fmRequests.some(url => url.startsWith('/api/pve/cup-season?')) && !!document.querySelector('[data-action=\"enter-cup\"]')")
+    if (await evaluate("window.fmRequests.some(url => url.includes('pve-snapshots.generated'))")) throw new Error('Cup mode should not download unrelated fixed opponents')
+  }
+  await click('[data-challenge-mode="legend"]')
+  await wait("window.fmRequests.some(url => url.includes('pve-snapshots.generated')) && !!document.querySelector('[data-action=\"start-legend-challenge\"]')")
+  await click('[data-nav="world"]')
+  await wait("window.fmRequests.includes('/api/world/teams')")
+  await click('main [data-club-open]')
+  await wait("window.fmRequests.some(url => url.startsWith('/api/world/club?id=')) && !!document.querySelector('#world-roster [data-club-player]')")
   await click('[data-nav="youth"]')
   await wait("document.querySelectorAll('[data-youth-member]').length === 6")
   if (await evaluate("[...document.querySelectorAll('[data-youth-member]')].some(c => /基础 CA|青训上限|CA 成长/.test(c.innerText) || c.querySelector('[role=progressbar]'))")) throw new Error('Academy still displays exact CA/cap')
@@ -114,7 +132,7 @@ try {
   const desktop = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
   fs.writeFileSync('/tmp/fm-youth-desktop.png', Buffer.from(desktop.data, 'base64'))
   if (errors.length) throw new Error(JSON.stringify(errors))
-  console.log('PASS: stalled academy action unlocks without duplicate submission; plan, call-up, promotion, reload and mobile layout work')
+  console.log('PASS: world/team and PvE lazy loads; stalled academy action unlocks; plan, call-up, promotion, reload and mobile layout work')
 } finally {
   ws?.close()
   chrome.kill('SIGTERM')

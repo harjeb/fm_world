@@ -58,9 +58,11 @@ export function settleCondition(player: Pick<Player, 'condition' | 'recoveryAt'>
   const steps = step > 0 ? Math.floor((now - last) / step) : 0
   if (steps <= 0) return player.recoveryAt !== last
   player.recoveryAt = last + steps * step
+  const prev = player.condition ?? MAX_CONDITION
   const gained = (steps * CONDITION_RECOVERY_PER_GAME_DAY) / CONDITION_SETTLES_PER_GAME_DAY
-  player.condition = Math.max(MIN_CONDITION, Math.min(MAX_CONDITION, (player.condition ?? MAX_CONDITION) + gained))
-  return true
+  const next = Math.max(MIN_CONDITION, Math.min(MAX_CONDITION, prev + gained))
+  player.condition = next
+  return next !== prev
 }
 
 /** 一批球员都结算到 now。返回有没有谁变了。 */

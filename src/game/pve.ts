@@ -48,11 +48,12 @@ export function ensurePve(game: GameState, worldTeams?: readonly AITeam[]): bool
     changed = true
   }
   // 升级前的杯赛没有对手快照，不能让新规则静默换掉旧对手；保留赛果并允许重报。
+  const waitingForCupPool = pve.cupSeasonDeferred && pve.cupSeason?.seasonIndex !== game.season.index
   for (const run of Object.values(pve.cups)) {
     if (!run) continue
     if (!run.groups) { run.groups = []; changed = true }
     if (!run.participants) { run.participants = {}; changed = true }
-    if (run.status === 'active' && Object.entries(run.participants).some(([id, entry]) => entry.kind !== 'player' && !cupTeamAvailable(game, run, id))) {
+    if (run.status === 'active' && !(waitingForCupPool && run.seasonPool) && Object.entries(run.participants).some(([id, entry]) => entry.kind !== 'player' && !cupTeamAvailable(game, run, id))) {
       run.status = 'void'
       changed = true
     }

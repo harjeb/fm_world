@@ -28,6 +28,7 @@ describe('真实玩家执教的球队名旁边有绿色人物图标，超过 3 �
       ok: true,
       json: async () => ({
         seasonIndex: 1,
+        divisions: [],
         clubs: [
           { id: coached.id, name: coached.name, managed: true, aiTakeover: false, players: [] },
           { id: takeoverClub.id, name: takeoverClub.name, managed: true, aiTakeover: true, players: [] },

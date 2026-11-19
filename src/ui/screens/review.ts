@@ -53,6 +53,9 @@ function recordKits(record: MatchRecord): string {
 }
 
 function renderReplay(record: MatchRecord): string {
+  if (record.detailDeferred) {
+    return panel('文字播放器', '<p class="muted pad">正在按需加载完整文字解说与复盘明细…</p>', { className: 'replay-panel' })
+  }
   const duration = record.durationSeconds ?? 600
   const entries = record.commentary
   const count = entries?.length ?? record.keyEvents.length

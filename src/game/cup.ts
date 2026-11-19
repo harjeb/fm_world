@@ -178,7 +178,8 @@ function createCupSeason(game: GameState, seasonIndex: number, canonical?: reado
 
 /** Capture once at season opening (or once when migrating an older save). */
 export function ensureCupSeason(game: GameState, canonical?: readonly AITeam[]): boolean {
-  if (!game.pve) return false
+  // 轻量联机快照没有冻结名单，不能在浏览器用实时球队重新生成一份。
+  if (!game.pve || game.pve.cupSeasonDeferred) return false
   const old = game.pve.cupSeason
   if (old?.version === 1 && old.seasonIndex === game.season.index && CUP_DEFS.every(def => {
     const field = old.fields?.[def.id]
@@ -207,7 +208,10 @@ export function cupSeasonTeam(game: GameState, cupId: CupId, id: string): AITeam
 
 /** Preview and enrollment share the same season-opening opponents. */
 export function buildCupField(cupId: CupId, game: GameState, seasonIndex = game.season.index): CupParticipant[] {
-  if (seasonIndex === game.season.index) ensureCupSeason(game)
+  if (seasonIndex === game.season.index) {
+    if (game.pve?.cupSeasonDeferred && game.pve.cupSeason?.seasonIndex !== seasonIndex) return []
+    ensureCupSeason(game)
+  }
   const season = seasonIndex === game.season.index && game.pve?.cupSeason ? game.pve.cupSeason : createCupSeason(game, seasonIndex)
   const field = season.fields[cupId]
   const world: CupParticipant[] = field.worldIds.map(id => {

@@ -3,6 +3,8 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { Worker } from 'node:worker_threads'
 import type { GameState } from '../src/game/types.ts'
+import { packAccountGame, unpackAccountGame, type AccountPart } from './account-parts.ts'
+import { prepareAccountParts } from './account-parts-sql.mjs'
 
 export type Account = {
   id: string
@@ -40,6 +42,7 @@ const ACCOUNT_SQL = `INSERT INTO accounts
 const SESSION_SQL = 'INSERT INTO sessions (token, account_id) VALUES (?, ?) ON CONFLICT(token) DO UPDATE SET account_id=excluded.account_id'
 const DELETE_SESSION_SQL = 'DELETE FROM sessions WHERE token = ?'
 type Values = Array<string | number | null>
+type AccountWrite = { id: string; values: Values; parts: AccountPart[] }
 type Batch = {
   id: number
   accounts: Account[]
@@ -50,9 +53,9 @@ type Batch = {
   error?: string
 }
 
-function accountValues(account: Account): Values {
+function accountValues(account: Account, gameJson: string): Values {
   return [account.id, account.username, account.username.toLowerCase(), account.salt, account.passwordHash,
-    account.agentToken ?? null, JSON.stringify(account.game), account.revision,
+    account.agentToken ?? null, gameJson, account.revision,
     account.lastUserRevision ?? null, account.appliedMatchIds ? JSON.stringify(account.appliedMatchIds) : null,
     account.offerKey ?? null, account.lastOnlineAt ?? null, account.aiTakeoverKey ?? null, account.createdAt, account.updatedAt]
 }
@@ -79,7 +82,7 @@ export class AccountStore {
   private nextBatchId = 0
   private closed = false
 
-  constructor(dataDir: string, private readonly saveDelayMs = 1000) {
+  constructor(dataDir: string, private readonly saveDelayMs = 1000, private readonly compactWrites = true) {
     fs.mkdirSync(dataDir, { recursive: true })
     this.filename = path.join(dataDir, ACCOUNT_DB_FILE)
     this.db = new DatabaseSync(this.filename)
@@ -109,18 +112,30 @@ export class AccountStore {
           token TEXT PRIMARY KEY,
           account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE
         );
-        CREATE INDEX IF NOT EXISTS sessions_account ON sessions(account_id);`)
+        CREATE INDEX IF NOT EXISTS sessions_account ON sessions(account_id);
+        CREATE TABLE IF NOT EXISTS account_game_parts (hash TEXT PRIMARY KEY, json TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS account_game_refs (
+          account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+          slot TEXT NOT NULL,
+          hash TEXT NOT NULL REFERENCES account_game_parts(hash),
+          PRIMARY KEY (account_id, slot)
+        );
+        CREATE INDEX IF NOT EXISTS account_game_refs_hash ON account_game_refs(hash);`)
       const columns = new Set(this.db.prepare('PRAGMA table_info(accounts)').all().map((row) => row.name as string))
       if (!columns.has('last_online_at')) this.db.exec('ALTER TABLE accounts ADD COLUMN last_online_at INTEGER')
       if (!columns.has('ai_takeover_key')) this.db.exec('ALTER TABLE accounts ADD COLUMN ai_takeover_key TEXT')
       this.migrateLegacy(dataDir)
+      const loadParts = this.db.prepare(`SELECT refs.slot, parts.hash, parts.json FROM account_game_refs refs
+        JOIN account_game_parts parts ON refs.hash = parts.hash WHERE refs.account_id = ? ORDER BY refs.slot`)
+      // 冻结的杯赛世界队按内容哈希在内存中共享同一只读副本，显著降低多账号启动内存。
+      const sharedCupPool = new Map<string, import('../src/game/types.ts').AITeam>()
       this.accounts = Array.from(this.db.prepare('SELECT * FROM accounts ORDER BY rowid').iterate(), (row) => ({
         id: row.id as string,
         username: row.username as string,
         salt: row.salt as string,
         passwordHash: row.password_hash as string,
         ...(row.agent_token !== null ? { agentToken: row.agent_token as string } : {}),
-        game: JSON.parse(row.game_json as string) as GameState,
+        game: unpackAccountGame(row.game_json as string, loadParts.iterate(row.id) as Iterable<{ slot: string; hash: string; json: string }>, sharedCupPool),
         revision: row.revision as number,
         ...(row.last_user_revision !== null ? { lastUserRevision: row.last_user_revision as number } : {}),
         ...(row.applied_match_ids !== null ? { appliedMatchIds: JSON.parse(row.applied_match_ids as string) as string[] } : {}),
@@ -159,7 +174,7 @@ export class AccountStore {
           || !Number.isInteger(account.revision) || !Number.isFinite(account.createdAt) || !Number.isFinite(account.updatedAt)) {
           throw new Error('accounts.json 含无效账号，无法迁移')
         }
-        insert.run(...accountValues(account))
+        insert.run(...accountValues(account, JSON.stringify(account.game)))
       }
       const ids = new Set(legacy.accounts.map((account) => account.id))
       const insertSession = this.db.prepare(SESSION_SQL)
@@ -170,6 +185,11 @@ export class AccountStore {
       // 即使全新安装也写标记：以后不能因为遗留 JSON 的存在而覆盖 SQLite。
       this.db.prepare("INSERT INTO metadata (key, value) VALUES ('legacy-json-imported', '1')").run()
     })
+  }
+
+  private prepareWrite(account: Account): AccountWrite {
+    const { json, parts } = packAccountGame(account.game, this.compactWrites)
+    return { id: account.id, values: accountValues(account, json), parts }
   }
 
   save(account: Account): void {
@@ -264,7 +284,7 @@ export class AccountStore {
         // Session foreign keys may refer to accounts in a later batch: commit them last.
         const sessions = accounts.length === this.dirty.size ? new Map(this.dirtySessions) : new Map<string, string | null>()
         // 先序列化成功再清脏标记，异常不会吞掉待保存数据。
-        const values = accounts.map(accountValues)
+        const values = accounts.map(account => this.prepareWrite(account))
         const worker = this.getWorker()
         worker.ref() // 显式 await flush 时，进程必须等这笔事务完成。
         let complete!: () => void
@@ -302,8 +322,13 @@ export class AccountStore {
     if (!accounts.length && !sessions.length) return
     transaction(this.db, () => {
       const save = this.db.prepare(ACCOUNT_SQL)
+      const saveParts = prepareAccountParts(this.db)
       // Serialize one save at a time, not the entire account database in memory.
-      for (const account of accounts) save.run(...accountValues(account))
+      for (const account of accounts) {
+        const { id, values, parts } = this.prepareWrite(account)
+        save.run(...values)
+        saveParts(id, parts)
+      }
       const set = this.db.prepare(SESSION_SQL)
       const remove = this.db.prepare(DELETE_SESSION_SQL)
       for (const [token, id] of sessions) {

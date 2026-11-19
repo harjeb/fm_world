@@ -1,5 +1,5 @@
 import type { AttrKey, AutoTrainingPresetId, DetailedPosition, GameState, Lineup, MatchMentality, Player, Position, RoleId, SkillId, Tactics } from '../game/types.ts'
-import { cacheGameLocally, clearSave, saveGame, setTeamPickPending, teamPickPending, upgradeLegacySignatures } from '../game/state.ts'
+import { cacheGameLocally, cacheOnlineGame, loadGame, saveGame, setTeamPickPending, teamPickPending, upgradeLegacySignatures } from '../game/state.ts'
 import { createWorldGame, previewD2Clubs, worldTransferTeams } from '../game/world.ts'
 import { friendlyStepMs } from './match-timing.ts'
 import { filterTrainingBookIds, trainingBookLoadout } from './training-books.ts'
@@ -93,7 +93,7 @@ import { renderAcademy } from './screens/academy.ts'
 import { renderYouth } from './screens/youth.ts'
 import { ensureYouth, settleYouth, type YouthPlan } from '../game/youth.ts'
 import { applyYouthAction, type YouthAction } from '../game/youth-actions.ts'
-import { youthActionOnline } from '../online.ts'
+import { applyLoadedCupSeason, applyLoadedMatchRecords, loadCupSeasonOnline, loadMatchRecordOnline, refreshPublicClub, youthActionOnline } from '../online.ts'
 import { renderChallenge } from './screens/challenge.ts'
 import type { CupId } from '../game/data/cup-config.ts'
 import { loadPveContent } from '../game/pve-content.ts'
@@ -119,10 +119,12 @@ import { returnToChallengeAfterWin } from './match-completion.ts'
 import { latestPlayedRound } from '../game/standings-history.ts'
 
 const app = document.getElementById('app')!
+const SAVE_FAILURE_NOTICE = '存档保存失败：浏览器未能写入本地存档。请勿刷新或关闭页面。'
 
 function persist(): void {
   if (ui.screen) game.ui = { screen: ui.screen }
-  if (!saveGame(game)) ui.notice = '存档保存失败（可能已达浏览器容量上限），请勿刷新或关闭页面。'
+  if (!saveGame(game)) ui.notice = SAVE_FAILURE_NOTICE
+  else if (ui.notice === SAVE_FAILURE_NOTICE) ui.notice = ''
 }
 
 /** 竞拍有动静时提示一下：被人超过、签下了、有人开了新的竞拍。比赛中不打扰。 */
@@ -243,6 +245,8 @@ function go(screen: Screen): void {
   if (screen === 'youth' && !isOnlineMode() && !sharedActionUnavailable()) settleYouth(game, Date.now())
   if (screen === 'season') ui.seasonRound = null
   if (screen === 'world' || screen === 'cups') void refreshPublicWorld()
+  if (screen === 'world' && ui.worldClubId) loadClubRoster(ui.worldClubId)
+  if (screen === 'challenge') void loadChallengeOpponents()
   if (screen === 'transfer' && ui.transferTab === 'ai' && isOnlineMode()) void refreshAITransferMarket()
   if (screen === 'lineup') {
     ui.lineupDraft = structuredClone(game.lineup)
@@ -376,8 +380,10 @@ function render(): void {
   }
   if (ui.screen === 'review') {
     scheduleReplay()
-    // 联机联赛的战报可以 2D 重看：取回开球状态，把当前这一帧画上去。
-    ensureReplay2D([...game.matchHistory, ...game.challengeHistory].find((item) => item.id === ui.reviewId))
+    // 联机联赛的战报可以 2D 重看，复盘明细（解说/关键事件/技能统计）按需拉取。
+    const reviewRecord = [...game.matchHistory, ...game.challengeHistory].find((item) => item.id === ui.reviewId)
+    ensureMatchRecordDetail(reviewRecord)
+    ensureReplay2D(reviewRecord)
     drawReplay2D()
   } else {
     stopReplay()
@@ -429,6 +435,25 @@ function mountTurnstile(): void {
   })
 }
 
+let autoExpandReviewId: string | null = null
+const failedMatchRecords = new Set<string>()
+
+function ensureMatchRecordDetail(record: GameState['matchHistory'][number] | undefined): void {
+  if (!record?.detailDeferred || !isOnlineMode() || failedMatchRecords.has(record.id)) return
+  const targetId = record.id
+  void loadMatchRecordOnline(targetId).then((full) => {
+    failedMatchRecords.delete(targetId)
+    applyLoadedMatchRecords(game)
+    if (ui.reviewId === targetId && autoExpandReviewId === targetId) {
+      autoExpandReviewId = null
+      replay.index = (full.commentary ?? full.keyEvents).length
+    }
+    if (ui.screen === 'review' && ui.reviewId === targetId) render()
+  }).catch(() => {
+    failedMatchRecords.add(targetId)
+  })
+}
+
 function openFinishedLeague(previous: NonNullable<GameState['activeMatch']>): void {
   const record = previous.preplayed && previous.context.mode === 'cup'
     ? game.challengeHistory.find(item => item.cupFixtureId === previous.context.cupFixtureId)
@@ -440,6 +465,7 @@ function openFinishedLeague(previous: NonNullable<GameState['activeMatch']>): vo
     return
   }
   resetReplay(record.id)
+  if (record.detailDeferred) autoExpandReviewId = record.id
   replay.index = (record.commentary ?? record.keyEvents).length
   ui.reviewId = record.id
   ui.screen = 'review'
@@ -463,6 +489,8 @@ function announceNewOffers(before: ReadonlySet<string>): void {
 const pendingOfferIds = (): Set<string> => new Set((game.transferOffers ?? []).filter((offer) => offer.status === 'pending').map((offer) => offer.id))
 
 function applyOnlineGame(next: GameState, notice?: string): void {
+  applyLoadedCupSeason(next)
+  applyLoadedMatchRecords(next)
   const firstLoad = ui.bootGate
   const offersBefore = firstLoad ? new Set<string>() : pendingOfferIds()
   const previous = game?.activeMatch
@@ -479,11 +507,11 @@ function applyOnlineGame(next: GameState, notice?: string): void {
     restoreSavedScreen()
     ui.bootGate = false
   } else announceNewOffers(offersBefore)
-  // 联赛实时推送每秒一次，没必要每次都写整个存档，换队/换季时立刻写，其余最多 10 秒一次。
+  // 联机缓存与离线进度分开；推送频繁，缓存每隔 10 秒再更新，换队或换季例外。
   const stamp = Date.now()
   if (clubChanged || stamp - lastOnlineCacheAt > 10_000) {
     lastOnlineCacheAt = stamp
-    cacheGameLocally(next)
+    cacheOnlineGame(next)
   }
   upgradeLegacySignatures(game)
   ensureCards(game)
@@ -495,6 +523,11 @@ function applyOnlineGame(next: GameState, notice?: string): void {
   if (notice) ui.notice = notice
   maybeOpenChangelog()
   render()
+  if (ui.screen === 'challenge' && ui.challengeMode === 'cup' && clubChanged) void loadChallengeOpponents()
+  if (clubChanged) {
+    const viewed = ui.clubViewId ?? (ui.screen === 'world' ? ui.worldClubId : null)
+    if (viewed) loadClubRoster(viewed)
+  }
   if ((ui.screen === 'world' || ui.screen === 'cups') && !publicWorld) void refreshPublicWorld()
 }
 
@@ -1054,6 +1087,31 @@ function autoFillLineupDraft(): Lineup {
   return structuredClone(lineup)
 }
 
+function loadClubRoster(id: string): void {
+  if (!isOnlineMode()) return
+  void refreshPublicClub(id).catch(error => {
+    if (ui.clubViewId === id || (ui.screen === 'world' && ui.worldClubId === id)) {
+      showNotice(error instanceof Error ? error.message : '球队名单加载失败，可重新点击球队重试。')
+    }
+  })
+}
+
+async function loadChallengeOpponents(): Promise<void> {
+  const mode = ui.challengeMode
+  const season = game.season.index
+  try {
+    if (mode === 'cup') {
+      if (game.world?.seasonCupMode === 1 || !game.pve?.cupSeasonDeferred || game.pve.cupSeason) return
+      await loadCupSeasonOnline(season)
+      if (game.season.index === season) applyLoadedCupSeason(game)
+    } else if (mode === 'legend' || mode === 'peak') await loadPveContent()
+    else return
+    if (ui.screen === 'challenge' && ui.challengeMode === mode) render()
+  } catch (error) {
+    if (ui.screen === 'challenge' && ui.challengeMode === mode) showNotice(`对手加载失败，请重新点击挑战模式重试：${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 document.addEventListener('click', async (event) => {
   if (trainingStartPending || cardActionPending) return
   const target = event.target as HTMLElement
@@ -1094,7 +1152,7 @@ document.addEventListener('click', async (event) => {
     ui.pveTeamId = null
     ui.peakPreviewStage = null
     render()
-    if (ui.challengeMode !== 'friendly') void loadPveContent().then(() => render()).catch((error) => showNotice(`加载失败，可重新点击模式重试：${String(error)}`))
+    void loadChallengeOpponents()
     return
   }
   const pveTeam = target.closest<HTMLElement>('[data-pve-team]')
@@ -1152,9 +1210,9 @@ document.addEventListener('click', async (event) => {
     } else {
       ui.clubViewId = clubOpen.dataset.clubOpen
       ui.clubViewPlayerId = null
-      if (isOnlineMode() && !publicWorld) void refreshPublicWorld().then(() => render())
       render()
     }
+    loadClubRoster(clubOpen.dataset.clubOpen)
     return
   }
   const clubPlayer = target.closest<HTMLElement>('[data-club-player]')
@@ -1585,6 +1643,14 @@ document.addEventListener('click', async (event) => {
     case 'account-logout':
       void logoutOnline().then(() => {
         onlineSessionRequested = false
+        // 联机缓存只用于联机会话，不替换独立的离线档。
+        const local = loadGame()
+        setGame(local ?? createWorldGame())
+        if (!local) setTeamPickPending(true)
+        stopTimer()
+        stopReplay()
+        Object.assign(ui, { screen: 'home', accountOpen: false, matchEngine: null, matchPlaying: false, completing: false, lineupDraft: null, autoSubsDraft: null, detailPlayerId: null, clubViewId: null, trainingPlayerId: null, reviewId: null })
+        if (teamPickPending()) openNewGamePicker(true)
         ui.recycleSelectedIds = []
         ui.recycleConfirm = false
         ui.trainingPointSpend = 0
@@ -1593,7 +1659,7 @@ document.addEventListener('click', async (event) => {
       })
       break
     case 'new-game':
-      if (onlineState.status === 'online') { showNotice('联机账号不能重开个人世界；请先退出账号再创建本地存档。'); break }
+      if (isOnlineMode() || sharedActionUnavailable()) { showNotice('联机账号不能重开个人世界；请先退出账号再创建本地存档。'); break }
       if (game.activeMatch?.context.isLeague) { showNotice('联赛进行中不能开始新游戏。'); break }
       openNewGamePicker(false)
       render()
@@ -1607,21 +1673,23 @@ document.addEventListener('click', async (event) => {
       ui.newGameClubId = actionEl.dataset.club ?? null
       render()
       break
-    case 'newgame-confirm':
-      if (onlineState.status === 'online') { showNotice('联机账号不能重开个人世界。'); break }
+    case 'newgame-confirm': {
+      if (isOnlineMode() || sharedActionUnavailable()) { showNotice('联机账号不能重开个人世界。'); break }
+      const next = createWorldGame(ui.newGamePreview?.seed, ui.newGameClubId ?? undefined)
+      ensureYouth(next)
+      // 新档写入成功后再切换，不先清空旧存档。
+      if (!cacheGameLocally(next)) { showNotice('存档保存失败：新游戏未创建，原有存档未改动。请检查浏览器存储设置和空间。'); break }
       stopTimer()
-      clearSave()
-      setGame(createWorldGame(ui.newGamePreview?.seed, ui.newGameClubId ?? undefined))
-      ensureYouth(game)
+      setGame(next)
       ui.newGameOpen = false
       ui.newGamePreview = null
-      saveGame(game)
       setTeamPickPending(false)
       ui.newGameRequired = false
       Object.assign(ui, { screen: 'home', trainingPlayerId: null, trainingPointSpend: 0, recycleSelectedIds: [], recycleConfirm: false, trainingBookIds: [], trainingTeammateIds: [], peakCardPlayerId: null, peakCardAttr: null, detailPlayerId: null, reviewId: null, lineupDraft: null, lineupSlot: null, autoSubsDraft: null, matchAutoSubsDraft: null, notice: '新游戏已创建。', matchEngine: null, matchPlaying: false, completing: false, coachPanel: false, seasonRound: null, worldDivision: null, worldRound: null, worldFixtureClubId: 'ALL', worldClubId: null, worldPlayerId: null, newGameOpen: false, newGameClubId: null })
       maybeOpenChangelog()
       render()
       break
+    }
     case 'chemistry-detail':
       if (playerId) {
         openPlayerDetail(playerId)
@@ -2452,6 +2520,7 @@ document.addEventListener('click', async (event) => {
     }
     case 'open-review':
       if (recordId) {
+        failedMatchRecords.delete(recordId)
         resetReplay(recordId)
         ui.reviewId = recordId
         ui.screen = 'review'

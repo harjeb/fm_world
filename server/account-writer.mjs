@@ -1,8 +1,10 @@
 import { DatabaseSync } from 'node:sqlite'
 import { parentPort, workerData } from 'node:worker_threads'
+import { prepareAccountParts } from './account-parts-sql.mjs'
 
 let db
 let saveAccount
+let saveParts
 let saveSession
 let deleteSession
 let startupError
@@ -10,6 +12,7 @@ try {
   db = new DatabaseSync(workerData.filename)
   db.exec('PRAGMA busy_timeout=5000; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;')
   saveAccount = db.prepare(workerData.accountSql)
+  saveParts = prepareAccountParts(db)
   saveSession = db.prepare(workerData.sessionSql)
   deleteSession = db.prepare(workerData.deleteSessionSql)
 } catch (error) {
@@ -29,7 +32,10 @@ parentPort.on('message', (message) => {
       if (startupError) throw startupError
       db.exec('BEGIN IMMEDIATE')
       transaction = true
-      for (const values of message.accounts) saveAccount.run(...values)
+      for (const { id, values, parts } of message.accounts) {
+        saveAccount.run(...values)
+        saveParts(id, parts)
+      }
       for (const [token, accountId] of message.sessions) {
         if (accountId === null) deleteSession.run(token)
         else saveSession.run(token, accountId)

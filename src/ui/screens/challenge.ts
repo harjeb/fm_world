@@ -176,8 +176,8 @@ export function renderChallenge(): string {
   // 只有正式赛季杯赛已经启用时才替换旧入口，避免功能未开放期间隐藏现有杯赛。
   const seasonCupsEnabled = game.world?.seasonCupMode === 1
   const mode = seasonCupsEnabled && ui.challengeMode === 'cup' ? 'friendly' : ui.challengeMode
-  const loaded = mode === 'friendly' || pveContentReady()
-  const body = !loaded ? '<p class="banner info" role="status">正在加载固定球队数据，请稍候…</p>' : mode === 'friendly' ? renderFriendly() : mode === 'legend' ? renderLegend() : mode === 'cup' ? renderCup() : renderPeak()
+  const loaded = mode === 'friendly' || (mode === 'cup' ? !game.pve?.cupSeasonDeferred || game.pve.cupSeason?.seasonIndex === game.season.index : pveContentReady())
+  const body = !loaded ? '<p class="banner info" role="status">正在加载对手名单，请稍候；加载失败时可重新选择此模式。</p>' : mode === 'friendly' ? renderFriendly() : mode === 'legend' ? renderLegend() : mode === 'cup' ? renderCup() : renderPeak()
   return `${pageHead({ kicker: '挑战 · 纯 PvE', title: MODE_LABEL[mode], sub: MODE_SUB[mode] })}
     <div class="seg challenge-mode-tabs" aria-label="挑战模式">${(Object.keys(MODE_LABEL) as (keyof typeof MODE_LABEL)[]).filter(key => !seasonCupsEnabled || key !== 'cup').map((key) => `<button data-challenge-mode="${key}" class="${key === mode ? 'active' : ''}">${MODE_LABEL[key]}</button>`).join('')}</div>
     ${body}${loaded ? selectedRoster() : ''}`

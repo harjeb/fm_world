@@ -25,6 +25,8 @@ const app = createAppServer({
   tickMs: Number(process.env.FM_TICK_MS ?? 30_000),
   // 默认启用正式赛季杯赛；运维可在发生故障时设置 0 停止新赛季排期。
   seasonCups: process.env.FM_SEASON_CUPS !== '0',
+  // Explicit rollout after an SQLite backup. Reading both formats is always supported.
+  compactAccountWrites: process.env.FM_ACCOUNT_COMPACT_WRITES === '1',
   registration: registration === 'invite' && !inviteCode ? 'closed' : registration,
   inviteCode,
   turnstileSecret: process.env.FM_TURNSTILE_SECRET?.trim(),

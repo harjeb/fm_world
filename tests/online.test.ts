@@ -66,6 +66,43 @@ describe('联机保存与 SSE', () => {
   })
 })
 
+it('联机登录不预取世界或杯赛，按需请求合并并隔离换账号时返回的快照', async () => {
+  vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {} })
+  const { createInitialGame } = await import('../src/game/state.ts')
+  const game = createInitialGame(97)
+  const pool = game.pve!.cupSeason!
+  delete game.pve!.cupSeason
+  game.pve!.cupSeasonDeferred = true
+  let release!: (response: Response) => void
+  let login = 0
+  const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+    if (url === '/api/login') {
+      expect((init!.headers as Record<string, string>)['X-FM-Lazy-Cup']).toBe('1')
+      ++login
+      return Promise.resolve(Response.json({ token: `token-${login}`, user: { id: String(login), username: 'test' }, revision: 1, game }))
+    }
+    return new Promise<Response>(resolve => { release = resolve })
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  const online = await import('../src/online.ts')
+  await online.loginOnline('a', 'password')
+  expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/login'])
+  const pending = online.loadCupSeasonOnline(pool.seasonIndex)
+  expect(online.loadCupSeasonOnline(pool.seasonIndex)).toBe(pending)
+  expect(fetchMock.mock.calls[1][0]).toBe(`/api/pve/cup-season?season=${pool.seasonIndex}`)
+  await online.loginOnline('b', 'password')
+  release(Response.json({ cupSeason: pool }))
+  await pending
+  online.applyLoadedCupSeason(game)
+  expect(game.pve!.cupSeason).toBeUndefined()
+  const current = online.loadCupSeasonOnline(pool.seasonIndex)
+  release(Response.json({ cupSeason: pool }))
+  await current
+  online.applyLoadedCupSeason(game)
+  expect(game.pve).toMatchObject({ cupSeason: { seasonIndex: pool.seasonIndex } })
+  expect(fetchMock.mock.calls.some(([url]) => url.startsWith('/api/world/'))).toBe(false)
+})
+
 function stallRequest(init: RequestInit): Promise<Response> {
   return new Promise((_, reject) => {
     init.signal!.addEventListener('abort', () => reject(init.signal!.reason), { once: true })
