@@ -77,7 +77,7 @@ import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPla
 import { minimumBid } from '../game/auction.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
 import { clubNameError, normalizeClubName } from '../game/club-name.ts'
-import { aiTransferMarket, bidOnline, buyFromAIClubOnline, chatState, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, recycleCardsOnline, refreshAITransferMarket, refreshChatOnline, refreshGameOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setCardRecycleLockOnline, startPeakOnline, startScoutingOnline, deleteScoutingOnline, startTrainingOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline } from '../online.ts'
+import { aiTransferMarket, bidOnline, buyFromAIClubOnline, buyShopBookOnline, chatState, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, recycleCardsOnline, refreshAITransferMarket, refreshChatOnline, refreshGameOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setCardRecycleLockOnline, startPeakOnline, startScoutingOnline, deleteScoutingOnline, startTrainingOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline } from '../online.ts'
 import { agentHandoffText } from './agent-handoff.ts'
 import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
 import { UNHAPPY_HOURS } from '../game/transfer-rules.ts'
@@ -98,6 +98,9 @@ import { renderChallenge } from './screens/challenge.ts'
 import type { CupId } from '../game/data/cup-config.ts'
 import { loadPveContent } from '../game/pve-content.ts'
 import { renderClub } from './screens/club.ts'
+import { renderShop } from './screens/shop.ts'
+import { buyShopBook } from '../game/shop.ts'
+import { SKILLS } from '../game/data/skills.ts'
 import { renderChatDrawer } from './screens/chat.ts'
 import { renderTransfer } from './screens/transfer.ts'
 import { renderHome } from './screens/home.ts'
@@ -267,6 +270,8 @@ function renderScreen(): string {
       return renderYouth()
     case 'club':
       return renderClub()
+    case 'shop':
+      return renderShop()
     case 'transfer':
       return renderTransfer()
     case 'home':
@@ -1394,6 +1399,30 @@ document.addEventListener('click', async (event) => {
         ui.notice = messages[kind]
       } catch (error) {
         ui.notice = error instanceof Error ? error.message : '青训操作失败，请刷新检查'
+      } finally {
+        cardActionPending = false
+        render()
+      }
+      break
+    }
+    case 'buy-shop-book': {
+      const skillId = actionEl.dataset.skill ?? ''
+      if (!skillId) break
+      if (sharedActionUnavailable()) { showNotice('联机连接已断开，请先重新连接服务器'); break }
+      cardActionPending = true
+      try {
+        if (isOnlineMode()) {
+          ui.notice = '正在兑换技能书，请稍候…'
+          render()
+          await buyShopBookOnline(skillId)
+        } else {
+          const result = commitOfflineTransaction(() => buyShopBook(game, skillId))
+          if (!result.ok) throw new Error(result.error)
+        }
+        const name = SKILLS[skillId as SkillId]?.name ?? skillId
+        ui.notice = `已兑换金书《${name}》，可前往培养页配置。`
+      } catch (error) {
+        ui.notice = error instanceof Error ? error.message : '技能书兑换失败'
       } finally {
         cardActionPending = false
         render()

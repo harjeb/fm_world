@@ -9,7 +9,7 @@ import { chemistryKey } from '../chemistry.ts'
 import { derivedRng } from '../rng.ts'
 import { legendMultiplier } from '../legend-bonus.ts'
 import { homeAtmosphereBonus } from '../economy.ts'
-import { opponentSide } from './team.ts'
+import { opponentSide, skillTierMultiplier } from './team.ts'
 import { clamp, progressOf, wideZone } from './pitch.ts'
 import type { MatchEventContext, MatchPlayerState, MatchSide, MatchState } from './types.ts'
 
@@ -56,6 +56,33 @@ export class MatchRatings {
       const team = this.stateOf().teams.find((entry) => entry.side === player.side)
       const leader = team?.players.find((entry) => entry.onPitch && entry.skills.includes('lg_leader'))
       if (leader) value += 4 * legendMultiplier(leader, 'lg_leader')
+    }
+    if (key === 'composure' && ctx.penalty && player.skills.includes('sh_aux_penalty_calm')) {
+      value += 8 * skillTierMultiplier(player, 'sh_aux_penalty_calm')
+    }
+    if ((key === 'composure' || key === 'decisions') && player.skills.includes('sh_aux_comeback') && this.traitConditionMet(player, 'behind', ctx)) {
+      value += 5 * skillTierMultiplier(player, 'sh_aux_comeback')
+    }
+    if ((key === 'defPos' || key === 'anticipation') && player.skills.includes('sh_aux_hold_lead') && this.traitConditionMet(player, 'ahead', ctx)) {
+      value += 5 * skillTierMultiplier(player, 'sh_aux_hold_lead')
+    }
+    if ((key === 'composure' || key === 'acceleration') && player.skills.includes('sh_aux_late_surge') && this.traitConditionMet(player, 'late', ctx)) {
+      value += 5 * skillTierMultiplier(player, 'sh_aux_late_surge')
+    }
+    if ((key === 'anticipation' || key === 'firstTouch') && player.skills.includes('sh_aux_fast_start') && this.traitConditionMet(player, 'early', ctx)) {
+      value += 6 * skillTierMultiplier(player, 'sh_aux_fast_start')
+    }
+    if ((key === 'acceleration' || key === 'composure' || key === 'anticipation') && player.skills.includes('sh_aux_super_sub') && this.traitConditionMet(player, 'subbedOn', ctx)) {
+      value += 5 * skillTierMultiplier(player, 'sh_aux_super_sub')
+    }
+    if ((key === 'teamwork' || key === 'vision') && player.skills.includes('sh_aux_home_boost') && this.traitConditionMet(player, 'home', ctx)) {
+      value += 5 * skillTierMultiplier(player, 'sh_aux_home_boost')
+    }
+    if ((key === 'composure' || key === 'firstTouch') && player.skills.includes('sh_aux_away_steel') && this.traitConditionMet(player, 'away', ctx)) {
+      value += 5 * skillTierMultiplier(player, 'sh_aux_away_steel')
+    }
+    if ((key === 'agility' || key === 'defPos') && player.skills.includes('sh_aux_tired_grit') && this.traitConditionMet(player, 'tired', ctx)) {
+      value += 5 * skillTierMultiplier(player, 'sh_aux_tired_grit')
     }
     const trait = TRAITS[player.traitId as BaseTraitId]
     if (trait) {

@@ -8,6 +8,7 @@ import { PEAK_STAGE_COUNT, peakStageDef, buildPeakTeam } from '../../game/peak.t
 import { PEAK_REWARD_STAGE, peakRewardReady } from '../../game/peak-reward.ts'
 import { PEAK_DAILY_LIMIT, peakDailyStatus } from '../../game/peak-attempts.ts'
 import { peakStageReward } from '../../game/data/peak-rewards.ts'
+import { peakStageShopPoints } from '../../game/shop.ts'
 import { peakSkillForStage } from '../../game/data/peak-skills.ts'
 import { SQUAD_LIMIT } from '../../game/market.ts'
 import { legendRecordOf } from '../../game/pve.ts'
@@ -128,6 +129,8 @@ function peakRewardText(stage: number): string {
     parts.push(reward.kind === 'money' ? `金币 ${reward.amount.toLocaleString()}` : `球迷 +${reward.amount.toLocaleString()}`)
     if (reward.breakthroughCards) parts.push(`属性突破卡 ×${reward.breakthroughCards}`)
   }
+  const shopPts = peakStageShopPoints(stage)
+  if (shopPts > 0) parts.push(`商店点数 +${shopPts}`)
   if (stage === PEAK_REWARD_STAGE) parts.push('从全明星名单中任选 1 人加入')
   const skill = peakSkillForStage(stage)
   if (skill) parts.push(`彩色技能书「${skill.name}」`)

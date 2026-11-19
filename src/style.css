@@ -1831,3 +1831,32 @@ circle.pm-5 { fill: var(--h6); }
 .scout-report p { margin: .4rem 0; }
 .scout-attrs { display: flex; flex-wrap: wrap; gap: .5rem 1rem; }
 .scout-ratings { display: grid; gap: 4px; }
+
+/* ---------- 技能书商店 ---------- */
+.shop-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+}
+.shop-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.shop-card.owned { opacity: 0.78; border-color: rgba(79, 208, 138, 0.35); }
+.shop-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.shop-card-title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.shop-price { font-family: var(--font-num); color: var(--warn); font-size: 13px; white-space: nowrap; }
+.shop-effect { color: var(--text); font-size: 12.5px; line-height: 1.45; }
+.shop-meta { margin: 0; }
+.shop-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; padding-top: 6px; border-top: 1px solid var(--line); }
+.pad-grid { padding: 0 12px 12px; }
+.sub-head { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+@media (max-width: 840px) {
+  .shop-grid { grid-template-columns: 1fr; }
+}

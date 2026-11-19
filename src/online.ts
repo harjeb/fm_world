@@ -1041,6 +1041,10 @@ export async function startTrainingOnline(playerId: string, bookKeys: string[], 
   return protectedGameAction('/api/training/start', { playerId, bookKeys, points })
 }
 
+export async function buyShopBookOnline(skillId: string): Promise<GameState> {
+  return protectedGameAction('/api/shop/buy', { skillId })
+}
+
 export async function nextWorldSeasonOnline(): Promise<GameState> {
   const next = await onlineGameAction('/api/world/next-season', {})
   if (publicWorld) void refreshPublicWorld()

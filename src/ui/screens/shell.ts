@@ -47,6 +47,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
   { label: '经营', items: [
     { id: 'club', label: '俱乐部', icon: 'club' },
+    { id: 'shop', label: '商店', icon: 'bag' },
     { id: 'transfer', label: '转会', icon: 'swap', alert: pendingOffers, badge: () => (isOnlineMode() ? marketState.auctions.length : 0) },
   ] },
 ]

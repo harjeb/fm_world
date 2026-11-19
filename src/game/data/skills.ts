@@ -1,6 +1,7 @@
 import type { BaseTraitId, SkillId, TraitEffect } from '../types.ts'
 import { LEGEND_SKILLS } from './legend-skills.ts'
 import { PEAK_SKILLS } from './peak-skills.ts'
+import { SHOP_SKILLS } from './shop-skills.ts'
 
 export type { BaseTraitId }
 
@@ -9,7 +10,7 @@ export const MAIN_SKILL_CAPACITY = 4
 export const AUXILIARY_SKILL_CAPACITY = 2
 
 export function skillCategory(id: SkillId): SkillCategory {
-  return id === 'injury_prevention' || id === 'injury_resilience' ? 'auxiliary' : 'main'
+  return id === 'injury_prevention' || id === 'injury_resilience' || id.startsWith('sh_aux_') ? 'auxiliary' : 'main'
 }
 
 export function skillCapacity(category: SkillCategory): number {
@@ -32,6 +33,7 @@ export type SkillDef = {
 export const SKILLS: Record<SkillId, SkillDef> = {
   ...LEGEND_SKILLS,
   ...PEAK_SKILLS,
+  ...SHOP_SKILLS,
   through_ball: {
     id: 'through_ball',
     name: '穿线者',

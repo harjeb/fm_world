@@ -6,6 +6,7 @@ import { addLegendBook, awardLegendReward, ensureLegendBooks } from './legend-bo
 import { PEAK_SKILL_STAGES, peakSkillForStage } from './data/peak-skills.ts'
 import { ensureCupCeilingClaims } from './cup-rewards.ts'
 import { awardPeakMilestone, ensurePeakMilestones } from './peak-milestones.ts'
+import { awardPeakShopPoints, ensureShop } from './shop.ts'
 
 const EMPTY_LEGEND: PveLegendRecord = { played: 0, won: 0, drawn: 0, lost: 0, goals: 0, conceded: 0 }
 
@@ -68,9 +69,10 @@ export function ensurePve(game: GameState, worldTeams?: readonly AITeam[]): bool
   const booksChanged = ensureLegendBooks(game)
   const cupsChanged = ensureCupCeilingClaims(game)
   const peakChanged = ensurePeakMilestones(game)
+  const shopChanged = ensureShop(game)
   const archiveChanged = archivePastCups(game)
   const fieldChanged = ensureCupSeason(game, worldTeams)
-  return booksChanged || cupsChanged || peakChanged || archiveChanged || fieldChanged || changed
+  return booksChanged || cupsChanged || peakChanged || shopChanged || archiveChanged || fieldChanged || changed
 }
 
 export function legendRecordOf(game: GameState, legendId: string): PveLegendRecord {
@@ -122,6 +124,7 @@ export function applyPveResult(game: GameState, record: MatchRecord, context: Ma
       const peakBook = peakSkillForStage(context.stage)
       if (peakBook) addLegendBook(game, peakBook.id, 'rainbow')
       awardPeakMilestone(game, context.stage)
+      awardPeakShopPoints(game, context.stage)
     }
   }
 }

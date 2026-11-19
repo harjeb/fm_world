@@ -170,6 +170,10 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     bookKeys: z.array(z.string()).max(4),
   }, (args) => action('set_training_books', args))
 
+  register('buy_shop_book', '商店兑换金色技能书', '消耗商店点数购买当季上架的一本金色技能书（8 外场 + 2 门将 + 2 辅助共 12 本，每赛季轮换；skillId 来自 get_state.shop.catalog）。买后永久进入 legendBooks。', {
+    skillId: z.string().min(1),
+  }, (args) => action('buy_shop_book', args))
+
   register('youth_action', '管理青训', '读取 get_state.youth 后操作青训：设置位置与能力方向、招募、临时征召、返回、正式提拔或解约。正式提拔永久停止基础成长；解约不返资源。', {
     youth: z.object({
       action: z.enum(['plan', 'recruit_position', 'sign', 'call_up', 'return', 'promote', 'release']),

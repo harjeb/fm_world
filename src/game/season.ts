@@ -11,6 +11,7 @@ import { matchPlanConditionFactor, type MatchPlanId } from './pes/match-plan.ts'
 import { expireOffers, runLocalTransfers } from './transfers.ts'
 import { refreshLocalFreeMarket } from './free-market.ts'
 import { awardSeasonPrize } from './economy.ts'
+import { awardSeasonShopPoints } from './shop.ts'
 import { squadLimitError } from './market.ts'
 import { AVERAGE_ROUND_GAME_DAYS, DAY_MS, GAME_DAY_MS, KICKOFF_SCHEDULE, calendarStartForSeason, latestKickoffAt, elapsedGameDays, gameDayOfRound, kickoffAtForRound, seasonEndAt, roundsKickedOff, roundGapGameDays } from './calendar.ts'
 import { seasonRoundKickoff, worldRoundsKickedOff } from './season-cups.ts'
@@ -222,6 +223,7 @@ export function updateSeasonTable(game: GameState): void {
     ensurePromotionPlayoff(game)
     // 排名奖金只发一次，靠 economy.prizeSeason 去重。
     awardSeasonPrize(game)
+    awardSeasonShopPoints(game)
   }
 }
 

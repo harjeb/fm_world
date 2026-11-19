@@ -55,7 +55,9 @@ import { leagueDisplayClock } from '../src/game/realtime.ts'
 import { injuryUntil } from '../src/game/injury.ts'
 import { buildReview } from '../src/game/review.ts'
 import { cardRecyclePoints, cardsOf, playerCards, recyclePlayerCards, setCardRecycleLock, untrainedPlayer } from '../src/game/cards.ts'
-import { traitEffectText } from '../src/game/data/skill-effects.ts'
+import { skillEffectText, traitEffectText } from '../src/game/data/skill-effects.ts'
+import { hasBookAtOrAbove } from '../src/game/legend-books.ts'
+import { SHOP_BOOK_PRICE, buyShopBook, peakStageShopPoints, shopCatalog, shopPointsOf, shopSeasonIndex } from '../src/game/shop.ts'
 import { traitNameOf } from '../src/game/data/star-traits.ts'
 import {
   autoLineup,
@@ -386,7 +388,7 @@ function peakStageSummary(stage: number) {
     season: def.team.season,
     tier: def.team.tier,
     formationId: def.team.formationId,
-    reward: reward ? { kind: reward.kind, amount: reward.amount, ...(reward.breakthroughCards ? { breakthroughCards: reward.breakthroughCards } : {}) } : null,
+    reward: reward ? { kind: reward.kind, amount: reward.amount, shopPoints: peakStageShopPoints(stage), ...(reward.breakthroughCards ? { breakthroughCards: reward.breakthroughCards } : {}) } : null,
     peakSkillDrop: book ? { id: book.id, name: book.name, effect: book.effect } : null,
   }
 }
@@ -626,6 +628,26 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
     matchPlans: MATCH_PLAN_LIST,
     roles: ROLES_BY_POSITION,
     trainingSessions: sessionView,
+    shop: {
+      points: shopPointsOf(game),
+      seasonIndex: shopSeasonIndex(game),
+      price: SHOP_BOOK_PRICE,
+      peakClaimedStages: (game.shop?.peakClaimedStages ?? []).length,
+      seasonClaims: game.shop?.seasonClaims ?? {},
+      catalog: shopCatalog(game.seed, shopSeasonIndex(game)).map((offer) => ({
+        id: offer.id,
+        key: bookKey(offer),
+        name: bookName(offer.id),
+        tier: offer.tier,
+        scope: offer.scope,
+        group: offer.group,
+        category: offer.category,
+        price: offer.price,
+        owned: hasBookAtOrAbove(game, offer.id, 'gold'),
+        effect: skillEffectText(offer.id, offer.tier),
+        requirements: bookRequirementText(offer),
+      })),
+    },
     legendBooks: (game.legendBooks ?? []).map((book) => ({ ...book, key: bookKey(book), name: bookName(book.id), requirements: bookRequirementText(book) })),
     trainingBooksByPlayer: Object.fromEntries(game.roster.map((player) => [player.id, trainingBookLoadout(game, player.id)])),
     candidates: Object.values(game.candidates).map((player) => playerView(player, game, now)),
@@ -886,6 +908,12 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       if (!Array.isArray(body.bookKeys) || body.bookKeys.some((key) => typeof key !== 'string')) return { ok: false, error: 'bookKeys 必须是技能书 key 数组' }
       const result = setTrainingBookLoadout(game, text(body.playerId), body.bookKeys as string[])
       return { ...result, result }
+    }
+    case 'buy_shop_book': {
+      const skillId = text(body.skillId)
+      if (!skillId) return { ok: false, error: 'skillId 不能为空' }
+      const result = buyShopBook(game, skillId)
+      return result.ok ? { ok: true, result } : result
     }
     case 'start_training': {
       // 省略 bookKeys 时使用该球员已保存的配置。

@@ -7,7 +7,7 @@
  * - 玩家也可随时通过顶栏版本号按钮重新打开查看。
  */
 
-export const APP_VERSION = 'v0.4.20'
+export const APP_VERSION = 'v0.4.21'
 export const CHANGELOG_STORAGE_KEY = 'fm-world-changelog-seen'
 
 export type ChangelogItem = {
@@ -26,6 +26,18 @@ export type ChangelogRelease = {
 }
 
 export const CHANGELOG_RELEASES: readonly ChangelogRelease[] = [
+  {
+    version: 'v0.4.21',
+    date: '2026-11-20',
+    headline: '上线技能书商店、40 个全新技能（含 10 个场上辅助技能）与巅峰点数补发',
+    summary: '经营页新增每赛季全服轮换的技能书商店（8 外场 + 2 门将 + 2 辅助金书），推出 40 个非传奇/非巅峰新技能，开放赛季排名结算与巅峰之路逐关商店点数（已通关老玩家自动补发），并同步支持 Agent / MCP 兑换。',
+    items: [
+      { badge: '新功能', tone: 'gold', title: '技能书商店与每赛季全服轮换货架', desc: '侧边栏「经营 → 商店」上线，每赛季统一轮换 8 本外场金书、2 本守门员金书与 2 本辅助金书（共 12 本，每本 100 商店点数，永久入库不消耗，相邻赛季零重复）。' },
+      { badge: '新技能', tone: 'good', title: '新增 40 个商店技能（24 外场 + 6 门将 + 10 场上辅助）', desc: '补齐后防、中场、边路、锋线、门将全位置新技能，并新增点球大心脏（常规点球与点球大战镇定加成，主罚与扑点皆生效）、逆风斗志、领先稳控、绝杀意志、超级替补、纪律严明等 10 个场上/纪律辅助技能，占 2 格辅助技能槽不挤占主技能位；伤病预防与伤病韧性金书一并纳入辅助轮换池。' },
+      { badge: '点数与补发', tone: 'gold', title: '赛季排名结算 + 巅峰之路每关点数（自动补发老玩家）', desc: '赛季常规赛结束按联赛级别与排名发放商店点数（跨赛季不清零：二级上游 400–480 点约换 4 本，一级上游 670–800 点，冠军联赛上游 1000–1200 点可全换）；巅峰之路 1–100 关首通额外奖励 15–60 点/关（共 3,660 点），历史已通关玩家登录后自动幂等补发。' },
+      { badge: '优化修复', tone: '', title: 'Agent / MCP 同步开放与培养上限突破修复', desc: 'Agent API 与 MCP 同步提供 state.shop 货架与 buy_shop_book 兑换接口；此前修复的奖杯突破 1500 培养上限截断与彩色技能标签展示优化一并随本版本上线。' },
+    ],
+  },
   {
     version: 'v0.4.20',
     date: '2026-11-19',

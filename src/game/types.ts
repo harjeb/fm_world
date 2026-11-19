@@ -149,6 +149,52 @@ export type SkillId =
   | 'lg_peak_wall'
   | 'lg_peak_wing'
   | 'lg_peak_keeper'
+  | ShopSkillId
+
+export type ShopSkillId =
+  | 'sh_buildup'
+  | 'sh_box_defense'
+  | 'sh_mid_destroyer'
+  | 'sh_clear_header'
+  | 'sh_clean_tackle'
+  | 'sh_long_block'
+  | 'sh_switch_play'
+  | 'sh_halfspace_pass'
+  | 'sh_ball_magnet'
+  | 'sh_counter_press'
+  | 'sh_ball_carrier'
+  | 'sh_lane_cut'
+  | 'sh_cut_inside'
+  | 'sh_cutback'
+  | 'sh_dead_ball'
+  | 'sh_cut_in_shot'
+  | 'sh_clinical_1v1'
+  | 'sh_target_header'
+  | 'sh_power_header'
+  | 'sh_free_kick'
+  | 'sh_poised_finish'
+  | 'sh_target_link'
+  | 'sh_tight_angle'
+  | 'sh_box_poacher'
+  | 'sh_gk_long_save'
+  | 'sh_gk_penalty'
+  | 'sh_gk_box_command'
+  | 'sh_gk_aerial_save'
+  | 'sh_gk_short_build'
+  | 'sh_gk_loose_claim'
+  | ShopAuxSkillId
+
+export type ShopAuxSkillId =
+  | 'sh_aux_penalty_calm'
+  | 'sh_aux_comeback'
+  | 'sh_aux_hold_lead'
+  | 'sh_aux_late_surge'
+  | 'sh_aux_fast_start'
+  | 'sh_aux_super_sub'
+  | 'sh_aux_home_boost'
+  | 'sh_aux_away_steel'
+  | 'sh_aux_tired_grit'
+  | 'sh_aux_discipline'
 
 export type PeakSkillId = 'lg_peak_striker' | 'lg_peak_engine' | 'lg_peak_wall' | 'lg_peak_wing' | 'lg_peak_keeper'
 export type LegendSkillId = Exclude<Extract<SkillId, `lg_${string}`>, PeakSkillId>
@@ -1156,9 +1202,26 @@ export type PairChemistry = {
 
 export type Chemistry = Record<string, PairChemistry>
 
+export type ShopState = {
+  /** 当前可用商店点数（跨赛季累计不清零）。 */
+  points: number
+  /** 已发放过赛季排名点数的赛季编号 → 获得点数（按赛季去重）。 */
+  seasonClaims: Record<number, number>
+  /** 已发放过巅峰之路点数的关卡号列表（1..100，用于首通发奖与已通关玩家自动补发去重）。 */
+  peakClaimedStages: number[]
+  /** 巅峰之路已累计发放过的商店点数（用于调高巅峰点数后的差额补发与幂等校验）。 */
+  peakPointsAwarded?: number
+  /** 最近一次赛季结算获得的商店点数。 */
+  lastSeasonPoints?: number
+  /** 最近一次老存档巅峰之路自动补发的商店点数。 */
+  lastPeakBackfill?: number
+}
+
 export type GameState = {
   /** 独立青训营；缺省旧档首次进入时初始化一次。 */
   youth?: YouthState
+  /** 技能书商店点数与领取账本；旧档首次进入时初始化并补发已通关巅峰关卡点数。 */
+  shop?: ShopState
   scoutReports?: ScoutReport[]
   /** 全俱乐部共用的回收培养点；旧档不存在时为 0。 */
   trainingPoints?: number

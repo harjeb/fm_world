@@ -3,6 +3,7 @@ import { SKILLS, basicSkillsFor, basicSkillScopeMatches, canLearnSkill, skillCat
 import { getSkillTier, inheritanceChances } from './inheritance.ts'
 import { LEGEND_SKILLS, MAX_BOOKS } from './data/legend-skills.ts'
 import { PEAK_SKILLS } from './data/peak-skills.ts'
+import { SHOP_SKILLS } from './data/shop-skills.ts'
 import { basicBookDef } from './data/basic-skill-books.ts'
 import { effectiveClubCeilings } from './cup-rewards.ts'
 import { attrHardLimit } from './scale.ts'
@@ -16,7 +17,9 @@ type BookRequirement = { attr: AttrKey; silver?: number; gold: number; rainbow: 
 type BookDef = { name: string; scope: 'any' | 'field' | 'gk'; requires: BookRequirement[] }
 
 function bookDef(id: SkillBookId): BookDef | undefined {
-  const special = (LEGEND_SKILLS as unknown as Record<string, BookDef>)[id] ?? (PEAK_SKILLS as unknown as Record<string, BookDef>)[id]
+  const special = (LEGEND_SKILLS as unknown as Record<string, BookDef>)[id]
+    ?? (PEAK_SKILLS as unknown as Record<string, BookDef>)[id]
+    ?? (SHOP_SKILLS as unknown as Record<string, BookDef>)[id]
   if (special) return special
   return Object.hasOwn(SKILLS, id) ? basicBookDef(id, SKILLS[id].name) : undefined
 }
@@ -73,7 +76,9 @@ export function canUseBookOnPlayer(player: Pick<Player, 'positions' | 'skills' |
   if (!bookScopeMatches(player, book)) return { ok: false, reason: '位置不匹配' }
   const current = player.skills.includes(book.id) ? (player.skillTiers?.[book.id] ?? 'silver') : null
   if (current && RANK[current] >= RANK[book.tier]) return { ok: false, reason: '已经掌握同等或更高档位' }
-  if (!current && !canLearnSkill(player.skills, book.id)) return { ok: false, reason: '主技能槽已满（4/4）' }
+  if (!current && !canLearnSkill(player.skills, book.id)) {
+    return { ok: false, reason: skillCategory(book.id) === 'auxiliary' ? '辅助技能槽已满（2/2）' : '主技能槽已满（4/4）' }
+  }
   return { ok: true }
 }
 
@@ -154,7 +159,7 @@ export const SKILL_SOURCE_WEIGHTS = { book: 50, teammate: 30, basic: 20 } as con
 export const MAX_SKILL_TEACHERS = 5
 
 function skillMatchesPlayer(player: Pick<Player, 'positions'>, skill: SkillId): boolean {
-  if (skill.startsWith('lg_')) return bookScopeMatches(player, { id: skill as SkillBookId })
+  if (skill.startsWith('lg_') || skill.startsWith('sh_')) return bookScopeMatches(player, { id: skill as SkillBookId })
   return basicSkillScopeMatches(skill, player.positions.GK > 0)
 }
 

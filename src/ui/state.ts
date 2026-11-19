@@ -24,7 +24,7 @@ export type NegotiationDraft = {
 import type { TrainingActionId } from '../game/training.ts'
 import type { TrainingActivityId } from '../game/training-calendar.ts'
 
-export type Screen = 'youth' | 'club' | 'transfer' | 'home' | 'academy' | 'inventory' | 'training' | 'lineup' | 'season' | 'cups' | 'world' | 'challenge' | 'review' | 'match'
+export type Screen = 'youth' | 'club' | 'shop' | 'transfer' | 'home' | 'academy' | 'inventory' | 'training' | 'lineup' | 'season' | 'cups' | 'world' | 'challenge' | 'review' | 'match'
 export type ClubTab = 'facilities' | 'contracts' | 'history'
 export type TransferTab = 'market' | 'free' | 'ai' | 'offers'
 export type SquadSortKey = 'pos' | 'name' | 'age' | 'ca' | 'condition' | 'energy' | 'value' | `attr${number}`
@@ -152,7 +152,7 @@ export type UIState = {
   newGamePreview: { seed: number; clubs: ClubPreview[] } | null
 }
 
-const SAVE_SCREEN: Screen[] = ['youth', 'club', 'transfer', 'home', 'academy', 'inventory', 'training', 'lineup', 'season', 'cups', 'world', 'challenge', 'review', 'match']
+const SAVE_SCREEN: Screen[] = ['youth', 'club', 'shop', 'transfer', 'home', 'academy', 'inventory', 'training', 'lineup', 'season', 'cups', 'world', 'challenge', 'review', 'match']
 
 /** 模式选定后才初始化；启动页不读取、迁移或生成离线世界。 */
 export let game: GameState
