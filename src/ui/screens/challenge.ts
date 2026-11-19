@@ -46,13 +46,20 @@ function renderFriendly(): string {
   const ids = game.world?.divisions.find((division) => division.divisionId === active)?.clubIds ?? []
   const teams = own ? game.aiTeams : ids.filter((id) => id !== 'player').flatMap((id) => {
     const club = game.world!.clubs.find((entry) => entry.id === id)
-    return club ? [{ ...club, formationId: club.formationId ?? DEFAULT_FORMATION, players: [] }] : []
+    return club ? [{
+      ...club,
+      formationId: club.liveFormationId ?? club.formationId ?? DEFAULT_FORMATION,
+      tactics: club.liveTactics ?? club.tactics,
+      tacticalStyle: club.liveTacticalStyle,
+      players: [],
+    }] : []
   })
   return `${inPostseason(game) ? '<div class="banner info">赛后休整期间也可以约战世界球队。</div>' : ''}<div class="toolbar"><span>选择联赛</span><div class="seg">${options.map((entry) => `<button class="${active === entry.id ? 'active' : ''}" data-challenge-div="${entry.id}">${esc(entry.label)}</button>`).join('')}</div>${onlineState.status === 'online' ? '<span class="muted small">联机对手名单由服务器提供。</span>' : ''}</div>
     <div class="grid challenge-grid">${panel(`可挑战球队 <small>${teams.length}</small>`, `<div class="table-scroll"><table class="dt"><thead><tr><th>球队</th><th>阵型</th><th>战术</th><th>实力</th><th>平均 CA</th><th>核心球员</th><th></th></tr></thead><tbody>${teams.map((team) => {
       const best = [...team.players].sort((a, b) => playerCA(b) - playerCA(a))
       const average = best.slice(0, 11).reduce((sum, p) => sum + playerCA(p), 0) / Math.min(11, best.length || 1)
-      return `<tr><td>${clubName(team.id)}</td><td>${team.formationId}</td><td>${esc(aiTeamTacticLabel(team))}</td><td>${team.strength} / 5</td><td>${best.length ? caHeat(average) : '约战后再看'}</td><td>${best.slice(0, 3).map((p) => esc(p.name)).join('、')}</td><td><button class="btn small" data-action="start-world-challenge" data-team="${esc(team.id)}" ${game.activeMatch ? 'disabled' : ''}>约战</button></td></tr>`
+      const formationId = 'lineup' in team && team.lineup ? team.lineup.formationId : team.formationId
+      return `<tr><td>${clubName(team.id)}</td><td>${formationId}</td><td>${esc(aiTeamTacticLabel(team))}</td><td>${team.strength} / 5</td><td>${best.length ? caHeat(average) : '约战后再看'}</td><td>${best.slice(0, 3).map((p) => esc(p.name)).join('、')}</td><td><button class="btn small" data-action="start-world-challenge" data-team="${esc(team.id)}" ${game.activeMatch ? 'disabled' : ''}>约战</button></td></tr>`
     }).join('')}</tbody></table></div>`, { flush: true })}${recordsPanel(game.challengeHistory.filter((record) => !record.mode || record.mode === 'friendly'))}</div>`
 }
 

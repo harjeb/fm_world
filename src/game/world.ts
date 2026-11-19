@@ -10,6 +10,7 @@ import type {
   PromotionPlayoff,
   SeasonState,
   SeasonTableRow,
+  Tactics,
   TierId,
   WorldClub,
   WorldState,
@@ -19,8 +20,9 @@ import { LEGACY_SQUAD_SIZE, buildNameBook, createRandomPlayer, randomSquadPositi
 import { allocateNaturalSquad, neededNaturalPosition } from './natural-positions.ts'
 import { DIVISION_IDS, WORLD_CLUB_DEFS, conferenceLabel, conferenceOfDivision, divisionIdForTier, pickExpandedZoneClubs, type WorldClubDef } from './data/world-clubs.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION } from './names.ts'
-import { FULL_SQUAD, MIN_SQUAD, autoFillLineup, repairLineup, validateLineup } from './squad.ts'
+import { FULL_SQUAD, MIN_SQUAD, autoFillLineup, refreshAILineup, repairLineup, validateLineup } from './squad.ts'
 import { applyAITacticsToLineup } from './ai-tactics.ts'
+import { inferStyleForInstructions } from './pes/tactics.ts'
 import { equipAICards, mergeSignings, seedAIClubs } from './ai-club.ts'
 import { caOf } from './ca.ts'
 import { derivedRng, splitSeed, hashString } from './rng.ts'
@@ -560,13 +562,108 @@ export function createOwnerlessWorld(seed: number, startedAt = Date.now()): { wo
   return { world: setup.world, freeStars: setup.freeStars, reserveStars: setup.reserveStars }
 }
 
-const EXPAND_TACTICS = [
+export const EXPAND_TACTICS = [
   { attack: 'balanced', passing: 'mixed', tempo: 'normal', line: 'mid', press: 'mid' },
   { attack: 'wing', passing: 'direct', tempo: 'fast', line: 'high', press: 'high' },
   { attack: 'middle', passing: 'short', tempo: 'slow', line: 'mid', press: 'mid' },
   { attack: 'balanced', passing: 'direct', tempo: 'normal', line: 'low', press: 'mid' },
   { attack: 'middle', passing: 'short', tempo: 'normal', line: 'mid', press: 'low' },
 ] as const
+
+const DEFAULT_LEGACY_EXPANDED_TACTICS: Tactics = EXPAND_TACTICS[0]
+
+function sameTactics(a: Tactics | undefined, b: Tactics | undefined): boolean {
+  if (!a || !b) return a === b
+  return a.attack === b.attack
+    && a.passing === b.passing
+    && a.tempo === b.tempo
+    && a.line === b.line
+    && a.press === b.press
+}
+
+/**
+ * 迁移 v0.4.18 之前扩区生成的 d2z* 球队：旧版把全区 `club.tactics` 统一写死为默认均衡。
+ * 若整个扩展赛区所有球队仍是同一份默认战术，则按确定性洗牌补齐 5 档多样化基底战术，
+ * 并同步更新无主 AI 球队的 `team.tactics` 与阵容战术画像（真人执教球队的阵容不动）。幂等。
+ */
+export function migrateLegacyExpandedTactics(
+  world: WorldState,
+  seed: number,
+  options?: { teams?: Record<string, AITeam>; owners?: Record<string, string> },
+): boolean {
+  const byZone = new Map<string, WorldClub[]>()
+  for (const club of world.clubs) {
+    if (!club.id.startsWith('d2z') || !club.conference) continue
+    const list = byZone.get(club.conference) ?? []
+    list.push(club)
+    byZone.set(club.conference, list)
+  }
+  let changed = false
+  for (const [conference, zoneClubs] of byZone) {
+    if (zoneClubs.length < 2) continue
+    if (!zoneClubs.every((club) => sameTactics(club.tactics, DEFAULT_LEGACY_EXPANDED_TACTICS))) continue
+    const sorted = [...zoneClubs].sort((a, b) => a.id.localeCompare(b.id))
+    const pool = Array.from({ length: sorted.length }, (_, index) => ({ ...EXPAND_TACTICS[index % EXPAND_TACTICS.length] }))
+    const rng = derivedRng(seed, 'migrate-expanded-tactics', conference)
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = rng.int(i + 1)
+      const tmp = pool[i]
+      pool[i] = pool[j]
+      pool[j] = tmp
+    }
+    for (let i = 0; i < sorted.length; i++) {
+      const club = sorted[i]
+      club.tactics = { ...pool[i] }
+      const team = options?.teams?.[club.id]
+      const owned = !!options?.owners?.[club.id]
+      if (team && !owned) {
+        team.tactics = { ...club.tactics }
+        if (team.players?.length && team.lineup) refreshAILineup(team)
+      }
+    }
+    changed = true
+  }
+  return changed
+}
+
+/** 把共享球队当前生效的阵型与战术摘要同步到 `WorldClub`，供跨赛区友谊赛列表展示（不覆盖建队基底 `club.tactics`）。 */
+export function syncClubLiveTactics(
+  club: WorldClub,
+  team: Pick<AITeam, 'formationId' | 'tactics' | 'lineup'> | undefined,
+): boolean {
+  const lineup = team?.lineup
+  if (!lineup) return false
+  const nextFormation = lineup.formationId ?? team.formationId ?? club.formationId
+  const nextTactics: Tactics = { ...lineup.tactics }
+  const nextStyle = lineup.tacticalInstructions
+    ? inferStyleForInstructions(lineup.tacticalInstructions, lineup.tacticalStyle).styleId
+    : lineup.tacticalStyle
+  let changed = false
+  if (club.liveFormationId !== nextFormation) {
+    club.liveFormationId = nextFormation
+    changed = true
+  }
+  if (!sameTactics(club.liveTactics, nextTactics)) {
+    club.liveTactics = nextTactics
+    changed = true
+  }
+  if (club.liveTacticalStyle !== nextStyle) {
+    if (nextStyle === undefined) delete club.liveTacticalStyle
+    else club.liveTacticalStyle = nextStyle
+    changed = true
+  }
+  return changed
+}
+
+/** 批量同步所有俱乐部的实时阵型与战术摘要。 */
+export function syncAllClubLiveTactics(world: WorldState, teams: Record<string, AITeam> | undefined): boolean {
+  if (!teams) return false
+  let changed = false
+  for (const club of world.clubs) {
+    if (syncClubLiveTactics(club, teams[club.id])) changed = true
+  }
+  return changed
+}
 
 /**
  * 二级联赛满员后开一个新赛区：20 支真实低级别球队、同样的双循环赛程。

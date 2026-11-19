@@ -26,7 +26,7 @@ import { addTrainedCard, ensureCards, equipCard, playerCards, recyclePlayerCards
 import { ensurePve } from '../src/game/pve.ts'
 import { loadPveContent } from '../src/game/pve-content.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
-import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, wageForPlayer, worldForClub, worldSlots, worldWageBill } from '../src/game/world.ts'
+import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, migrateLegacyExpandedTactics, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, syncAllClubLiveTactics, syncClubLiveTactics, wageForPlayer, worldForClub, worldSlots, worldWageBill } from '../src/game/world.ts'
 import { pickExpandedZoneClubs } from '../src/game/data/world-clubs.ts'
 import { lineupLockState } from '../src/game/season.ts'
 import { completedWorldRound, seasonRoundKickoff, worldRoundsKickedOff } from '../src/game/season-cups.ts'
@@ -343,9 +343,16 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     sharedWorld.positionProfilesVersion = 1
     sharedWorld.marketVersion = (sharedWorld.marketVersion ?? 1) + 1
   }
+  // 早期扩区（v0.4.18 前）的 d2z* 球队战术统一写死为默认均衡：按确定性洗牌补齐多样化基底战术，
+  // 同步更新无主 AI 球队的基底战术（真人执教球队阵容不动）。
+  migrateLegacyExpandedTactics(sharedWorld.world, sharedWorld.seed, {
+    teams: sharedWorld.teams,
+    owners: sharedWorld.owners,
+  })
   // 以前 AI 买进来的球员没排进首发（只修“不合法”的阵容），一直坐在名单外：无主的 AI 球队按名单重排一次。
   // 有教练的球队阵容是教练自己排的，不动。
   refreshAILineups(Object.entries(sharedWorld.teams ?? {}).filter(([clubId]) => !sharedWorld.owners[clubId]).map(([, team]) => team))
+  syncAllClubLiveTactics(sharedWorld.world, sharedWorld.teams)
   if (!sharedWorld.matchBook) {
     sharedWorld.matchBook = emptyMatchBook()
     for (const account of db.accounts) {
@@ -628,6 +635,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const team = sharedWorld.teams?.[club.id]
       const before = `${state.economy.balance}|${state.trained}|${state.upgrades}`
       advanceAIClub(state, club, team, rounds, splitSeed(sharedWorld.seed, `ai-advance-${club.id}-${round}`), true, sharedWorld.world.seasonIndex)
+      if (syncClubLiveTactics(club, team)) changed = true
       if (`${state.economy.balance}|${state.trained}|${state.upgrades}` !== before) changed = true
     }
     // 转会窗口里 AI 之间按需互相挖人（同级或更低级别），每轮全服最多 3 笔。
@@ -641,6 +649,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
           changed = true
         },
       })
+      if (syncAllClubLiveTactics(sharedWorld.world, sharedWorld.teams)) changed = true
     }
     if (changed || rounds > 0) persistWorld()
   }
@@ -1114,6 +1123,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         anyChanged = true
         worldChanged = true
       }
+      if (syncClubLiveTactics(sharedClub, sharedWorld.teams[clubId])) {
+        anyChanged = true
+        worldChanged = true
+      }
     }
     const division = sharedWorld.world.divisions.find((item) => item.divisionId === account.game.season.divisionId && item.index === account.game.season.index)
     if (division) {
@@ -1233,6 +1246,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       team.players = [...team.players, player]
       // 拍下的球员要能进首发：只修“不合法”的阵容会让他一直坐在名单外。
       refreshAILineup(team)
+      const club = sharedWorld.world.clubs.find((item) => item.id === clubId)
+      if (club) syncClubLiveTactics(club, team)
     },
   }
 
@@ -2109,6 +2124,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const teams = buildOwnerlessTeams(next, teamSeed, sharedWorld.aiClubs)
       for (const { clubId, game } of drafts) {
         teams[clubId] = { ...teams[clubId], players: structuredClone(game.roster), lineup: structuredClone(game.lineup) }
+      }
+      syncAllClubLiveTactics(next, teams)
+      for (const { clubId, game } of drafts) {
         game.world = worldForClub(next, clubId)
         game.season = game.world.divisions.find((division) => division.clubIds?.includes('player'))!
         game.aiTeams = (game.season.clubIds ?? []).filter((id) => id !== 'player').map((id) => structuredClone(teams[id]))
@@ -2356,7 +2374,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       for (let round = 1; round <= aiRounds; round++) {
         advanceAIClub(state, item, team, 1, splitSeed(sharedWorld.seed, `ai-advance-${item.id}-${round}`), true, sharedWorld.world.seasonIndex)
       }
-      if (team) refreshAILineup(team)
+      if (team) {
+        refreshAILineup(team)
+        syncClubLiveTactics(item, team)
+      }
     }
     if (newDivision) catchUpExpandedDivision(sharedWorld.world, newDivision, completedBefore, sharedWorld.seed)
     persistWorld()

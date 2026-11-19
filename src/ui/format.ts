@@ -197,8 +197,13 @@ export function teamStatusTacticBadge(team: {
   return `${team.formationId} · ${stylePart}${mentalityPart}`
 }
 
-/** 挑战/世界列表里展示 AI 球队的战术风格与五项倾向（兼容冻结 PvE 球队实时推导）。 */
-export function aiTeamTacticLabel(team: Pick<AITeam, 'formationId' | 'tactics' | 'players' | 'style' | 'strength' | 'tier'> & { lineup?: AITeam['lineup'] }): string {
+/** 挑战/世界列表里展示 AI 球队的战术风格与五项倾向（兼容冻结 PvE 球队实时推导与跨赛区实时摘要）。 */
+export function aiTeamTacticLabel(
+  team: Pick<AITeam, 'formationId' | 'tactics' | 'players' | 'style' | 'strength' | 'tier'> & {
+    lineup?: AITeam['lineup']
+    tacticalStyle?: StyleId
+  },
+): string {
   if (team.lineup?.tacticalInstructions) {
     const info = inferStyleForInstructions(team.lineup.tacticalInstructions, team.lineup.tacticalStyle)
     return `${STYLES_REV3[info.styleId].name}（${tacticText(team.lineup.tactics)}）`
@@ -213,6 +218,9 @@ export function aiTeamTacticLabel(team: Pick<AITeam, 'formationId' | 'tactics' |
       tier: team.tier,
     })
     return `${STYLES_REV3[profile.tacticalStyle].name}（${tacticText(profile.tactics)}）`
+  }
+  if (team.tacticalStyle && STYLES_REV3[team.tacticalStyle]) {
+    return `${STYLES_REV3[team.tacticalStyle].name}（${tacticText(team.tactics)}）`
   }
   return tacticText(team.tactics)
 }
