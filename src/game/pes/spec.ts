@@ -40,6 +40,10 @@ export interface Abilities {
   handling: number
   /** 空中能力（头球 / 对抗 / 身高）：决定角球和传中时谁冲点；原版 pes2d 没有这一项 */
   air?: number
+  /** simV2 物理运动直连的单项能力：盘带 / 力量 / 镇定（旧存档缺省时回退到 control / 0.65） */
+  dribbling?: number
+  strength?: number
+  composure?: number
 }
 
 /** 战术滑杆，0–1（第 5 节）。 */
@@ -203,6 +207,13 @@ export interface PesPlayer {
   familiarity?: number
   /** 本次决策的指令执行系数（−1…+1）：正 = 按指令执行，负 = 执行反了。每帧重算，不参与存档语义。 */
   bias?: number
+  /** simV2：过人成功后的短暂加速摆脱窗口结束时刻。 */
+  burstUntil?: number
+  /** simV2：被过/失位后的短暂减速恢复窗口结束时刻。 */
+  slowUntil?: number
+  /** simV2：最近一次传球给自己的人 pid 与时刻（抑制无意义乒乓球回传）。 */
+  lastPasser?: number
+  lastPassAt?: number
 }
 
 export interface PesTeam {
@@ -230,6 +241,11 @@ export interface PesTeam {
   pressOwnerPid?: number
   /** marks[slot] = 该队员本帧盯防的对方 pid，没有为 -1。每帧重新分配。 */
   marks: number[]
+  /** simV2：盯人分配节流时间戳，减少每帧无状态重排导致的急停掉头。 */
+  markEvalAt?: number
+  /** simV2：旧滑杆模式下上抢者滞回节流状态。 */
+  legacyPressEvalAt?: number
+  legacyPressOwnerPid?: number
 }
 
 export type BallMetaType = 'pass' | 'cross' | 'shot' | 'blocked' | 'clear' | 'loose' | 'save'
@@ -263,6 +279,9 @@ export interface BallMeta {
   hold?: boolean
   /** 射门是头球 */
   header?: boolean
+  /** simV2：射门封堵演出——先飞向封堵者再在其身前弹开。 */
+  blocker?: number
+  deflected?: boolean
 }
 
 export interface PesBall {
@@ -351,6 +370,12 @@ export interface PesRules {
   offside: boolean
   /** 禁区内犯规判点球；false = 一律任意球 */
   penalties: boolean
+  /**
+   * 2D 运动与 AI 演进版本（true = simV2）：
+   * 死球强制出球、真实门将近身扑救、敌我碰撞分离、前锋冲刺与带球避障、对抗摆脱反馈、盯人区域滞回。
+   * 旧回放快照缺省为 false，保证历史 2D 回放与既有比分逐位一致；原生 pes-diff 保持 false。
+   */
+  simV2?: boolean
 }
 
 export const NATIVE_RULES: PesRules = { fatigue: 'native', fatiguePerMeter: 2.0e-4, cross: false, offside: true, penalties: false }
@@ -362,11 +387,11 @@ export const NATIVE_RULES: PesRules = { fatigue: 'native', fatiguePerMeter: 2.0e
  * 比赛存档自带 fatiguePerMeter，因此进行中的旧比赛保持原来的消耗系数。
  */
 export const GAME_FATIGUE_PER_METER = 3.8e-4
-export const GAME_RULES: PesRules = { fatigue: 'distance', fatiguePerMeter: GAME_FATIGUE_PER_METER, cross: true, offside: true, penalties: true }
+export const GAME_RULES: PesRules = { fatigue: 'distance', fatiguePerMeter: GAME_FATIGUE_PER_METER, cross: true, offside: true, penalties: true, simV2: true }
 
-/** 刚开出的任意球：发球人在这段时间内按定位球的规则出球（直接射门 / 传中 / 短传）。 */
+/** 刚开出的定位球 / 重开球：发球人按对应规则强制出球（不能违例直接带球）。 */
 export interface PesSetPiece {
-  type: 'fk'
+  type: 'fk' | 'kickoff' | 'throwin' | 'goalkick'
   taker: number
   until: number
 }

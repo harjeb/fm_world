@@ -96,6 +96,8 @@ export interface KernelHooks {
   markSkill(player: MatchPlayerState, skillId: SkillId, condition: boolean, applied: boolean): void
   /** rulesVersion < 2 的旧存档；新引擎恒为 false。 */
   readonly legacyRules: boolean
+  /** 2D simV2 增强属性平衡（仅新 PES 比赛启用，不影响旧引擎 pes-equiv 与历史回放）。 */
+  readonly simV2?: boolean
 }
 
 export class SettlementKernel {
@@ -152,7 +154,9 @@ export class SettlementKernel {
     const dist = distance(from, to)
     const interceptors = this.findLineInterceptors(opp, from, to)
     const main = interceptors[0]?.player ?? null
-    let a = 0.7 * this.ratings.eff(carrier, 'passing', { passing: true, crossing: type === 'cross' }) + 0.2 * this.ratings.eff(carrier, 'composure') + 0.1 * this.ratings.eff(receiver, 'firstTouch', { finalThird: progressOf(carrier.side, receiver.x) > 0.65 })
+    let a = this.hooks.simV2
+      ? 0.65 * this.ratings.eff(carrier, 'passing', { passing: true, crossing: type === 'cross' }) + 0.25 * this.ratings.eff(carrier, 'composure') + 0.1 * this.ratings.eff(receiver, 'firstTouch', { finalThird: progressOf(carrier.side, receiver.x) > 0.65 })
+      : 0.7 * this.ratings.eff(carrier, 'passing', { passing: true, crossing: type === 'cross' }) + 0.2 * this.ratings.eff(carrier, 'composure') + 0.1 * this.ratings.eff(receiver, 'firstTouch', { finalThird: progressOf(carrier.side, receiver.x) > 0.65 })
     const support = interceptors.slice(1, 2).reduce((sum, item) => sum + Math.min(6, Math.max(0, item.score) * 0.1), 0)
     let d = main ? 0.75 * this.ratings.eff(main, 'tackling') + 0.25 * this.ratings.eff(main, 'agility') + Math.min(12, support) : 0
     if (main?.skills.includes('cb_intercept') && !this.hooks.legacyRules) {
@@ -169,6 +173,10 @@ export class SettlementKernel {
     const nearestToReceiver = this.nearestOpponent(opp, receiver)
     c += nearestToReceiver ? Math.min(5, distance(nearestToReceiver, receiver) * 0.25) : 3
     c -= pressure * 0.8
+    if (this.hooks.simV2 && pressure > 2) {
+      // 高压逼抢下，镇定高的持球人更冷静地完成出球
+      c += (this.ratings.eff(carrier, 'composure') - 50) * 0.018 * Math.min(pressure, 6)
+    }
     if (weak) c -= 4
     if (type === 'cross') c += 2
     if (type === 'through') c -= 2
@@ -271,14 +279,18 @@ export class SettlementKernel {
     const weak = weakFoot(carrier)
     const wing = wideZone(carrier)
     const pressure = distance(defender, carrier) < 5 ? 1 : 0
-    let a = 0.4 * this.ratings.eff(carrier, 'dribbling') + 0.22 * this.ratings.eff(carrier, 'agility') + 0.18 * this.ratings.eff(carrier, 'strength') + 0.2 * this.ratings.eff(carrier, 'acceleration')
+    let a = this.hooks.simV2
+      ? 0.50 * this.ratings.eff(carrier, 'dribbling') + 0.22 * this.ratings.eff(carrier, 'strength') + 0.14 * this.ratings.eff(carrier, 'agility') + 0.14 * this.ratings.eff(carrier, 'acceleration')
+      : 0.4 * this.ratings.eff(carrier, 'dribbling') + 0.22 * this.ratings.eff(carrier, 'agility') + 0.18 * this.ratings.eff(carrier, 'strength') + 0.2 * this.ratings.eff(carrier, 'acceleration')
     if (carrier.skills.includes('wing_runner') && wing) {
       a += 5 * skillTierMultiplier(carrier, 'wing_runner')
       if (markSkills) this.hooks.markSkill(carrier, 'wing_runner', true, true)
     } else if (carrier.skills.includes('wing_runner')) {
       if (markSkills) this.hooks.markSkill(carrier, 'wing_runner', false, false)
     }
-    let d = 0.6 * this.ratings.eff(defender, 'tackling') + 0.15 * this.ratings.eff(defender, 'agility') + 0.1 * this.ratings.eff(defender, 'strength') + 0.15 * this.ratings.eff(defender, 'acceleration')
+    let d = this.hooks.simV2
+      ? 0.50 * this.ratings.eff(defender, 'tackling') + 0.22 * this.ratings.eff(defender, 'strength') + 0.14 * this.ratings.eff(defender, 'agility') + 0.14 * this.ratings.eff(defender, 'acceleration')
+      : 0.6 * this.ratings.eff(defender, 'tackling') + 0.15 * this.ratings.eff(defender, 'agility') + 0.1 * this.ratings.eff(defender, 'strength') + 0.15 * this.ratings.eff(defender, 'acceleration')
     if (defender.skills.includes('sweeper')) {
       d += 3 * skillTierMultiplier(defender, 'sweeper')
       if (markSkills) this.hooks.markSkill(defender, 'sweeper', true, true)
@@ -318,7 +330,8 @@ export class SettlementKernel {
     if (stopper?.kind === 'defend' && this.ratings.traitConditionMet(defender, stopper.when)) traitDelta -= stopper.success / 100
     const floor = 0.12 + (carrier.skills.includes('lg_elastico') && !this.hooks.legacyRules ? 0.08 * legendMultiplier(carrier, 'lg_elastico') : 0)
     if (carrier.skills.includes('lg_elastico') && markSkills && !this.hooks.legacyRules) this.hooks.markSkill(carrier, 'lg_elastico', true, true)
-    return { p: clamp(sigmoid(logit(0.72) + (a - d + c) / 30) + traitDelta, floor, 0.95), a, d }
+    const divisor = this.hooks.simV2 ? 22 : 30
+    return { p: clamp(sigmoid(logit(0.72) + (a - d + c) / divisor) + traitDelta, floor, 0.95), a, d }
   }
 
   /** 旧活动比赛恢复路径：只用于没有 rulesVersion 的存档。 */
@@ -423,7 +436,11 @@ export class SettlementKernel {
     const mk = (type: ShotChanceDetail['type'], label: string, base: number, floor: number, ceiling: number, goalBase: number, reason: string): ShotChanceDetail => ({
       type, label, base, floor, ceiling, goalBase, distance: dist, angle, pressure, blockers, reason,
     })
-    if (opts.penalty) return mk('penalty', '点球', 0.7, 0.68, 0.95, 0.5, '点球，仅门将和主罚者')
+    if (opts.penalty) {
+      return this.hooks.simV2
+        ? mk('penalty', '点球', 0.86, 0.56, 0.97, 0.78, '点球，仅门将和主罚者')
+        : mk('penalty', '点球', 0.7, 0.68, 0.95, 0.5, '点球，仅门将和主罚者')
+    }
     if (opts.freeKick) {
       // 20 米以内最好罚，越远射正和破门都越难。
       const far = Math.max(0, dist - 20)
@@ -466,14 +483,53 @@ export class SettlementKernel {
     const inBoxShot = inBox(shooter.side, opts.point)
     const weak = !opts.header && (opts.foot ? isWeakShotFoot(shooter, opts.foot) : weakFoot(shooter))
     const chance = this.classifyShotChance(shooter, opp, opts.point, opts)
-    let finishScore = opts.header
-      ? 0.55 * this.ratings.eff(shooter, 'heading', { aerial: true, inBox: true }) + 0.25 * this.ratings.eff(shooter, 'shooting', { inBox: true }) + 0.2 * this.ratings.eff(shooter, 'composure', { inBox: true })
-      : 0.75 * this.ratings.eff(shooter, 'shooting', { inBox: inBoxShot }) + 0.25 * this.ratings.eff(shooter, 'composure', { inBox: inBoxShot })
+    const simV2 = !!this.hooks.simV2
+    const effShoot = this.ratings.eff(shooter, 'shooting', { inBox: inBoxShot })
+    const effComp = this.ratings.eff(shooter, 'composure', { inBox: inBoxShot })
+    let finishScore: number
+    let precision: number
+    if (simV2) {
+      if (opts.penalty) {
+        // 点球高度考验镇定：射术与镇定各占 50%
+        finishScore = 0.50 * effShoot + 0.50 * effComp
+        precision = 0.50 * this.ratings.eff(shooter, 'shooting') + 0.50 * this.ratings.eff(shooter, 'composure')
+      } else if (opts.header) {
+        // 头球攻门体现力量卡位优势
+        finishScore = 0.45 * this.ratings.eff(shooter, 'heading', { aerial: true, inBox: true })
+          + 0.25 * this.ratings.eff(shooter, 'strength', { aerial: true })
+          + 0.15 * effShoot + 0.15 * effComp
+        precision = 0.65 * this.ratings.eff(shooter, 'heading') + 0.35 * this.ratings.eff(shooter, 'composure')
+      } else if (opts.freeKick) {
+        finishScore = 0.65 * effShoot + 0.35 * effComp
+        precision = 0.65 * this.ratings.eff(shooter, 'shooting') + 0.35 * this.ratings.eff(shooter, 'composure')
+      } else if (chance.type === 'clear_chance' || chance.type === 'box_open') {
+        // 单刀与禁区空位良机：镇定权重提升至 40%
+        finishScore = 0.60 * effShoot + 0.40 * effComp
+        precision = 0.60 * this.ratings.eff(shooter, 'shooting') + 0.40 * this.ratings.eff(shooter, 'composure')
+      } else {
+        finishScore = 0.70 * effShoot + 0.30 * effComp
+        precision = 0.68 * this.ratings.eff(shooter, 'shooting') + 0.32 * this.ratings.eff(shooter, 'composure')
+      }
+      // 贴身受压射门：高镇定稳住心态、高力量抗对抗、高盘带摆脱半步起脚空间
+      if (!opts.penalty && !opts.freeKick && chance.pressure > 0.15) {
+        const effStr = this.ratings.eff(shooter, 'strength')
+        const effDrib = this.ratings.eff(shooter, 'dribbling')
+        finishScore += ((effComp - 50) * 0.16 + (effStr - 50) * 0.18 + (opts.header ? 0 : (effDrib - 50) * 0.12)) * chance.pressure
+      }
+    } else {
+      finishScore = opts.header
+        ? 0.55 * this.ratings.eff(shooter, 'heading', { aerial: true, inBox: true }) + 0.25 * this.ratings.eff(shooter, 'shooting', { inBox: true }) + 0.2 * this.ratings.eff(shooter, 'composure', { inBox: true })
+        : 0.75 * effShoot + 0.25 * effComp
+      precision = opts.header
+        ? 0.7 * this.ratings.eff(shooter, 'heading') + 0.3 * this.ratings.eff(shooter, 'composure')
+        : 0.7 * this.ratings.eff(shooter, 'shooting') + 0.3 * this.ratings.eff(shooter, 'composure')
+    }
     if (weak) finishScore -= clamp(11 - this.ratings.eff(shooter, 'firstTouch') * 0.07 - (shooter.skills.includes('weak_foot') ? 3 * skillTierMultiplier(shooter, 'weak_foot') : 0), 2, 10)
-    const precision = opts.header
-      ? 0.7 * this.ratings.eff(shooter, 'heading') + 0.3 * this.ratings.eff(shooter, 'composure')
-      : 0.7 * this.ratings.eff(shooter, 'shooting') + 0.3 * this.ratings.eff(shooter, 'composure')
-    const attributeAdjust = clamp((precision - 50) * 0.002, -0.1, 0.1)
+    const attributeAdjust = simV2
+      ? (opts.penalty
+        ? clamp((precision - 50) * 0.0045, -0.22, 0.14)
+        : clamp((precision - 50) * 0.002 + (!opts.freeKick && chance.pressure > 0.15 ? (effComp - 50) * 0.0012 * chance.pressure : 0), -0.12, 0.12))
+      : clamp((precision - 50) * 0.002, -0.1, 0.1)
     const weakAdjust = weak ? -0.02 : 0
     let onTarget = clamp(chance.base + attributeAdjust + weakAdjust, chance.floor, chance.ceiling)
     let goalGiven = chance.goalBase
@@ -489,9 +545,27 @@ export class SettlementKernel {
         goalGiven += chance.type === 'open_goal' ? 0.12 : 0.06
       } else {
         const oneOnOne = chance.type === 'clear_chance'
-        gkScore = oneOnOne || opts.penalty
-          ? 0.55 * this.ratings.eff(gk, 'oneOnOne', { oneOnOne: true, penalty: opts.penalty }) + 0.3 * this.ratings.eff(gk, 'reflexes') + 0.15 * this.ratings.eff(gk, 'defPos')
-          : 0.65 * this.ratings.eff(gk, 'reflexes', { oneOnOne: false }) + 0.35 * this.ratings.eff(gk, 'defPos')
+        if (simV2) {
+          if (opts.penalty) {
+            // 门将扑点融入镇定（沉住气判断方向）
+            gkScore = 0.35 * this.ratings.eff(gk, 'oneOnOne', { oneOnOne: true, penalty: true })
+              + 0.35 * this.ratings.eff(gk, 'reflexes')
+              + 0.30 * this.ratings.eff(gk, 'composure')
+          } else if (oneOnOne) {
+            gkScore = 0.40 * this.ratings.eff(gk, 'oneOnOne', { oneOnOne: true })
+              + 0.35 * this.ratings.eff(gk, 'reflexes')
+              + 0.25 * this.ratings.eff(gk, 'composure')
+          } else {
+            // 常规扑救同样接入镇定主属性（减少隐藏属性 defPos 占比，让门将镇定真正起效）
+            gkScore = 0.60 * this.ratings.eff(gk, 'reflexes', { oneOnOne: false })
+              + 0.30 * this.ratings.eff(gk, 'composure')
+              + 0.10 * this.ratings.eff(gk, 'defPos')
+          }
+        } else {
+          gkScore = oneOnOne || opts.penalty
+            ? 0.55 * this.ratings.eff(gk, 'oneOnOne', { oneOnOne: true, penalty: opts.penalty }) + 0.3 * this.ratings.eff(gk, 'reflexes') + 0.15 * this.ratings.eff(gk, 'defPos')
+            : 0.65 * this.ratings.eff(gk, 'reflexes', { oneOnOne: false }) + 0.35 * this.ratings.eff(gk, 'defPos')
+        }
       }
       if (!this.hooks.legacyRules && !gkOut && chance.type === 'clear_chance' && gk.skills.includes('gk_close_down')) {
         gkScore += 5 * skillTierMultiplier(gk, 'gk_close_down')
@@ -521,7 +595,8 @@ export class SettlementKernel {
     } else {
       goalGiven = 1
     }
-    goalGiven = clamp(goalGiven + (finishScore - gkScore) * 0.003, 0.05, 0.95)
+    const finishSlope = simV2 && opts.penalty ? 0.0055 : 0.003
+    goalGiven = clamp(goalGiven + (finishScore - gkScore) * finishSlope, 0.05, 0.95)
     if (noKeeper || chance.type === 'open_goal') goalGiven = 1
     if (shooter.skills.includes('box_hunter') && inBoxShot) {
       onTarget += 0.04 * skillTierMultiplier(shooter, 'box_hunter')
@@ -612,6 +687,10 @@ export class SettlementKernel {
       if (blockers.length > 0) {
         const score = blockers[0]
         block = clamp(0.015 + Math.max(0, score - 30) * 0.008, 0.01, 0.42)
+        if (simV2 && !opts.header && !opts.freeKick) {
+          // 高盘带球员更容易在起脚前扣开半步角度、降低被封堵概率
+          block *= clamp(1 - (this.ratings.eff(shooter, 'dribbling') - 50) * 0.0045, 0.75, 1.22)
+        }
       }
       if (opts.freeKick) block += 0.05
     }
@@ -667,7 +746,10 @@ export class SettlementKernel {
 
   /** 前场任意球传中到禁区，球能不能传到位。 */
   freeKickDeliveryChance(taker: MatchPlayerState, point: { x: number; y: number }): number {
-    const quality = 0.6 + (this.ratings.eff(taker, 'passing', { passing: true, crossing: true }) - 50) * 0.006 + (taker.skills.includes('lg_set_piece_iq') && !this.hooks.legacyRules ? 0.06 * legendMultiplier(taker, 'lg_set_piece_iq') : 0)
+    const passBase = this.hooks.simV2
+      ? 0.75 * this.ratings.eff(taker, 'passing', { passing: true, crossing: true }) + 0.25 * this.ratings.eff(taker, 'composure')
+      : this.ratings.eff(taker, 'passing', { passing: true, crossing: true })
+    const quality = 0.6 + (passBase - 50) * 0.006 + (taker.skills.includes('lg_set_piece_iq') && !this.hooks.legacyRules ? 0.06 * legendMultiplier(taker, 'lg_set_piece_iq') : 0)
     return clamp(quality + this.passTraitDelta(taker, null, 'cross', 0, distance(taker, point), true), 0.3, 0.95)
   }
 
@@ -686,8 +768,12 @@ export class SettlementKernel {
       ? shooter.foot === 'L' ? 'left' : 'right'
       : chooseShotFoot(shooter, opts.point.y, balance, rng)
     const precision = opts.header
-      ? 0.7 * this.ratings.eff(shooter, 'heading') + 0.3 * this.ratings.eff(shooter, 'composure')
-      : 0.7 * this.ratings.eff(shooter, 'shooting') + 0.3 * this.ratings.eff(shooter, 'composure')
+      ? (this.hooks.simV2
+        ? 0.65 * this.ratings.eff(shooter, 'heading') + 0.35 * this.ratings.eff(shooter, 'composure')
+        : 0.7 * this.ratings.eff(shooter, 'heading') + 0.3 * this.ratings.eff(shooter, 'composure'))
+      : (this.hooks.simV2 && opts.penalty
+        ? 0.5 * this.ratings.eff(shooter, 'shooting') + 0.5 * this.ratings.eff(shooter, 'composure')
+        : 0.7 * this.ratings.eff(shooter, 'shooting') + 0.3 * this.ratings.eff(shooter, 'composure'))
     // 门将偏哪边就往另一边打，射门不再总是打在门将身上。
     const gkNow = this.teamGoalkeeper(opp)
     const target = opts.target ?? chooseShotTarget(precision, rng, gkNow ? gkNow.y - GOAL_Y : 0)
@@ -730,7 +816,11 @@ export class SettlementKernel {
   keeperCatchChance(gk: MatchPlayerState, shooter: MatchPlayerState): number {
     const skill = !this.hooks.legacyRules && gk.skills.includes('gk_safe_hands')
     if (skill) this.hooks.markSkill(gk, 'gk_safe_hands', true, true)
-    return clamp(0.35 + (this.ratings.eff(gk, 'handling') - this.ratings.eff(shooter, 'shooting')) / 150 + (skill ? 0.08 * skillTierMultiplier(gk, 'gk_safe_hands') : 0), 0.12, 0.88)
+    const diff = this.hooks.simV2
+      ? ((0.70 * this.ratings.eff(gk, 'handling') + 0.30 * this.ratings.eff(gk, 'composure'))
+        - (0.75 * this.ratings.eff(shooter, 'shooting') + 0.25 * this.ratings.eff(shooter, 'strength'))) / 135
+      : (this.ratings.eff(gk, 'handling') - this.ratings.eff(shooter, 'shooting')) / 150
+    return clamp(0.35 + diff + (skill ? 0.08 * skillTierMultiplier(gk, 'gk_safe_hands') : 0), 0.12, 0.88)
   }
 
   /** 防守者动手的倾向（盘带犯规和战术犯规共用）：逼抢越凶、角色越爱逼抢越高。新战术指令下保持基准中性，不借上抢频率隐性抬高犯规率。 */
@@ -817,16 +907,26 @@ export class SettlementKernel {
    * 条件照常判定，“主场”特性客场不生效。
    */
   shootoutKickOdds(taker: MatchPlayerState, gk: MatchPlayerState | null): number {
-    const takerScore = this.ratings.eff(taker, 'shooting') * 0.6 + this.ratings.eff(taker, 'composure') * 0.4
-    const gkScore = gk ? this.ratings.eff(gk, 'reflexes') * 0.6 + this.ratings.eff(gk, 'oneOnOne') * 0.4 + (gk.skills.includes('gk_reflexes') ? 5 * skillTierMultiplier(gk, 'gk_reflexes') : 0) : 50
-    let p = clamp(0.7 + (takerScore - 60) / 250 - (gkScore - 55) / 400, 0.5, 0.9)
+    const simV2 = !!this.hooks.simV2
+    const takerScore = simV2
+      ? this.ratings.eff(taker, 'shooting') * 0.45 + this.ratings.eff(taker, 'composure') * 0.55
+      : this.ratings.eff(taker, 'shooting') * 0.6 + this.ratings.eff(taker, 'composure') * 0.4
+    const gkScore = gk
+      ? (simV2
+        ? this.ratings.eff(gk, 'reflexes') * 0.40 + this.ratings.eff(gk, 'oneOnOne') * 0.30 + this.ratings.eff(gk, 'composure') * 0.30
+        : this.ratings.eff(gk, 'reflexes') * 0.6 + this.ratings.eff(gk, 'oneOnOne') * 0.4)
+        + (gk.skills.includes('gk_reflexes') ? 5 * skillTierMultiplier(gk, 'gk_reflexes') : 0)
+      : 50
+    let p = simV2
+      ? clamp(0.7 + (takerScore - 55) / 165 - (gkScore - 55) / 240, 0.40, 0.94)
+      : clamp(0.7 + (takerScore - 60) / 250 - (gkScore - 55) / 400, 0.5, 0.9)
     if (taker.skills.includes('penalty_specialist')) p += 0.06 * skillTierMultiplier(taker, 'penalty_specialist')
     const takerTrait = STAR_TRAITS[taker.traitId]
     if (takerTrait?.kind === 'shot' && (takerTrait.scope === 'penalty' || takerTrait.scope === 'any') && this.ratings.traitConditionMet(taker, takerTrait.when)) p += (takerTrait.onTarget + takerTrait.goal) / 100
     const keeperTrait = gk ? STAR_TRAITS[gk.traitId] : undefined
     if (gk && keeperTrait?.kind === 'save' && (keeperTrait.scope === 'penalty' || keeperTrait.scope === 'any') && this.ratings.traitConditionMet(gk, keeperTrait.when)) p -= keeperTrait.goal / 100
     if (gk?.skills.includes('sweeper')) p -= 0.015 * skillTierMultiplier(gk, 'sweeper')
-    return clamp(p, 0.45, 0.92)
+    return clamp(p, simV2 ? 0.38 : 0.45, simV2 ? 0.95 : 0.92)
   }
 
   /** 谁能在这个位置把球停下：二点球争夺和追球都用同一套判定。 */
@@ -840,18 +940,20 @@ export class SettlementKernel {
    */
   aerialContestants(attacking: MatchTeamState, defending: MatchTeamState, point: { x: number; y: number }, attackingSide: MatchSide, jitter: () => number): AerialContestant[] {
     const contestants: AerialContestant[] = []
+    const simV2 = !!this.hooks.simV2
     for (const player of attacking.players) {
       if (!player.onPitch || player.position === 'GK') continue
       const dist = distance(player, point)
       if (dist <= 13) {
-        const weight =
-          0.45 * this.ratings.eff(player, 'heading', { aerial: true }) +
-          0.25 * this.ratings.eff(player, 'strength', { aerial: true }) +
-          0.2 * this.ratings.eff(player, 'anticipation') +
+        const rawWeight =
+          (simV2 ? 0.40 : 0.45) * this.ratings.eff(player, 'heading', { aerial: true }) +
+          (simV2 ? 0.35 : 0.25) * this.ratings.eff(player, 'strength', { aerial: true }) +
+          (simV2 ? 0.15 : 0.2) * this.ratings.eff(player, 'anticipation') +
           0.1 * this.ratings.eff(player, 'offBall') +
           Math.max(0, player.height - 175) * 0.2 +
           (player.skills.includes('aerial') ? 5 * skillTierMultiplier(player, 'aerial') : 0) +
           (player.skills.includes('lg_off_ball_iq') && !this.hooks.legacyRules ? 6 * legendMultiplier(player, 'lg_off_ball_iq') : 0)
+        const weight = simV2 ? Math.max(1, rawWeight) ** 1.35 : rawWeight
         contestants.push({ player, weight: weight * (0.85 + jitter() * 0.3), side: attackingSide })
         if (player.skills.includes('aerial')) this.hooks.markSkill(player, 'aerial', true, true)
       }
@@ -861,10 +963,11 @@ export class SettlementKernel {
       const dist = distance(player, point)
       const isGk = player.position === 'GK'
       if (dist <= (isGk ? 11 : 13)) {
-        const weight = (isGk
+        const rawWeight = (isGk
           ? 0.4 * this.ratings.eff(player, 'rushing', { aerial: true }) + 0.3 * this.ratings.eff(player, 'handling') + 0.2 * this.ratings.eff(player, 'anticipation') + 10
-          : 0.4 * this.ratings.eff(player, 'heading', { aerial: true }) + 0.3 * this.ratings.eff(player, 'strength', { aerial: true }) + 0.2 * this.ratings.eff(player, 'defPos') + 0.1 * this.ratings.eff(player, 'anticipation')) + Math.max(0, player.height - 175) * 0.2 + (isGk && !this.hooks.legacyRules && player.skills.includes('gk_high_ball') ? 5 * skillTierMultiplier(player, 'gk_high_ball') : 0)
+          : (simV2 ? 0.38 : 0.4) * this.ratings.eff(player, 'heading', { aerial: true }) + (simV2 ? 0.37 : 0.3) * this.ratings.eff(player, 'strength', { aerial: true }) + (simV2 ? 0.15 : 0.2) * this.ratings.eff(player, 'defPos') + 0.1 * this.ratings.eff(player, 'anticipation')) + Math.max(0, player.height - 175) * 0.2 + (isGk && !this.hooks.legacyRules && player.skills.includes('gk_high_ball') ? 5 * skillTierMultiplier(player, 'gk_high_ball') : 0)
         if (isGk && !this.hooks.legacyRules && player.skills.includes('gk_high_ball')) this.hooks.markSkill(player, 'gk_high_ball', true, true)
+        const weight = simV2 ? Math.max(1, rawWeight) ** 1.35 : rawWeight
         contestants.push({ player, weight: weight * (0.85 + jitter() * 0.3), side: defending.side })
         if (!isGk && player.skills.includes('aerial')) this.hooks.markSkill(player, 'aerial', true, true)
       }
@@ -878,6 +981,7 @@ export class SettlementKernel {
    */
   looseBallContestants(teams: MatchTeamState[], ball: { x: number; y: number }, jitter: () => number): Contestant[] {
     const candidates: Contestant[] = []
+    const simV2 = !!this.hooks.simV2
     for (const team of teams) {
       for (const player of team.players) {
         if (!player.onPitch) continue
@@ -885,17 +989,18 @@ export class SettlementKernel {
         const reach = 4.5 + this.ratings.eff(player, 'anticipation') * 0.035 + this.ratings.eff(player, 'speed') * 0.01 + this.ratings.eff(player, 'acceleration') * 0.01
         if (dist <= reach) {
           const gk = player.position === 'GK'
-          const weight = gk
+          const rawWeight = gk
             ? 0.5 * this.ratings.eff(player, 'rushing') + 0.3 * this.ratings.eff(player, 'handling') + 1
-            : 0.35 * this.ratings.eff(player, 'anticipation') +
-              0.2 * (player.position === 'CB' ? this.ratings.eff(player, 'defPos') : this.ratings.eff(player, 'offBall')) +
-              0.2 * this.ratings.eff(player, 'strength') +
-              0.07 * this.ratings.eff(player, 'speed') +
-              0.08 * this.ratings.eff(player, 'acceleration') +
+            : (simV2 ? 0.28 : 0.35) * this.ratings.eff(player, 'anticipation') +
+              (simV2 ? 0.18 : 0.2) * (player.position === 'CB' ? this.ratings.eff(player, 'defPos') : this.ratings.eff(player, 'offBall')) +
+              (simV2 ? 0.30 : 0.2) * this.ratings.eff(player, 'strength') +
+              (simV2 ? 0.12 : 0.07) * this.ratings.eff(player, 'speed') +
+              (simV2 ? 0.12 : 0.08) * this.ratings.eff(player, 'acceleration') +
               (player.skills.includes('lg_off_ball_iq') && !this.hooks.legacyRules ? 6 * legendMultiplier(player, 'lg_off_ball_iq') : 0) +
               (!this.hooks.legacyRules && player.skills.includes('cb_cover') && progressOf(player.side, player.x) < 0.5 ? 5 * skillTierMultiplier(player, 'cb_cover') : 0) +
               Math.max(0, player.height - 175) * 0.15
           if (!gk && !this.hooks.legacyRules && player.skills.includes('cb_cover') && progressOf(player.side, player.x) < 0.5) this.hooks.markSkill(player, 'cb_cover', true, true)
+          const weight = simV2 ? Math.max(1, rawWeight) ** 1.35 : rawWeight
           candidates.push({ player, weight: weight * (0.75 + jitter() * 0.5) })
         }
       }

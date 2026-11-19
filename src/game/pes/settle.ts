@@ -153,6 +153,7 @@ export class PesSettlement implements ContactModel {
   private pidById = new Map<string, number>()
   private secondWindUsed = new Set<number>()
   private saveTacticalState = false
+  private simV2 = false
 
   constructor(source: PesSettlementInit | PesSettlementJSON) {
     if ('game' in source) {
@@ -167,9 +168,11 @@ export class PesSettlement implements ContactModel {
       this.extra = { knockout: source.knockout, offside: source.offside, tuning: { ...DEFAULT_TUNING, ...source.tuning }, lastPass: null, keyPass: null, lastShot: null, joined: {}, left: {} }
     }
     this.ratings = new MatchRatings(() => this.game, () => this.game.durationSeconds)
+    const self = this
     this.kernel = new SettlementKernel(this.ratings, {
       markSkill: (player, skillId, condition, applied) => this.markSkill(player, skillId, condition, applied),
       legacyRules: false,
+      get simV2() { return self.simV2 },
     })
   }
 
@@ -197,6 +200,7 @@ export class PesSettlement implements ContactModel {
 
   attach(m: PesMatch): void {
     this.saveTacticalState = m.usesTacticalMechanics
+    this.simV2 = !!m.rules.simV2
     const byId = new Map<string, MatchPlayerState>()
     for (const team of this.game.teams) for (const player of [...team.players, ...team.bench]) byId.set(player.id, player)
     this.mp = []

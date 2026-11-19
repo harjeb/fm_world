@@ -91,5 +91,8 @@ export function abilityOf(attrs: AttrRecord, calib: AbilityCalibration = DEFAULT
     positioning: clamp01(s('defPos') * 0.35 + s('anticipation') * 0.25 + s('decisions') * 0.25 + s('teamwork') * 0.15),
     handling: clamp01(s('reflexes') * 0.5 + s('handling') * 0.3 + s('rushing') * 0.2),
     air: clamp01(s('heading') * 0.7 + s('strength') * 0.3),
+    dribbling: s('dribbling'),
+    strength: s('strength'),
+    composure: s('composure'),
   }
 }

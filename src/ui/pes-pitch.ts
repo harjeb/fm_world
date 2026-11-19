@@ -63,6 +63,18 @@ interface Banner {
   until: number
 }
 
+interface PitchFx {
+  x: number
+  y: number
+  color: string
+  r0: number
+  r1: number
+  alpha: number
+  width: number
+  since: number
+  dur: number
+}
+
 const pv = {
   key: '',
   /** 画面推进、绘制的那份引擎：友谊赛 = ui.matchEngine 本身，联赛 = 私有副本 */
@@ -76,12 +88,14 @@ const pv = {
   /** 不足一个物理步的零头 */
   acc: 0,
   logSeen: 0,
+  eventSeen: 0,
   scoreKey: '',
   refreshAt: 0,
   saveAt: 0,
   paintAt: 0,
   endAt: 0,
   banner: null as Banner | null,
+  fx: [] as PitchFx[],
   trail: [] as { x: number; y: number; at: number }[],
   ground: null as HTMLCanvasElement | null,
   groundKey: '',
@@ -116,11 +130,13 @@ function clearView(): void {
   pv.last = 0
   pv.acc = 0
   pv.logSeen = 0
+  pv.eventSeen = 0
   pv.scoreKey = ''
   pv.refreshAt = 0
   pv.saveAt = 0
   pv.endAt = 0
   pv.banner = null
+  pv.fx = []
   pv.trail = []
 }
 
@@ -169,6 +185,8 @@ function inSync(view: PesEngine, auth: PesEngine): boolean {
 function copyOf(engine: PesEngine): PesEngine {
   const copy = PesEngine.restore(engine.serialize())
   pv.logSeen = copy.state.log.length
+  pv.eventSeen = copy.game.match.events.length
+  pv.fx = []
   pv.acc = 0
   return copy
 }
@@ -182,7 +200,10 @@ function prepare(engine: PesEngine): PesEngine {
   }
   if (!game.activeMatch?.context.isLeague && !game.activeMatch?.preplayed) {
     // 第一次接手这场比赛：已有的文字直播不再弹横幅
-    if (!pv.sim) pv.logSeen = engine.state.log.length
+    if (!pv.sim) {
+      pv.logSeen = engine.state.log.length
+      pv.eventSeen = engine.game.match.events.length
+    }
     pv.sim = engine
     pv.owned = false
     return engine
@@ -226,6 +247,8 @@ function advanceLeague(sim: PesEngine, dt: number): void {
     sim.advanceTo(target)
     pv.acc = 0
     pv.logSeen = sim.state.log.length
+    pv.eventSeen = sim.game.match.events.length
+    pv.fx = []
     return
   }
   // 落后太多且权威存档确实走在前面：直接复制。权威存档也落后（断线、没更新）时复制没有意义，照常加速追
@@ -246,7 +269,7 @@ function chase(sim: PesEngine, dt: number, target: number, speed = 1): void {
   const m = g.match
   const lag = target - m.time
   const base = (sim.state.durationSeconds / LEAGUE_REALTIME_SECONDS) * speed
-  const boost = Math.min(5, (m.phase === 'play' ? 1 : 2) * (1 + 0.25 * Math.max(0, Math.min(8, lag))))
+  const boost = Math.min(5, (m.phase === 'play' ? 1 : 1.35) * (1 + 0.25 * Math.max(0, Math.min(8, lag))))
   pv.acc += (dt * base * boost) / m.spec.DT
   let steps = Math.floor(pv.acc)
   pv.acc -= steps
@@ -270,13 +293,49 @@ function bannerOf(entry: MatchLogEntry): Pick<Banner, 'text' | 'tone'> | null {
   }
 }
 
-/** 看一眼新出现的文字直播，决定要不要弹横幅；返回有没有新条目。 */
+/** 看一眼新出现的文字直播与动作事件，决定弹横幅和球场视觉反馈；返回文字直播有没有新条目。 */
 function noteEvents(sim: PesEngine, now: number): boolean {
   const log = sim.state.log
   const grew = log.length > pv.logSeen
   for (; pv.logSeen < log.length; pv.logSeen++) {
     const banner = bannerOf(log[pv.logSeen])
     if (banner) pv.banner = { ...banner, since: now, until: now + BANNER_MS }
+  }
+  const m = sim.game.match
+  const evs = m.events
+  if (evs.length < pv.eventSeen) {
+    pv.eventSeen = evs.length
+    pv.fx = []
+  } else if (evs.length - pv.eventSeen > 12) {
+    pv.eventSeen = evs.length
+  } else {
+    for (; pv.eventSeen < evs.length; pv.eventSeen++) {
+      const ev = evs[pv.eventSeen]
+      const a0 = ev.actors[0] !== undefined ? m.players[ev.actors[0]] : undefined
+      const a1 = ev.actors[1] !== undefined ? m.players[ev.actors[1]] : undefined
+      if (ev.type === 'shot') {
+        const isBlock = ev.meta?.result === 'block'
+        const blk = isBlock && typeof ev.meta?.blocker === 'number' ? m.players[ev.meta.blocker] : undefined
+        const pt = blk?.pos ?? a0?.pos ?? m.ball
+        pv.fx.push(isBlock
+          ? { x: pt.x, y: pt.y, color: '#ffae42', r0: 0.5, r1: 2.4, alpha: 0.78, width: 2.2, since: now, dur: 340 }
+          : { x: pt.x, y: pt.y, color: '#ffe894', r0: 0.5, r1: 2.2, alpha: 0.72, width: 2.0, since: now, dur: 280 })
+      } else if (ev.type === 'save') {
+        const pt = a0?.pos ?? m.ball
+        pv.fx.push({ x: pt.x, y: pt.y, color: '#78e3ff', r0: 0.7, r1: 3.3, alpha: 0.85, width: 2.4, since: now, dur: 420 })
+      } else if (ev.type === 'tackle') {
+        const x = a0 && a1 ? (a0.pos.x + a1.pos.x) / 2 : (a0?.pos.x ?? m.ball.x)
+        const y = a0 && a1 ? (a0.pos.y + a1.pos.y) / 2 : (a0?.pos.y ?? m.ball.y)
+        pv.fx.push({ x, y, color: '#ffd166', r0: 0.45, r1: 2.3, alpha: 0.75, width: 2.0, since: now, dur: 320 })
+      } else if (ev.type === 'foul') {
+        const x = typeof ev.meta?.x === 'number' ? ev.meta.x : (a1?.pos.x ?? a0?.pos.x ?? m.ball.x)
+        const y = typeof ev.meta?.y === 'number' ? ev.meta.y : (a1?.pos.y ?? a0?.pos.y ?? m.ball.y)
+        pv.fx.push({ x, y, color: '#f26d6a', r0: 0.6, r1: 3.0, alpha: 0.82, width: 2.2, since: now, dur: 460 })
+      } else if (ev.type === 'pass' && a0) {
+        pv.fx.push({ x: a0.pos.x, y: a0.pos.y, color: '#ffffff', r0: 0.4, r1: 1.45, alpha: 0.30, width: 1.3, since: now, dur: 200 })
+      }
+    }
+    if (pv.fx.length > 24) pv.fx.splice(0, pv.fx.length - 24)
   }
   return grew
 }
@@ -343,13 +402,27 @@ function drawGround(ctx: CanvasRenderingContext2D, w: number, h: number, P: Pitc
   }
 }
 
-function paintPlayer(ctx: CanvasRenderingContext2D, p: PesPlayer, owner: number, px: number, py: number, face: { x: number; y: number }, unit: number, showNames: boolean): void {
+function paintPlayer(
+  ctx: CanvasRenderingContext2D,
+  p: PesPlayer,
+  owner: number,
+  px: number,
+  py: number,
+  face: { x: number; y: number },
+  unit: number,
+  showNames: boolean,
+  diveAngle: number | null = null,
+): void {
   const kit = p.ti === 0 ? pv.kits.home : pv.kits.away
   const isGk = p.role === 'GK'
   const fill = isGk ? GOALKEEPER_FILL : kit
   const radius = 12 * unit
   ctx.beginPath()
-  ctx.ellipse(px, py + radius * 0.9, radius * 0.9, radius * 0.34, 0, 0, Math.PI * 2)
+  if (diveAngle !== null) {
+    ctx.ellipse(px, py + radius * 0.75, radius * 1.45, radius * 0.42, diveAngle, 0, Math.PI * 2)
+  } else {
+    ctx.ellipse(px, py + radius * 0.9, radius * 0.9, radius * 0.34, 0, 0, Math.PI * 2)
+  }
   ctx.fillStyle = 'rgba(0,0,0,.3)'
   ctx.fill()
   if (p.pid === owner) {
@@ -360,7 +433,11 @@ function paintPlayer(ctx: CanvasRenderingContext2D, p: PesPlayer, owner: number,
     ctx.stroke()
   }
   ctx.beginPath()
-  ctx.arc(px, py, radius, 0, Math.PI * 2)
+  if (diveAngle !== null) {
+    ctx.ellipse(px, py, radius * 1.42, radius * 0.80, diveAngle, 0, Math.PI * 2)
+  } else {
+    ctx.arc(px, py, radius, 0, Math.PI * 2)
+  }
   ctx.fillStyle = fill
   ctx.fill()
   ctx.lineWidth = (isGk ? 2 : 1.2) * unit
@@ -525,18 +602,95 @@ function paint(canvas: HTMLCanvasElement, sim: PesEngine, now: number): void {
     }
   }
 
-  // 球员：先画远端（y 小）再画近端，重叠时靠下的盖在上面
-  const sign = flip ? -1 : 1
-  const everyone = m.teams.flatMap((team) => team.players).sort((a, b) => (flip ? -a.pos.y : a.pos.y) - (flip ? -b.pos.y : b.pos.y))
-  for (const p of everyone) {
-    paintPlayer(ctx, p, m.ball.owner, X(p.pos.x), Y(p.pos.y), { x: sign * p.facing.x, y: sign * p.facing.y }, unit, showNames)
+  // 动作视觉反馈（传球/射门/扑救/抢断/封堵/犯规涟漪，纯画面演出）
+  if (pv.fx.length) {
+    pv.fx = pv.fx.filter((fx) => now - fx.since < fx.dur)
+    for (const fx of pv.fx) {
+      const progress = Math.max(0, Math.min(1, (now - fx.since) / fx.dur))
+      const r = (fx.r0 + (fx.r1 - fx.r0) * (1 - (1 - progress) * (1 - progress))) * s
+      ctx.save()
+      ctx.globalAlpha = fx.alpha * (1 - progress)
+      ctx.beginPath()
+      ctx.arc(X(fx.x), Y(fx.y), Math.max(2, r), 0, Math.PI * 2)
+      ctx.strokeStyle = fx.color
+      ctx.lineWidth = fx.width * unit
+      ctx.stroke()
+      ctx.restore()
+    }
   }
 
-  // 球：落地影子 + 离地高度；快球拖一段尾迹
+  // 球员：先画远端（y 小）再画近端，重叠时靠下的盖在上面；纯画面防重叠松弛把贴身圆点轻柔错开到肩并肩（不改物理状态）
+  const sign = flip ? -1 : 1
+  const shotFlying = m.ball.meta?.type === 'shot' && !m.ball.frozen && m.ball.owner < 0
+  const everyone = m.teams.flatMap((team) => team.players).sort((a, b) => (flip ? -a.pos.y : a.pos.y) - (flip ? -b.pos.y : b.pos.y))
+  const vis = new Map<number, { x: number; y: number }>()
+  for (const p of everyone) vis.set(p.pid, { x: p.pos.x, y: p.pos.y })
+  const minSep = Math.max(0.85, (20 * unit) / Math.max(1, s))
+  const maxShift = minSep * 0.55
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 0; i < everyone.length; i++) {
+      const pa = everyone[i]
+      if (shotFlying && pa.role === 'GK') continue
+      const va = vis.get(pa.pid)!
+      for (let j = i + 1; j < everyone.length; j++) {
+        const pb = everyone[j]
+        if (shotFlying && pb.role === 'GK') continue
+        const vb = vis.get(pb.pid)!
+        let dx = va.x - vb.x
+        let dy = va.y - vb.y
+        let d = Math.hypot(dx, dy)
+        if (d >= minSep) continue
+        if (d < 1e-4) {
+          dx = pa.pid < pb.pid ? 1 : -1
+          dy = 0
+          d = 1
+        }
+        const push = (minSep - d) * 0.45
+        const nx = dx / d
+        const ny = dy / d
+        va.x += nx * push
+        va.y += ny * push
+        vb.x -= nx * push
+        vb.y -= ny * push
+      }
+    }
+    for (const p of everyone) {
+      const vp = vis.get(p.pid)!
+      const ox = vp.x - p.pos.x
+      const oy = vp.y - p.pos.y
+      const od = Math.hypot(ox, oy)
+      if (od > maxShift) {
+        vp.x = p.pos.x + (ox / od) * maxShift
+        vp.y = p.pos.y + (oy / od) * maxShift
+      }
+    }
+  }
+  for (const p of everyone) {
+    const vp = vis.get(p.pid)!
+    const gkDive = shotFlying && p.role === 'GK' && Math.hypot(p.vel.x, p.vel.y) > 2.2
+      ? Math.atan2(sign * p.vel.y, sign * p.vel.x)
+      : null
+    paintPlayer(ctx, p, m.ball.owner, X(vp.x), Y(vp.y), { x: sign * p.facing.x, y: sign * p.facing.y }, unit, showNames, gkDive)
+  }
+
+  // 球：落地影子 + 离地高度；快球拖一段尾迹；带球时加轻微推球律动（仅视觉）
   const b = m.ball
-  const bx = X(b.x)
+  let bwx = b.x
+  let bwy = b.y
+  if (b.owner >= 0 && !b.frozen) {
+    const carrier = m.players[b.owner]
+    if (carrier) {
+      const vc = vis.get(carrier.pid) ?? carrier.pos
+      const bob = Math.hypot(carrier.vel.x, carrier.vel.y) > 0.6
+        ? 0.48 + 0.14 * Math.sin(carrier.distance * 3.2)
+        : 0.5
+      bwx = vc.x + carrier.facing.x * bob
+      bwy = vc.y + carrier.facing.y * bob
+    }
+  }
+  const bx = X(bwx)
   const lift = Math.min(18 * unit, b.z * s * 0.55)
-  const by = Y(b.y)
+  const by = Y(bwy)
   const radius = 4.6 * unit * (1 + Math.min(0.5, b.z * 0.08))
   const speed = Math.hypot(b.vx, b.vy)
   if (speed > 5 && !b.frozen) pv.trail.push({ x: bx, y: by - lift, at: now })
@@ -666,6 +820,7 @@ export function resetReplayPaint(sim: PesEngine | null): void {
   clearView()
   pv.key = ''
   pv.logSeen = sim?.state.log.length ?? 0
+  pv.eventSeen = sim?.game.match.events.length ?? 0
 }
 
 /** 当前横幅还在显示吗（循环要等它消失才停）。 */
