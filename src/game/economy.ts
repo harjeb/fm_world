@@ -25,6 +25,10 @@ export function startingBalance(tier: TierId | undefined): number {
 export const BASE_ROUND_INCOME = 1500
 export const LEAGUE_WIN_BONUS = 1000
 export const GOAL_INCOME_BONUS = 500
+/** 主场基础氛围加成（比赛评分 0–100 尺度，约合主属性 +15）。 */
+export const HOME_ATMOSPHERE_BASE = 1.0
+/** 满级球场（25 阶段 / LV5）额外提供的最高主场氛围加成（比赛评分尺度，约合主属性 +30）。 */
+export const HOME_STADIUM_MAX_BONUS = 2.0
 
 /**
  * 转播/联赛分成：级别越高每轮越多。球员身价现在是十万到千万级，
@@ -176,17 +180,34 @@ export function facilityUpgradeCost(id: FacilityId, stage: number): number | nul
   return Math.round(FACILITIES[id].baseCost * level ** 1.8 * multiplier * FACILITY_COST_SCALE / 100) * 100
 }
 
-/** 当前球迷规模下该设施每轮提供的收入；阶段越高收入越高，球迷越多倍率越大。 */
+/** 当前球迷规模下该设施每轮提供的收入；球场门票仅联赛主场发放。 */
 export function facilityRoundIncome(economy: EconomyState, id: FacilityId): number {
   if (!validId(id)) return 0
   const stage = clampStage(economy[id])
   return Math.round(FACILITIES[id].incomePerLevel * stage / STAGES_PER_LEVEL * Math.min(4, economy.fans / 5000))
 }
 
-/** 尚未踢本轮比赛时的预计收入；进球及赢球奖金结算时另加。 */
-export function projectedRoundIncome(economy: EconomyState, tier: TierId | undefined = 'division2'): number {
+/**
+ * 联赛/杯赛主队在 2D 引擎中获得的主场氛围加成（评分尺度 0–100）：
+ * - 缺省或 <= 0（旧回放、中立/挑战赛）：0；
+ * - 1 阶段（LV1 1/5）：+1.0（约合主属性 +15）；
+ * - 25 阶段（LV5 5/5）：+3.0（约合主属性 +45）。
+ */
+export function homeAtmosphereBonus(stadiumStage?: number): number {
+  if (typeof stadiumStage !== 'number' || !Number.isFinite(stadiumStage) || stadiumStage <= 0) return 0
+  const clamped = clampStage(stadiumStage)
+  const ratio = (clamped - 1) / (MAX_FACILITY_STAGE - 1)
+  return HOME_ATMOSPHERE_BASE + ratio * HOME_STADIUM_MAX_BONUS
+}
+
+/** 尚未踢本轮比赛时的预计收入（home=false 为客场，不计球场门票）；进球及赢球奖金结算时另加。 */
+export function projectedRoundIncome(
+  economy: EconomyState,
+  tier: TierId | undefined = 'division2',
+  home = true,
+): number {
   return Math.round(BASE_ROUND_INCOME + economy.fans * 2 + (TIER_ROUND_INCOME[tier ?? 'division2'] ?? 0))
-    + ids.reduce((sum, id) => sum + facilityRoundIncome(economy, id), 0)
+    + ids.reduce((sum, id) => sum + (!home && id === 'stadium' ? 0 : facilityRoundIncome(economy, id)), 0)
 }
 
 /** 输球掉球迷的力度：输给联赛里最强的一队只掉一点，输给最弱的一队掉得最多。 */
@@ -258,8 +279,9 @@ export function awardRoundIncome(game: GameState, round: number): number {
   const opponentId = fixture ? (fixture.homeId === 'player' ? fixture.awayId : fixture.homeId) : undefined
   const rankShare = opponentId ? opponentRankShare(game, opponentId) : null
   const nextFans = fixture ? fansAfterResult(oldFans, scored, conceded, rankShare === null ? 1 : lossWeightByRank(rankShare)) : oldFans
+  const isHome = fixture ? fixture.homeId === 'player' : true
   const won = !!fixture && scored > conceded
-  const income = projectedRoundIncome({ ...economy, fans: nextFans }, game.season.tier) + Math.min(8, scored) * GOAL_INCOME_BONUS +
+  const income = projectedRoundIncome({ ...economy, fans: nextFans }, game.season.tier, isHome) + Math.min(8, scored) * GOAL_INCOME_BONUS +
     (won ? LEAGUE_WIN_BONUS + Math.floor(nextFans * 0.35) : 0)
   if (!Number.isSafeInteger(economy.balance + income)) return 0
   economy.balance += income

@@ -31,6 +31,7 @@ export type LockedTeam = {
   suspended: string[]
   medical: number
   tacticsStage?: number
+  stadiumStage?: number
   /** 锁定时的教练账号，用于避免中途接管重复获得历史战报/荣誉。 */
   coachId?: string
   /** 锁定时这支队能发挥几成（欠薪 0.5）；没有这一项按 1 算。 */
@@ -101,6 +102,7 @@ export function computeMatchJob(job: MatchJob): MatchJobResult {
   const live = !job.home.ai || !job.away.ai
   const knockout = job.competition?.kind === 'seasonCup'
   const home = input(job.home), away = input(job.away)
+  if (typeof job.home.stadiumStage === 'number' && job.home.stadiumStage > 0) home.stadiumStage = job.home.stadiumStage
   const engine: GameEngine = live
     ? new PesEngine({ seed: job.seed, home, away, knockout, durationSeconds: LOGIC_MATCH_SECONDS, offside: true })
     : new MatchEngine({ seed: job.seed, home, away, knockout, durationSeconds: LOGIC_MATCH_SECONDS, offside: true, recordPlayback: false, rulesVersion: 2 })

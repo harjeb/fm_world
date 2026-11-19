@@ -9,7 +9,7 @@ import type { TrainingRequest } from '../src/game/training.ts'
 import { trainingDate, trainingOptions, type TrainingActivityId } from '../src/game/training-calendar.ts'
 import type { SkillId } from '../src/game/types.ts'
 import { SKILLS, canLearnSkill, skillCategory } from '../src/game/data/skills.ts'
-import { economyOf, payWageArrears, upgradeFacility, FACILITIES, facilityLevel, facilityRoundIncome, facilityStageChance, facilityStageInLevel, facilityUpgradeCost, type FacilityId } from '../src/game/economy.ts'
+import { economyOf, payWageArrears, upgradeFacility, FACILITIES, facilityLevel, facilityRoundIncome, facilityStageChance, facilityStageInLevel, facilityUpgradeCost, homeAtmosphereBonus, type FacilityId } from '../src/game/economy.ts'
 import { aiTransferOffers, previewClubSigning, bestMarketValue, buyFreeAgent, listPlayer, cancelListing, releasePlayer, renewContract, signClubPlayer, transferWindowOpen } from '../src/game/market.ts'
 import { negotiationDemands, negotiationTerms, SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../src/game/negotiation.ts'
 import { ALL_ATTRIBUTES, POSITIONS } from '../src/game/types.ts'
@@ -233,6 +233,7 @@ function economyView(game: GameState) {
         stageInLevel: facilityStageInLevel(stage),
         growthChance: facilityStageChance(stage),
         roundIncome: facilityRoundIncome(economy, facility),
+        ...(facility === 'stadium' ? { homeOnly: true, homeAtmosphereRating: Number(homeAtmosphereBonus(stage).toFixed(2)) } : {}),
         upgradeCost: facilityUpgradeCost(facility, stage),
       }
     }),

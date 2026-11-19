@@ -15,7 +15,8 @@ function settle(e: EconomyState, fixture: { homeId: string; awayId: string; scor
   const conceded = fixture?.score ? (playerHome ? fixture.score.away : fixture.score.home) : 0
   const nextFans = fixture?.score ? fansAfterResult(e.fans, scored, conceded) : e.fans
   const won = Boolean(fixture?.score) && scored > conceded
-  const income = projectedRoundIncome({ ...e, fans: nextFans }) + Math.min(8, scored) * GOAL_INCOME_BONUS +
+  const isHome = fixture ? playerHome : true
+  const income = projectedRoundIncome({ ...e, fans: nextFans }, 'division2', isHome) + Math.min(8, scored) * GOAL_INCOME_BONUS +
     (won ? LEAGUE_WIN_BONUS + Math.floor(nextFans * 0.35) : 0)
   e.fans = nextFans
   e.balance += income

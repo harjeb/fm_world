@@ -474,7 +474,8 @@ export function simulateAIFixturesInRound(game: GameState, round = game.season.r
     const away = game.aiTeams.find((team) => team.id === fixture.awayId)
     if (!home || !away) continue
     const seed = splitSeed(game.season.seed, `ai-${round}-${fixture.homeId}-${fixture.awayId}`)
-    const state = simulateAIvsAIState(home, away, seed, LEAGUE_MATCH_SECONDS, game.injuries, now, suspendedPlayerIds(game), true, game.chemistry, game.season.gameDayMs)
+    const homeStadiumStage = game.aiClubs?.[home.id]?.economy.stadium ?? 1
+    const state = simulateAIvsAIState(home, away, seed, LEAGUE_MATCH_SECONDS, game.injuries, now, suspendedPlayerIds(game), true, game.chemistry, game.season.gameDayMs, homeStadiumStage)
     recordMatchInjuries(game, state, now, historical)
     recordMatchDiscipline(game, state)
     fixture.score = { home: state.score.home, away: state.score.away }

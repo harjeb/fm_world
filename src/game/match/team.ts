@@ -124,6 +124,7 @@ export function buildMatchTeam(input: MatchTeamInput, side: MatchSide): MatchTea
     autoSubs: input.autoSubs ? structuredClone(input.autoSubs) : undefined,
     subsUsed: 0,
     ...(input.chemistry && Object.keys(input.chemistry).length ? { chemistry: { ...input.chemistry } } : {}),
+    ...(side === 'home' && typeof input.stadiumStage === 'number' && input.stadiumStage > 0 ? { stadiumStage: input.stadiumStage } : {}),
     ...(effectiveInstructions
       ? {
           ...(input.tacticalStyle ? { tacticalStyle: input.tacticalStyle } : {}),

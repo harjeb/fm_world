@@ -4,7 +4,8 @@ import { PLAYER_TEAM_ID } from '../../game/season.ts'
 import { worldTierLabel } from '../../game/world.ts'
 import { conferenceLabel } from '../../game/data/world-clubs.ts'
 import { isOnlineMode } from '../../online.ts'
-import { BASE_ROUND_INCOME, economyOf, FACILITIES, facilityLevel, facilityRoundIncome, facilityStageChance, facilityStageInLevel, facilityUpgradeCost, GOAL_INCOME_BONUS, LEAGUE_WIN_BONUS, MAX_FACILITY_LEVEL, MAX_FACILITY_STAGE, projectedRoundIncome, STAGES_PER_LEVEL, type FacilityId } from '../../game/economy.ts'
+import { BASE_ROUND_INCOME, economyOf, FACILITIES, facilityLevel, facilityRoundIncome, facilityStageChance, facilityStageInLevel, facilityUpgradeCost, GOAL_INCOME_BONUS, HOME_ATMOSPHERE_BASE, HOME_STADIUM_MAX_BONUS, homeAtmosphereBonus, LEAGUE_WIN_BONUS, MAX_FACILITY_LEVEL, MAX_FACILITY_STAGE, projectedRoundIncome, STAGES_PER_LEVEL, type FacilityId } from '../../game/economy.ts'
+import { MAIN_ATTR_SCALE } from '../../game/scale.ts'
 import { CATEGORY_BONUS_PER_LEVEL, STADIUM_BONUS_PER_LEVEL } from '../../game/training.ts'
 import { bestMarketValue, transferWindowOpen } from '../../game/market.ts'
 import { caHeat, icon, ownName, pageHead, panel, posBadge, primaryPosition, tag, tile } from '../components.ts'
@@ -163,19 +164,28 @@ function facilitiesTab(): string {
     const cost = facilityUpgradeCost(id, stage)
     const income = facilityRoundIncome(economy, id)
     const chance = Math.round(facilityStageChance(stage) * 100)
+    const effectText = id === 'stadium'
+      ? `${info.effect}；仅主场收门票，主场全队约 +${Math.round(homeAtmosphereBonus(stage) * MAIN_ATTR_SCALE)} 主属性氛围`
+      : info.effect
+    const incomeCell = income
+      ? `${income.toLocaleString()}${id === 'stadium' ? '<small class="muted"> / 主场</small>' : ''}`
+      : '<span class="muted">—</span>'
     return `<tr>
       <td><span class="facility-name">${icon(info.icon, 16)}<b>${info.label}</b><span class="lv">LV${level}</span></span></td>
       <td>${stagePips(stage)}<small class="muted stage-count">${facilityStageInLevel(stage)} / ${STAGES_PER_LEVEL}</small></td>
       <td class="num">${GROWTH_FACILITIES.has(id) ? `${chance}%` : '<span class="muted">—</span>'}</td>
-      <td class="num">${income ? income.toLocaleString() : '<span class="muted">—</span>'}</td>
-      <td class="dim wrap">${info.effect}</td>
+      <td class="num">${incomeCell}</td>
+      <td class="dim wrap">${effectText}</td>
       <td class="num"><button class="btn small" data-action="club-upgrade" data-facility="${id}" ${cost === null || economy.balance < cost ? 'disabled' : ''}>${cost === null ? '已满级' : `升级 · ${cost.toLocaleString()}`}</button></td>
     </tr>`
   }).join('')
+  const minAtmo = Math.round(HOME_ATMOSPHERE_BASE * MAIN_ATTR_SCALE)
+  const maxAtmo = Math.round((HOME_ATMOSPHERE_BASE + HOME_STADIUM_MAX_BONUS) * MAIN_ATTR_SCALE)
   return `<div class="grid club-grid">
-    ${panel('俱乐部设施', `<div class="table-scroll"><table class="dt"><thead><tr><th>设施</th><th>阶段</th><th class="num">成长概率</th><th class="num">每轮收入</th><th>培养加成</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`, { flush: true })}
+    ${panel('俱乐部设施', `<div class="table-scroll"><table class="dt"><thead><tr><th>设施</th><th>阶段</th><th class="num">成长概率</th><th class="num">每轮 / 主场收入</th><th>加成效果</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`, { flush: true })}
     ${panel('设施规则', `<ul class="rule-list">
-      <li>${icon('coin', 13)}每轮保底 ${BASE_ROUND_INCOME.toLocaleString()}；球迷每人贡献 2，球场、商店、赞助收入随球迷规模增长（最多按 4 倍计算）。</li>
+      <li>${icon('coin', 13)}每轮保底 ${BASE_ROUND_INCOME.toLocaleString()}；球迷每人贡献 2，球场、商店、赞助收入随球迷规模增长（最多按 4 倍计算）；其中<b>球场门票仅联赛主场发放</b>。</li>
+      <li>${icon('stadium', 13)}球场在联赛/杯赛主场为全队提供微弱主场氛围加成（LV1 约 +${minAtmo} 至 LV5 满级约 +${maxAtmo} 主属性有效值），客场及中立挑战赛不生效。</li>
       <li>${icon('flag', 13)}联赛比分推动球迷增长：胜场与进球越多，下一轮收入越高；本轮每进一球另得 ${GOAL_INCOME_BONUS.toLocaleString()}，胜场加 ${LEAGUE_WIN_BONUS.toLocaleString()} + 球迷数的 35%。友谊赛不计收入或涨粉。</li>
       <li>${icon('training', 13)}培养免费，仅消耗 30 精力；设施共 ${MAX_FACILITY_LEVEL} 个等级、每级 ${STAGES_PER_LEVEL} 个阶段（合计 ${MAX_FACILITY_STAGE} 个阶段）。第 ${STAGES_PER_LEVEL} 阶段会升到下一等级，费用明显高于同级的前几个阶段。</li>
       <li>${icon('bag', 13)}球迷商店和赞助商只提高每轮余额收入，不再提供属性成长；它们原来的培养加成由心理辅导室和战术研究室接管。</li>
@@ -212,9 +222,10 @@ function contractsTab(): string {
 export function renderClub(): string {
   const economy = economyOf(game)
   const wages = game.roster.reduce((sum, player) => sum + (player.contract?.wage ?? 0), 0)
-  const income = projectedRoundIncome(economy, game.season.tier)
+  const homeIncome = projectedRoundIncome(economy, game.season.tier, true)
+  const awayIncome = projectedRoundIncome(economy, game.season.tier, false)
   const wagesDue = game.world && game.world.seasonIndex <= 1 ? 0 : wages
-  const net = income - wagesDue
+  const net = homeIncome - wagesDue
   const body = ui.clubTab === 'contracts' ? contractsTab() : ui.clubTab === 'history' ? historyTab() : facilitiesTab()
   return `
     ${pageHead({ kicker: '俱乐部', title: ownName(game.clubName) })}
@@ -222,9 +233,9 @@ export function renderClub(): string {
     <div class="kpi-row club-kpis">
       ${tile('余额', economy.balance.toLocaleString())}
       ${tile('球迷', economy.fans.toLocaleString(), economy.lastFanChange === undefined ? '联赛赛果带动球迷增长' : `上轮 ${economy.lastFanChange >= 0 ? '+' : ''}${economy.lastFanChange.toLocaleString()}`)}
-      ${tile('预计每轮收入', income.toLocaleString(), economy.lastRoundIncome === undefined ? '不含本轮进球、胜场奖金' : `上轮实际 ${economy.lastRoundIncome.toLocaleString()}`)}
+      ${tile('预计主场收入', homeIncome.toLocaleString(), economy.lastRoundIncome === undefined ? `客场 ${awayIncome.toLocaleString()}（无门票）` : `客场 ${awayIncome.toLocaleString()} · 上轮实收 ${economy.lastRoundIncome.toLocaleString()}`)}
       ${tile('每轮工资', wages.toLocaleString(), game.world && game.world.seasonIndex <= 1 ? '首赛季由董事会承担' : `${game.roster.length} 名球员`)}
-      ${tile('预计每轮净收入', `<span class="${net >= 0 ? 'up' : 'down'}">${net >= 0 ? '+' : ''}${net.toLocaleString()}</span>`, '不含本轮进球、胜场奖金和交易')}
+      ${tile('预计主场净收入', `<span class="${net >= 0 ? 'up' : 'down'}">${net >= 0 ? '+' : ''}${net.toLocaleString()}</span>`, `客场净 ${(awayIncome - wagesDue) >= 0 ? '+' : ''}${(awayIncome - wagesDue).toLocaleString()}（不含奖金交易）`)}
     </div>
     <div class="tabs" role="tablist">
       ${TABS.map((tab) => `<button class="tab ${ui.clubTab === tab.id ? 'active' : ''}" role="tab" aria-selected="${ui.clubTab === tab.id}" data-club-tab="${tab.id}">${tab.label}</button>`).join('')}

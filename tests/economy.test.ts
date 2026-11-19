@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { Fixture, GameState } from '../src/game/types'
 import {
   awardRoundIncome, economyOf, facilityLevel, facilityRoundIncome, facilityStageInLevel, FACILITIES,
-  facilityUpgradeCost, fansAfterResult, GOAL_INCOME_BONUS, LEAGUE_WIN_BONUS, MAX_FACILITY_STAGE,
+  facilityUpgradeCost, fansAfterResult, GOAL_INCOME_BONUS, HOME_ATMOSPHERE_BASE, HOME_STADIUM_MAX_BONUS, homeAtmosphereBonus,
+  LEAGUE_WIN_BONUS, MAX_FACILITY_STAGE,
   facilityStageChance, MAX_FACILITY_LEVEL, projectedRoundIncome, STARTING_FANS,
   STARTING_FACILITY_STAGE, STAGES_PER_LEVEL, upgradeFacility,
 } from '../src/game/economy'
@@ -124,11 +125,13 @@ describe('economy', () => {
   ] as const)('awards score and fan growth for %s only when eligible', (_label, changes, result) => {
     const game = oldSave()
     economyOf(game)
-    game.season.fixtures = [{ round: 1, homeId: 'player', awayId: 'ai', isPlayer: true, played: true,
-      score: { home: 1, away: 0 }, ...changes } as Fixture]
+    const fixture = { round: 1, homeId: 'player', awayId: 'ai', isPlayer: true, played: true,
+      score: { home: 1, away: 0 }, ...changes } as Fixture
+    game.season.fixtures = [fixture]
     const [scored, conceded] = result ?? [0, 0]
     const nextFans = result ? fansAfterResult(STARTING_FANS, scored, conceded) : STARTING_FANS
-    const expected = projectedRoundIncome({ ...economyOf(game), fans: nextFans }) + scored * GOAL_INCOME_BONUS +
+    const isHome = result ? fixture.homeId === 'player' : true
+    const expected = projectedRoundIncome({ ...economyOf(game), fans: nextFans }, 'division2', isHome) + scored * GOAL_INCOME_BONUS +
       (result && scored > conceded ? LEAGUE_WIN_BONUS + Math.floor(nextFans * 0.35) : 0)
     expect(awardRoundIncome(game, 1)).toBe(expected)
     expect(economyOf(game).fans).toBe(nextFans)
@@ -245,5 +248,37 @@ describe('economy', () => {
     expect(awardRoundIncome(game, 1)).toBe(0)
     expect(e.lastIncomeRound).toBe(2)
     expect(e.balance).toBe(240000 - cost + afterUpgrade)
+  })
+
+  it('仅联赛主场发放球场门票收入，客场不计球场门票', () => {
+    const homeGame = oldSave()
+    const awayGame = oldSave()
+    for (const g of [homeGame, awayGame]) {
+      const e = economyOf(g)
+      e.fans = 20_000
+      e.stadium = 15 // LV3 满阶段
+      e.shop = 10
+      e.sponsor = 10
+    }
+    homeGame.season.fixtures = [{ round: 1, homeId: 'player', awayId: 'ai', isPlayer: true, played: true, score: { home: 1, away: 1 } } as Fixture]
+    awayGame.season.fixtures = [{ round: 1, homeId: 'ai', awayId: 'player', isPlayer: true, played: true, score: { home: 1, away: 1 } } as Fixture]
+
+    const homeIncome = awardRoundIncome(homeGame, 1)
+    const awayIncome = awardRoundIncome(awayGame, 1)
+    const stadiumTicket = facilityRoundIncome(economyOf(homeGame), 'stadium')
+    expect(stadiumTicket).toBeGreaterThan(0)
+    expect(homeIncome - awayIncome).toBe(stadiumTicket)
+    expect(projectedRoundIncome(economyOf(homeGame), 'division2', true) - projectedRoundIncome(economyOf(homeGame), 'division2', false)).toBe(stadiumTicket)
+  })
+
+  it('主场氛围加成按球场阶段线性递增，缺省或无效值为 0', () => {
+    expect(homeAtmosphereBonus(undefined)).toBe(0)
+    expect(homeAtmosphereBonus(0)).toBe(0)
+    expect(homeAtmosphereBonus(-5)).toBe(0)
+    expect(homeAtmosphereBonus(1)).toBeCloseTo(HOME_ATMOSPHERE_BASE, 6)
+    expect(homeAtmosphereBonus(MAX_FACILITY_STAGE)).toBeCloseTo(HOME_ATMOSPHERE_BASE + HOME_STADIUM_MAX_BONUS, 6)
+    for (let s = 1; s < MAX_FACILITY_STAGE; s++) {
+      expect(homeAtmosphereBonus(s + 1)).toBeGreaterThan(homeAtmosphereBonus(s))
+    }
   })
 })

@@ -93,6 +93,8 @@ export type MatchTeamState = {
   instructions?: import('../pes/tactics.ts').TacticalInstructionsV2
   /** 全队战术执行熟练度 0–1。 */
   familiarity?: number
+  /** 主队球场阶段（1–25）；仅主队生效，提供微弱主场氛围加成，缺省为 0 以兼容旧回放与中立赛。 */
+  stadiumStage?: number
   players: MatchPlayerState[]
   bench: MatchPlayerState[]
   autoSubs?: AutoSubPlan
@@ -298,6 +300,8 @@ export type MatchTeamInput = {
   instructions?: import('../pes/tactics.ts').TacticalInstructionsV2
   /** 全队战术熟练度 0–1（缺省 1）。只在新指令下生效。 */
   familiarity?: number
+  /** 主队球场阶段（1–25）；仅主队生效，提供微弱主场氛围加成。 */
+  stadiumStage?: number
   /** 是否启用 AI 主教练临场战术调度与智能换人。 */
   aiCoach?: boolean
   autoSubs?: AutoSubPlan

@@ -8,6 +8,7 @@ import { detailedPositionValue } from '../detailed-positions.ts'
 import { chemistryKey } from '../chemistry.ts'
 import { derivedRng } from '../rng.ts'
 import { legendMultiplier } from '../legend-bonus.ts'
+import { homeAtmosphereBonus } from '../economy.ts'
 import { opponentSide } from './team.ts'
 import { clamp, progressOf, wideZone } from './pitch.ts'
 import type { MatchEventContext, MatchPlayerState, MatchSide, MatchState } from './types.ts'
@@ -38,6 +39,12 @@ export class MatchRatings {
     const ratio = player.stamina / Math.max(1, player.maxStamina)
     const gk = player.position === 'GK'
     let value = effectiveAttr(player.attrs, ratio, player.detailedPosition ? detailedPositionValue(player, player.detailedPosition) : player.positions[player.position], key, gk)
+    if (player.side === 'home') {
+      const homeTeam = this.stateOf().teams[0]
+      if (homeTeam?.stadiumStage && homeTeam.stadiumStage > 0) {
+        value += homeAtmosphereBonus(homeTeam.stadiumStage)
+      }
+    }
     const star = STAR_TRAITS[player.traitId]
     if (star?.kind === 'attr' && star.attr === key && this.traitConditionMet(player, star.when, ctx) && this.traitRoll(player, 'attr', star.chance)) value += star.bonus / MAIN_ATTR_SCALE
     if (star?.kind === 'hotStreak' && key === 'shooting') value += (star.bonus / MAIN_ATTR_SCALE) * player.stats.goals

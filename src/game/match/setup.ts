@@ -120,10 +120,12 @@ export function teamInputFromAI(
 }
 
 /** 两支电脑球队的比赛（联赛、升级附加赛）：体能低于 80 的先休息（rotate 默认开）。 */
-export function simulateAIvsAIState(home: AITeam, away: AITeam, seed: number, durationSeconds = LOGIC_MATCH_SECONDS, injuries?: GameState['injuries'], now = Date.now(), suspended?: Set<string>, rotate = true, chemistry?: Chemistry, gameDayMs = GAME_DAY_MS) {
+export function simulateAIvsAIState(home: AITeam, away: AITeam, seed: number, durationSeconds = LOGIC_MATCH_SECONDS, injuries?: GameState['injuries'], now = Date.now(), suspended?: Set<string>, rotate = true, chemistry?: Chemistry, gameDayMs = GAME_DAY_MS, homeStadiumStage?: number) {
+  const homeInput = withChemistry(teamInputFromAI(home, suspended, { rotate }), chemistry, now, gameDayMs)
+  if (typeof homeStadiumStage === 'number' && homeStadiumStage > 0) homeInput.stadiumStage = homeStadiumStage
   const engine = new MatchEngine({
     seed,
-    home: withChemistry(teamInputFromAI(home, suspended, { rotate }), chemistry, now, gameDayMs),
+    home: homeInput,
     away: withChemistry(teamInputFromAI(away, suspended, { rotate }), chemistry, now, gameDayMs),
     knockout: false,
     durationSeconds,
@@ -296,6 +298,11 @@ export function buildMatchEngineForGame(game: GameState, context: MatchContext, 
   const aiInput = teamInputFromAI(ai, suspended, { rotate: true, tacticsStage: aiClubTactics })
   withChemistry(playerInput, game.chemistry, now, game.season.gameDayMs)
   withChemistry(aiInput, game.chemistry, now, game.season.gameDayMs)
+  // 联赛与杯赛启用主队球场氛围加成；中立挑战赛/巅峰之路不施加。
+  if (context.isLeague || context.mode === 'cup') {
+    if (context.homeAway === 'home') playerInput.stadiumStage = game.economy?.stadium ?? 1
+    else aiInput.stadiumStage = game.aiClubs?.[ai.id]?.economy.stadium ?? 1
+  }
   if (rulesVersion === undefined) {
     const pes = new PesEngine({
       seed: context.seed,
