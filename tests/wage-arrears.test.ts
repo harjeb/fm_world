@@ -4,8 +4,9 @@ import { ALL_ATTRIBUTES } from '../src/game/types.ts'
 import { UNPAID_PERFORMANCE, economyOf, matchPerformanceOf, payWageArrears, payWageBill, wageArrearsOf } from '../src/game/economy.ts'
 import { buildMatchEngineForGame } from '../src/game/match/setup.ts'
 import type { MatchEngine } from '../src/game/match/engine.ts'
-import { attrRating } from '../src/game/scale.ts'
-import { createWorldGame } from '../src/game/world.ts'
+import { attrRating, attrStorage } from '../src/game/scale.ts'
+import { WAGE_CAP, createWorldGame, repairInflatedContractWages, wageForPlayer } from '../src/game/world.ts'
+import { renewContract } from '../src/game/market.ts'
 
 describe('欠薪', () => {
   it('发薪时余额不够就记欠薪；下次发薪先补欠薪再发本轮的', () => {
@@ -84,5 +85,61 @@ describe('欠薪的总览提示', () => {
     economyOf(game).balance = 9_000
     home = renderHome()
     expect(home).toMatch(/data-action="pay-wage-arrears" >/)
+  })
+})
+
+describe('工资口径与存量天价合同修复', () => {
+  it('wageForPlayer 只按原始属性 baseAttrs 计算并封顶，培养/装卡后不会指数爆炸', () => {
+    const game = createWorldGame(6102)
+    const player = game.roster.find((p) => p.positions.GK === 0)!
+    const baseWage = wageForPlayer(player)
+    expect(baseWage).toBeGreaterThanOrEqual(500)
+    expect(baseWage).toBeLessThan(10_000)
+
+    // 模拟 AI 长期培养或装备高阶球员卡，把当前 attrs 拉到 CA ~600（baseAttrs 保持原始）
+    player.baseAttrs = structuredClone(player.baseAttrs ?? player.attrs)
+    for (const key of ALL_ATTRIBUTES) {
+      player.attrs[key] = attrStorage(key, 65, false)
+    }
+    expect(wageForPlayer(player)).toBe(baseWage)
+
+    // 即使原始属性极高，也不超过单人封顶上限 WAGE_CAP
+    for (const key of ALL_ATTRIBUTES) {
+      player.baseAttrs[key] = attrStorage(key, 95, false)
+    }
+    expect(wageForPlayer(player)).toBe(WAGE_CAP)
+  })
+
+  it('repairInflatedContractWages 修复天价存量合同且不伤及正常签约、1.1× 续约与青训合同', () => {
+    const game = createWorldGame(6103)
+    const [inflated, normal, renewed, youth] = game.roster
+    const fair0 = wageForPlayer(inflated)
+    const fair1 = wageForPlayer(normal)
+    const fair2 = wageForPlayer(renewed)
+
+    inflated.contract = { clubId: 'player', wage: 484_471_900, expiresSeason: 4 }
+    normal.contract = { clubId: 'player', wage: fair1, expiresSeason: 4 }
+    renewed.contract = { clubId: 'player', wage: Math.round(fair2 * 1.1), expiresSeason: 6 }
+    youth.contract = { clubId: 'player', wage: 100, expiresSeason: 5 }
+
+    expect(repairInflatedContractWages([inflated, normal, renewed, youth])).toBe(true)
+    expect(inflated.contract.wage).toBe(fair0)
+    expect(normal.contract.wage).toBe(fair1)
+    expect(renewed.contract.wage).toBe(Math.round(fair2 * 1.1))
+    expect(youth.contract.wage).toBe(100)
+    // 幂等：再次调用不再修改
+    expect(repairInflatedContractWages([inflated, normal, renewed, youth])).toBe(false)
+  })
+
+  it('给已培养或残留天价合同的球员续约时，按原始属性合理涨薪而不再锁死天价', () => {
+    const game = createWorldGame(6104)
+    const player = game.roster.find((p) => p.positions.GK === 0)!
+    const fair = wageForPlayer(player)
+    player.baseAttrs = structuredClone(player.baseAttrs ?? player.attrs)
+    for (const key of ALL_ATTRIBUTES) player.attrs[key] = attrStorage(key, 68, false)
+    player.contract = { clubId: 'player', wage: 83_322_200, expiresSeason: 4 }
+
+    expect(renewContract(game, player.id, 2).ok).toBe(true)
+    expect(player.contract.wage).toBe(Math.round(fair * 1.1))
   })
 })

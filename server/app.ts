@@ -26,7 +26,7 @@ import { addTrainedCard, ensureCards, equipCard, playerCards, recyclePlayerCards
 import { ensurePve } from '../src/game/pve.ts'
 import { loadPveContent } from '../src/game/pve-content.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
-import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, migrateLegacyExpandedTactics, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, syncAllClubLiveTactics, syncClubLiveTactics, wageForPlayer, worldForClub, worldSlots, worldWageBill } from '../src/game/world.ts'
+import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, migrateLegacyExpandedTactics, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, repairInflatedContractWages, syncAllClubLiveTactics, syncClubLiveTactics, wageForPlayer, worldForClub, worldSlots, worldWageBill } from '../src/game/world.ts'
 import { pickExpandedZoneClubs } from '../src/game/data/world-clubs.ts'
 import { lineupLockState } from '../src/game/season.ts'
 import { completedWorldRound, seasonRoundKickoff, worldRoundsKickedOff } from '../src/game/season-cups.ts'
@@ -327,10 +327,17 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
   }
   // 统一迁移账号与共享世界的实时球员；已锁定的比赛任务、回放和杯赛开赛快照不改。
-  for (const account of db.accounts) if (account.game && migratePositionProfiles(account.game)) {
-    account.revision++
-    account.lastUserRevision = account.revision
-    persistAccount(account)
+  for (const account of db.accounts) {
+    const posChanged = account.game ? migratePositionProfiles(account.game) : false
+    const wageFixed = account.game ? repairInflatedContractWages(account.game.roster) : false
+    if (posChanged || wageFixed) {
+      account.revision++
+      account.lastUserRevision = account.revision
+      persistAccount(account)
+    }
+  }
+  for (const team of Object.values(sharedWorld.teams ?? {})) {
+    repairInflatedContractWages(team.players)
   }
   for (const player of [
     ...Object.values(sharedWorld.teams ?? {}).flatMap(team => team.players),

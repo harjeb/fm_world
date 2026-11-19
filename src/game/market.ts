@@ -514,9 +514,12 @@ export function renewContract(game: GameState, playerId: string, years = 2): Mar
   if (game.activeMatch) return fail('比赛进行中不能续约')
   const player = game.roster.find((item) => item.id === playerId)
   if (!player) return fail('球员不在你的阵容')
+  const fair = wageForPlayer(player)
+  const current = player.contract?.wage ?? 0
+  const baseWage = current <= Math.round(fair * 1.15) ? current : fair
   player.contract = {
     clubId: 'player',
-    wage: Math.max(player.contract?.wage ?? 0, Math.round(wageForPlayer(player) * 1.1)),
+    wage: Math.max(baseWage, Math.round(fair * 1.1)),
     expiresSeason: Math.max((player.contract?.expiresSeason ?? game.season.index) + years, game.season.index + years),
   }
   return { ok: true }

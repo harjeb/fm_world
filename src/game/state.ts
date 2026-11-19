@@ -8,7 +8,7 @@ import { elevenFormationFor } from './data/formations.ts'
 import { upgradeElevenASide } from './eleven.ts'
 import { emptyAutoSubs, sanitizeAutoSubPlan, validateAutoSubPlan } from './match/management.ts'
 import { createSeason } from './season.ts'
-import { ensureWorldCalendar } from './world.ts'
+import { ensureWorldCalendar, repairInflatedContractWages } from './world.ts'
 import { migrateGameSchedule } from './schedule.ts'
 import { latestKickoffAt } from './calendar.ts'
 import { splitSeed } from './rng.ts'
@@ -194,9 +194,10 @@ export function loadGame(): GameState | null {
     const traitsUpgraded = upgradeStarTraits(parsed)
     const attrsUpgraded = upgradeBurstAttr(parsed)
     const pveAdded = ensurePve(parsed)
+    const wagesRepaired = repairInflatedContractWages(parsed.roster)
     parsed.ui = parsed.ui ?? { screen: 'home' }
     const chemistryPruned = pruneChemistry(parsed.chemistry, Date.now(), parsed.season.gameDayMs)
-    if (positionsMigrated || chemistryPruned || rescheduled || elevenUpgraded || repaired || aiLineupsRefreshed || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || pveAdded) saveGame(parsed)
+    if (positionsMigrated || chemistryPruned || rescheduled || elevenUpgraded || repaired || aiLineupsRefreshed || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || pveAdded || wagesRepaired) saveGame(parsed)
     return parsed
   } catch {
     return null
