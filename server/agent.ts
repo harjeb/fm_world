@@ -3,6 +3,18 @@ import { detailedPositionForSlot, isDetailedPosition, readDetailedPositions, slo
 import { MAX_SCOUT_REPORTS, SCOUT_LEVELS, deleteScoutReport, startScouting, visibleScoutReports, type ScoutReport, type ScoutSource, type ScoutTarget, type VisibleScoutReport } from '../src/game/scouting.ts'
 import { preferredPositionRatings } from '../src/game/scout-rating.ts'
 import { cupCeilingBonus } from '../src/game/cup-rewards.ts'
+import { PEAK_STAGES } from '../src/game/data/peak-stages.generated.ts'
+import { PEAK_STAGE_COUNT, buildPeakTeam } from '../src/game/peak.ts'
+import { PEAK_DAILY_LIMIT, peakDailyStatus } from '../src/game/peak-attempts.ts'
+import { peakStageReward } from '../src/game/data/peak-rewards.ts'
+import { peakSkillForStage } from '../src/game/data/peak-skills.ts'
+import { applyPeakBreakthrough } from '../src/game/peak-milestones.ts'
+import { PEAK_REWARD_STAGE, claimPeakReward, peakRewardReady } from '../src/game/peak-reward.ts'
+import { LEGEND_TEAMS } from '../src/game/data/legend-teams.ts'
+import { legendSkillForTeam } from '../src/game/data/legend-skills.ts'
+import { legendTeamById } from '../src/game/legend.ts'
+import { pveContentReady } from '../src/game/pve-content.ts'
+import { ensurePve, legendRecordOf } from '../src/game/pve.ts'
 import { youthView } from '../src/game/youth.ts'
 import { applyYouthAction } from '../src/game/youth-actions.ts'
 import type { TrainingRequest } from '../src/game/training.ts'
@@ -68,7 +80,9 @@ import {
   setLineup,
   simulateSeasonRound,
   startLeague,
+  startLegendChallenge,
   startNextSeasonAction,
+  startPeakChallenge,
   startSingleChallenge,
   startTraining,
   startTrainingWithSupport,
@@ -294,6 +308,8 @@ function matchView(game: GameState) {
     opponentId: active.context.opponentId,
     opponentName: active.context.opponentName,
     isLeague: active.context.isLeague,
+    mode: active.context.mode ?? null,
+    stage: active.context.stage ?? null,
     round: active.context.round ?? null,
     homeAway: playerSide,
     playerSide,
@@ -342,6 +358,8 @@ function matchSummary(record: GameState['matchHistory'][number]) {
   return {
     id: record.id,
     isLeague: record.isLeague,
+    mode: record.mode ?? null,
+    stage: record.stage ?? null,
     round: record.round ?? null,
     homeName: record.homeName,
     awayName: record.awayName,
@@ -350,6 +368,112 @@ function matchSummary(record: GameState['matchHistory'][number]) {
     result: record.result,
     autoSimulated: !!record.autoSimulated,
     bookDrops: (record.bookDrops ?? []).map((drop) => ({ ...drop, key: bookKey(drop), name: bookName(drop.id) })),
+  }
+}
+
+function peakStageSummary(stage: number) {
+  const def = PEAK_STAGES[stage - 1]
+  if (!def) return null
+  const reward = peakStageReward(stage)
+  const book = peakSkillForStage(stage)
+  return {
+    stage: def.stage,
+    targetCa: def.targetCa,
+    kind: def.kind,
+    club: def.team.club,
+    clubEn: def.team.clubEn,
+    season: def.team.season,
+    tier: def.team.tier,
+    formationId: def.team.formationId,
+    reward: reward ? { kind: reward.kind, amount: reward.amount, ...(reward.breakthroughCards ? { breakthroughCards: reward.breakthroughCards } : {}) } : null,
+    peakSkillDrop: book ? { id: book.id, name: book.name, effect: book.effect } : null,
+  }
+}
+
+function pveSummaryView(game: GameState, now: number) {
+  const cleared = game.pve?.peak.cleared ?? 0
+  const nextStage = cleared < PEAK_STAGE_COUNT ? cleared + 1 : null
+  const legends = game.pve?.legends ?? {}
+  return {
+    peak: {
+      cleared,
+      nextStage,
+      totalStages: PEAK_STAGE_COUNT,
+      dailyLimit: PEAK_DAILY_LIMIT,
+      dailyAttempts: peakDailyStatus(game, now),
+      breakthroughCards: game.pve?.peak.breakthroughCards ?? 0,
+      reward50Ready: peakRewardReady(game),
+      reward50: game.pve?.peak.reward50 ?? null,
+      currentStageDef: nextStage ? peakStageSummary(nextStage) : null,
+    },
+    legends: {
+      total: LEGEND_TEAMS.length,
+      beaten: Object.values(legends).filter((row) => row.won > 0).length,
+      records: Object.fromEntries(Object.entries(legends).map(([id, row]) => [id, { ...row }])),
+    },
+  }
+}
+
+function pveCatalogView(game: GameState, now: number, body: Record<string, unknown>) {
+  const summary = pveSummaryView(game, now)
+  const stages = PEAK_STAGES.map((def) => peakStageSummary(def.stage)!)
+  const legends = LEGEND_TEAMS.map((def) => {
+    const drop = legendSkillForTeam(def.id)
+    const record = legendRecordOf(game, def.id)
+    return {
+      id: def.id,
+      club: def.club,
+      clubEn: def.clubEn,
+      season: def.season,
+      coach: def.coach,
+      tier: def.tier,
+      formationId: def.formationId,
+      note: def.note,
+      dropSkill: drop ? { id: drop.id, name: drop.name, effect: drop.effect } : null,
+      record,
+    }
+  })
+  const rosterSeeds = new Set(game.roster.map((p) => p.seedId).filter(Boolean))
+  const reward50Candidates = summary.peak.reward50Ready && pveContentReady()
+    ? buildPeakTeam(PEAK_REWARD_STAGE).players.map((p) => ({
+      templateId: p.id,
+      name: p.name,
+      enName: p.enName,
+      primaryPosition: primaryPosition(p),
+      ca: displayCA(caOf(p.attrs, p.positions.GK > 0)),
+      traitName: traitNameOf(p.traitId),
+      skills: p.skills,
+      alreadyInSquad: rosterSeeds.has(p.id),
+    }))
+    : null
+  const requestedStage = body.stage !== undefined ? Number(body.stage) : undefined
+  const requestedLegendId = text(body.legendId)
+  let preview: unknown = null
+  if (pveContentReady() && requestedStage !== undefined && Number.isInteger(requestedStage) && requestedStage >= 1 && requestedStage <= PEAK_STAGE_COUNT) {
+    const team = buildPeakTeam(requestedStage)
+    preview = {
+      kind: 'peak',
+      stage: requestedStage,
+      name: team.name,
+      formationId: team.formationId,
+      players: team.players.map((p) => ({ id: p.id, name: p.name, primaryPosition: primaryPosition(p), ca: displayCA(caOf(p.attrs, p.positions.GK > 0)), traitName: traitNameOf(p.traitId), skills: p.skills })),
+    }
+  } else if (pveContentReady() && requestedLegendId) {
+    const team = legendTeamById(requestedLegendId)
+    if (team) {
+      preview = {
+        kind: 'legend',
+        legendId: requestedLegendId,
+        name: team.name,
+        formationId: team.formationId,
+        players: team.players.map((p) => ({ id: p.id, name: p.name, primaryPosition: primaryPosition(p), ca: displayCA(caOf(p.attrs, p.positions.GK > 0)), traitName: traitNameOf(p.traitId), skills: p.skills })),
+      }
+    }
+  }
+  return {
+    peak: { ...summary.peak, stages, ...(reward50Candidates ? { reward50Candidates } : {}) },
+    legends: { total: summary.legends.total, beaten: summary.legends.beaten, teams: legends },
+    ...(preview ? { preview } : {}),
   }
 }
 
@@ -428,6 +552,7 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
       cupCeilingClaims: { ...(game.pve?.cupCeilingClaims ?? {}) },
       seasonCupGoldClaims: { ...(game.pve?.seasonCupGoldClaims ?? {}) },
     },
+    pve: pveSummaryView(game, now),
     season: {
       index: game.season.index,
       round: game.season.round,
@@ -959,6 +1084,36 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       const result = startSingleChallenge(game, text(body.teamId), now)
       return { ...result, result: result.ok ? matchView(game) : undefined }
     }
+    case 'get_pve': {
+      return { ok: true, result: pveCatalogView(game, now, body) }
+    }
+    case 'start_peak_challenge': {
+      ensurePve(game)
+      const cleared = game.pve?.peak.cleared ?? 0
+      const stage = body.stage === undefined ? Math.min(PEAK_STAGE_COUNT, cleared + 1) : Number(body.stage)
+      const result = startPeakChallenge(game, stage, now)
+      return { ...result, result: result.ok ? matchView(game) : undefined }
+    }
+    case 'start_legend_challenge': {
+      const legendId = text(body.legendId)
+      if (!legendId) return { ok: false, error: '请提供 legendId（来自 get_pve 的 legends.teams[].id）' }
+      const result = startLegendChallenge(game, legendId, now)
+      return { ...result, result: result.ok ? matchView(game) : undefined }
+    }
+    case 'use_peak_breakthrough': {
+      const playerId = text(body.playerId)
+      const attr = text(body.attr)
+      if (!playerId) return { ok: false, error: '请提供 playerId' }
+      if (!(ALL_ATTRIBUTES as readonly string[]).includes(attr)) return { ok: false, error: '无效的属性名' }
+      const result = applyPeakBreakthrough(game, playerId, attr as AttrKey)
+      return { ...result, result }
+    }
+    case 'claim_peak_reward': {
+      const templateId = text(body.templateId)
+      if (!templateId) return { ok: false, error: '请提供 templateId（来自 get_pve 的 peak.reward50Candidates[].templateId）' }
+      const result = claimPeakReward(game, templateId)
+      return result.ok ? { ok: true, result: { player: playerView(result.player, game, now) } } : result
+    }
     case 'get_match': {
       const matchId = text(body.matchId)
       if (matchId) {
@@ -1014,7 +1169,7 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       return ok ? { ok: true, result: matchView(game) } : { ok: false, error: '教练暂停已用完' }
     }
     case 'play_match': {
-      if (!game.activeMatch) return { ok: false, error: '请先开始友谊赛' }
+      if (!game.activeMatch) return { ok: false, error: '当前没有进行中的比赛' }
       if (game.activeMatch.context.isLeague) return { ok: false, error: '联赛按现实时间进行，不能跳到结果' }
       const engine = restoreActiveEngine(game)
       if (!engine) return { ok: false, error: '无法恢复比赛引擎' }

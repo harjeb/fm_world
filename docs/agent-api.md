@@ -24,7 +24,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 `/api/agent/action` 请求体统一为 `{ "action": "...", ...参数 }`。成功返回 `{ ok: true, revision, result, game }`；失败返回 HTTP 400、`{ ok: false, error, revision, game }`。`game` 是执行后的最新状态，可直接用于下一步决策。
 
-状态里和手动界面一致地公开：0–1500 原始主属性、位置与 `detailedPositions`、CA、年龄、估值 `marketValue`、合同 `contract`（`wage`、`expiresSeason`）、技能、性格、训练日志（最近 24 条）、待处理事件及成功率、自动培养设置 `autoTraining`、共享培养点 `trainingPoints` 与档位 `trainingPointTiers`、阵容合法性/位置折损、比赛历史、挑战历史、历年联赛成绩 `seasonHistory`（级别、名次、战绩、冠军）、前 5 轮赛程、转会窗口 `market.transferWindowOpen`、可谈判的 AI 球员 `market.clubOffers`、球探配置 `scouting` 和报告 `scoutReports`、奖杯与杯赛奖励 `honors`。全服其他球队和分区用 `get_world` 读取。**球员的隐藏属性当前值不会返回给 Agent；事件提示、日志或球探估计可能提及相关成长。**
+状态里和手动界面一致地公开：0–1500 原始主属性、位置与 `detailedPositions`、CA、年龄、估值 `marketValue`、合同 `contract`（`wage`、`expiresSeason`）、技能、性格、训练日志（最近 24 条）、待处理事件及成功率、自动培养设置 `autoTraining`、共享培养点 `trainingPoints` 与档位 `trainingPointTiers`、阵容合法性/位置折损、比赛历史、挑战历史、历年联赛成绩 `seasonHistory`（级别、名次、战绩、冠军）、前 5 轮赛程、转会窗口 `market.transferWindowOpen`、可谈判的 AI 球员 `market.clubOffers`、球探配置 `scouting` 和报告 `scoutReports`、奖杯与杯赛奖励 `honors`、以及巅峰之路与传奇挑战进度 `pve`（已通关数、今日剩余次数、属性突破卡、50 关奖励状态及传奇战绩）。全服其他球队和分区用 `get_world` 读取，巅峰 100 关与 50 支传奇队完整目录用 `get_pve` 读取。**球员的隐藏属性当前值不会返回给 Agent；事件提示、日志或球探估计可能提及相关成长。**
 
 ## 3. 动作
 
@@ -191,7 +191,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 ### 经济与市场
 
-`state.economy` 提供余额、球迷数、设施 `stage`（1–25）、`level`、`stageInLevel`、`growthChance`、`roundIncome` 及 `upgradeCost`；`state.market.freeAgents` 和 `state.market.listings` 提供价格及经过可见字段过滤的球员信息。市场是**本地 NPC 市场，不是跨账号交易**；赛季结束后不能新挂牌。每轮收入 = 1500 + 球迷 × 2 + 各设施收入（按阶段比例并随球迷最多放大 4 倍），另有每球 500 和胜场奖金（1000 + 球迷数 35%）；友谊赛没有收入也没有球迷变化。
+`state.economy` 提供余额、球迷数、设施 `stage`（1–25）、`level`、`stageInLevel`、`growthChance`、`roundIncome` 及 `upgradeCost`（球场额外返回 `homeOnly: true` 与 `homeAtmosphereRating`）；`state.market.freeAgents` 和 `state.market.listings` 提供价格及经过可见字段过滤的球员信息。市场是**本地 NPC 市场，不是跨账号交易**；赛季结束后不能新挂牌。每轮收入 = 1500 + 联赛转播分成 + 球迷 × 2 + 各设施收入（按阶段比例并随球迷最多放大 4 倍；其中**球场门票仅联赛主场发放**），另有每球 500 和胜场奖金（1000 + 球迷数 35%）；友谊赛与 PvE 挑战赛不计常规轮次收入或涨粉。联赛与杯赛中，主队按球场阶段在 2D 引擎获得微弱主场氛围加成（LV1 约 +15 至 LV5 满级约 +45 主属性有效值）。
 
 - `upgrade_facility` — `facilityId`: `stadium`、`academy`、`medical`、`psychology`、`tactics`、`shop` 或 `sponsor`。
 - `pay_wage_arrears` — 无参数：补发全部欠薪。每轮结束发工资时先补以前的欠薪再发本轮的，余额不够的部分记在 `state.economy.wageArrears`。**欠薪期间球员在比赛里所有属性减半（只发挥 50%）**，联机按开球前 30 分钟锁定时的状态算。余额必须够一次还清；下次发薪时余额够也会先自动补发。
@@ -216,19 +216,36 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 - `start_league` — 仅用于本地单机的手动开赛。联机接口始终拒绝：联赛开球前 30 分钟锁定完整快照，服务器逐场提前计算，开球后按现实时间“直播” 10 分钟，比分在开球 10 分钟后才统一公布，不创建可临场操作的新 `activeMatch`。
 - `get_match` — 不传 `matchId` 读取当前比赛（比分、90 分钟显示时钟、统计、场上球员、替补、战术、最近事件和截至当前的 `commentary`）；传 `matchId` 读取完整记录和复盘建议。
-- `advance_match` — 仅限友谊赛：按步推进（默认 1 步），终场时自动结算。联赛调用会报错。新引擎（`rulesVersion = 4`）一步约等于 1 个模拟秒（整场 900 步）；旧存档里进行中的 v3 比赛一步是一个动作。
+- `advance_match` — 适用于友谊赛、巅峰之路与传奇挑战：按步推进（默认 1 步），终场时自动结算。联赛调用会报错。新引擎（`rulesVersion = 4`）一步约等于 1 个模拟秒（整场 900 步）；旧存档里进行中的 v3 比赛一步是一个动作。
   - `steps?`
-- `set_match_tactics` — 用于进行中的友谊赛或升级前仍在进行的旧版联赛；新的联机队列比赛不能在锁定后修改。比赛中选择战术心态：`{ "action": "set_match_tactics", "mentality": "attack" }`（全体进攻）、`"balanced"`（均衡）或 `"defend"`（全体防守）。赛中不接受任意五维战术对象；赛前仍可设置完整战术。全体进攻使用直传、快速、高防线、高压；均衡使用均衡方向、混合传球、正常节奏、中防线和中等逼抢；全体防守使用短传、慢节奏、低防线、低压，场上非门将球员的整体站位也会相应前压或后撤。均衡是固定预设，并非恢复自定义的赛前战术。`activeMatch.mentality` 为当前心态，`null` 表示还在使用赛前战术。
+- `set_match_tactics` — 用于进行中的友谊赛 / 巅峰之路 / 传奇挑战或升级前仍在进行的旧版联赛；新的联机队列比赛不能在锁定后修改。比赛中选择战术心态：`{ "action": "set_match_tactics", "mentality": "attack" }`（全体进攻）、`"balanced"`（均衡）或 `"defend"`（全体防守）。赛中不接受任意五维战术对象；赛前仍可设置完整战术。全体进攻使用直传、快速、高防线、高压；均衡使用均衡方向、混合传球、正常节奏、中防线和中等逼抢；全体防守使用短传、慢节奏、低防线、低压，场上非门将球员的整体站位也会相应前压或后撤。均衡是固定预设，并非恢复自定义的赛前战术。`activeMatch.mentality` 为当前心态，`null` 表示还在使用赛前战术。
 - `set_match_auto_subs` — 在进行中的比赛里实时更新本场自动换人设置（`plan` 结构同 `set_auto_subs`，校验对象为当前场上球员与可用替补席；可选 `syncDefault: true` 同步更新 `state.autoSubs`）。
-- `substitute` — 进行中的友谊赛（以及升级前仍在进行的旧版联赛）手动换人，与自动换人共用 5 次；新的联机队列比赛请在锁定前设置自动换人。
+- `substitute` — 进行中的友谊赛 / 巅峰之路 / 传奇挑战（以及升级前仍在进行的旧版联赛）手动换人，与自动换人共用 5 次；新的联机队列比赛请在锁定前设置自动换人。
   - `outId`、`inId`：`get_match` 返回的带主客前缀的比赛球员 ID。
-- `coach_pause` — 仅限友谊赛：使用一次教练暂停，返回当前比赛。联赛不可暂停。
+- `coach_pause` — 适用于友谊赛、巅峰之路与传奇挑战：使用一次教练暂停，返回当前比赛。联赛不可暂停。
 - `start_friendly` — 和本分区 AI 球队开始一场友谊赛（挑战页）。
   - `teamId`: 来自 `state.teams[].id`
 - `start_world_friendly` — 和全服任意一支球队开始友谊赛（世界页「约战」），对手名单由服务器给出，可以约其他教练执教的球队。
   - `clubId`: 来自 `get_world` 的 `clubs[].id`
-- `play_match` — 仅限已有进行中的友谊赛：立即模拟至终场并结算。联赛不能跳过。
+- `play_match` — 适用于已有进行中的友谊赛、巅峰之路或传奇挑战：立即模拟至终场并结算（自动更新巅峰通关、里程碑奖励、突破卡与传奇技能书掉落）。联赛不能跳过。
 - `simulate_round` — 本地单机只模拟本轮 AI 比赛；联机接口拒绝调用，全服比赛只由后台队列处理。
+
+### 巅峰之路与传奇挑战（PvE）
+
+`state.pve` 返回巅峰之路摘要（`peak.cleared`、`nextStage`、`totalStages`、`dailyLimit`、`dailyAttempts`、`breakthroughCards`、`reward50Ready`、`reward50`、`currentStageDef`）与传奇挑战摘要（`legends.total`、`beaten`、`records`）。PvE 比赛默认全队满体能开球，不消耗联赛体能、不产生赛后伤停；开赛后可通过 `advance_match` / `set_match_tactics` / `set_match_auto_subs` / `substitute` / `coach_pause` / `play_match` 推进并结算，赛果记入 `challengeHistory`。
+
+- `get_pve` — 只读，不写存档。返回巅峰之路全部 100 关目录（含目标 CA、奖励、巅峰技能书掉落及 50 关全明星奖励候选 `reward50Candidates`）和全部 50 支传奇强队列表（含 `id`、档位、掉落传奇技能书 `dropSkill` 与个人历史战绩）。可选传 `stage`（1–100）或 `legendId` 预览该对手完整 16 人名单。
+  - `stage?`
+  - `legendId?`
+- `start_peak_challenge` — 开启一场巅峰之路比赛（淘汰制，平局自动点球决胜；每日上限 10 次，北京时间 00:00 重置）。仅可挑战已通关关卡或当前下一关（`stage <= cleared + 1`）；首次通关自动发放关卡金币/球迷奖励、属性突破卡及 80–100 关巅峰技能书。
+  - `stage?`: 1–100，省略时默认挑战下一未通关关卡（`cleared + 1`）
+- `start_legend_challenge` — 与一支历史传奇强队开赛（允许平局；战胜对应强队可概率掉落该队专属传奇技能书）。
+  - `legendId`: 来自 `get_pve` 的 `legends.teams[].id`（例如 `"barcelona-2010-11"`）
+- `use_peak_breakthrough` — 消耗 1 张巅峰属性突破卡，把指定球员一项主属性的个人上限 +100（不超过 2000 硬上限；如该球员正在培养，同步提升本轮候选上限）。
+  - `playerId`
+  - `attr`: 该球员的主属性英文名（外场：`passing / shooting / dribbling / tackling / strength / speed / acceleration`；门将：`reflexes / handling / rushing / oneOnOne / passing / composure`）
+- `claim_peak_reward` — 通关巅峰之路第 50 关后，从全明星阵容中任选 1 人入队（需阵容未满 30 人且队内无重复模板）。
+  - `templateId`: 来自 `get_pve` 的 `peak.reward50Candidates[].templateId`
 
 `get_state` / `get_player` 的球员 `injuryUntil` 是预计恢复的 Unix 毫秒时间戳，`null` 表示当前没有伤病；易伤倾向的数值不公开。伤病由比赛对抗产生，基础恢复期为现实 2–120 小时（大多数为 2–10 小时），防护技能和医疗设施可缩短新伤病恢复时间，伤病属于球员本人，换卡不变，联赛、友谊赛和 AI 对局均会应用。`get_match` 的 `injured` 包含赛前未恢复的伤病和本场新伤；带伤上场的有效能力降低 30%，可手动换入伤员或用受伤自动换人尝试将其换下。本场开始时的伤病状态保持到终场。伤病不会影响训练精力、培养行动、培养收益或球员卡属性。旧比赛记录不会被追溯为伤病。
 
@@ -250,20 +267,20 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 - `get_chat` — 读取全服聊天记录（最多返回最新的 50 条消息，含发送教练 `username`、所属俱乐部 `clubId` / `clubName`、消息 `text` 与时间戳 `at`）。只读。
 - `send_chat` — `text`：在全服聊天频道发送一条消息（单条最多 200 字，自动折叠换行，含发言间隔限制）。
 - `rename_club` — `name`：联机时修改俱乐部名字。最多 8 个字（按字符算），去掉首尾空格；不能和全服任何其他球队重名（AI 球队或其他教练的球队，比较时忽略大小写和空格）；比赛进行中不能改。改名后全服看到的都是新名字。普通存档保存不能修改俱乐部名字。
-球队只能在注册时选择，注册完成后不能换队，Agent 也不能例外。注册前可用 `GET /api/registration/clubs` 预览空缺二级球队的公开名单，在 `POST /api/register` 中传入 `clubId` 确认；旧的 `choose_club` 操作与 `/api/world/choose-club` 接口均返回错误。注册只继承球队已经存在的全服战绩及已锁定比赛，不重算历史，不增加注册准备期，正式开球时间始终固定为北京时间 12:00 / 20:00。
+球队只能在注册时选择，注册完成后不能换队，Agent 也不能例外。注册前可用 `GET /api/registration/clubs` 预览空缺二级球队的公开名单，在 `POST /api/register` 中传入 `clubId` 确认；旧的 `choose_club` 操作与 `/api/world/choose-club` 接口均返回错误。注册只继承球队已经存在的全服战绩及已锁定比赛，不重算历史，不增加注册准备期，正式联赛固定在北京时间 02:00 / 06:00 / 10:00 / 14:00 / 18:00 / 22:00 开球。
 
 ## 4. 推荐流程
 
 1. `GET /api/agent/state`。
 2. 用 `auto_lineup` 或 `set_lineup` 确定首发和战术，并按需用 `set_auto_subs` 设置下场自动换人；`state.lineupAnalysis` 有合法性和位置折损。
 3. 对精力足够的球员 `start_training`，每次先用 `preview_training` 看收益，再 `training_action`；遇到事件用 `training_event_choice`；最后 `confirm_training`。
-4. 联机联赛开赛前 30 分钟锁定完整比赛快照，后台提前计算，到开赛时间才统一公布；要在锁定前排好阵容、装备好球员卡并设置 `set_auto_subs`，之后从 `matchHistory` / `get_match` 看结果。单机可以 `start_league` 手动开赛。友谊赛可以使用 `advance_match` 或 `play_match`。
+4. 联机联赛开赛前 30 分钟锁定完整比赛快照，后台提前计算，到开赛时间才统一公布；要在锁定前排好阵容、装备好球员卡并设置 `set_auto_subs`，之后从 `matchHistory` / `get_match` 看结果。单机可以 `start_league` 手动开赛。友谊赛、巅峰之路（`start_peak_challenge`）与传奇挑战（`start_legend_challenge`）随时可开，并可用 `advance_match` 或 `play_match` 推进结算。
 5. 用 `get_match` 看完整记录和复盘。
 6. 重复 1–5，直到赛季结束。
 
 ## 5. MCP
 
-本仓库自带 stdio MCP 服务 `mcp/index.ts`，工具名与上面的动作一致（含 `get_world`、`preview_signing`、`sign_club_player`、`run_auto_training`、`start_scouting`、`get_scout_reports`、`recycle_cards`、`lock_card`、`get_chat`、`send_chat`、`set_match_auto_subs` 等），另有 `get_state`、`get_docs`。
+本仓库自带 stdio MCP 服务 `mcp/index.ts`，工具名与上面的动作一致（含 `get_world`、`get_pve`、`start_peak_challenge`、`start_legend_challenge`、`use_peak_breakthrough`、`claim_peak_reward`、`preview_signing`、`sign_club_player`、`run_auto_training`、`start_scouting`、`get_scout_reports`、`recycle_cards`、`lock_card`、`get_chat`、`send_chat`、`set_match_auto_subs` 等），另有 `get_state`、`get_docs`。
 
 ```bash
 FM_AGENT_TOKEN=fm_... FM_SERVER=http://127.0.0.1:8787 npm run mcp

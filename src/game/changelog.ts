@@ -7,7 +7,7 @@
  * - 玩家也可随时通过顶栏版本号按钮重新打开查看。
  */
 
-export const APP_VERSION = 'v0.4.18'
+export const APP_VERSION = 'v0.4.19'
 export const CHANGELOG_STORAGE_KEY = 'fm-world-changelog-seen'
 
 export type ChangelogItem = {
@@ -26,6 +26,18 @@ export type ChangelogRelease = {
 }
 
 export const CHANGELOG_RELEASES: readonly ChangelogRelease[] = [
+  {
+    version: 'v0.4.19',
+    date: '2026-11-19',
+    headline: '主客场体系升级、全服竞拍修复、Agent PvE 接口与联机瘦身压缩',
+    summary: '修复全服竞拍人数限制与联赛连主/连客赛程，新增主场门票与球场氛围加成，开放 Agent 巅峰之路与传奇挑战接口，并大幅优化联机流量与内存占用。',
+    items: [
+      { badge: '主客场', tone: 'good', title: '赛程主客交替、主场门票与球场氛围', desc: '修复新赛季赛程连续十几轮主/客场的编排问题（下赛季及新存档生效，全队最多 2 连主/2 连客）；球场门票改为仅联赛主场发放，并在联赛/杯赛 2D 引擎中为球场提供微弱主场氛围加成（LV1 约 +15 至 LV5 满级约 +45 主属性有效值）。' },
+      { badge: '转会', tone: 'gold', title: '修复全服竞拍 25 人阵容限制', desc: '移除全服竞拍「出价」按钮遗留的 25 人旧限制，与 30 人一线队上限对齐，并补充余额不足/比赛中禁用原因提示。' },
+      { badge: 'Agent', tone: 'good', title: '开放巅峰之路与传奇挑战接口', desc: 'Agent API 与 MCP 新增 get_pve、start_peak_challenge、start_legend_challenge、use_peak_breakthrough 与 claim_peak_reward，支持完整开赛、推进、结算与领奖流程，状态同步返回 state.pve。' },
+      { badge: '性能', tone: '', title: '联机同步瘦身、增量 SSE 与压缩优化', desc: '启用 Brotli/Gzip 压缩与流式序列化，/api/game 支持精简投影与复盘按需加载，/api/events 升级为差分增量推送（state-sync / state-patch / 高压 state-stale 降级），并消除后台空转与重复快照内存占用。' },
+    ],
+  },
   {
     version: 'v0.4.18',
     date: '2026-11-18',

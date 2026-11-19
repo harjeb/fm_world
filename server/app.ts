@@ -24,6 +24,7 @@ import {
 import { createInitialGame, GAME_VERSION, upgradeLegacySignatures } from '../src/game/state.ts'
 import { addTrainedCard, ensureCards, equipCard, playerCards, recyclePlayerCards, setCardRecycleLock, untrainedPlayer } from '../src/game/cards.ts'
 import { ensurePve } from '../src/game/pve.ts'
+import { loadPveContent } from '../src/game/pve-content.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
 import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, wageForPlayer, worldForClub, worldSlots, worldWageBill } from '../src/game/world.ts'
 import { pickExpandedZoneClubs } from '../src/game/data/world-clubs.ts'
@@ -2636,6 +2637,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         if (body.action === 'choose_club') {
           return json(res, 400, { error: '注册完成后不允许换队，球队只能在注册时选择' })
         }
+        if (['get_pve', 'start_peak_challenge', 'start_legend_challenge', 'claim_peak_reward'].includes(String(body.action))) {
+          await loadPveContent()
+        }
         let outcome: ReturnType<typeof applyAgentAction>
         const previousRoster = new Set(agentAccount.game.roster.map((player) => player.id))
         const previousTeams = agentAccount.game.aiTeams
@@ -2647,7 +2651,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
           outcome = applyAgentAction(body.action === 'preview_signing' ? transferSnapshot(agentAccount) : agentAccount.game, body, now(), agentOptions)
         }
         if (outcome.ok) commitAiSignings(previousRoster, previousTeams, agentAccount.game)
-        if (outcome.ok && !['get_player', 'get_match', 'preview_training', 'preview_signing', 'get_scout_reports'].includes(String(body.action))) {
+        if (outcome.ok && !['get_player', 'get_match', 'get_pve', 'preview_training', 'preview_signing', 'get_scout_reports'].includes(String(body.action))) {
           publishClub(agentAccount)
           agentAccount.revision++
           const leagueOnly = agentAccount.game.activeMatch?.context.isLeague && ['start_league', 'set_match_tactics', 'set_match_auto_subs', 'substitute'].includes(String(body.action))

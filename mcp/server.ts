@@ -272,6 +272,28 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     clubId: z.string().describe('来自 get_world 的 clubs[].id'),
   }, (args) => action('start_world_friendly', args))
 
+  register('get_pve', '查看巅峰之路与传奇挑战', '读取巅峰之路 100 关目录、今日剩余次数、50 关全明星候选名单及 50 支传奇强队与掉落技能书；可选传 stage 或 legendId 预览对手名单。', {
+    stage: z.number().int().min(1).max(100).optional(),
+    legendId: z.string().min(1).optional(),
+  }, (args) => action('get_pve', args))
+
+  register('start_peak_challenge', '开启巅峰之路挑战', '开启一场巅峰之路关卡比赛（满体能、不消耗联赛体能、支持平局点球决胜）；省略 stage 时默认挑战下一未通关关卡。开赛后可用 advance_match / play_match 完成结算。', {
+    stage: z.number().int().min(1).max(100).optional().describe('关卡号 1–100，仅可挑战已通关或当前下一关；省略默认下一关'),
+  }, (args) => action('start_peak_challenge', args))
+
+  register('start_legend_challenge', '开启传奇挑战', '与历史传奇强队开启一场挑战赛（满体能、允许平局、赢球可掉落该队传奇技能书）；开赛后可用 advance_match / play_match 完成结算。', {
+    legendId: z.string().min(1).describe('来自 get_pve 的 legends.teams[].id'),
+  }, (args) => action('start_legend_challenge', args))
+
+  register('use_peak_breakthrough', '使用巅峰属性突破卡', '消耗 1 张巅峰之路属性突破卡，将指定球员一项主属性个人上限 +100（不超过 2000 硬上限）。', {
+    playerId: z.string().min(1),
+    attr: z.string().min(1).describe('主属性英文名，如 shooting / passing / speed / reflexes'),
+  }, (args) => action('use_peak_breakthrough', args))
+
+  register('claim_peak_reward', '领取巅峰 50 关全明星奖励', '通关巅峰之路第 50 关后，从第 50 关全明星阵容中任选 1 人加入一线队。', {
+    templateId: z.string().min(1).describe('来自 get_pve 的 peak.reward50Candidates[].templateId'),
+  }, (args) => action('claim_peak_reward', args))
+
   register('get_world', '查看全服世界', '读取全服所有球队（名单、RANK、是否有教练执教、电脑球队设施）以及各分区的积分榜和赛程，和世界页 / 球队详情一致。', {}, () => action('get_world'))
 
   register('get_chat', '读取全服聊天', '读取最新最多 50 条全服聊天，含教练、俱乐部、文字和时间。', {}, () => action('get_chat'))
@@ -292,7 +314,7 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     matchId: z.string().optional().describe('比赛记录 ID；不填则读取当前比赛'),
   }, (args) => action('get_match', args))
 
-  register('advance_match', '推进友谊赛', '仅限友谊赛：按步推进，默认 1 步；联赛只能等待现实时间。返回当前比赛或终场记录。', {
+  register('advance_match', '推进挑战赛 / 友谊赛', '适用于友谊赛、巅峰之路与传奇挑战：按步推进，默认 1 步；联赛只能等待现实时间。返回当前比赛或终场记录。', {
     steps: z.number().int().min(1).max(20000).optional(),
   }, (args) => action('advance_match', args))
 
@@ -305,9 +327,9 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     inId: z.string().describe('可用替补 ID，来自 get_match 的 availableBench'),
   }, (args) => action('substitute', args))
 
-  register('coach_pause', '教练暂停', '仅限友谊赛：使用一次教练暂停（最多 3 次）。联赛不停表，可以直接调整战术或换人。', {}, () => action('coach_pause'))
+  register('coach_pause', '教练暂停', '适用于友谊赛、巅峰之路与传奇挑战：使用一次教练暂停（最多 3 次）。联赛不停表，可以直接调整战术或换人。', {}, () => action('coach_pause'))
 
-  register('play_match', '结束友谊赛', '将已开始的友谊赛模拟至终场并结算；联赛不能跳过。返回比分、球员数据与复盘建议。', {}, () => action('play_match'))
+  register('play_match', '结束挑战赛 / 友谊赛', '将已开始的友谊赛、巅峰之路或传奇挑战模拟至终场并结算；联赛不能跳过。返回比分、球员数据与复盘建议。', {}, () => action('play_match'))
 
   register('simulate_round', '模拟本轮 AI 比赛', '只模拟本轮其他 AI 球队的比赛；玩家本轮比赛未完成时会报错。', {}, () => action('simulate_round'))
 
