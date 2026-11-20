@@ -2731,7 +2731,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
           return
         }
         if (body.action === 'start_league' || body.action === 'simulate_round') return json(res, 400, { error: '联赛由服务器提前排队计算、开球 10 分钟后统一公布，不能手动开赛或模拟' })
-        if (['auto_lineup', 'set_lineup', 'set_auto_subs'].includes(String(body.action)) && officialLineupLocked(agentAccount, now())) {
+        if (['auto_lineup', 'set_lineup', 'apply_lineup_preset', 'set_auto_subs'].includes(String(body.action)) && officialLineupLocked(agentAccount, now())) {
           await sendJson(400, { ok: false, error: '阵容已锁定：开赛前 30 分钟内不能修改，比赛由服务器自动结算', revision: agentAccount.revision, game: agentState() }, true)
           return
         }

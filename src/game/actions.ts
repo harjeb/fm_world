@@ -1,4 +1,4 @@
-import { ALL_ATTRIBUTES, type AITeam, type AttrKey, type Attributes, type AutoSubPlan, type AutoTrainingPresetId, type EventDef, type EventEffect, type EventOption, type GameState, type Lineup, type MatchMentality, type MatchRecord, type Player, type Position, type TrainingAutoConfig, type TrainingExchange, type TrainingSession } from './types.ts'
+import { ALL_ATTRIBUTES, type AITeam, type AttrKey, type Attributes, type AutoSubPlan, type AutoTrainingPresetId, type EventDef, type EventEffect, type EventOption, type GameState, type Lineup, type MatchMentality, type MatchRecord, type Player, type Position, type TacticPreset, type TrainingAutoConfig, type TrainingExchange, type TrainingSession } from './types.ts'
 import type { GameEngine } from './pes/engine.ts'
 import { restoreEngine } from './pes/engine.ts'
 import { MatchEngine as Engine } from './match/engine.ts'
@@ -8,7 +8,7 @@ import { addTrainedCard, closeFinishedTraining, deleteCard, equipCard, untrained
 import { newTrainingSeed, saveGame } from './state.ts'
 import { nextSeasonCountdown } from './season.ts'
 import { seasonEndAt } from './calendar.ts'
-import { autoFillLineup, bestRoleForPlayer, validateLineup } from './squad.ts'
+import { applyTacticPreset, autoFillLineup, bestRoleForPlayer, deleteTacticPreset, findTacticPreset, findTacticPresetByName, overwriteTacticPreset, renameTacticPreset, saveTacticPreset, validateLineup } from './squad.ts'
 import { FORMATIONS } from './data/formations.ts'
 import { caOf, positionMultiplier } from './ca.ts'
 import { lineupRating } from './club-rating.ts'
@@ -802,6 +802,78 @@ export function setAutoSubs(game: GameState, plan: unknown): { ok: boolean; erro
 export function autoLineup(game: GameState, formationId = game.lineup.formationId): { ok: boolean; errors: string[] } {
   const available = game.roster.filter((player) => injuryUntil(game, player) === null)
   return setLineup(game, autoFillLineup(available, formationId, game.lineup.tactics, game.lineup))
+}
+
+export function saveLineupPreset(
+  game: GameState,
+  options: { presetId?: string; name?: string; overwrite?: boolean; lineup?: Lineup; now?: number },
+): { ok: boolean; error?: string; preset?: TacticPreset; overwritten?: boolean } {
+  const source = options.lineup ?? game.lineup
+  const check = validateLineup(game.roster, source)
+  if (!check.valid) return { ok: false, error: check.errors.join('；') }
+  const next = structuredClone(game.lineup)
+  const createdAt = options.now ?? Date.now()
+  if (options.presetId !== undefined) {
+    const outcome = overwriteTacticPreset(next, options.presetId, source, {
+      ...(options.name !== undefined ? { name: options.name } : {}),
+      createdAt,
+    })
+    if (!outcome.ok) return { ok: false, error: outcome.error }
+    game.lineup.presets = next.presets
+    saveGame(game)
+    return { ok: true, preset: structuredClone(outcome.preset!), overwritten: true }
+  }
+  const existing = options.overwrite && options.name ? findTacticPresetByName(next, options.name) : undefined
+  if (existing) {
+    const outcome = overwriteTacticPreset(next, existing.id, source, { name: options.name, createdAt })
+    if (!outcome.ok) return { ok: false, error: outcome.error }
+    game.lineup.presets = next.presets
+    saveGame(game)
+    return { ok: true, preset: structuredClone(outcome.preset!), overwritten: true }
+  }
+  const outcome = saveTacticPreset(next, options.name ?? '', createdAt, source)
+  if (!outcome.ok) return { ok: false, error: outcome.error }
+  game.lineup.presets = next.presets
+  saveGame(game)
+  return { ok: true, preset: structuredClone(outcome.preset!), overwritten: false }
+}
+
+export function applyLineupPreset(
+  game: GameState,
+  presetId: string,
+  autoSubs?: unknown,
+): { ok: boolean; error?: string; preset?: TacticPreset; clearedAutoSubs?: boolean } {
+  const preset = findTacticPreset(game.lineup, presetId)
+  if (!preset) return { ok: false, error: '找不到这个战术预设' }
+  const next = applyTacticPreset(game.lineup, presetId)
+  if (!next) return { ok: false, error: '找不到这个战术预设' }
+  const lineupCheck = validateLineup(game.roster, next)
+  if (!lineupCheck.valid) return { ok: false, error: lineupCheck.errors.join('；') }
+  if (autoSubs !== undefined) {
+    const result = setLineup(game, next, autoSubs)
+    return result.ok ? { ok: true, preset: structuredClone(preset), clearedAutoSubs: false } : { ok: false, error: result.errors.join('；') }
+  }
+  const result = setLineup(game, next, game.autoSubs ?? emptyAutoSubs())
+  if (result.ok) return { ok: true, preset: structuredClone(preset), clearedAutoSubs: false }
+  const fallback = setLineup(game, next, emptyAutoSubs())
+  return fallback.ok ? { ok: true, preset: structuredClone(preset), clearedAutoSubs: true } : { ok: false, error: fallback.errors.join('；') }
+}
+
+export function renameLineupPreset(game: GameState, presetId: string, name: string): { ok: boolean; error?: string; preset?: TacticPreset } {
+  const next = structuredClone(game.lineup)
+  const outcome = renameTacticPreset(next, presetId, name)
+  if (!outcome.ok) return { ok: false, error: outcome.error }
+  game.lineup.presets = next.presets
+  saveGame(game)
+  return { ok: true, preset: structuredClone(outcome.preset!) }
+}
+
+export function deleteLineupPreset(game: GameState, presetId: string): { ok: boolean; error?: string } {
+  const next = structuredClone(game.lineup)
+  if (!deleteTacticPreset(next, presetId)) return { ok: false, error: '找不到这个战术预设' }
+  game.lineup.presets = next.presets
+  saveGame(game)
+  return { ok: true }
 }
 
 export function startNextSeasonAction(game: GameState, now = Date.now()): { ok: boolean; error?: string } {

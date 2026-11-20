@@ -57,7 +57,39 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
     }
   }
   ```
-  `slotId` 与可选职责见 `state.formations`、`state.roles`；全部可用战术风格模板（`blank / control / highPress / tikiTaka / verticalTiki / wingPlay / longBall / fluidCounter / directCounter / catenaccio / parkBus`）及展开指令见 `state.tacticalStyles`，全部可用下场比赛计划（`standard / allOutWin / parkTheBus / fastStart / protectLead / lateSiege / counterTrap / highPressBlitz / wingBombard / controlTempo / conserveStamina / underdogGrind / twoGoalCushion / cupHoldout`）见 `state.matchPlans`，当前阵容的战术执行度（0.50–1.00）见 `state.lineupAnalysis.tacticalFamiliarity`。仅传 `tacticalStyle` 时自动展开该风格模板指令；同时传 `tacticalInstructions` 时可逐项微调（`tactics` 五字段会自动同步）；传 `matchPlan`（或传 `"standard"` / `null` 恢复常规部署）时会在赛季联赛与挑战赛中按分钟和比分自动触发阶段变阵并影响联赛赛后体能消耗；旧调用只传 `tactics` 仍兼容。首发必须 11 人（占满阵型的 11 个位置）、1 名门将，替补最多 7 人。边路位置（`W`）同时包括边后卫、边前卫和边锋，站得靠后的是边后卫（默认职责 `w_back`）。也可在顶层同时传 `autoSubs`，以便一次保存新阵容和匹配的新换人计划。已有定时计划若与新阵容冲突，须修改或清除计划后才能保存。
+  `slotId` 与可选职责见 `state.formations`、`state.roles`；全部可用战术风格模板（`blank / control / highPress / tikiTaka / verticalTiki / wingPlay / longBall / fluidCounter / directCounter / catenaccio / parkBus`）及展开指令见 `state.tacticalStyles`，全部可用下场比赛计划（`standard / allOutWin / parkTheBus / fastStart / protectLead / lateSiege / counterTrap / highPressBlitz / wingBombard / controlTempo / conserveStamina / underdogGrind / twoGoalCushion / cupHoldout`）见 `state.matchPlans`，当前阵容的战术执行度（0.50–1.00）见 `state.lineupAnalysis.tacticalFamiliarity`。仅传 `tacticalStyle` 时自动展开该风格模板指令；同时传 `tacticalInstructions` 时可逐项微调（`tactics` 五字段会自动同步）；传 `matchPlan`（或传 `"standard"` / `null` 恢复常规部署）时会在赛季联赛与挑战赛中按分钟和比分自动触发阶段变阵并影响联赛赛后体能消耗；可选 `customPositions`（`{ "st": { "x": 0.6, "y": 0.45 } }`，`x/y` 在 `0–1` 之间，传 `null` 恢复默认摆位）；旧调用只传 `tactics` 仍兼容。首发必须 11 人（占满阵型的 11 个位置）、1 名门将，替补最多 7 人。边路位置（`W`）同时包括边后卫、边前卫和边锋，站得靠后的是边后卫（默认职责 `w_back`）。也可在顶层同时传 `autoSubs`，以便一次保存新阵容和匹配的新换人计划。已有定时计划若与新阵容冲突，须修改或清除计划后才能保存。
+
+- `save_lineup_preset` — 保存新阵容预设或覆盖已有阵容预设（已保存预设列表见 `state.lineup.presets`，最多 30 套；每条含 `id`、`name`、`createdAt`、`lineup`）。
+  ```json
+  { "action": "save_lineup_preset", "name": "联赛主力高位压迫" }
+  ```
+  ```json
+  {
+    "action": "save_lineup_preset",
+    "presetId": "preset-xxx",
+    "name": "可选同时改名",
+    "lineup": { "formationId": "4-3-3", "starters": ["..."], "bench": ["..."], "tacticalStyle": "highPress", "matchPlan": "fastStart" }
+  }
+  ```
+  - `presetId?`: 传入已有预设 ID（来自 `state.lineup.presets[].id`）时原地覆盖该预设；此时 `name` 可选（传入则同时改名并校验重名，省略则沿用原名）。
+  - `name?`: 预设名称（1–20 字，去首尾空格，同一存档内不区分大小写判重）；未传 `presetId` 时必填。
+  - `overwrite?`: 布尔值，默认 `false`。未传 `presetId` 时，若已存在同名预设且 `overwrite: true`，则原地覆盖该同名预设（保留原 `id`）；若不存在同名预设则新建。
+  - `lineup?`: 可选完整阵容对象（格式与 `set_lineup.lineup` 一致）。省略时保存当前生效的 `state.lineup`；传入时只校验该 `lineup` 并写入预设，**不改动当前生效阵容**（因此开赛前 30 分钟锁阵期间也可保存/覆盖预设）。
+  - 返回 `result`: `{ preset, overwritten, presets }`。
+
+- `apply_lineup_preset` — 将指定预设应用为当前阵容（开赛前 30 分钟锁阵期间不可用）。
+  - `presetId`: 来自 `state.lineup.presets[].id`。
+  - `autoSubs?`: 可选同时提交匹配的自动换人计划；若省略且原自动换人规则与预设阵容冲突，会与手动界面一致自动清空冲突规则并在 `result.clearedAutoSubs` 返回 `true`。
+  - 返回 `result`: `{ preset, lineup, autoSubs, clearedAutoSubs }`。
+
+- `rename_lineup_preset` — 重命名已有阵容预设（不改动当前生效阵容）。
+  - `presetId`: 来自 `state.lineup.presets[].id`。
+  - `name`: 新名称（1–20 字，不可与其他预设重名）。
+  - 返回 `result`: `{ preset, presets }`。
+
+- `delete_lineup_preset` — 删除已有阵容预设（不改动当前生效阵容）。
+  - `presetId`: 来自 `state.lineup.presets[].id`。
+  - 返回 `result`: `{ deleted: true, presetId, presets }`。
 
 - `set_auto_subs` — 设置下一场比赛使用的自动换人计划，支持全局体力筛选位置、最早分钟、替补挑选策略及按位置/槽位/球员/比分触发的条件换人，例如：
   ```json

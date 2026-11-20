@@ -403,6 +403,9 @@ export function clearSlotPositions(lineup: Lineup): boolean {
 /** 战术名称的最大长度。 */
 export const PRESET_NAME_LIMIT = 20
 
+/** 单个账号最多保存的战术预设数量。 */
+export const MAX_TACTIC_PRESETS = 30
+
 export type PresetOutcome = { ok: boolean; error?: string; preset?: TacticPreset }
 
 /** 预设名重复比较用的归一化形式：去首尾空格、忽略大小写。 */
@@ -412,6 +415,12 @@ export function normalizePresetName(name: string): string {
 
 export function findTacticPreset(lineup: Lineup, id: string): TacticPreset | undefined {
   return (lineup.presets ?? []).find((preset) => preset.id === id)
+}
+
+export function findTacticPresetByName(lineup: Lineup, name: string): TacticPreset | undefined {
+  const wanted = normalizePresetName(name)
+  if (!wanted) return undefined
+  return (lineup.presets ?? []).find((preset) => normalizePresetName(preset.name) === wanted)
 }
 
 /** 名称校验：不能为空，同一存档内不能重名（exceptId 用于重命名自己）。 */
@@ -445,13 +454,35 @@ function nextPresetId(lineup: Lineup, createdAt: number): string {
   return `preset-${createdAt.toString(36)}-${seq}`
 }
 
-/** 把当前配置存成一个命名预设（原地修改 lineup.presets）。 */
-export function saveTacticPreset(lineup: Lineup, name: string, createdAt = Date.now()): PresetOutcome {
+/** 把指定阵容（默认当前配置）存成一个命名预设（原地修改 lineup.presets）。 */
+export function saveTacticPreset(lineup: Lineup, name: string, createdAt = Date.now(), source: Lineup = lineup): PresetOutcome {
+  if ((lineup.presets?.length ?? 0) >= MAX_TACTIC_PRESETS) {
+    return { ok: false, error: `最多保存 ${MAX_TACTIC_PRESETS} 套战术预设` }
+  }
   const error = presetNameError(lineup, name)
   if (error) return { ok: false, error }
   const presets = (lineup.presets ??= [])
-  const preset: TacticPreset = { id: nextPresetId(lineup, createdAt), name: name.trim(), createdAt, lineup: snapshotLineup(lineup) }
+  const preset: TacticPreset = { id: nextPresetId(lineup, createdAt), name: name.trim(), createdAt, lineup: snapshotLineup(source) }
   presets.push(preset)
+  return { ok: true, preset }
+}
+
+/** 用指定阵容（默认当前配置）覆盖已有预设，可选同时改名（原地修改 lineup.presets）。 */
+export function overwriteTacticPreset(
+  lineup: Lineup,
+  id: string,
+  source: Lineup = lineup,
+  options?: { name?: string; createdAt?: number },
+): PresetOutcome {
+  const preset = findTacticPreset(lineup, id)
+  if (!preset) return { ok: false, error: '找不到这个战术预设' }
+  if (options?.name !== undefined) {
+    const error = presetNameError(lineup, options.name, id)
+    if (error) return { ok: false, error }
+    preset.name = options.name.trim()
+  }
+  preset.createdAt = options?.createdAt ?? Date.now()
+  preset.lineup = snapshotLineup(source)
   return { ok: true, preset }
 }
 

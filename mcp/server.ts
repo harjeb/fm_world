@@ -45,6 +45,19 @@ const tacticsSchema = z.object({
   press: z.enum(['low', 'mid', 'high']),
 })
 
+const formationIdSchema = z.enum(['4-4-2', '4-3-3', '4-2-3-1', '3-5-2', '5-3-2', '4-1-4-1', '3-4-3', '4-1-2-1-2'])
+
+const lineupInputSchema = z.object({
+  formationId: formationIdSchema,
+  starters: z.array(z.object({ slotId: z.string(), playerId: z.string(), role: z.string().optional() })).describe('11 名首发；role 可省略，服务器会选该位置默认职责'),
+  bench: z.array(z.string()).max(7),
+  tactics: tacticsSchema.optional(),
+  tacticalStyle: z.string().nullable().optional().describe('可选战术风格模板 ID，见 state.tacticalStyles；null 清空'),
+  tacticalInstructions: z.record(z.string(), z.unknown()).nullable().optional().describe('可选十二项战术指令对象；null 清空'),
+  matchPlan: z.string().nullable().optional().describe('可选下场比赛计划 ID，见 state.matchPlans；standard 或 null 恢复常规'),
+  customPositions: z.record(z.string(), z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).nullable().optional().describe('可选槽位自定义坐标映射；null 清空'),
+})
+
 const autoSubsSchema = z.object({
   timed: z.array(z.object({ atMinute: z.number().gt(0).lt(90), outId: z.string(), inId: z.string() })).max(5)
     .describe('指定首发换下和替补换上的比赛分钟数（0-90），达到后在事件边界执行'),
@@ -143,18 +156,34 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
   }, (args) => action('release_player', args))
 
   register('auto_lineup', '自动排阵容', '按指定阵型自动选择首发、替补和默认战术。', {
-    formationId: z.enum(['4-4-2', '4-3-3', '4-2-3-1', '3-5-2', '5-3-2', '4-1-4-1', '3-4-3', '4-1-2-1-2']).optional().describe('不填则沿用当前阵型'),
+    formationId: formationIdSchema.optional().describe('不填则沿用当前阵型'),
   }, (args) => action('auto_lineup', args))
 
   register('set_lineup', '提交阵容', '提交完整首发、替补和战术。首发必须 11 人并占满阵型的位置，替补最多 7 人；任何球员都能踢任何位置，没学过的位置属性按 60% 发挥。', {
-    lineup: z.object({
-      formationId: z.enum(['4-4-2', '4-3-3', '4-2-3-1', '3-5-2', '5-3-2', '4-1-4-1', '3-4-3', '4-1-2-1-2']),
-      starters: z.array(z.object({ slotId: z.string(), playerId: z.string(), role: z.string().optional() })).describe('11 名首发；role 可省略，服务器会选该位置默认职责'),
-      bench: z.array(z.string()).max(5),
-      tactics: tacticsSchema.optional(),
-    }),
+    lineup: lineupInputSchema,
     autoSubs: autoSubsSchema.optional().describe('可同时提交与新阵容匹配的自动换人计划'),
   }, (args) => action('set_lineup', args))
+
+  register('save_lineup_preset', '保存或覆盖阵容预设', '将当前阵容（或指定的 lineup）保存为命名预设，或通过 presetId / name+overwrite=true 覆盖已有预设；不会修改当前生效阵容，锁阵期间也可维护预设。', {
+    presetId: z.string().min(1).optional().describe('要覆盖的已有预设 ID（来自 get_state.lineup.presets[].id）；传入时覆盖该预设，name 可选'),
+    name: z.string().min(1).max(20).optional().describe('预设名称（1-20 字）；新建预设时必填，按 presetId 覆盖时传入可顺便改名'),
+    overwrite: z.boolean().optional().describe('未传 presetId 且存在同名预设时，传 true 原地覆盖（不存在则新建）；默认 false 拒绝重名'),
+    lineup: lineupInputSchema.optional().describe('可选要保存的完整阵容；省略则保存当前生效阵容'),
+  }, (args) => action('save_lineup_preset', args))
+
+  register('apply_lineup_preset', '应用阵容预设', '将已保存的阵容预设应用为当前阵容（来自 get_state.lineup.presets[].id）；赛前 30 分钟锁阵期间不可用。若原自动换人与新阵容冲突且未传 autoSubs，会自动清空冲突规则。', {
+    presetId: z.string().min(1),
+    autoSubs: autoSubsSchema.optional().describe('可选与该预设匹配的自动换人计划'),
+  }, (args) => action('apply_lineup_preset', args))
+
+  register('rename_lineup_preset', '重命名阵容预设', '修改已有阵容预设的名称（1-20 字，不可与其他预设重名）。', {
+    presetId: z.string().min(1),
+    name: z.string().min(1).max(20),
+  }, (args) => action('rename_lineup_preset', args))
+
+  register('delete_lineup_preset', '删除阵容预设', '删除指定 ID 的阵容预设（来自 get_state.lineup.presets[].id）。', {
+    presetId: z.string().min(1),
+  }, (args) => action('delete_lineup_preset', args))
 
   register('set_auto_subs', '设置自动换人', '可选赛前低体能轮换，以及比赛内定时、体力和受伤自动换人；场内自动与手动共用 5 次额度。', {
     plan: autoSubsSchema,

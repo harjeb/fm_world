@@ -33,7 +33,7 @@ import { FORMATIONS, FORMATION_LIST, isLegacyFormation } from '../src/game/data/
 import { ROLES, ROLES_BY_POSITION } from '../src/game/data/roles.ts'
 import { bookKey, bookLearnChance, bookName, bookRequirementText, eventForSession, trainingSkillChance } from '../src/game/legend-learning.ts'
 import { branchProbability, eventChance, trainingActionsTotal, eventGrowthScale, trainingQualityChances, TRAINING_ACTION_INFO, TRAINING_POINT_TIERS } from '../src/game/training.ts'
-import { computeLineupFamiliarity, lineupSlots, validateLineup } from '../src/game/squad.ts'
+import { computeLineupFamiliarity, lineupSlots, setSlotPosition, validateLineup } from '../src/game/squad.ts'
 import {
   STYLE_LIST_REV3,
   STYLE_META,
@@ -60,11 +60,15 @@ import { hasBookAtOrAbove } from '../src/game/legend-books.ts'
 import { SHOP_BOOK_PRICE, buyShopBook, peakStageShopPoints, shopCatalog, shopPointsOf, shopSeasonIndex } from '../src/game/shop.ts'
 import { traitNameOf } from '../src/game/data/star-traits.ts'
 import {
+  applyLineupPreset,
   autoLineup,
   autoTrainingConfig,
   autoTrainingRunnable,
   autoTrainingStep,
   defaultAutoPriority,
+  deleteLineupPreset,
+  renameLineupPreset,
+  saveLineupPreset,
   setAutoTrainingConfig,
   setTrainingBookLoadout,
   trainingBookLoadout,
@@ -822,7 +826,26 @@ function parseLineup(game: GameState, value: unknown): { lineup?: Lineup; error?
     ...(tacticalInstructions ? { tacticalInstructions } : {}),
     ...(matchPlan ? { matchPlan } : {}),
   }
-  if (game.lineup.customPositions && game.lineup.formationId === formationId) {
+  if (raw.customPositions !== undefined) {
+    if (raw.customPositions !== null) {
+      if (typeof raw.customPositions !== 'object' || Array.isArray(raw.customPositions)) {
+        return { error: 'customPositions 必须是槽位坐标映射对象' }
+      }
+      const slotIds = new Set(formation.slots.map((slot) => slot.id))
+      for (const [slotId, spotValue] of Object.entries(raw.customPositions as Record<string, unknown>)) {
+        if (!slotIds.has(slotId)) return { error: `自定义位置包含不在当前阵型中的槽位：${slotId}` }
+        const spot = asRecord(spotValue)
+        const x = spot.x
+        const y = spot.y
+        if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) {
+          return { error: `自定义位置坐标无效：${slotId}` }
+        }
+        const clampedX = Math.round(Math.min(0.79, Math.max(0.02, x)) * 1000) / 1000
+        const clampedY = Math.round(Math.min(0.98, Math.max(0.02, y)) * 1000) / 1000
+        setSlotPosition(next, slotId, { x: clampedX, y: clampedY })
+      }
+    }
+  } else if (game.lineup.customPositions && game.lineup.formationId === formationId) {
     next.customPositions = structuredClone(game.lineup.customPositions)
   }
   if (game.lineup.presets?.length) {
@@ -889,7 +912,7 @@ function findRecord(game: GameState, id: string) {
 
 export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.now(), options: AgentOptions = {}): AgentOutcome {
   const rawAction = (rawBody as { action?: unknown } | null)?.action
-  if ((rawAction === 'auto_lineup' || rawAction === 'set_lineup' || rawAction === 'set_auto_subs') && lineupLockState(game, now).locked) {
+  if ((rawAction === 'auto_lineup' || rawAction === 'set_lineup' || rawAction === 'apply_lineup_preset' || rawAction === 'set_auto_subs') && lineupLockState(game, now).locked) {
     return { ok: false, error: '阵容已锁定：开赛前 30 分钟内不能修改，比赛由服务器自动结算' }
   }
   const body = asRecord(rawBody)
@@ -1096,6 +1119,62 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       if (!parsed.lineup) return { ok: false, error: parsed.error ?? '无效阵容；需要合法 formationId、starters[{slotId,playerId,role}] 与 bench[playerId]' }
       const result = setLineup(game, parsed.lineup, body.autoSubs === undefined ? game.autoSubs ?? emptyAutoSubs() : body.autoSubs)
       return result.ok ? { ok: true, result: game.lineup } : { ok: false, error: result.errors.join('；') }
+    }
+    case 'save_lineup_preset': {
+      if (body.overwrite !== undefined && typeof body.overwrite !== 'boolean') {
+        return { ok: false, error: 'overwrite 必须是布尔值' }
+      }
+      if (body.presetId !== undefined && typeof body.presetId !== 'string') {
+        return { ok: false, error: 'presetId 必须是字符串' }
+      }
+      if (body.name !== undefined && typeof body.name !== 'string') {
+        return { ok: false, error: 'name 必须是字符串' }
+      }
+      const presetId = body.presetId === undefined ? undefined : body.presetId.trim()
+      if (body.presetId !== undefined && !presetId) {
+        return { ok: false, error: 'presetId 不能为空' }
+      }
+      let targetLineup: Lineup | undefined
+      if (body.lineup !== undefined) {
+        const parsed = parseLineup(game, body.lineup)
+        if (!parsed.lineup) return { ok: false, error: parsed.error ?? '无效阵容；需要合法 formationId、starters[{slotId,playerId,role}] 与 bench[playerId]' }
+        targetLineup = parsed.lineup
+      }
+      const result = saveLineupPreset(game, {
+        ...(presetId !== undefined ? { presetId } : {}),
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        overwrite: body.overwrite === true,
+        ...(targetLineup ? { lineup: targetLineup } : {}),
+        now,
+      })
+      return result.ok
+        ? { ok: true, result: { preset: result.preset, overwritten: !!result.overwritten, presets: game.lineup.presets ?? [] } }
+        : { ok: false, error: result.error }
+    }
+    case 'apply_lineup_preset': {
+      const presetId = text(body.presetId).trim()
+      if (!presetId) return { ok: false, error: '请提供 presetId（来自 state.lineup.presets[].id）' }
+      const result = applyLineupPreset(game, presetId, body.autoSubs)
+      return result.ok
+        ? { ok: true, result: { preset: result.preset, lineup: game.lineup, autoSubs: game.autoSubs ?? emptyAutoSubs(), clearedAutoSubs: !!result.clearedAutoSubs } }
+        : { ok: false, error: result.error }
+    }
+    case 'rename_lineup_preset': {
+      const presetId = text(body.presetId).trim()
+      if (!presetId) return { ok: false, error: '请提供 presetId（来自 state.lineup.presets[].id）' }
+      if (typeof body.name !== 'string') return { ok: false, error: '请提供新的战术名称 name' }
+      const result = renameLineupPreset(game, presetId, body.name)
+      return result.ok
+        ? { ok: true, result: { preset: result.preset, presets: game.lineup.presets ?? [] } }
+        : { ok: false, error: result.error }
+    }
+    case 'delete_lineup_preset': {
+      const presetId = text(body.presetId).trim()
+      if (!presetId) return { ok: false, error: '请提供 presetId（来自 state.lineup.presets[].id）' }
+      const result = deleteLineupPreset(game, presetId)
+      return result.ok
+        ? { ok: true, result: { deleted: true, presetId, presets: game.lineup.presets ?? [] } }
+        : { ok: false, error: result.error }
     }
     case 'set_auto_subs': {
       const result = setAutoSubs(game, body.plan)
