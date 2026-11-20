@@ -7,7 +7,7 @@
  * - 玩家也可随时通过顶栏版本号按钮重新打开查看。
  */
 
-export const APP_VERSION = 'v0.4.22'
+export const APP_VERSION = 'v0.4.23'
 export const CHANGELOG_STORAGE_KEY = 'fm-world-changelog-seen'
 
 export type ChangelogItem = {
@@ -26,6 +26,18 @@ export type ChangelogRelease = {
 }
 
 export const CHANGELOG_RELEASES: readonly ChangelogRelease[] = [
+  {
+    version: 'v0.4.23',
+    date: '2026-11-20',
+    headline: '上线球员年龄战术执行与动作成功率系统、Agent 阵容预设接口与移动端/竞拍修复',
+    summary: '新增差异化年龄影响曲线（不改面板属性与 CA，只作用于战术执行度、动作成功率与低体力稳定性），开放 Agent / MCP 阵容预设保存、覆盖与应用动作，同步修复自由市场估值虚高、停赛编号误显与移动端适配问题。',
+    items: [
+      { badge: '新系统', tone: 'gold', title: '球员年龄影响战术执行度与动作成功率（不改面板属性）', desc: '引入差异化平滑年龄曲线（外场 24–29 岁黄金巅峰为零膨胀基准，门将延后 3 岁）：21 岁及以下新星更有冲劲（1v1 过人、高压逼抢与末段活力占优），但战术执行度、受压出球、关键球与吃牌控制偏青涩；30+ 岁老将战术执行更稳、传球/受压出球/单刀点球与门将扑救判断更老辣且更少吃牌，但 1v1 过人、贴身对抗以及高压快节奏和低体力（32+ 外场高压下 55% 触发，常规 45%）下的动作稳定性会随年龄衰减。球员详情、教练检查与 Agent API 均已透明展示。' },
+      { badge: 'Agent / MCP', tone: 'good', title: '开放阵容预设（presets）保存、覆盖、应用与删改接口', desc: 'Agent API 与 MCP 新增 save_lineup_preset（支持保存当前阵容或显式 lineup、按 presetId 或同名 overwrite 原地覆盖，锁阵期间也可维护）、apply_lineup_preset、rename_lineup_preset 与 delete_lineup_preset，并支持自定义摆位 customPositions 与阵容年龄分析 ageSummary。' },
+      { badge: '修复', tone: 'warn', title: '修复自由市场按培养属性抬高底价与教练检查误显对手停赛编号', desc: '自由球员市场、全服竞拍、AI 竞价及出价弹窗统一按原始属性估值与起拍，不再因离队前的培养属性虚高底价；修复战术页「教练检查」把对手或离队球员编号（如 d2n_XXX）直接显示为本队停赛的问题。' },
+      { badge: '优化', tone: '', title: '移动端竖屏/横屏适配优化与传奇杯平衡调整', desc: '完善手机端导航抽屉、安全区、弹窗及宽屏横屏适配；调整传奇杯强度并完善换季回收与联机同步，传奇挑战掉落技能书统一使用彩虹渐变字体展示。' },
+    ],
+  },
   {
     version: 'v0.4.22',
     date: '2026-11-20',
