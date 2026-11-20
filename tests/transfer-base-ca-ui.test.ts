@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { caOf } from '../src/game/ca.ts'
+import { playerMarketValue, VALUE_CAP } from '../src/game/pricing.ts'
 import { initialDisplayCA } from '../src/game/rating.ts'
 import { mainAttrsFor } from '../src/game/scale.ts'
 import { createInitialGame } from '../src/game/state.ts'
@@ -107,7 +108,7 @@ describe('转会市场展示原始 CA', () => {
     expect(renderTransfer()).toContain(`原始 CA ${initialDisplayCA(player).toFixed(0)}</small>`)
   })
 
-  it.each([false, true])('自由球员列表使用原始 CA（联机：%s）', async (online) => {
+  it.each([false, true])('自由球员列表使用原始 CA 和原始估价（联机：%s）', async (online) => {
     const { game, player, ui, marketState, onlineState, renderTransfer, caHeat } = await setup()
     delete player.starKey
     game.freeStars = [player]
@@ -117,6 +118,11 @@ describe('转会市场展示原始 CA', () => {
     const row = rowFor(renderTransfer(), player.id)
     expect(row).toContain(caHeat(initialDisplayCA(player)))
     expect(row).not.toContain(caHeat(caOf(player.attrs, false)))
+    const price = playerMarketValue(untrainedPlayer(player))
+    expect(playerMarketValue(player)).toBe(VALUE_CAP)
+    expect(price).toBeLessThan(VALUE_CAP)
+    expect(row).toContain(`<td class="num">${price.toLocaleString()}</td>`)
+    expect(row).not.toContain(VALUE_CAP.toLocaleString())
   })
 
   it('正在竞拍的球员也不会把装备卡 CA 显示为买入后的能力', async () => {
@@ -124,8 +130,11 @@ describe('转会市场展示原始 CA', () => {
     onlineState.status = 'online'
     ui.transferTab = 'free'
     marketState.pool = [player]
-    marketState.auctions = [{ playerId: player.id, playerName: player.name, startedAt: Date.now(), endsAt: Date.now() + 60_000, bids: [{ accountId: 'buyer', club: '买方', amount: 1_000_000, at: Date.now() }] }]
-    expect(rowFor(renderTransfer(), player.id)).toContain(caHeat(initialDisplayCA(player)))
+    const amount = Math.max(playerMarketValue(untrainedPlayer(player)), 1_000_000)
+    marketState.auctions = [{ playerId: player.id, playerName: player.name, startedAt: Date.now(), endsAt: Date.now() + 60_000, bids: [{ accountId: 'buyer', club: '买方', amount, at: Date.now() }] }]
+    const row = rowFor(renderTransfer(), player.id)
+    expect(row).toContain(caHeat(initialDisplayCA(player)))
+    expect(row).toContain(`min="${Math.ceil(amount * 1.05)}"`)
   })
 
   it('全服竞拍在阵容达到 25 人时仍可出价，且余额不足时展示禁用原因', async () => {

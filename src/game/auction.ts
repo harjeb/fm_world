@@ -1,5 +1,6 @@
 import { economyOf } from './economy.ts'
-import { bestMarketValue, joinRoster, playerMarketValue, transferWindowOpen } from './market.ts'
+import { joinRoster, transferWindowOpen } from './market.ts'
+import { basePlayerMarketValue } from './pricing.ts'
 import type { GameState, Player } from './types.ts'
 
 /**
@@ -61,10 +62,10 @@ function raise(auction: Auction, bid: AuctionBid): void {
   auction.endsAt = Math.max(auction.endsAt, bid.at + AUCTION_EXTEND_MS)
 }
 
-/** 下一口至少出多少：还没人出价时是估值，之后在当前价上加 5%，至少多 1。 */
+/** 开拍按原始属性估值；已有出价时至少加 5% 且至少多 1。 */
 export function minimumBid(player: Player, auction?: Auction | null): number {
-  const value = playerMarketValue(player)
-  if (!auction?.bids.length) return value
+  const value = basePlayerMarketValue(player)
+  if (!value || !auction?.bids.length) return value
   const current = leadingBid(auction).amount
   return Math.max(value, Math.ceil(current * (1 + AUCTION_MIN_RAISE)), current + 1)
 }
@@ -91,6 +92,7 @@ export function placeAIBid(market: FreeMarket, club: { id: string; name: string 
   if (auction && leadingBid(auction).accountId === accountId) return fail('已经是最高出价')
   if (auction && auction.bids.filter((bid) => bid.accountId === accountId).length >= AI_MAX_BIDS) return fail('这支球队已经放弃这名球员')
   const minimum = minimumBid(player, auction)
+  if (minimum <= 0) return fail('球员估值无效')
   if (amount < minimum) return fail(`出价至少 ${minimum.toLocaleString()}`)
   const bid: AuctionBid = { accountId, club: club.name, amount, at: now }
   if (!auction) {
@@ -112,8 +114,8 @@ export function placeBid(market: FreeMarket, game: GameState, accountId: string,
   if (game.roster.some((item) => item.id === playerId)) return fail('他已经在你的阵容里')
   const auction = market.auctions.find((item) => item.playerId === playerId)
   if (auction && leadingBid(auction).accountId === accountId) return fail('你已经是最高出价')
-  // 自己练过这名球员时估值按最好的卡算，免得低价卖掉再低价竞拍回来。
-  const minimum = Math.max(minimumBid(player, auction), bestMarketValue(game, player))
+  const minimum = minimumBid(player, auction)
+  if (minimum <= 0) return fail('球员估值无效')
   if (amount < minimum) return fail(`出价至少 ${minimum.toLocaleString()}`)
   const economy = economyOf(game)
   const committed = committedFunds(market.auctions, accountId, playerId)

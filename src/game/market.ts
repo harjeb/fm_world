@@ -1,7 +1,7 @@
 import { type AITeam, type GameState, type Player } from './types.ts'
 import { economyOf } from './economy.ts'
 import { caOf } from './ca.ts'
-import { playerMarketValue } from './pricing.ts'
+import { basePlayerMarketValue, playerMarketValue } from './pricing.ts'
 export { VALUE_AT_CA_205, VALUE_GROWTH_PER_CA, VALUE_CAP, playerMarketValue } from './pricing.ts'
 import { FULL_SQUAD, MIN_SQUAD, autoFillLineup, repairLineup, validateLineup } from './squad.ts'
 import { assessRelease, releaseChance, releaseRoll, type ReleaseAssessment } from './transfer-rules.ts'
@@ -27,9 +27,7 @@ export const CLUB_BUYOUT_RATIO = 1.5
  * 挂牌、买回、竞拍底价都用这一个数。
  */
 export function bestMarketValue(_game: Pick<GameState, 'cards'>, player: Player): number {
-  // 身上的属性本身就无效（NaN、越界）时仍然判无效，不能靠原始属性蒙混过关。
-  if (!playerMarketValue(player)) return 0
-  return playerMarketValue({ attrs: player.baseAttrs ?? player.attrs, positions: player.basePositions ?? player.positions })
+  return basePlayerMarketValue(player)
 }
 
 /** 买进来的球员以原始属性、不带卡入队：AI 球队装备的卡、别人留下的成品都不跟着人走。 */

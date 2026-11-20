@@ -20,3 +20,9 @@ export function playerMarketValue(player: Pick<Player, 'attrs' | 'positions'>): 
   const raw = VALUE_AT_CA_205 * Math.pow(VALUE_GROWTH_PER_CA, ca - 205)
   return Math.max(1_000, Math.min(VALUE_CAP, Math.round(raw / 1_000) * 1_000))
 }
+
+/** 转会不带培养卡：估值只看原始属性，但仍拒绝当前属性非法的球员。 */
+export function basePlayerMarketValue(player: Player): number {
+  if (!playerMarketValue(player)) return 0
+  return playerMarketValue({ attrs: player.baseAttrs ?? player.attrs, positions: player.basePositions ?? player.positions })
+}

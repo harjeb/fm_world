@@ -7,7 +7,9 @@ import { createAppServer, type AppServer } from '../server/app.ts'
 import { readStoredAccounts, writeStoredAccounts } from './account-storage-helpers.ts'
 import { AUCTION_DURATION_MS, AUCTION_EXTEND_MS, AUCTION_RAISE_FEE_MIN, absorbFreeAgents, auctionRaiseFee, committedFunds, leadingBid, minimumBid, placeBid, settleAuctions, type FreeMarket } from '../src/game/auction.ts'
 import { economyOf } from '../src/game/economy.ts'
-import { SQUAD_LIMIT, playerMarketValue, releasePlayer, squadLimitError } from '../src/game/market.ts'
+import { SQUAD_LIMIT, VALUE_CAP, playerMarketValue, releasePlayer, squadLimitError } from '../src/game/market.ts'
+import { mainAttrsFor } from '../src/game/scale.ts'
+import { initialDisplayCA } from '../src/game/rating.ts'
 import { createWorldGame } from '../src/game/world.ts'
 import type { GameState } from '../src/game/types.ts'
 
@@ -430,14 +432,29 @@ describe('全服自由市场', () => {
     expect(one.user.id).toBeTruthy()
   })
 
-  it('Agent：看得到竞拍，用 bid_free_agent 出价，buy_free_agent 被拒绝', async () => {
-    const { base } = await start(() => 1_000_000)
+  it('Agent 和出价接口都按存量自由球员的原始属性起拍，而不是按离队前的培养属性', async () => {
+    const clock = 1_000_000
+    const first = await start(() => clock)
+    const { pool } = await getMarket(first.base)
+    const original = pool.find((player) => !player.starKey && player.positions.GK === 0 && playerMarketValue(player) < 450_000)!
+    const price = playerMarketValue(original)
+    expect(price).toBeGreaterThan(0)
+    await first.app.shutdown()
+    servers.pop()
+    const worldFile = path.join(first.dir, 'world.json')
+    const world = JSON.parse(fs.readFileSync(worldFile, 'utf8')) as { freeStars: GameState['freeStars'] }
+    const released = world.freeStars.find((player) => player.id === original.id)!
+    for (const key of mainAttrsFor(false)) released.attrs[key] = 1400
+    expect(playerMarketValue(released)).toBe(VALUE_CAP)
+    fs.writeFileSync(worldFile, JSON.stringify(world))
+    const { base } = await start(() => clock, first.dir)
     const one = await register(base, 'alpha')
     const { token } = await (await fetch(`${base}/api/agent/token`, { method: 'POST', headers: one.headers })).json() as { token: string }
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-    const state = await (await fetch(`${base}/api/agent/state`, { headers })).json() as { game: { market: { freeAgents: { player: { id: string }; price: number }[]; auctions: unknown[] } } }
-    expect(state.game.market.freeAgents.length).toBeGreaterThan(0)
-    const target = [...state.game.market.freeAgents].sort((a, b) => a.price - b.price)[0]
+    const state = await (await fetch(`${base}/api/agent/state`, { headers })).json() as { game: { market: { freeAgents: { player: { id: string; ca: number }; price: number }[]; auctions: unknown[] } } }
+    const target = state.game.market.freeAgents.find(({ player }) => player.id === original.id)!
+    expect(target).toMatchObject({ price, player: { ca: initialDisplayCA(original) } })
+    expect((await bid(base, one.headers, original.id, price - 1)).status).toBe(400)
     const refused = await fetch(`${base}/api/agent/action`, { method: 'POST', headers, body: JSON.stringify({ action: 'buy_free_agent', playerId: target.player.id }) })
     expect(refused.status).toBe(400)
     const placed = await fetch(`${base}/api/agent/action`, { method: 'POST', headers, body: JSON.stringify({ action: 'bid_free_agent', playerId: target.player.id, amount: target.price }) })

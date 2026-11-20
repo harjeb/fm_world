@@ -82,7 +82,7 @@ function auctionTab(): string {
     const player = marketState.pool.find((item) => item.id === auction.playerId)!
     const lead = leadingBid(auction)
     const mine = lead.accountId === me
-    const next = Math.max(minimumBid(player, auction), bestMarketValue(game, player))
+    const next = minimumBid(player, auction)
     const left = auction.endsAt - serverNow()
     return `<tr data-key="${esc(player.id)}">
       <td>${posBadge(primaryPosition(player))}</td>
@@ -93,7 +93,7 @@ function auctionTab(): string {
       <td class="num strong">${lead.amount.toLocaleString()}</td>
       <td>${mine ? tag('你领先', 'good') : esc(lead.club)}</td>
       <td class="num"><span class="countdown ${left < AUCTION_EXTEND_MS ? 'urgent' : ''}" data-countdown-end="${auction.endsAt}">${countdownText(left)}</span></td>
-      <td class="num"><span class="bid-cell">${mine ? '<span class="muted small">等待结束</span>' : `<input class="bid-input" type="number" min="${next}" step="1" value="${next}" data-bid-amount aria-label="出价金额"><button class="btn small primary" data-action="auction-bid" data-player="${esc(player.id)}" ${canTrade ? '' : 'disabled'}>加价</button><small class="muted">手续费 ${auctionRaiseFee(next).toLocaleString()}</small>`}</span></td>
+      <td class="num"><span class="bid-cell">${mine ? '<span class="muted small">等待结束</span>' : `<input class="bid-input" type="number" min="${next}" step="1" value="${next}" data-bid-amount aria-label="出价金额"><button class="btn small primary" data-action="auction-bid" data-player="${esc(player.id)}" ${canTrade && next > 0 ? '' : 'disabled'}>加价</button><small class="muted">手续费 ${auctionRaiseFee(next).toLocaleString()}</small>`}</span></td>
     </tr>`
   }).join('')
   const query = ui.clubSearch.trim().toLowerCase()
@@ -103,12 +103,14 @@ function auctionTab(): string {
   const pages = Math.max(1, Math.ceil(agents.length / pageSize))
   ui.clubPage = Math.min(ui.clubPage, pages - 1)
   const rows = agents.slice(ui.clubPage * pageSize, ui.clubPage * pageSize + pageSize).map((player) => {
-    const opening = Math.max(minimumBid(player), bestMarketValue(game, player))
-    const disabledReason = !canTrade
-      ? '比赛进行中不能出价'
-      : available < opening
-        ? (committed > 0 ? `可用余额不足（其他竞拍已占用 ${committed.toLocaleString()}）` : '余额不足')
-        : ''
+    const opening = minimumBid(player)
+    const disabledReason = opening <= 0
+      ? '球员估值无效'
+      : !canTrade
+        ? '比赛进行中不能出价'
+        : available < opening
+          ? (committed > 0 ? `可用余额不足（其他竞拍已占用 ${committed.toLocaleString()}）` : '余额不足')
+          : ''
     return `<tr class="clickable" data-action="detail" data-player="${esc(player.id)}" data-key="${esc(player.id)}">
       <td>${posBadge(primaryPosition(player))}</td>
       ${nameCell(player)}

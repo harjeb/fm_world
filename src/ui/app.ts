@@ -73,7 +73,7 @@ import { hasSeenLatestChangelog, markChangelogSeen } from '../game/changelog.ts'
 import { emptyAutoSubs } from '../game/match/management.ts'
 import { payWageArrears, upgradeFacility, type FacilityId } from '../game/economy.ts'
 import { leadingBid, type Auction, type AuctionResult } from '../game/auction.ts'
-import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPlayer, playerMarketValue, refreshClubMarket, releasePlayer, renewContract, signWorldClubPlayer, signFreeAgent } from '../game/market.ts'
+import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPlayer, refreshClubMarket, releasePlayer, renewContract, signWorldClubPlayer, signFreeAgent } from '../game/market.ts'
 import { minimumBid } from '../game/auction.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
 import { clubNameError, normalizeClubName } from '../game/club-name.ts'
@@ -1050,7 +1050,8 @@ function openNegotiation(kind: 'free' | 'club' | 'bid', playerId: string, clubId
     showNotice('找不到这名球员。')
     return
   }
-  const value = Math.max(1, Math.round(kind === 'club' ? bestMarketValue(game, player) : playerMarketValue(player)))
+  const value = bestMarketValue(game, player)
+  if (value <= 0) { showNotice('球员估值无效'); return }
   const auction = kind === 'bid' ? marketState.auctions.find((item) => item.playerId === playerId) : undefined
   const team = kind === 'club' ? worldTransferTeams(game).find((item) => item.id === clubId) : undefined
   const clubTerms = team ? clubSaleTerms(game, team, player) : undefined
@@ -1062,7 +1063,7 @@ function openNegotiation(kind: 'free' | 'club' | 'bid', playerId: string, clubId
     ? freeAgentAsking(game, player)
     : kind === 'club'
       ? clubTerms!.asking!
-      : Math.max(askingFloor(player, auction), value)
+      : minimumBid(player, auction)
   ui.negotiation = {
     kind,
     playerId,
@@ -1074,11 +1075,6 @@ function openNegotiation(kind: 'free' | 'club' | 'bid', playerId: string, clubId
     role: 'first-team',
   }
   render()
-}
-
-function askingFloor(player: Player, auction: ReturnType<typeof marketState.auctions.find>): number {
-  if (!auction) return bestMarketValue(game, player)
-  return minimumBid(player, auction)
 }
 
 /** 战术页自动填充：轮换先排除伤停、再看体能和能力；部分轮换基于当前草稿，而不是重新洗掉首发。 */

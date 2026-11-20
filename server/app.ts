@@ -50,7 +50,7 @@ import { LEAGUE_REALTIME_MS, LOGIC_MATCH_SECONDS } from '../src/game/match/time.
 import { absorbFreeAgents, aiClubIdOf, auctionRaiseFee, committedFunds, leadingBid, minimumBid, placeAIBid, placeBid, settleAuctions, type AIBidder, type Auction, type AuctionResult, type BidResult, type FreeMarket } from '../src/game/auction.ts'
 import { isOnMarketToday } from '../src/game/market-window.ts'
 import { lineupRating } from '../src/game/club-rating.ts'
-import { AI_SQUAD_LIMIT, advanceAIClub, aiBidFor, createAIClub, playerValue, recordAISigning, seedAIClubs } from '../src/game/ai-club.ts'
+import { AI_SQUAD_LIMIT, advanceAIClub, aiBidFor, createAIClub, recordAISigning, seedAIClubs } from '../src/game/ai-club.ts'
 import { agentView, applyAgentAction, playerView, type AgentOptions } from './agent.ts'
 import { clubNameError, normalizeClubName } from '../src/game/club-name.ts'
 import { negotiationDemands, SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../src/game/negotiation.ts'
@@ -703,13 +703,14 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const committed = market.auctions.reduce((sum, item) => (item.bids.length && leadingBid(item).accountId === `ai:${club.id}` ? sum + leadingBid(item).amount : sum), 0)
     const open = market.pool
       .filter((player) => !market.auctions.some((auction) => auction.playerId === player.id) && sharedAvailable(player, nowMs, keptIds))
-      .sort((a, b) => playerValue(b) - playerValue(a))
+      .map((player) => ({ player, value: minimumBid(player) }))
+      .sort((a, b) => b.value - a.value)
       .slice(0, 30)
-    for (const player of open) {
-      const minimum = minimumBid(player)
-      const plan = aiBidFor({ state: club.state, tier: club.tier, player, squad: club.team.players, value: playerValue(player), minimum, committed, buysLeft })
-      if (!plan || club.state.economy.balance - committed < minimum) continue
-      if (placeAIBid(market, { id: club.id, name: club.team.name }, player.id, minimum, nowMs).ok) return true
+    for (const { player, value } of open) {
+      if (value <= 0 || club.state.economy.balance - committed < value) continue
+      const plan = aiBidFor({ state: club.state, tier: club.tier, player: untrainedPlayer(player), squad: club.team.players, value, minimum: value, committed, buysLeft })
+      if (!plan) continue
+      if (placeAIBid(market, { id: club.id, name: club.team.name }, player.id, value, nowMs).ok) return true
     }
     return false
   }
@@ -733,7 +734,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (auction.endsAt <= nowMs || auction.bids.length === 0) continue
       const player = market.pool.find((item) => item.id === auction.playerId)
       if (!player) continue
+      const value = minimumBid(player)
+      if (value <= 0) continue
+      const base = untrainedPlayer(player)
       const lead = leadingBid(auction)
+      const minimum = minimumBid(player, auction)
       for (const club of candidates) {
         const state = sharedWorld.aiClubs[club.id]
         const squad = sharedWorld.teams?.[club.id]?.players
@@ -749,10 +754,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         const plan = aiBidFor({
           state,
           tier: club.tier ?? 'division2',
-          player,
+          player: base,
           squad,
-          value: playerValue(player),
-          minimum: minimumBid(player, auction),
+          value,
+          minimum,
           rival: lead.amount,
           committed,
           // 每赛季最多买 5 人：已经买的 + 正领先的竞拍都算。
@@ -1290,9 +1295,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const state = sharedWorld.aiClubs?.[clubId]
       const team = sharedWorld.teams?.[clubId]
       if (!state || !team) return
-      recordAISigning(state, player, amount)
+      const signing = untrainedPlayer(player)
+      recordAISigning(state, signing, amount)
       noteAIBuy(state, serverSeason())
-      team.players = [...team.players, player]
+      team.players = [...team.players, signing]
       // 拍下的球员要能进首发：只修“不合法”的阵容会让他一直坐在名单外。
       refreshAILineup(team)
       const club = sharedWorld.world.clubs.find((item) => item.id === clubId)
@@ -2434,7 +2440,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     view.market.freeAgents = market.pool.filter((player) => onAuctionNow(player.id) || sharedAvailable(player, now())).map((player) => {
       const auction = market.auctions.find((item) => item.playerId === player.id)
       return {
-        player: playerView(player, account.game, now()),
+        player: playerView(untrainedPlayer(player), account.game, now()),
         price: minimumBid(player, auction),
       }
     })

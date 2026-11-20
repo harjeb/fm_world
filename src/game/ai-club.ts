@@ -2,7 +2,8 @@ import { caOf } from './ca.ts'
 import { MAX_FANS, STAGES_PER_LEVEL, facilityLevel, facilityUpgradeCost, projectedRoundIncome } from './economy.ts'
 import { AVERAGE_ROUND_GAME_DAYS } from './calendar.ts'
 import { derivedRng, splitSeed } from './rng.ts'
-import { playerMarketValue } from './pricing.ts'
+import { basePlayerMarketValue, playerMarketValue } from './pricing.ts'
+import { untrainedPlayer } from './cards.ts'
 import { isOnMarketToday } from './market-window.ts'
 import { attrHardLimit, attrMax, isMainAttr } from './scale.ts'
 import { cupCeilingBonusFromClaims } from './cup-rewards.ts'
@@ -464,15 +465,17 @@ export function aiSignFreeAgents(game: { world?: WorldState; createdAt?: number;
   const anchor = { world: game.world, createdAt: game.createdAt ?? now }
   const targets = game.freeStars
     .filter((player) => isOnMarketToday(anchor, player, now))
-    .sort((a, b) => playerCa(b) - playerCa(a))
+    .sort((a, b) => originalCa(b) - originalCa(a))
     .slice(0, 12)
   let signed = 0
-  for (const player of targets) {
+  for (const candidate of targets) {
     if (signed >= 2) break
     const club = game.aiTeams![rng.int(game.aiTeams!.length)]
     const state = game.aiClubs?.[club.id]
     if (!state || club.players.length >= AI_SQUAD_LIMIT) continue
-    const value = playerValue(player)
+    const value = basePlayerMarketValue(candidate)
+    if (value <= 0) continue
+    const player = untrainedPlayer(candidate)
     const season = game.season?.index ?? game.world.seasonIndex
     const plan = aiBidFor({ state, tier: club.tier ?? 'division2', player, squad: club.players, value, minimum: value, buysLeft: aiBuysLeft(state, season) })
     if (!plan) continue
