@@ -57,12 +57,19 @@ export function applyGains(
   const caBefore = caOf(before, isGk)
   const clipped: Partial<Record<AttrKey, number>> = {}
   let cappedByCeiling = false
+  let hasClipped = false
   for (const [key, raw] of Object.entries(gains) as [AttrKey, number][]) {
     if (!raw || raw <= 0) continue
     const room = Math.max(0, ceilings[key] - before[key])
     const amount = Math.min(raw, room)
     if (amount < raw - 1e-9) cappedByCeiling = true
-    if (amount > 0) clipped[key] = amount
+    if (amount > 0) {
+      clipped[key] = amount
+      hasClipped = true
+    }
+  }
+  if (!hasClipped) {
+    return { attrs: before, actual: clipped, requested: gains, caBefore, caAfter: caBefore, scale: 1, cappedByCeiling, cappedByPa: false }
   }
   const caAfterFull = caOf(addAttrs(before, clipped, isGk), isGk)
   if (caAfterFull <= pa + 1e-9) {

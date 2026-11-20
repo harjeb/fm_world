@@ -85,6 +85,7 @@ const SKILL_EFFECTS: Partial<Record<SkillId, (m: number) => string>> = {
   sh_aux_away_steel: (m) => `客场比赛时：镇定与第一脚触球有效评分各 +${num(5 * m)}。`,
   sh_aux_tired_grit: (m) => `体力低于 70% 时：敏捷与防守站位有效评分各 +${num(5 * m)}。`,
   sh_aux_discipline: (m) => `犯规后吃牌判定：黄牌与直红风险 -${num(25 * m)}%。`,
+  lg_legend_star: () => '培养前带入书槽即全程生效（不占技能槽）：每次常规行动 10% 触发彩色事件，从 2 项随机未满主属性中二选一 +100（每轮最多 3 次）。',
 }
 
 export function skillEffectText(id: SkillId, tier: SkillTier = 'silver'): string {

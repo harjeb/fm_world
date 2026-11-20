@@ -9,7 +9,7 @@ import { facilityLevel } from '../src/game/economy.ts'
 import { LOGIC_MATCH_SECONDS, matchRealSeconds } from '../src/game/match/time.ts'
 import { matchConditionLoss } from '../src/game/condition.ts'
 import { matchPlanConditionFactor } from '../src/game/pes/match-plan.ts'
-import type { SeasonCupId } from '../src/game/season-cups.ts'
+import type { SeasonCupId, SeasonCupStage } from '../src/game/season-cups.ts'
 
 export type MatchBook = {
   injuries: Record<string, number>
@@ -47,7 +47,14 @@ export type MatchJob = {
   divisionId: string
   round: number
   /** 缺省为旧版联赛任务；正式杯赛使用独立赛事与对阵 ID。 */
-  competition?: { kind: 'seasonCup'; cupId: SeasonCupId; fixtureId: string }
+  competition?: {
+    kind: 'seasonCup'
+    cupId: SeasonCupId
+    fixtureId: string
+    stage?: SeasonCupStage
+    leg?: 1 | 2
+    aggregateOffset?: { home: number; away: number }
+  }
   kickoffAt: number
   lockedAt: number
   seed: number
@@ -100,12 +107,15 @@ export function computeMatchJob(job: MatchJob): MatchJobResult {
   // 至少一方有教练：开球后要把整场当直播放给教练看，必须用和画面同一个的 PES 引擎。
   // 两支电脑球队互踢没人看，沿用便宜的整步引擎，只要赛果。
   const live = !job.home.ai || !job.away.ai
-  const knockout = job.competition?.kind === 'seasonCup'
+  const isSeasonCup = job.competition?.kind === 'seasonCup'
+  // 小组赛和两回合首回合允许平局（无点球）；单场淘汰赛和两回合次回合按总比分决胜（总分平点球）。
+  const knockout = isSeasonCup && job.competition?.stage !== 'group' && job.competition?.leg !== 1
+  const shootoutOffset = knockout ? job.competition?.aggregateOffset : undefined
   const home = input(job.home), away = input(job.away)
   if (typeof job.home.stadiumStage === 'number' && job.home.stadiumStage > 0) home.stadiumStage = job.home.stadiumStage
   const engine: GameEngine = live
-    ? new PesEngine({ seed: job.seed, home, away, knockout, durationSeconds: LOGIC_MATCH_SECONDS, offside: true })
-    : new MatchEngine({ seed: job.seed, home, away, knockout, durationSeconds: LOGIC_MATCH_SECONDS, offside: true, recordPlayback: false, rulesVersion: 2 })
+    ? new PesEngine({ seed: job.seed, home, away, knockout, ...(shootoutOffset ? { shootoutOffset } : {}), durationSeconds: LOGIC_MATCH_SECONDS, offside: true })
+    : new MatchEngine({ seed: job.seed, home, away, knockout, ...(shootoutOffset ? { shootoutOffset } : {}), durationSeconds: LOGIC_MATCH_SECONDS, offside: true, recordPlayback: false, rulesVersion: 2 })
   prepareMatchInjuries(engine.state, { ...job.home.injuries, ...job.away.injuries }, job.kickoffAt)
   const initialState = live ? engine.serialize() : undefined
   const state = engine.simulate()
@@ -121,7 +131,8 @@ export function computeMatchJob(job: MatchJob): MatchJobResult {
     injuries[injury.personId] = Math.max(injuries[injury.personId] ?? 0, until)
   }
   const record = createMatchRecord({ season: { index: job.season }, lineup: job.home.team.lineup }, state, {
-    isLeague: !knockout, ...(job.competition ? { mode: 'cup' as const, cupId: `season-${job.competition.cupId}`, cupFixtureId: job.competition.fixtureId } : {}),
+    isLeague: !isSeasonCup, ...(job.competition ? { mode: 'cup' as const, cupId: `season-${job.competition.cupId}`, cupFixtureId: job.competition.fixtureId } : {}),
+    ...(shootoutOffset ? { shootoutOffset } : {}),
     round: job.round, opponentId: job.away.team.id, opponentName: job.away.team.name,
     seed: job.seed, homeAway: 'home', durationSeconds: LOGIC_MATCH_SECONDS,
   })
@@ -155,7 +166,8 @@ export function recordForClub(job: MatchJob, result: MatchJobResult, clubId: str
   const conceded = home ? record.score.away : record.score.home
   const playerShootout = home ? record.shootout?.home : record.shootout?.away
   const opponentShootout = home ? record.shootout?.away : record.shootout?.home
-  record.result = scored > conceded ? 'win' : scored < conceded ? 'loss'
-    : playerShootout !== undefined && opponentShootout !== undefined ? (playerShootout > opponentShootout ? 'win' : 'loss') : 'draw'
+  record.result = playerShootout !== undefined && opponentShootout !== undefined
+    ? (playerShootout > opponentShootout ? 'win' : playerShootout < opponentShootout ? 'loss' : 'draw')
+    : scored > conceded ? 'win' : scored < conceded ? 'loss' : 'draw'
   return record
 }

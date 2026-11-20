@@ -799,6 +799,7 @@ export function ownerlessWorldFromClub(base: WorldState, clubId: string): WorldS
   for (const entry of world.history) {
     entry.promotions = entry.promotions.map((id) => id === 'player' ? clubId : id)
     entry.relegations = entry.relegations.map((id) => id === 'player' ? clubId : id)
+    if (entry.championsTop4) entry.championsTop4 = entry.championsTop4.map((id) => id === 'player' ? clubId : id)
   }
   return world
 }
@@ -1303,11 +1304,13 @@ function promoteAndRelegate(game: GameState, protectedClubs: ReadonlySet<string>
       club.starPlayerIds = []
     }
   }
+  const championsTop4 = champions.table.slice(0, 4).map((row) => row.teamId)
   world.history.push({
     seasonIndex: world.seasonIndex,
     champion: current.get(champions.champion ?? '')?.name ?? champions.champion ?? '',
     promotions: [...d1Top, ...promoted],
     relegations: [...champsBottom, ...d1Bottom],
+    championsTop4,
   })
   return { promoted, relegated: [...champsBottom, ...d1Bottom] }
 }

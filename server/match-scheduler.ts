@@ -2,7 +2,8 @@ import type { AIClubState, AITeam, Fixture, WorldState } from '../src/game/types
 import { awardAISeasonCup } from '../src/game/season-cup-rewards.ts'
 import { seasonCupPlayerStats } from '../src/game/season-cup-stats.ts'
 import { computeWorldTable } from '../src/game/world.ts'
-import { SEASON_CUP_QUALIFICATION_ROUND, advanceSeasonCup, applySeasonCupPlan, completedWorldRound, planSeasonCups, seasonRoundKickoff, worldRoundsKickedOff, type SeasonCupFixture } from '../src/game/season-cups.ts'
+import { SEASON_CUP_QUALIFICATION_ROUND, advanceSeasonCup, applySeasonCupPlan, completedWorldRound, paysSeasonCupAppearanceGold, planSeasonCups, seasonRoundKickoff, worldRoundsKickedOff, type SeasonCupFixture } from '../src/game/season-cups.ts'
+import { aggregateScore } from '../src/game/match/knockout.ts'
 import { recordMatchDiscipline } from '../src/game/discipline.ts'
 import { splitSeed } from '../src/game/rng.ts'
 import { LINEUP_LOCK_MS } from '../src/game/season.ts'
@@ -59,22 +60,36 @@ export class MatchScheduler {
     const cupsPublished = this.publishCupDue(now)
     this.prepare(now)
     this.prepareCups(now)
-    const caughtUp = world.divisions.every(d => d.fixtures.every(f => f.played || seasonRoundKickoff(d, f.round) + LEAGUE_REALTIME_MS > now))
+    const caughtUp = world.divisions.every(d => d.fixtures.every(f => f.played || this.fixtureKickoff(d, f) + LEAGUE_REALTIME_MS > now))
     if (caughtUp && pruneChemistry(this.shared.matchBook!.chemistry, now, world.divisions[0]?.gameDayMs)) { this.persist(); changed = true }
     return changed || published || cupsPublished
   }
 
+  private fixtureKickoff(division: WorldState['divisions'][number], fixture: Pick<Fixture, 'round' | 'kickoffAt'>): number {
+    return Number.isFinite(fixture.kickoffAt) ? fixture.kickoffAt! : seasonRoundKickoff(division, fixture.round)
+  }
+
   private prepare(now: number): void {
     const { world } = this.shared
-    const pending = world.divisions.flatMap((division) => division.fixtures.filter((fixture) => !fixture.played))
+    // 停服恢复时先完成每支队更早未赛轮次，再锁下一场，避免同一个球员漏记体能、伤病和停赛；O(N) 预计算各队最早未赛轮次。
+    const earliestPendingRound = new Map<string, number>()
+    for (const division of world.divisions) {
+      for (const fixture of division.fixtures) {
+        if (fixture.played) continue
+        const prevHome = earliestPendingRound.get(fixture.homeId)
+        if (prevHome === undefined || fixture.round < prevHome) earliestPendingRound.set(fixture.homeId, fixture.round)
+        const prevAway = earliestPendingRound.get(fixture.awayId)
+        if (prevAway === undefined || fixture.round < prevAway) earliestPendingRound.set(fixture.awayId, fixture.round)
+      }
+    }
+    let enqueued = 0
     for (const division of world.divisions) for (const fixture of division.fixtures) {
       if (fixture.played) continue
-      const kickoffAt = seasonRoundKickoff(division, fixture.round)
+      if (earliestPendingRound.get(fixture.homeId)! < fixture.round || earliestPendingRound.get(fixture.awayId)! < fixture.round) continue
+      const kickoffAt = this.fixtureKickoff(division, fixture)
       if (now < kickoffAt - LINEUP_LOCK_MS || this.cupPendingBefore(kickoffAt)) continue
       const id = matchJobId(world.seasonIndex, division.divisionId!, fixture)
       if (this.queue.entries.has(id)) continue
-      // 停服恢复时先完成上一场，再锁下一场，避免同一个球员漏记体能、伤病和停赛。
-      if (pending.some((old) => old.round < fixture.round && [old.homeId, old.awayId].some((club) => club === fixture.homeId || club === fixture.awayId))) continue
       const home = this.teamFor(fixture.homeId), away = this.teamFor(fixture.awayId)
       if (!home || !away) continue
       const job: MatchJob = {
@@ -95,14 +110,21 @@ export class MatchScheduler {
         }
         locked.chemistry = chemistrySnapshot(this.shared.matchBook!.chemistry, [...locked.team.lineup.starters.map(p => p.playerId), ...locked.team.lineup.bench], kickoffAt, job.gameDayMs)
       }
-      this.queue.enqueue(job)
+      if (this.queue.enqueue(job, true)) enqueued++
     }
+    if (enqueued > 0) this.queue.flushIndex()
   }
 
   private publishDue(now: number): boolean {
     const { world } = this.shared
     let published = false
-    const rounds = [...new Set(world.divisions.flatMap((division) => division.fixtures.filter((fixture) => !fixture.played && seasonRoundKickoff(division, fixture.round) + LEAGUE_REALTIME_MS <= now).map((fixture) => fixture.round)))].sort((a, b) => a - b)
+    const roundSet = new Set<number>()
+    for (const division of world.divisions) {
+      for (const fixture of division.fixtures) {
+        if (!fixture.played && this.fixtureKickoff(division, fixture) + LEAGUE_REALTIME_MS <= now) roundSet.add(fixture.round)
+      }
+    }
+    const rounds = [...roundSet].sort((a, b) => a - b)
     for (const round of rounds) {
       if (this.cupPendingBefore(seasonRoundKickoff(world.divisions[0], round))) break
       const pending = world.divisions.flatMap((division) => division.fixtures.filter((fixture) => fixture.round === round && !fixture.played).map((fixture) => ({ division, fixture, id: matchJobId(world.seasonIndex, division.divisionId!, fixture) })))
@@ -140,7 +162,7 @@ export class MatchScheduler {
       const round = cup.rounds.at(-1)
       if (!round || cup.championId || now < round.kickoffAt - LINEUP_LOCK_MS || this.cupPendingBefore(round.kickoffAt)) continue
       // 跨赛事严格按时间顺序；早于本杯赛的联赛必须先公布。
-      if (world.divisions.some(division => division.fixtures.some(fixture => !fixture.played && seasonRoundKickoff(division, fixture.round) < round.kickoffAt))) continue
+      if (world.divisions.some(division => division.fixtures.some(fixture => !fixture.played && this.fixtureKickoff(division, fixture) < round.kickoffAt))) continue
       for (const fixture of round.fixtures) {
         if (fixture.played) continue
         const id = seasonCupJobId(world.seasonIndex, cup.id, fixture.id)
@@ -162,7 +184,14 @@ export class MatchScheduler {
         }
         const job: MatchJob = {
           id, season: world.seasonIndex, divisionId: `season-cup-${cup.id}`, round: round.round,
-          competition: { kind: 'seasonCup', cupId: cup.id, fixtureId: fixture.id },
+          competition: {
+            kind: 'seasonCup',
+            cupId: cup.id,
+            fixtureId: fixture.id,
+            ...(fixture.stage ? { stage: fixture.stage } : {}),
+            ...(fixture.leg ? { leg: fixture.leg } : {}),
+            ...(fixture.aggregateOffset ? { aggregateOffset: { ...fixture.aggregateOffset } } : {}),
+          },
           kickoffAt: round.kickoffAt, lockedAt: round.kickoffAt - LINEUP_LOCK_MS,
           seed: splitSeed(this.shared.seed, `season-cup-${world.seasonIndex}-${fixture.id}`),
           gameDayMs: world.divisions[0].gameDayMs, home: structuredClone(home), away: structuredClone(away),
@@ -201,19 +230,25 @@ export class MatchScheduler {
         return round ? [{ cup, round }] : []
       })
       if (scheduled.some(({ round }) => round.fixtures.some(fixture => !fixture.played && !this.queue.ready(seasonCupJobId(world.seasonIndex, fixture.cupId, fixture.id))))) break
-      const ready: { fixture: SeasonCupFixture; job: MatchJob; result: MatchJobResult; winner: string }[] = []
+      const ready: { fixture: SeasonCupFixture; job: MatchJob; result: MatchJobResult; winner?: string }[] = []
       for (const { round } of scheduled) for (const fixture of round.fixtures) {
         if (fixture.played) continue
         const { input, result } = this.queue.read(seasonCupJobId(world.seasonIndex, fixture.cupId, fixture.id))
         const score = result.record.score
         const shootout = result.record.shootout
-        if (score.home === score.away && (!shootout || shootout.home === shootout.away)) throw new Error(`杯赛 ${fixture.id} 缺少有效点球结果`)
-        const homeWins = score.home > score.away || score.home === score.away && shootout!.home > shootout!.away
-        ready.push({ fixture, job: input, result, winner: homeWins ? fixture.homeId : fixture.awayId })
+        if (fixture.stage === 'group' || fixture.leg === 1) {
+          const winner = score.home > score.away ? fixture.homeId : score.away > score.home ? fixture.awayId : undefined
+          ready.push({ fixture, job: input, result, winner })
+        } else {
+          const total = aggregateScore(score, fixture.aggregateOffset)
+          if (total.home === total.away && (!shootout || shootout.home === shootout.away)) throw new Error(`杯赛 ${fixture.id} 缺少有效点球结果`)
+          const homeWins = total.home > total.away || (total.home === total.away && shootout!.home > shootout!.away)
+          ready.push({ fixture, job: input, result, winner: homeWins ? fixture.homeId : fixture.awayId })
+        }
       }
       for (const { fixture, job, result, winner } of ready) {
         this.applyEffects(job, result)
-        Object.assign(fixture, { played: true, score: { ...result.record.score }, ...(result.record.shootout ? { shootout: { ...result.record.shootout } } : {}), winnerId: winner, matchId: job.id, scorers: result.fixture.scorers ?? [], assisters: result.fixture.assisters ?? [], playerStats: seasonCupPlayerStats(result.record) })
+        Object.assign(fixture, { played: true, score: { ...result.record.score }, ...(result.record.shootout ? { shootout: { ...result.record.shootout } } : {}), ...(winner ? { winnerId: winner } : {}), matchId: job.id, scorers: result.fixture.scorers ?? [], assisters: result.fixture.assisters ?? [], playerStats: seasonCupPlayerStats(result.record) })
       }
       for (const { cup } of scheduled) {
         advanceSeasonCup(cup, world.seasonIndex, this.shared.seed)
@@ -258,7 +293,7 @@ export class MatchScheduler {
       player.condition = Math.max(1, Math.min(100, (player.condition ?? 100) - (result.conditionLoss[player.id] ?? 0)))
     }
     for (const id of ids) book.conditionAt[id] = job.kickoffAt
-    if (job.competition) {
+    if (job.competition && paysSeasonCupAppearanceGold(job.competition)) {
       for (const locked of [job.home, job.away]) {
         const ai = !locked.coachId ? this.shared.aiClubs?.[locked.team.id] : undefined
         if (ai) awardAISeasonCup(ai, job.competition.cupId, job.id, job.season, false)

@@ -15,6 +15,7 @@ import { awardSeasonShopPoints } from './shop.ts'
 import { squadLimitError } from './market.ts'
 import { AVERAGE_ROUND_GAME_DAYS, DAY_MS, GAME_DAY_MS, KICKOFF_SCHEDULE, calendarStartForSeason, latestKickoffAt, elapsedGameDays, gameDayOfRound, kickoffAtForRound, seasonEndAt, roundsKickedOff, roundGapGameDays } from './calendar.ts'
 import { seasonRoundKickoff, worldRoundsKickedOff } from './season-cups.ts'
+import { legendCupMetaById } from './data/legend-cup-teams.ts'
 import { recordMatchInjuries } from './injury.ts'
 import { scoutMarketGraceMs } from './scouting.ts'
 import { emptyAutoSubs } from './match/management.ts'
@@ -160,7 +161,7 @@ function buildFixtures(teamIds: string[], startedAt: number, shift = 0): Fixture
 
 export function teamName(game: GameState, id: string): string {
   if (id === PLAYER_TEAM_ID) return game.clubName
-  return game.aiTeams.find((team) => team.id === id)?.name ?? id
+  return game.aiTeams.find((team) => team.id === id)?.name ?? legendCupMetaById(id)?.name ?? id
 }
 
 export function teamStrength(game: GameState, id: string): number {

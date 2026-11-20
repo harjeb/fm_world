@@ -12,7 +12,8 @@ import { partnerAssignment, trainingDate, trainingOptions, type TrainingActivity
 import { baseBuild, playerCards, untrainedPlayer } from '../../game/cards.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
 import { getSkillTier } from '../../game/inheritance.ts'
-import { bookKey, bookLearnChance, bookName, bookRequirementText, bookTierLabel, canChooseTrainingBook, eventForSession, trainingSkillChance } from '../../game/legend-learning.ts'
+import { bookKey, bookLearnChance, bookName, bookRequirementText, bookTierLabel, canChooseTrainingBook, eventForSession, legendStarTriggersUsed, trainingSkillChance } from '../../game/legend-learning.ts'
+import { isPassiveTrainingBook, LEGEND_STAR_MAX_TRIGGERS } from '../../game/data/legend-cup-skill.ts'
 import { MAX_BOOKS } from '../../game/data/legend-skills.ts'
 import { keyAttrsOf } from '../../game/data/key-attrs.ts'
 import { activityColor, attrColor, attributeRadar, attrHeat, caHeat, cardName, cardSelect, icon, mainAttrs, meter, pageHead, panel, posBadge, primaryPosition, skillGroups, tag, tile, traitLabel } from '../components.ts'
@@ -314,9 +315,13 @@ function bookPicker(player: Player): string {
     const checked = selected.has(key)
     const duplicate = !checked && books.some((other) => other.id === book.id && selected.has(bookKey(other)))
     const reason = !check.ok ? ` · ${check.reason}` : duplicate ? ' · 已选同技能的其他档位' : ''
+    const passive = isPassiveTrainingBook(book.id)
+    const metaText = passive
+      ? `培养期携带生效 · 不占实战技能槽${reason}`
+      : `要求 ${bookRequirementText(book)} · 起点成功率 ${Math.round(bookLearnChance(base, book) * 100)}%${reason}`
     return `<label class="check-field training-book-option tier-${book.tier} ${check.ok && !duplicate ? '' : 'muted'}" title="${esc(reason)}">
       <input type="checkbox" data-training-book="${esc(key)}" ${checked ? 'checked' : ''} ${!checked && (!check.ok || duplicate || selected.size >= MAX_BOOKS) ? 'disabled' : ''}>
-      <span><span class="book-option-head">${tag(esc(bookTierLabel(book.tier)), `skill-${book.tier}`)} <b>${esc(bookName(book.id))}</b></span><small>${esc(SKILLS[book.id]?.desc ?? '')} ${esc(skillEffectText(book.id, book.tier))}</small><small class="muted">要求 ${esc(bookRequirementText(book))} · 起点成功率 ${Math.round(bookLearnChance(base, book) * 100)}%${esc(reason)}</small></span>
+      <span><span class="book-option-head">${tag(esc(bookTierLabel(book.tier)), `skill-${book.tier}`)} <b>${esc(bookName(book.id))}</b></span><small>${esc(SKILLS[book.id]?.desc ?? '')} ${esc(skillEffectText(book.id, book.tier))}</small><small class="muted">${esc(metaText)}</small></span>
     </label>`
   }).join('')
   const basicList = `<details class="training-basic-skills"><summary>本位置基础技能池（${basic.length} 项）</summary><div class="rows">${basic.map((id) => `<div class="row-line"><span><b>${esc(SKILLS[id].name)}</b> ${base.skills.includes(id) ? '<small class="muted">已掌握</small>' : ''}<small class="muted"> · ${esc(SKILLS[id].desc)} ${esc(skillEffectText(id, 'silver'))}</small></span></div>`).join('')}</div></details>`
@@ -332,6 +337,10 @@ function bookLoadout(session: TrainingSession): string {
   const teachers = names.length ? `<p class="hint pad">本轮技能来源队友（随机最多 5 人）：${names.map(esc).join('、')}。只有当前仍参与培养的人可提供选项。</p>` : ''
   if (!session.books?.length) return panel(`本轮技能书槽 <small>0 / ${MAX_BOOKS}</small>`, `<p class="hint pad">本轮未装备技能卡；交流赛后仍可学习共同培养的队友或位置基础技能。</p>${teachers}`, { flush: true, className: 'book-slot-panel' })
   const rows = session.books.map((book) => {
+    if (isPassiveTrainingBook(book.id)) {
+      const used = legendStarTriggersUsed(session)
+      return `<div class="row-line"><span>${tag(esc(bookTierLabel(book.tier)), `skill-${book.tier}`)} ${esc(bookName(book.id))} <small class="muted">携带生效 · 不占技能槽</small></span><b>${used}/${LEGEND_STAR_MAX_TRIGGERS} 次</b></div>`
+    }
     const check = canChooseTrainingBook(session.candidate, book)
     return `<div class="row-line"><span>${tag(esc(bookTierLabel(book.tier)), `skill-${book.tier}`)} ${esc(bookName(book.id))} <small class="muted">${check.ok ? esc(bookRequirementText(book)) : esc(check.reason ?? '')}</small></span><b>${check.ok ? `${Math.round(bookLearnChance(session.candidate, book) * 100)}%` : '—'}</b></div>`
   }).join('')
@@ -632,25 +641,35 @@ function legacyActionPanel(session: TrainingSession): string {
 
 function eventPanel(session: TrainingSession, event: NonNullable<ReturnType<typeof eventById>>): string {
   const isGk = session.candidate.positions.GK > 0
+  const isRainbow = event.rarity === 'rainbow'
   return panel(esc(event.title), `
     <p class="event-text">${esc(event.text)}</p>
     <div class="options">
       ${event.options.map((option) => {
         const choice = option.trainingSkill
-        const p = choice ? trainingSkillChance(session, choice) : option.book ? bookLearnChance(session.candidate, option.book) : option.branch ? branchProbability(session, option.branch.check, option.branch.p) : undefined
-        const replaceable = choice && !canLearnSkill(session.candidate.skills, choice.id) ? session.candidate.skills.filter((id) => skillCategory(id) === skillCategory(choice.id)).sort((a, b) => TIER_ORDER[getSkillTier(session.candidate, a)] - TIER_ORDER[getSkillTier(session.candidate, b)]) : []
+        const inherit = option.rainbowInherit
+        const p = inherit ? 1 : choice ? trainingSkillChance(session, choice) : option.book ? bookLearnChance(session.candidate, option.book) : option.branch ? branchProbability(session, option.branch.check, option.branch.p) : undefined
+        const replaceTarget = choice?.id ?? (inherit && !session.candidate.skills.includes(inherit.skill) ? inherit.skill : undefined)
+        const replaceable = replaceTarget && !canLearnSkill(session.candidate.skills, replaceTarget) ? session.candidate.skills.filter((id) => skillCategory(id) === skillCategory(replaceTarget)).sort((a, b) => TIER_ORDER[getSkillTier(session.candidate, a)] - TIER_ORDER[getSkillTier(session.candidate, b)]) : []
         const saved = ui.trainingEventReplacements[option.id]
         const replacement = saved && replaceable.includes(saved) ? saved : replaceable[0]
         const select = replacement ? `<label class="field-inline"><span>槽位已满，成功后替换</span><select data-event-replace="${esc(option.id)}">${replaceable.map((id) => `<option value="${esc(id)}" ${id === replacement ? 'selected' : ''}>${esc(skillName(id))} · ${{ silver: '银', gold: '金', rainbow: '彩' }[getSkillTier(session.candidate, id)]}</option>`).join('')}</select></label>` : ''
-        return `<div class="skill-choice"><button class="option" data-action="event-option" data-option="${esc(option.id)}">
-          <span class="option-head"><b>${esc(option.label)}</b>${p !== undefined ? `<span class="prob">${choice || option.book ? '成功率' : esc(option.branch?.chanceText ?? '成功率')} ${pct(p, 0)}</span>` : ''}</span>
-          <span class="option-hint">${esc(choice ? option.hint : displayEventHint(option.hint, isGk, eventGrowthScale(session)))}</span>
+        const hintText = choice || inherit || isRainbow || option.effect?.flatAttrs ? option.hint : displayEventHint(option.hint, isGk, eventGrowthScale(session))
+        return `<div class="skill-choice"><button class="option${isRainbow ? ' option-rainbow' : ''}" data-action="event-option" data-option="${esc(option.id)}">
+          <span class="option-head"><b>${esc(option.label)}</b>${p !== undefined ? `<span class="prob">${inherit ? '必成' : choice || option.book ? '成功率' : esc(option.branch?.chanceText ?? '成功率')} ${pct(p, 0)}</span>` : ''}</span>
+          <span class="option-hint">${esc(hintText)}</span>
           ${choice ? `<span class="option-hint">${esc(skillEffectText(choice.id, choice.source === 'book' ? choice.tier : choice.source === 'teammate' ? getSkillTier(choice.mentor, choice.id) : 'silver'))}</span>` : ''}
+          ${inherit ? `<span class="option-hint">${esc(skillEffectText(inherit.skill, 'rainbow'))}</span>` : ''}
           ${option.branch ? `<span class="branch-preview"><span class="up">成功：${esc(option.branch.success.text ?? '')}</span><span class="down">失败：${esc(option.branch.failure.text ?? '')}</span></span>` : choice || option.book ? `<span class="branch-preview"><span class="up">成功：学会技能${replacement ? '并替换所选技能' : ''}</span><span class="down">失败：保留原技能和技能书</span></span>` : ''}
         </button>${select}</div>`
       }).join('')}
     </div>
-  `, { className: 'event-panel', aside: tag(event.category === 'mainline' ? '主线' : event.category === 'chain' ? `事件链 ${event.stage}/3` : '训练事件', event.category === 'mainline' ? 'gold' : '') })
+  `, {
+    className: isRainbow ? 'event-panel event-rainbow' : 'event-panel',
+    aside: isRainbow
+      ? tag('彩色事件 · 传奇之星', 'skill-rainbow')
+      : tag(event.category === 'mainline' ? '主线' : event.category === 'chain' ? `事件链 ${event.stage}/3` : '训练事件', event.category === 'mainline' ? 'gold' : ''),
+  })
 }
 
 function candidatePanel(current: Player, cand: Player, session: TrainingSession): string {

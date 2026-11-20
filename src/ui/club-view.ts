@@ -6,6 +6,7 @@ import { ATTR_GROUPS } from '../game/data/attributes.ts'
 import { attrRating, mainAttrsFor } from '../game/rating.ts'
 import { loadedPublicClub, publicWorld, onlineState, type WorldPublicClub, type WorldPublicPlayer } from '../online.ts'
 import { PLAYER_TEAM_ID } from '../game/season.ts'
+import { isLegendCupTeamId, legendCupMetaById, legendCupTeamById } from '../game/data/legend-cup-teams.ts'
 import { attrHeat, attributeRadar, caHeat, humanMark, icon, ownName, panel, posBadge, positionMap, primaryPosition, skillGroups, tag, traitLabel } from './components.ts'
 import { attrLabel, esc, playerCA } from './format.ts'
 import { tipAttrs } from './tooltip.ts'
@@ -62,6 +63,23 @@ export function publicClubFor(world: WorldState | undefined, id: string): WorldP
   if (onlineState.status === 'online') {
     const loaded = loadedPublicClub(id, game.season.index)
     if (loaded) return loaded
+  }
+  const legendTeam = legendCupTeamById(id)
+  if (legendTeam) {
+    return {
+      id: legendTeam.id,
+      name: legendTeam.name,
+      color: legendTeam.color,
+      tier: 'champions',
+      formationId: legendTeam.formationId,
+      rating: Math.round(lineupRating(legendTeam.players, legendTeam.lineup)),
+      players: legendTeam.players.map(({ youthOrigin, id: playerId, name, enName, country, era, age, foot, height, positions, detailedPositions, attrs, baseAttrs, traitId, skills, skillTiers }) => ({
+        id: playerId, name, enName, country, era, age, foot, height, positions, detailedPositions, youthOrigin,
+        attrs: Object.fromEntries(mainAttrsFor(positions.GK > 0).map((key) => [key, attrs[key]])),
+        traitId, skills, skillTiers, ca: playerCA({ attrs, positions }),
+        baseCa: baseAttrs ? playerCA({ attrs: baseAttrs, positions }) : undefined,
+      })),
+    }
   }
   const found = snapshot?.clubs.find((club) => club.id === id || (id === 'player' && club.id === snapshot.ownClubId))
   if (found) return found
@@ -144,10 +162,14 @@ export function clubRosterPanel(club: WorldPublicClub, selectedId?: string | nul
     <td>${equippedCardCell(player)}</td>
     <td>${traitLabel(player.traitId)}</td></tr>`).join('')
   const own = club.id === PLAYER_TEAM_ID || (onlineState.status === 'online' && publicWorld?.ownClubId === club.id)
-  return `${panel(`${ownName(club.name, own)}${humanMark(club.id, !!club.managed, !!club.aiTakeover)}${club.aiTakeover ? ` ${tag('AI 接管中', 'gold')}` : ''} · 球员名单`, `<p class="hint">公开 CA、属性、位置、技能和他们现在装备的球员卡；实时体能、训练精力与伤病状态不公开。CA 是装备卡的评分，“原始”是没练过的属性。${club.aiTakeover ? ' 该球队教练已超过 3 天未上线，当前由 AI 临时接管阵容轮换与日常培养。' : ''}</p>
+  const legendMeta = legendCupMetaById(club.id)
+  const subtitle = legendMeta
+    ? `传奇杯历史特邀豪门 · 首发平均 CA ${legendMeta.targetCa} · 主教练：${esc(legendMeta.coach)} · ${esc(legendMeta.note)}`
+    : `公开 CA、属性、位置、技能和他们现在装备的球员卡；实时体能、训练精力与伤病状态不公开。CA 是装备卡的评分，“原始”是没练过的属性。${club.aiTakeover ? ' 该球队教练已超过 3 天未上线，当前由 AI 临时接管阵容轮换与日常培养。' : ''}`
+  return `${panel(`${ownName(club.name, own)}${humanMark(club.id, !!club.managed, !!club.aiTakeover)}${club.aiTakeover ? ` ${tag('AI 接管中', 'gold')}` : ''}${legendMeta ? ` ${tag(`传奇杯 CA ${legendMeta.targetCa}`, 'gold')}` : ''} · 球员名单`, `<p class="hint">${subtitle}</p>
     ${club.facilities ? `<p class="hint">设施：${facilityTags(club.facilities)}</p>` : ''}
     <div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th class="num">年龄</th><th class="num">CA</th><th>装备卡</th><th>特性</th></tr></thead><tbody>${rows}</tbody></table></div>`, { flush: true })}
-    ${selected ? `<div id="club-player-detail">${publicPlayerPanel(selected)}${!own && !game.roster.some(p => p.id === selected.id) ? renderScoutControls(selected.id, 'club', club.id) : ''}</div>` : ''}`
+    ${selected ? `<div id="club-player-detail">${publicPlayerPanel(selected)}${!own && !isLegendCupTeamId(club.id) && !game.roster.some(p => p.id === selected.id) ? renderScoutControls(selected.id, 'club', club.id) : ''}</div>` : ''}`
 }
 
 export function renderClubOverlay(): string {

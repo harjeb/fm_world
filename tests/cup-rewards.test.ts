@@ -15,21 +15,34 @@ function mainCeilings(game: ReturnType<typeof createInitialGame>) {
 }
 
 describe('杯赛冠军俱乐部上限奖励', () => {
-  it('三个杯赛分别 +100/+150/+200，且每个杯赛只发一次', () => {
+  it('奖杯上限按最高档唯一生效（社区 +100 / 联盟 +150 / 冠军 +200 / 星联 +250，不叠加），传奇杯不给上限', () => {
     const game = createInitialGame(71)
     const before = mainCeilings(game)
     expect(applyCupCeilingReward(game, 'community')).toBe(100)
+    expect(cupCeilingBonus(game)).toBe(100)
     expect(applyCupCeilingReward(game, 'league')).toBe(150)
+    expect(cupCeilingBonus(game)).toBe(150)
     expect(applyCupCeilingReward(game, 'champions')).toBe(200)
     expect(applyCupCeilingReward(game, 'champions')).toBe(0)
-    expect(cupCeilingBonus(game)).toBe(450)
+    expect(cupCeilingBonus(game)).toBe(200)
+    // 已有更高档后，再拿更低档或传奇杯不再提升上限
+    expect(applyCupCeilingReward(game, 'cross')).toBe(250)
+    expect(cupCeilingBonus(game)).toBe(250)
+    expect(applyCupCeilingReward(game, 'legend')).toBe(0)
+    expect(cupCeilingBonus(game)).toBe(250)
     const after = mainCeilings(game)
     for (let p = 0; p < after.length; p++) {
       for (let a = 0; a < after[p].length; a++) {
-        expect(after[p][a] - before[p][a]).toBeCloseTo(450, 5)
+        expect(after[p][a] - before[p][a]).toBeCloseTo(250, 5)
       }
     }
-    expect(CUP_CEILING_BONUS).toEqual({ community: 100, league: 150, champions: 200, cross: 250 })
+    expect(CUP_CEILING_BONUS).toEqual({ community: 100, league: 150, champions: 200, cross: 250, legend: 0 })
+
+    // 先拿星联杯 (+250) 再拿社区杯 (+100)：社区杯返回 0 且总上限保持 250
+    const rev = createInitialGame(711)
+    expect(applyCupCeilingReward(rev, 'cross')).toBe(250)
+    expect(applyCupCeilingReward(rev, 'community')).toBe(0)
+    expect(cupCeilingBonus(rev)).toBe(250)
   })
 
   it('上限被硬顶在 2000，不会超过道具硬上限', () => {
@@ -57,7 +70,7 @@ describe('杯赛冠军俱乐部上限奖励', () => {
     expect(started.ok, started.error).toBe(true)
     expect(game.training[player.id].cupCeilingBonus).toBe(100)
     applyCupCeilingReward(game, 'league')
-    expect(game.training[player.id].cupCeilingBonus).toBe(250)
+    expect(game.training[player.id].cupCeilingBonus).toBe(150)
   })
 
   it('旧版直接写入个人上限的奖杯加成会迁移成俱乐部实时加成，不会叠加两次', () => {
@@ -129,8 +142,8 @@ describe('杯赛冠军俱乐部上限奖励', () => {
     game.pve!.legacyCupCeilings = { [player.id]: backup }
     expect(ensureCupCeilingClaims(game)).toBe(true)
     expect(player.ceilings).toEqual(personal)
-    expect(cupCeilingBonus(game)).toBe(350)
-    expect(effectiveClubCeilings(player, 350).passing).toBe(personal.passing + 350)
+    expect(cupCeilingBonus(game)).toBe(200)
+    expect(effectiveClubCeilings(player, 200).passing).toBe(personal.passing + 200)
     expect(ensureCupCeilingClaims(game)).toBe(false)
   })
 

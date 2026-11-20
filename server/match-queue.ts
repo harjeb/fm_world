@@ -52,7 +52,7 @@ export class MatchQueue {
   }
   private persist(): void { atomicJson(this.indexPath, [...this.entries.values()]) }
 
-  enqueue(input: MatchJob): boolean {
+  enqueue(input: MatchJob, deferPersist = false): boolean {
     if (this.entries.has(input.id)) return false
     const file = this.file(input.id, 'input')
     // 崩溃可能发生在写快照和写索引之间；第一次锁定的快照永远优先。
@@ -60,8 +60,12 @@ export class MatchQueue {
     else atomicJson(file, input)
     const { id, season, divisionId, round, kickoffAt, lockedAt } = input
     this.entries.set(id, { id, season, divisionId, round, kickoffAt, lockedAt, status: fs.existsSync(this.file(id, 'result')) ? 'ready' : 'queued', attempts: 0 })
-    this.persist()
+    if (!deferPersist) this.persist()
     return true
+  }
+
+  flushIndex(): void {
+    this.persist()
   }
 
   ready(id: string): boolean {
@@ -86,13 +90,18 @@ export class MatchQueue {
   /** 每次最多启动一场，任务之间留出空隙；HTTP 请求只负责入队/发布，绝不运行仿真。 */
   async pump(now: number): Promise<void> {
     if (this.busy || this.closed || performance.now() < this.nextRunAt) return
-    const entry = [...this.entries.values()].filter((item) => item.status === 'queued' && (item.retryAt ?? -Infinity) <= now)
-      .sort((a, b) => a.kickoffAt - b.kickoffAt || a.id.localeCompare(b.id))[0]
+    let entry: JobEntry | undefined
+    for (const item of this.entries.values()) {
+      if (item.status !== 'queued' || (item.retryAt ?? -Infinity) > now) continue
+      if (!entry || item.kickoffAt < entry.kickoffAt || (item.kickoffAt === entry.kickoffAt && item.id.localeCompare(entry.id) < 0)) {
+        entry = item
+      }
+    }
     if (!entry) { this.stopWorker(); return }
     this.busy = true
     entry.status = 'running'
     entry.attempts++
-    this.persist()
+    if (!this.options.compute) this.persist()
     try {
       const input = JSON.parse(fs.readFileSync(this.file(entry.id, 'input'), 'utf8')) as MatchJob
       const result = await (this.options.compute ? this.options.compute(input) : this.computeInWorker(input))

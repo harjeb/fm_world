@@ -12,7 +12,7 @@ import { game, ui } from '../state.ts'
 function tierNote(): string {
   if (game.season.tier === 'division2') return '二级每个赛区前 3 名进升级杯：各区第 1 轮空，2/3 名先加赛，然后随机分两组打循环（瑞士轮），小组第一直接升级，两个小组第二再战决出第 3 个名额。'
   if (game.season.tier === 'division1') return '一级联赛前三升入冠军联赛，后三降入二级联赛。'
-  if (game.season.tier === 'champions') return '冠军联赛后三降入一级联赛。'
+  if (game.season.tier === 'champions') return '冠军联赛前四获得下赛季传奇杯资格，后三降入一级联赛。'
   return ''
 }
 
@@ -53,7 +53,7 @@ function myCupFixtures(): MyFixtureRow[] {
   if (!world || !cups || world.seasonCupMode !== 1 || cups.seasonIndex !== game.season.index) return []
   const ownId = world.clubs.find((club) => club.id === PLAYER_TEAM_ID)?.squadKey ?? PLAYER_TEAM_ID
   return cups.cups.flatMap((cup) => {
-    const prelim = (cup.rounds[0]?.byes.length ?? 0) > 0
+    const prelim = !cup.groups?.length && (cup.rounds[0]?.byes.length ?? 0) > 0
     return cup.rounds.flatMap((round) => round.fixtures
       .filter((fixture) => fixture.homeId === ownId || fixture.awayId === ownId)
       .map((fixture) => {
@@ -63,7 +63,7 @@ function myCupFixtures(): MyFixtureRow[] {
           kickoffAt: Number.isFinite(fixture.kickoffAt) ? fixture.kickoffAt : cup.dates[round.round - 1] ?? 0,
           competition: cup.name,
           competitionTone: 'info',
-          roundLabel: cupRoundLabel(round.round, cup.dates.length, prelim),
+          roundLabel: cupRoundLabel(round.round, cup.dates.length, prelim, round.stage, round.leg),
           home,
           opponent: home ? fixture.awayId : fixture.homeId,
           played: fixture.played,

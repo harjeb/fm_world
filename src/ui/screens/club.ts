@@ -7,6 +7,8 @@ import { isOnlineMode } from '../../online.ts'
 import { BASE_ROUND_INCOME, economyOf, FACILITIES, facilityLevel, facilityRoundIncome, facilityStageChance, facilityStageInLevel, facilityUpgradeCost, GOAL_INCOME_BONUS, HOME_ATMOSPHERE_BASE, HOME_STADIUM_MAX_BONUS, homeAtmosphereBonus, LEAGUE_WIN_BONUS, MAX_FACILITY_LEVEL, MAX_FACILITY_STAGE, projectedRoundIncome, STAGES_PER_LEVEL, type FacilityId } from '../../game/economy.ts'
 import { MAIN_ATTR_SCALE } from '../../game/scale.ts'
 import { CATEGORY_BONUS_PER_LEVEL, STADIUM_BONUS_PER_LEVEL } from '../../game/training.ts'
+import { cupCeilingBonus } from '../../game/cup-rewards.ts'
+import { legendBookLabel } from '../../game/legend-books.ts'
 import { bestMarketValue, transferWindowOpen } from '../../game/market.ts'
 import { caHeat, icon, ownName, pageHead, panel, posBadge, primaryPosition, tag, tile } from '../components.ts'
 import { esc, playerCA } from '../format.ts'
@@ -60,6 +62,7 @@ function trophyCabinet(): string {
     row.last = Math.max(row.last, trophy.seasonIndex)
     counts.set(trophy.cupId, row)
   }
+  const activeCeiling = cupCeilingBonus(game)
   return panel(`荣誉橱窗 <small>${trophies.length}</small>`, `
     <div class="trophy-grid">
       ${[...counts.values()].map((row) => `<div class="trophy-card">
@@ -70,11 +73,11 @@ function trophyCabinet(): string {
     <div class="rows trophy-list">
       ${trophies.map((trophy) => `<div class="row trophy-row">
         ${icon('star', 14)}
-        <span class="result-teams"><b>${esc(trophy.cupName)}</b> <span class="muted">第 ${trophy.seasonIndex} 赛季 · 决赛 ${esc(trophy.finalOpponent)}</span>${trophy.ceilingBonus ? ` <span class="tag gold">主属性上限 +${trophy.ceilingBonus}</span>` : ''}${trophy.goldPrize ? ` <span class="tag gold">夺冠金币 ${trophy.goldPrize.toLocaleString()}</span>` : ''}</span>
+        <span class="result-teams"><b>${esc(trophy.cupName)}</b> <span class="muted">第 ${trophy.seasonIndex} 赛季 · 决赛 ${esc(trophy.finalOpponent)}</span>${trophy.ceilingBonus ? ` <span class="tag gold">主属性上限 +${trophy.ceilingBonus}</span>` : ''}${trophy.rewardBook ? ` ${tag(`彩书 · ${esc(legendBookLabel(trophy.rewardBook))}`, 'skill-rainbow')}` : ''}${trophy.goldPrize ? ` <span class="tag gold">夺冠金币 ${trophy.goldPrize.toLocaleString()}</span>` : ''}</span>
         <span class="num"><b>${trophy.finalScore.home}:${trophy.finalScore.away}</b>${trophy.finalShootout ? ` <small class="muted">点球 ${trophy.finalShootout.home}:${trophy.finalShootout.away}</small>` : ''}</span>
         ${trophy.matchId && game.challengeHistory.some((record) => record.id === trophy.matchId) ? `<button class="btn small ghost" data-action="open-review" data-record="${esc(trophy.matchId)}">决赛战报</button>` : ''}
       </div>`).join('')}
-    </div>`, { flush: true })
+    </div>`, { flush: true, aside: activeCeiling > 0 ? `<span class="tag gold">当前奖杯上限 +${activeCeiling}（取最高）</span>` : '' })
 }
 
 /** 每个赛季一行：级别、名次、战绩、冠军，以及下赛季是升级还是降级。 */

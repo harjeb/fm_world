@@ -149,6 +149,7 @@ export type SkillId =
   | 'lg_peak_wall'
   | 'lg_peak_wing'
   | 'lg_peak_keeper'
+  | 'lg_legend_star'
   | ShopSkillId
 
 export type ShopSkillId =
@@ -197,7 +198,8 @@ export type ShopAuxSkillId =
   | 'sh_aux_discipline'
 
 export type PeakSkillId = 'lg_peak_striker' | 'lg_peak_engine' | 'lg_peak_wall' | 'lg_peak_wing' | 'lg_peak_keeper'
-export type LegendSkillId = Exclude<Extract<SkillId, `lg_${string}`>, PeakSkillId>
+export type SpecialBookSkillId = 'lg_legend_star'
+export type LegendSkillId = Exclude<Extract<SkillId, `lg_${string}`>, PeakSkillId | SpecialBookSkillId>
 
 export type SkillTier = 'silver' | 'gold' | 'rainbow'
 export type LegendBookTier = SkillTier
@@ -440,6 +442,8 @@ export type WorldSeasonSummary = {
   champion: string
   promotions: string[]
   relegations: string[]
+  /** 该赛季冠军联赛最终前四，用于下一赛季传奇杯参赛资格。 */
+  championsTop4?: string[]
 }
 
 export type WorldState = {
@@ -636,6 +640,8 @@ export type EventCategory = 'mainline' | 'training' | 'personality' | 'teammate'
 export type EventEffect = {
   text?: string
   attrs?: Partial<Record<AttrKey, number>>
+  /** 直接按存档刻度发放的固定属性净增（如传奇之星彩色事件 +100），不经事件倍率/建筑/心情缩放，仍受上限约束。 */
+  flatAttrs?: Partial<Record<AttrKey, number>>
   fatigue?: number
   route?: { id: RouteId; points: number }
   routeOwn?: number
@@ -671,6 +677,8 @@ export type EventOption = {
   book?: { id: SkillBookId; tier: LegendBookTier }
   /** 交流赛后的技能学习（含书、队友和基础技能）。 */
   trainingSkill?: TrainingSkillChoice
+  /** 传奇之星隐藏事件：100% 继承同位置真实球星的彩虹招牌技能。 */
+  rainbowInherit?: { skill: SkillId; starName: string }
 }
 
 export type EventTrigger = {
@@ -695,6 +703,8 @@ export type EventDef = {
   id: string
   title: string
   category: EventCategory
+  /** 特殊视觉稀有度（如传奇之星触发的彩色事件）。 */
+  rarity?: 'rainbow'
   chain?: string
   stage?: number
   mainline?: boolean
@@ -1140,6 +1150,8 @@ export type TrophyRecord = {
   finalShootout?: { home: number; away: number }
   /** 首次夺冠时发放的俱乐部主属性上限奖励。 */
   ceilingBonus?: number
+  /** 首次夺冠时发放的专属技能书奖励（如传奇杯《传奇之星》彩书）。 */
+  rewardBook?: LegendBook
   /** 本届额外夺冠金币（不含每场参赛金）。 */
   goldPrize?: number
   matchId?: string

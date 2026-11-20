@@ -2,6 +2,7 @@ import type { BaseTraitId, SkillId, TraitEffect } from '../types.ts'
 import { LEGEND_SKILLS } from './legend-skills.ts'
 import { PEAK_SKILLS } from './peak-skills.ts'
 import { SHOP_SKILLS } from './shop-skills.ts'
+import { SPECIAL_BOOK_SKILLS } from './legend-cup-skill.ts'
 
 export type { BaseTraitId }
 
@@ -33,6 +34,7 @@ export type SkillDef = {
 export const SKILLS: Record<SkillId, SkillDef> = {
   ...LEGEND_SKILLS,
   ...PEAK_SKILLS,
+  ...SPECIAL_BOOK_SKILLS,
   ...SHOP_SKILLS,
   through_ball: {
     id: 'through_ball',

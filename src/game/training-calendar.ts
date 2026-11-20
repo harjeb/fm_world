@@ -164,6 +164,9 @@ export function isSpecialActivityAvailable(session: TrainingSession, item: Train
  * - 门将从 13 项门将课程中抽取 6 项；
  * - 末尾固定附上「导师复盘」与「恢复」，共 8 个选项。
  */
+const FIELD_ATTR_ACTIVITIES = ACTIVITIES.filter((item) => item.id !== 'mentor' && !!item.gains)
+const FIELD_SPECIAL_ACTIVITIES = ACTIVITIES.filter((item) => item.id !== 'mentor' && !item.gains)
+
 export function trainingOptions(session: TrainingSession): TrainingActivity[] {
   if (session.scheduleVersion !== 1 || session.completed || session.action >= (session.actionsTotal ?? 18)) return []
   const date = trainingDate(session.action + 1)
@@ -179,8 +182,8 @@ export function trainingOptions(session: TrainingSession): TrainingActivity[] {
     }
     return [...chosen, MENTOR_ACTIVITY, REST]
   }
-  const attrPool = ACTIVITIES.filter((item) => item.id !== 'mentor' && !!item.gains)
-  const specialPool = ACTIVITIES.filter((item) => item.id !== 'mentor' && !item.gains && isSpecialActivityAvailable(session, item))
+  const attrPool = [...FIELD_ATTR_ACTIVITIES]
+  const specialPool = FIELD_SPECIAL_ACTIVITIES.filter((item) => isSpecialActivityAvailable(session, item))
   const chosen: TrainingActivity[] = []
   const guaranteedAttrCount = DRAWN_OPTIONS_PER_SLOT - 1
   for (let i = 0; i < guaranteedAttrCount && attrPool.length > 0; i++) {

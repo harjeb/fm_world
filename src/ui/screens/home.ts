@@ -6,10 +6,11 @@ import { validateLineup } from '../../game/squad.ts'
 import { SQUAD_LIMIT } from '../../game/market.ts'
 import { trainingActionsTotal } from '../../game/training.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
+import { legendCupMetaById } from '../../game/data/legend-cup-teams.ts'
 import { isOnlineMode, onlineKickoffPending, serverNow } from '../../online.ts'
 import { boardMarkings, boardSpot, caHeat, clubLook, crest, emptyState, formPills, humanMark, icon, injuryLabel, leagueTable, meter, ownName, pageHead, panel, recordResult, resultPill, tag, teamForm, tile } from '../components.ts'
 import { isHighOffer } from '../../game/transfers.ts'
-import { countdownText, esc, kickoffTimeLabel, matchModeLabel, playerCA, pveModeLabel, shortName } from '../format.ts'
+import { countdownText, cupRoundLabel, esc, kickoffTimeLabel, matchModeLabel, playerCA, pveModeLabel, shortName } from '../format.ts'
 import { game } from '../state.ts'
 import type { IconName } from '../icons.ts'
 
@@ -26,11 +27,13 @@ function nextMatchSide(teamId: string, align: 'left' | 'right', isMe: boolean): 
   const look = clubLook(teamId)
   const rank = rankOf(teamId)
   const row = game.season.table.find((item) => item.teamId === teamId)
+  const legend = legendCupMetaById(teamId)
+  const meta = rank ? `第 ${rank} 名 · ${row?.points ?? 0} 分` : legend ? `传奇杯豪门 · CA ${legend.targetCa}` : ''
   return `<div class="nm-team ${align} ${isMe ? 'me' : ''}">
     ${crest(look, 64)}
     <div class="nm-team-text">
       <b>${esc(look.name)}${humanMark(teamId)}</b>
-      <span class="muted">${rank ? `第 ${rank} 名 · ${row?.points ?? 0} 分` : ''}</span>
+      <span class="muted">${esc(meta)}</span>
       ${formPills(teamForm(teamId, game.season.fixtures))}
     </div>
   </div>`
@@ -59,19 +62,19 @@ function nextMatchPanel(): string {
       <button class="btn primary" data-nav="match">${icon('play', 14)}继续比赛</button>
     </div>${recentLeagueResult()}</div>`, { className: 'next-match span-8' })
   }
-  if (season.finished) {
+  const clubId = game.world?.clubs.find(club => club.id === 'player')?.squadKey
+  const seasonCups = game.world?.seasonCupMode === 1 && game.world.seasonCups?.seasonIndex === season.index ? game.world.seasonCups : undefined
+  const cup = clubId && seasonCups ? seasonCups.cups.flatMap(item => item.rounds.flatMap(round => round.fixtures.map(fixture => ({ cup: item, fixture }))))
+    .filter(item => !item.fixture.played && (item.fixture.homeId === clubId || item.fixture.awayId === clubId))
+    .sort((a, b) => a.fixture.kickoffAt - b.fixture.kickoffAt)[0] : undefined
+  if (season.finished && !cup) {
     return panel('赛季结束', `<div class="nm-stack"><div class="nm-live">
       <div>${icon('star', 22)}</div>
       <div><b>冠军：${ownName(teamName(game, season.champion ?? ''), season.champion === PLAYER_TEAM_ID)}</b><p class="muted">你的最终排名：第 ${season.playerFinish ?? '—'} 名。升降级和合同会在新赛季开始时结算。</p></div>
       <button class="btn primary" data-action="next-season">${icon('play', 14)}开始下一赛季</button>
     </div>${recentLeagueResult()}</div>`, { className: 'next-match span-8' })
   }
-  const league = season.fixtures.filter(item => item.isPlayer && !item.played).sort((a, b) => a.round - b.round)[0]
-  const clubId = game.world?.clubs.find(club => club.id === 'player')?.squadKey
-  const seasonCups = game.world?.seasonCupMode === 1 && game.world.seasonCups?.seasonIndex === season.index ? game.world.seasonCups : undefined
-  const cup = clubId && seasonCups ? seasonCups.cups.flatMap(item => item.rounds.flatMap(round => round.fixtures.map(fixture => ({ cup: item, fixture }))))
-    .filter(item => !item.fixture.played && (item.fixture.homeId === clubId || item.fixture.awayId === clubId))
-    .sort((a, b) => a.fixture.kickoffAt - b.fixture.kickoffAt)[0] : undefined
+  const league = season.finished ? undefined : season.fixtures.filter(item => item.isPlayer && !item.played).sort((a, b) => a.round - b.round)[0]
   const cupFirst = !!cup && (!league || cup.fixture.kickoffAt < roundKickoffAt(game, league.round))
   const fixture = cupFirst ? { ...cup!.fixture, homeId: cup!.fixture.homeId === clubId ? PLAYER_TEAM_ID : cup!.fixture.homeId, awayId: cup!.fixture.awayId === clubId ? PLAYER_TEAM_ID : cup!.fixture.awayId, isPlayer: true } : league
   if (!fixture) {
@@ -83,16 +86,19 @@ function nextMatchPanel(): string {
   const countdown = kickoffAt > now ? shortCountdown(kickoffAt - now) : '比赛待结算'
   const startButton = !isOnlineMode() && !cupFirst && fixture.round === season.round
     ? `<button class="btn primary nm-go" data-action="start-league">${icon('play', 14)}跳至比赛日</button>` : ''
+  const cupRoundText = cupFirst
+    ? cupRoundLabel(cup!.fixture.round, cup!.cup.dates.length, !cup!.cup.groups?.length && (cup!.cup.rounds[0]?.byes.length ?? 0) > 0, cup!.fixture.stage, cup!.fixture.leg)
+    : `第 ${fixture.round} 轮`
   return panel('下一轮预告', `<div class="nm-stack" data-next-round="${fixture.round}"><div class="nm-body">
       ${nextMatchSide(fixture.homeId, 'left', homeIsMe)}
       <div class="nm-center">
         <div class="nm-vs">VS</div>
-        <div class="nm-meta">${homeIsMe ? '主场' : '客场'} · ${cupFirst ? tag(esc(cup!.cup.name), 'info') : tag('联赛')} 第 ${fixture.round} 轮</div>
+        <div class="nm-meta">${homeIsMe ? '主场' : '客场'} · ${cupFirst ? tag(esc(cup!.cup.name), 'info') : tag('联赛')} ${esc(cupRoundText)}</div>
         <div class="nm-meta">${icon('clock', 13)} ${esc(kickoffTimeLabel(kickoffAt))} · ${kickoffAt > now ? `距开赛 ${esc(countdown)}` : esc(countdown)}</div>
         ${startButton}
       </div>
       ${nextMatchSide(fixture.awayId, 'right', !homeIsMe)}
-    </div>${recentLeagueResult()}</div>`, { aside: `<span class="muted">${cupFirst ? `${esc(cup!.cup.name)} · ` : ''}第 ${fixture.round} 轮</span>`, className: 'next-match span-8' })
+    </div>${recentLeagueResult()}</div>`, { aside: `<span class="muted">${cupFirst ? `${esc(cup!.cup.name)} · ` : ''}${esc(cupRoundText)}</span>`, className: 'next-match span-8' })
 }
 
 function clubStatusPanel(): string {

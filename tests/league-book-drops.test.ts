@@ -68,6 +68,16 @@ describe('联赛技能书掉落', () => {
     let upgrade
     for (let seed = 0; seed < 500 && !upgrade; seed++) upgrade = awardLeagueBookDrops(silverOwner, { players: [player], stats, seed, label: 'u' })[0]
     expect(upgrade?.tier).toBe('gold')
+
+    // 真实球星身上的彩虹招牌技能：联赛掉落封顶金色（绝不掉彩书），已有金书后不再重复掉落
+    const rainbowStar: DropPlayer = { id: 'messi', name: '梅西', skills: ['box_hunter'], skillTiers: { box_hunter: 'rainbow' } }
+    const starStats = [{ playerId: 'home:messi', sourceId: 'messi', name: '梅西', side: 'home', minutes: 90 } as PlayerMatchStats]
+    const starGame = blankGame()
+    let starDrop
+    for (let seed = 0; seed < 500 && !starDrop; seed++) starDrop = awardLeagueBookDrops(starGame, { players: [rainbowStar], stats: starStats, seed, label: 'star' })[0]
+    expect(starDrop).toMatchObject({ id: 'box_hunter', tier: 'gold' })
+    expect(starGame.legendBooks).toEqual([{ id: 'box_hunter', tier: 'gold' }])
+    for (let seed = 0; seed < 500; seed++) expect(awardLeagueBookDrops(starGame, { players: [rainbowStar], stats: starStats, seed, label: 'star2' })).toEqual([])
   })
 
   it('基础技能书可以入库、配置并按单项属性计算门槛', () => {

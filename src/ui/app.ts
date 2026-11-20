@@ -1145,7 +1145,7 @@ document.addEventListener('click', async (event) => {
   const seasonCupTab = target.closest<HTMLElement>('[data-season-cup-tab]')
   if (seasonCupTab?.dataset.seasonCupTab) {
     const id = seasonCupTab.dataset.seasonCupTab
-    if (id === 'community' || id === 'league' || id === 'champions' || id === 'cross') ui.seasonCupTab = id
+    if (id === 'community' || id === 'league' || id === 'champions' || id === 'cross' || id === 'legend') ui.seasonCupTab = id
     render()
     return
   }

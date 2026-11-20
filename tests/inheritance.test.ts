@@ -46,18 +46,21 @@ describe('skill inheritance', () => {
     expect(validateInheritance(session, mentor, 'injury_resilience')).toBeTruthy()
   })
 
-  it('never inherits a tier above the mentor, and rainbow mentors can pass rainbow', () => {
+  it('never inherits a tier above gold (caps rainbow mentors to gold to keep star rainbow skills unique)', () => {
     for (const tier of ['silver', 'gold', 'rainbow'] as const) {
       const received = new Set<string>()
       for (let seed = 0; seed < 500; seed++) {
         const { session, mentor } = setup(seed)
         Object.assign(mentor, { skillTiers: { through_ball: tier } })
+        if (seed === 0) {
+          expect(inheritanceChances(session, mentor, 'through_ball').rainbow).toBe(0)
+        }
         const result = mentorSkill(session, mentor, 'through_ball')
         if (result.ok && result.tier) received.add(result.tier)
       }
       expect(received.has('silver')).toBe(true)
       expect(received.has('gold')).toBe(tier !== 'silver')
-      expect(received.has('rainbow')).toBe(tier === 'rainbow')
+      expect(received.has('rainbow')).toBe(false)
     }
   })
 

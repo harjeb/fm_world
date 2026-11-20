@@ -13,6 +13,7 @@ import { injuryUntil } from '../game/injury.ts'
 import { attrRating, initialDisplayCA, mainAttrsFor } from '../game/rating.ts'
 import { isMainAttr } from '../game/scale.ts'
 import { PLAYER_TEAM_ID, teamName } from '../game/season.ts'
+import { legendCupMetaById } from '../game/data/legend-cup-teams.ts'
 import { worldTransferTeams } from '../game/world.ts'
 import { latestRoundRankChanges } from '../game/standings-history.ts'
 import { isOnlineMode, marketState, onlineState, publicWorld } from '../online.ts'
@@ -28,6 +29,8 @@ const FALLBACK_COLOR = '#34d399'
 export type ClubLook = { id: string; name: string; enName?: string; color: string }
 
 export function clubLook(id: string): ClubLook {
+  const legend = legendCupMetaById(id)
+  if (legend) return { id, name: legend.name, enName: `${legend.clubEn} (${legend.season})`, color: legend.color }
   const onlineClub = id !== PLAYER_TEAM_ID && isOnlineMode() ? publicWorld?.clubs.find((item) => item.id === id) : undefined
   const club = game.world?.clubs.find((item) => item.id === id) ?? game.aiTeams.find((item) => item.id === id)
   return {

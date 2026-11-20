@@ -29,7 +29,9 @@ import { upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTra
 import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, migrateLegacyExpandedTactics, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, repairInflatedContractWages, syncAllClubLiveTactics, syncClubLiveTactics, wageForPlayer, worldForClub, worldSlots, worldWageBill } from '../src/game/world.ts'
 import { pickExpandedZoneClubs } from '../src/game/data/world-clubs.ts'
 import { lineupLockState } from '../src/game/season.ts'
-import { completedWorldRound, seasonRoundKickoff, worldRoundsKickedOff } from '../src/game/season-cups.ts'
+import { completedWorldRound, paysSeasonCupAppearanceGold, seasonRoundKickoff, worldRoundsKickedOff } from '../src/game/season-cups.ts'
+import { legendCupTeamById } from '../src/game/data/legend-cup-teams.ts'
+import { LEGEND_STAR_BOOK_ID } from '../src/game/data/legend-cup-skill.ts'
 import type { AIClubState, AITeam, Player, WorldClub, WorldState } from '../src/game/types.ts'
 import { caOf } from '../src/game/ca.ts'
 import { refreshAILineup, refreshAILineups, repairLineup } from '../src/game/squad.ts'
@@ -570,7 +572,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         fixture.playerStats ??= seasonCupPlayerStats(result.record)
         changed = true
       }
-      if (rewardBackfill) for (const locked of [input.home, input.away]) {
+      if (rewardBackfill && paysSeasonCupAppearanceGold(fixture)) for (const locked of [input.home, input.away]) {
         const ai = !locked.coachId ? sharedWorld.aiClubs?.[locked.team.id] : undefined
         if (!ai) continue
         const champion = cup.championId === locked.team.id && round.round === cup.rounds.at(-1)?.round && round.fixtures.length === 1 && fixture.winnerId === locked.team.id
@@ -767,6 +769,23 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
   /** 锁定的是整份比赛输入，不只首发 ID；之后训练、换卡或转会也不能改变已入队的本场。 */
   function lockedTeamFor(clubId: string): LockedTeam | null {
+    const legendTeam = legendCupTeamById(clubId)
+    if (legendTeam) {
+      const injuries: Record<string, number> = {}
+      for (const player of legendTeam.players) {
+        const until = sharedWorld.matchBook?.injuries[player.id]
+        if (until) injuries[player.id] = until
+      }
+      return {
+        team: legendTeam,
+        injuries,
+        suspended: [],
+        medical: 25,
+        tacticsStage: 25,
+        stadiumStage: 25,
+        ai: true,
+      }
+    }
     const team = sharedWorld.teams?.[clubId]
     if (!team) return null
     const account = db.accounts.find((item) => item.id === sharedWorld.owners[clubId])
@@ -891,7 +910,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         const record = recordForClub(input, result, clubId)
         recordYouthMatch(game, record)
         if (!game.challengeHistory.some(item => item.id === fixture.matchId)) { game.challengeHistory.unshift(record); changed = true }
-        if (awardSeasonCupMatch(game, cup.id, fixture.matchId)) { changed = true; rewardChanged = true }
+        if (paysSeasonCupAppearanceGold(fixture) && awardSeasonCupMatch(game, cup.id, fixture.matchId)) { changed = true; rewardChanged = true }
         if (cup.championId === clubId && round.round === cup.rounds.at(-1)?.round && round.fixtures.length === 1 && fixture.winnerId === clubId) {
           ensurePve(game)
           let trophy = game.pve!.trophies.find(item => item.cupId === `season-${cup.id}` && item.seasonIndex === input.season)
@@ -908,7 +927,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
             changed = true
           }
           const reward = awardSeasonCupChampion(game, cup.id, input.season, trophy)
-          if (reward.gold || reward.ceiling) { changed = true; rewardChanged = true }
+          if (reward.gold || reward.ceiling || reward.book) { changed = true; rewardChanged = true }
         }
       }
       if (!applied.has(fixture.matchId)) { applied.add(fixture.matchId); changed = true }
@@ -2782,6 +2801,26 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       advanceAllMatches()
       const requested = url.searchParams.get('id')
       const id = requested === 'player' ? ownedClubId(account) : requested
+      if (id) {
+        const legendTeam = legendCupTeamById(id)
+        if (legendTeam) {
+          await sendJson(200, {
+            club: {
+              id: legendTeam.id,
+              name: legendTeam.name,
+              color: legendTeam.color,
+              tier: 'champions' as const,
+              managed: false,
+              aiTakeover: false,
+              formationId: legendTeam.formationId,
+              players: legendTeam.players.map(publicPlayer),
+              rating: Math.round(lineupRating(legendTeam.players, legendTeam.lineup)),
+            },
+            seasonIndex: sharedWorld.world.seasonIndex,
+          })
+          return
+        }
+      }
       const club = sharedWorld.world.clubs.find(item => item.id === id)
       if (!club) return json(res, 404, { error: '找不到这支球队' })
       await sendJson(200, { club: publicWorldClub(club, true), seasonIndex: sharedWorld.world.seasonIndex })
@@ -3170,6 +3209,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         const owned = account.game.pve.cupCeilingClaims ?? {}
         body.game.pve.cupCeilingClaims = { ...(body.game.pve.cupCeilingClaims ?? {}), ...owned }
         if (!owned.cross) delete body.game.pve.cupCeilingClaims.cross
+        if (!owned.legend) delete body.game.pve.cupCeilingClaims.legend
         ensureCupCeilingClaims(body.game)
       }
       preservePeakAttempts(account.game, body.game)
@@ -3206,7 +3246,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       incomingGame.appearances = account.game.appearances
       incomingGame.suspensions = account.game.suspensions
       incomingGame.yellowCounts = account.game.yellowCounts
-      // 技能书永不消耗：服务器联赛掉落的书不能被尚未刷新的旧页面保存覆盖掉。
+      // 技能书永不消耗：服务器联赛掉落的书不能被尚未刷新的旧页面保存覆盖掉；传奇杯首冠专属彩书《传奇之星》只能由服务器权威发放，防客户端伪造。
+      const hadLegendStar = (account.game.legendBooks ?? []).some((book) => book.id === LEGEND_STAR_BOOK_ID)
+      if (!hadLegendStar && incomingGame.legendBooks?.length) {
+        incomingGame.legendBooks = incomingGame.legendBooks.filter((book) => book.id !== LEGEND_STAR_BOOK_ID)
+      }
       const bookKeys = new Set((incomingGame.legendBooks ?? []).map((book) => `${book.id}:${book.tier}`))
       const serverBooks = (account.game.legendBooks ?? []).filter((book) => !bookKeys.has(`${book.id}:${book.tier}`))
       if (serverBooks.length) incomingGame.legendBooks = [...(incomingGame.legendBooks ?? []), ...serverBooks]

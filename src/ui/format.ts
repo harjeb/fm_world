@@ -72,8 +72,14 @@ export function kickoffTimeLabel(at: number): string {
   return new Date(at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
-/** 杯赛轮次名称：预选赛 / 16 强 / 1/4 决赛 / 半决赛 / 决赛。 */
-export function cupRoundLabel(round: number, total: number, prelim: boolean): string {
+/** 杯赛轮次名称：小组赛第 X 轮 / 两回合首·次回合 / 预选赛 / 16 强 / 1/4 决赛 / 半决赛 / 决赛。 */
+export function cupRoundLabel(round: number, total: number, prelim: boolean, stage?: 'group' | 'knockout', leg?: 1 | 2): string {
+  if (stage === 'group') return `小组赛第 ${round} 轮`
+  if (leg === 1 || leg === 2) {
+    const after = total - (leg === 1 ? round + 1 : round)
+    const tieName = after <= 1 ? '半决赛' : after <= 3 ? '四分之一决赛' : `${2 ** (Math.floor(after / 2) + 2)} 强`
+    return `${tieName} · ${leg === 1 ? '首回合' : '次回合'}`
+  }
   if (round === 1 && prelim) return '预选赛'
   const remaining = total - round
   if (remaining <= 0) return '决赛'

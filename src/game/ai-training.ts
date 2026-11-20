@@ -49,9 +49,12 @@ function chooseActivity(session: TrainingSession, weights: Map<AttrKey, number>)
 }
 
 function optionScore(session: TrainingSession, option: EventOption, weights: Map<AttrKey, number>): number {
-  const score = (effect: { attrs?: Partial<Record<AttrKey, number>> } | undefined): number => {
+  const score = (effect: { attrs?: Partial<Record<AttrKey, number>>; flatAttrs?: Partial<Record<AttrKey, number>> } | undefined): number => {
     let total = 0
     for (const [attr, gain] of Object.entries(effect?.attrs ?? {}) as [AttrKey, number][]) {
+      if (gain > 0) total += gain * (weights.get(attr) ?? 0)
+    }
+    for (const [attr, gain] of Object.entries(effect?.flatAttrs ?? {}) as [AttrKey, number][]) {
       if (gain > 0) total += gain * (weights.get(attr) ?? 0)
     }
     return total

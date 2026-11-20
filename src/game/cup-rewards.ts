@@ -5,21 +5,24 @@ import type { Attributes, GameState, Player, TrainingSession } from './types.ts'
 import { createPlayerFromSeed, seedById } from './data/players.ts'
 import { normalizeCeilings } from './data/attr-profile.ts'
 import { legendValue } from './legend-bonus.ts'
+import { addLegendBook } from './legend-books.ts'
 import { attrHardLimit, mainAttrsFor } from './scale.ts'
 
-/** 每种奖杯只生效一次；旧挑战杯和同名赛季杯共用一次加成。 */
+/** 每种杯赛对应一个俱乐部主属性上限档位；多项冠军只取最高值，不叠加。传奇杯不给上限（改为专属彩书）。 */
 export const CUP_CEILING_BONUS: Record<SeasonCupId, number> = {
   community: SEASON_CUP_REWARDS.community.ceiling,
   league: SEASON_CUP_REWARDS.league.ceiling,
   champions: SEASON_CUP_REWARDS.champions.ceiling,
   cross: SEASON_CUP_REWARDS.cross.ceiling,
+  legend: SEASON_CUP_REWARDS.legend.ceiling,
 }
 
 const LEGACY_CUP_IDS: CupId[] = ['community', 'league', 'champions']
-const CUP_IDS: SeasonCupId[] = [...LEGACY_CUP_IDS, 'cross']
+const CUP_IDS: SeasonCupId[] = [...LEGACY_CUP_IDS, 'cross', 'legend']
 
+/** 奖杯主属性上限唯一生效：只取已获各类杯赛冠军中的最高值，不叠加。 */
 export function cupCeilingBonusFromClaims(claims?: Partial<Record<string, true>>): number {
-  return CUP_IDS.reduce((sum, id) => sum + (claims?.[id] ? CUP_CEILING_BONUS[id] : 0), 0)
+  return CUP_IDS.reduce((max, id) => (claims?.[id] ? Math.max(max, CUP_CEILING_BONUS[id]) : max), 0)
 }
 const CLUB_CEILING_VERSION = 3
 
@@ -65,14 +68,18 @@ export function syncCupCeilingSessions(game: GameState): boolean {
   return changed
 }
 
-/** 发放俱乐部永久加成；同一杯赛重复夺冠不会叠加。 */
+/** 发放俱乐部奖杯上限加成（多项冠军只取最高值不叠加）；返回新解锁的最高上限档位，未提升则返回 0。 */
 export function applyCupCeilingReward(game: GameState, cupId: SeasonCupId): number {
   if (!game.pve || !Object.hasOwn(CUP_CEILING_BONUS, cupId)) return 0
+  const tierBonus = CUP_CEILING_BONUS[cupId]
+  if (!(tierBonus > 0)) return 0
   const claims = (game.pve.cupCeilingClaims ??= {})
   if (claims[cupId]) return 0
+  const before = cupCeilingBonus(game)
   claims[cupId] = true
   syncCupCeilingSessions(game)
-  return CUP_CEILING_BONUS[cupId]
+  const after = cupCeilingBonus(game)
+  return after > before ? tierBonus : 0
 }
 
 /** Only separate an embedded reward when the full original ceiling vector is recoverable. */
@@ -159,6 +166,12 @@ export function ensureCupCeilingClaims(game: GameState): boolean {
     const official = trophy.cupId.startsWith('season-')
     const cupId = (official ? trophy.cupId.slice('season-'.length) : trophy.cupId) as SeasonCupId
     if (!Object.hasOwn(CUP_CEILING_BONUS, cupId)) continue
+    const rewardBook = SEASON_CUP_REWARDS[cupId]?.book
+    if (rewardBook && addLegendBook(game, rewardBook.id, rewardBook.tier)) {
+      trophy.rewardBook ??= { ...rewardBook }
+      changed = true
+    }
+    if (!(CUP_CEILING_BONUS[cupId] > 0)) continue
     if (pve.cupCeilingClaims[cupId]) {
       // 赛季杯后续夺冠只发金币，不要把旧的首次上限奖励标到每座奖杯上。
       if (!official && !trophy.ceilingBonus) {

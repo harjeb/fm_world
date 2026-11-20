@@ -647,13 +647,19 @@ function autoEventOption(session: TrainingSession, event: EventDef, weights: Aut
       const weight = weightOf.get(key) ?? 0
       if (gain > 0 && weight > 0) total += gain * weight
     }
+    for (const [key, gain] of Object.entries(effect?.flatAttrs ?? {}) as [AttrKey, number][]) {
+      const weight = weightOf.get(key) ?? 0
+      if (gain > 0 && weight > 0) total += gain * weight
+    }
     if (lowStamina && effect?.fatigue) total -= effect.fatigue * 0.15
     return total
   }
   let best = event.options[0]
   let bestScore = -Infinity
   for (const option of event.options) {
-    const value = option.trainingSkill
+    const value = option.rainbowInherit
+      ? 1000
+      : option.trainingSkill
       ? ({ book: 850, teammate: 650, basic: 500 }[option.trainingSkill.source] * trainingSkillChance(session, option.trainingSkill))
       : option.book
       ? (() => {
@@ -697,9 +703,11 @@ export function autoTrainingStep(game: GameState, playerId: string): AutoTrainin
     if (!event) return { ok: false, error: '未知的事件配置', completed: false, kind: 'event' }
     const option = autoEventOption(session, event, weights)
     const choice = option.trainingSkill
+    const inheritSkill = option.rainbowInherit?.skill
     const rank = { silver: 0, gold: 1, rainbow: 2 }
-    const replace = choice && !canLearnSkill(session.candidate.skills, choice.id)
-      ? session.candidate.skills.filter((id) => skillCategory(id) === skillCategory(choice.id)).sort((a, b) => rank[getSkillTier(session.candidate, a)] - rank[getSkillTier(session.candidate, b)])[0]
+    const targetSkill = choice?.id ?? (inheritSkill && !session.candidate.skills.includes(inheritSkill) ? inheritSkill : undefined)
+    const replace = targetSkill && !canLearnSkill(session.candidate.skills, targetSkill)
+      ? session.candidate.skills.filter((id) => skillCategory(id) === skillCategory(targetSkill)).sort((a, b) => rank[getSkillTier(session.candidate, a)] - rank[getSkillTier(session.candidate, b)])[0]
       : undefined
     const result = trainingEventChoice(game, playerId, option.id, replace)
     if (!result.ok) return { ok: false, error: result.error ?? '事件结算失败', completed: false, kind: 'event' }

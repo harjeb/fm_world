@@ -22,7 +22,8 @@ import { FACILITY_STAGE_VERSION, MAX_FACILITY_LEVEL, MAX_FACILITY_STAGE, STAGES_
 import { addTrainedCard, closeFinishedTraining, deleteCard, equipCard } from './cards.ts'
 import { attrMax, attrRating, CA_MAX, MAIN_ATTR_MAX, displayGain, isMainAttr, scaleAuthoredGains } from './rating.ts'
 import { inheritanceChances } from './inheritance.ts'
-import { bookLearnChance, drawTrainingSkills, eventForSession, grantBookSkill, grantTrainingSkill, skillChoiceReplacementError, trainingSkillChance, bookTierLabel, MAX_SKILL_TEACHERS, MATCH_BOOK_EVENT_ID } from './legend-learning.ts'
+import { bookLearnChance, canTriggerLegendStarEvent, canTriggerLegendStarInherit, drawTrainingSkills, eventForSession, grantBookSkill, grantRainbowInheritSkill, grantTrainingSkill, legendStarEventFor, legendStarInheritEventFor, rainbowInheritReplacementError, skillChoiceReplacementError, trainingSkillChance, bookTierLabel, MAX_SKILL_TEACHERS, MATCH_BOOK_EVENT_ID } from './legend-learning.ts'
+import { LEGEND_STAR_EVENT_CHANCE, LEGEND_STAR_EVENT_ID, LEGEND_STAR_INHERIT_CHANCE, LEGEND_STAR_INHERIT_EVENT_ID } from './data/legend-cup-skill.ts'
 import { effectiveTrainingCeilings } from './cup-rewards.ts'
 import { legendMultiplier, legendValue } from './legend-bonus.ts'
 import { partnerAssignment, trainingDate, trainingLowMood, trainingOptions, type TrainingActivityId } from './training-calendar.ts'
@@ -694,58 +695,62 @@ function emptyPlan(label: string, text: string, ca: number): TrainingPlan {
   }
 }
 
+const GUARANTEED_EVENTS = EVENTS.filter((event) => event.mainline || event.trigger.latestAction !== undefined)
+
+function isEventEligible(session: TrainingSession, event: EventDef, action: number, isGk: boolean): boolean {
+  const trigger = event.trigger
+  if (event.once !== false) {
+    if (session.flags.includes(event.id)) return false
+  } else {
+    const last = session.lastEventAction[event.id]
+    if (last !== undefined && action - last <= (event.cooldown ?? 0)) return false
+  }
+  if (event.maxTimes !== undefined && (session.eventCounts[event.id] ?? 0) >= event.maxTimes) return false
+  if (event.mutex?.some((id) => session.flags.includes(id))) return false
+  const minAction = event.id === 'main_graduation' ? trainingActionsTotal(session) : trigger.minAction
+  const maxAction = event.id === 'main_graduation' ? trainingActionsTotal(session) : trigger.maxAction
+  if (minAction !== undefined && action < minAction) return false
+  if (maxAction !== undefined && action > maxAction) return false
+  if (trigger.minFatigue !== undefined && session.fatigue < trigger.minFatigue) return false
+  if (trigger.playerCategory === 'gk' && !isGk) return false
+  if (trigger.playerCategory === 'field' && isGk) return false
+  if (trigger.playerCategory === undefined && event.id === 'train_gk' && !isGk) return false
+  if (trigger.route && session.routeId !== trigger.route) return false
+  if (trigger.noRoute && session.routeId !== null) return false
+  if (trigger.routeMin !== undefined) {
+    if (!session.routeId || session.routePoints < trigger.routeMin) return false
+  }
+  if (trigger.flag && !session.flags.includes(trigger.flag)) return false
+  if (trigger.prior && !trigger.prior.every((id) => session.flags.includes(id))) return false
+  if (trigger.minAttrs) {
+    for (const [key, value] of Object.entries(trigger.minAttrs) as [AttrKey, number][]) {
+      if (attrRating(key, session.candidate.attrs[key], isGk) < value) return false
+    }
+  }
+  if (trigger.trained) {
+    for (const [key, value] of Object.entries(trigger.trained) as [AttrKey, number][]) {
+      if ((session.trained[key] ?? 0) < value) return false
+    }
+  }
+  if (trigger.trainedAny) {
+    const entries = Object.entries(trigger.trainedAny) as [AttrKey, number][]
+    if (!entries.some(([key, value]) => (session.trained[key] ?? 0) >= value)) return false
+  }
+  if (trigger.trainedSince) {
+    for (const [key, value] of Object.entries(trigger.trainedSince) as [AttrKey, number][]) {
+      if ((session.trainedSinceEvent[key] ?? 0) < value) return false
+    }
+  }
+  if (trigger.trainedSinceAny) {
+    const entries = Object.entries(trigger.trainedSinceAny) as [AttrKey, number][]
+    if (!entries.some(([key, value]) => (session.trainedSinceEvent[key] ?? 0) >= value)) return false
+  }
+  return true
+}
+
 export function eligibleEvents(session: TrainingSession, action = session.action): EventDef[] {
   const isGk = candidateIsGk(session)
-  return EVENTS.filter((event) => {
-    const trigger = event.trigger
-    if (event.once !== false) {
-      if (session.flags.includes(event.id)) return false
-    } else {
-      const last = session.lastEventAction[event.id]
-      if (last !== undefined && action - last <= (event.cooldown ?? 0)) return false
-    }
-    if (event.maxTimes !== undefined && (session.eventCounts[event.id] ?? 0) >= event.maxTimes) return false
-    if (event.mutex?.some((id) => session.flags.includes(id))) return false
-    const minAction = event.id === 'main_graduation' ? trainingActionsTotal(session) : trigger.minAction
-    const maxAction = event.id === 'main_graduation' ? trainingActionsTotal(session) : trigger.maxAction
-    if (minAction !== undefined && action < minAction) return false
-    if (maxAction !== undefined && action > maxAction) return false
-    if (trigger.minFatigue !== undefined && session.fatigue < trigger.minFatigue) return false
-    if (trigger.playerCategory === 'gk' && !isGk) return false
-    if (trigger.playerCategory === 'field' && isGk) return false
-    if (trigger.playerCategory === undefined && event.id === 'train_gk' && !isGk) return false
-    if (trigger.route && session.routeId !== trigger.route) return false
-    if (trigger.noRoute && session.routeId !== null) return false
-    if (trigger.routeMin !== undefined) {
-      if (!session.routeId || session.routePoints < trigger.routeMin) return false
-    }
-    if (trigger.flag && !session.flags.includes(trigger.flag)) return false
-    if (trigger.prior && !trigger.prior.every((id) => session.flags.includes(id))) return false
-    if (trigger.minAttrs) {
-      for (const [key, value] of Object.entries(trigger.minAttrs) as [AttrKey, number][]) {
-        if (attrRating(key, session.candidate.attrs[key], isGk) < value) return false
-      }
-    }
-    if (trigger.trained) {
-      for (const [key, value] of Object.entries(trigger.trained) as [AttrKey, number][]) {
-        if ((session.trained[key] ?? 0) < value) return false
-      }
-    }
-    if (trigger.trainedAny) {
-      const entries = Object.entries(trigger.trainedAny) as [AttrKey, number][]
-      if (!entries.some(([key, value]) => (session.trained[key] ?? 0) >= value)) return false
-    }
-    if (trigger.trainedSince) {
-      for (const [key, value] of Object.entries(trigger.trainedSince) as [AttrKey, number][]) {
-        if ((session.trainedSinceEvent[key] ?? 0) < value) return false
-      }
-    }
-    if (trigger.trainedSinceAny) {
-      const entries = Object.entries(trigger.trainedSinceAny) as [AttrKey, number][]
-      if (!entries.some(([key, value]) => (session.trainedSinceEvent[key] ?? 0) >= value)) return false
-    }
-    return true
-  })
+  return EVENTS.filter((event) => isEventEligible(session, event, action, isGk))
 }
 
 export function eligibleEventCount(session: TrainingSession, action = session.action): number {
@@ -753,15 +758,23 @@ export function eligibleEventCount(session: TrainingSession, action = session.ac
 }
 
 export function guaranteedEvent(session: TrainingSession, action = session.action): EventDef | null {
-  const eligible = eligibleEvents(session, action)
-  const mainline = eligible.find((event) => event.mainline && (event.id === 'main_graduation' ? trainingActionsTotal(session) : event.trigger.minAction) === action)
-  if (mainline) return mainline
-  // 事件链不再“一满足条件就必出”：平时和普通事件一样靠概率抽，只有到了最迟期限才强制出现（公开的路线保障）。
-  const overdue = eligible
-    .filter((event) => event.trigger.latestAction !== undefined && action >= event.trigger.latestAction)
-    .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0) || (b.stage ?? 0) - (a.stage ?? 0))
-  if (overdue.length) return overdue[0]
-  return null
+  const isGk = candidateIsGk(session)
+  const total = trainingActionsTotal(session)
+  let bestOverdue: EventDef | null = null
+  for (const event of GUARANTEED_EVENTS) {
+    if (!isEventEligible(session, event, action, isGk)) continue
+    if (event.mainline && (event.id === 'main_graduation' ? total : event.trigger.minAction) === action) return event
+    if (event.trigger.latestAction !== undefined && action >= event.trigger.latestAction) {
+      if (
+        !bestOverdue
+        || (event.priority ?? 0) > (bestOverdue.priority ?? 0)
+        || ((event.priority ?? 0) === (bestOverdue.priority ?? 0) && (event.stage ?? 0) > (bestOverdue.stage ?? 0))
+      ) {
+        bestOverdue = event
+      }
+    }
+  }
+  return bestOverdue
 }
 
 /** 没有保底事件时，每次行动后出现事件的概率。保底事件（主线、路线入口等）仍是 100%。 */
@@ -771,14 +784,26 @@ export function pickEvent(session: TrainingSession, force = false): EventDef | n
   const action = session.action
   const guaranteed = guaranteedEvent(session, action)
   if (guaranteed) return guaranteed
+  if (!force && canTriggerLegendStarInherit(session)) {
+    if (derivedRng(session.seed, 'legend-star-easter', session.playerId, action).float() < LEGEND_STAR_INHERIT_CHANCE) {
+      const easter = legendStarInheritEventFor(session, action)
+      if (easter) return easter
+    }
+  }
+  if (!force && canTriggerLegendStarEvent(session)) {
+    if (derivedRng(session.seed, 'legend-star-trigger', session.playerId, action).float() < LEGEND_STAR_EVENT_CHANCE) {
+      const rainbow = legendStarEventFor(session, action)
+      if (rainbow) return rainbow
+    }
+  }
+  // 非强制触发时先掷 10% 概率骰子，再扫描普通事件池（无副作用且与先扫后掷完全等价）。
+  if (!force && derivedRng(session.seed, 'event-trigger', session.playerId, action).float() >= EVENT_BASE_CHANCE) return null
   const eligible = eligibleEvents(session, action).filter((event) => !event.mainline)
   if (eligible.length === 0) return null
   if (force) {
     eligible.sort((a, b) => b.weight - a.weight)
     return eligible[0]
   }
-  // 先掷“这次行动有没有事件”，再按权重从候选里选具体哪个；两个骰子都由种子和行动序号决定，读档不重抽。
-  if (derivedRng(session.seed, 'event-trigger', session.playerId, action).float() >= EVENT_BASE_CHANCE) return null
   const rng = derivedRng(session.seed, 'event-select', session.playerId, action)
   return rng.weighted(eligible, eligible.map((event) => eventWeight(session, event)))
 }
@@ -792,7 +817,9 @@ export function eventChance(session: TrainingSession, action = session.action): 
   const date = trainingDate(action)
   if (session.scheduleVersion === 1 && date.slot === '上午' && date.day === 1 && drawTrainingSkills(session).length) return 1
   if (guaranteedEvent(session, action)) return 1
-  return eligibleEvents(session, action).some((event) => !event.mainline) ? EVENT_BASE_CHANCE : 0
+  const baseP = eligibleEvents(session, action).some((event) => !event.mainline) ? EVENT_BASE_CHANCE : 0
+  const starP = canTriggerLegendStarEvent(session) ? LEGEND_STAR_EVENT_CHANCE : 0
+  return 1 - (1 - baseP) * (1 - starP)
 }
 
 export type PerformResult = {
@@ -965,12 +992,26 @@ export function resolveTrainingEvent(session: TrainingSession, optionId: string,
     const error = skillChoiceReplacementError(session, option.trainingSkill, replaceSkill)
     if (error) return { ok: false, error, completed: session.completed }
   }
+  if (option.rainbowInherit) {
+    const error = rainbowInheritReplacementError(session, option.rainbowInherit.skill, replaceSkill)
+    if (error) return { ok: false, error, completed: session.completed }
+  }
   const rng = derivedRng(session.seed, 'event-outcome', session.playerId, event.id, option.id, session.action)
   let effect: EventEffect = option.effect ?? {}
   let success: boolean | undefined
   let probability: number | undefined
   let roll: number | undefined
-  if (option.trainingSkill) {
+  if (option.rainbowInherit) {
+    const granted = grantRainbowInheritSkill(session, option.rainbowInherit.skill, replaceSkill)
+    if (!granted.ok) return { ok: false, error: granted.reason, completed: session.completed }
+    success = true
+    probability = 1
+    effect = {
+      text: granted.upgraded
+        ? `在《传奇之星》的指引下，继承 ${option.rainbowInherit.starName} 的真传，《${SKILLS[option.rainbowInherit.skill].name}》直接升格为彩虹档！`
+        : `在《传奇之星》的指引下，继承 ${option.rainbowInherit.starName} 的彩虹招牌技能《${SKILLS[option.rainbowInherit.skill].name}》${replaceSkill ? `，替换《${SKILLS[replaceSkill].name}》` : ''}！`,
+    }
+  } else if (option.trainingSkill) {
     const choice = option.trainingSkill
     probability = trainingSkillChance(session, choice)
     roll = rng.float()
@@ -1025,8 +1066,8 @@ export function resolveTrainingEvent(session: TrainingSession, optionId: string,
   session.flags.push(event.id)
   session.eventCounts[event.id] = (session.eventCounts[event.id] ?? 0) + 1
   session.lastEventAction[event.id] = session.action
-  // 交流赛额外插入的技能选择不清空普通事件的训练计数。
-  if (event.id !== MATCH_BOOK_EVENT_ID) session.trainedSinceEvent = {}
+  // 交流赛额外插入的技能选择与传奇之星彩色事件不清空普通事件的训练计数。
+  if (event.id !== MATCH_BOOK_EVENT_ID && event.id !== LEGEND_STAR_EVENT_ID && event.id !== LEGEND_STAR_INHERIT_EVENT_ID) session.trainedSinceEvent = {}
   if (event.id === MATCH_BOOK_EVENT_ID) {
     delete session.pendingBookChoices
     delete session.pendingSkillChoices
@@ -1096,7 +1137,12 @@ function applyEventEffect(session: TrainingSession, effect: EventEffect): { gain
     }
   }
   const eventGains = Object.fromEntries((Object.entries(gains) as [AttrKey, number][]).map(([key, value]) => [key, value * eventGrowthScale(session)]))
-  const result = applyTrainingGains(session, moodGains(session, facilityGains(session, scaleAuthoredGains(eventGains, isGk)), session.pendingEventAction ?? session.action))
+  const scaled = moodGains(session, facilityGains(session, scaleAuthoredGains(eventGains, isGk)), session.pendingEventAction ?? session.action)
+  const combined: Partial<Record<AttrKey, number>> = { ...scaled }
+  for (const [key, value] of Object.entries(effect.flatAttrs ?? {}) as [AttrKey, number][]) {
+    if (value > 0) combined[key] = (combined[key] ?? 0) + value
+  }
+  const result = applyTrainingGains(session, combined)
   if (result.cappedByCeiling) notes.push('部分属性已达各自上限')
   session.candidate.attrs = result.attrs
   if (effect.fatigue) session.fatigue = Math.max(0, Math.min(100, session.fatigue + effect.fatigue))

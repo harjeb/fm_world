@@ -34,13 +34,13 @@ export function validateInheritance(session: TrainingSession, mentor: Player, sk
   return null
 }
 
-/** Tier probabilities are conditional on successful inheritance; silver is the remainder. */
+/** 队友传承档位概率（成功后结算）：最高只出金色，不能复制球星身上唯一的彩虹档位。 */
 export function inheritanceChances(session: TrainingSession, mentor: Pick<Player, 'positions' | 'skillTiers'>, skillId: SkillId): { success: number; gold: number; rainbow: number } {
   const primary = POSITIONS.reduce((best, pos) => mentor.positions[pos] > mentor.positions[best] ? pos : best, POSITIONS[0])
   const compatible = session.candidate.positions[primary] >= 60
   const tier = getSkillTier(mentor, skillId)
   const success = Math.max(0.2, Math.min(0.9, 0.5 + (compatible ? 0.15 : 0) + (tier === 'rainbow' ? 0.1 : tier === 'gold' ? 0.05 : 0) - Math.max(0, session.fatigue - 50) / 500))
-  return { success, gold: tier === 'silver' ? 0 : tier === 'gold' ? 0.3 : 0.35, rainbow: tier === 'rainbow' ? 0.1 : 0 }
+  return { success, gold: tier === 'silver' ? 0 : tier === 'gold' ? 0.3 : 0.45, rainbow: 0 }
 }
 
 export type InheritanceResult =

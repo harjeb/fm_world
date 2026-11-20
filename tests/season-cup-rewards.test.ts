@@ -23,7 +23,7 @@ describe('赛季杯赛金币与上限奖励', () => {
     expect(restored.economy!.balance).toBe(before + 150_000)
   })
 
-  it('冠军每赛季有额外金币，每种杯赛上限只发一次且兼容旧挑战杯', () => {
+  it('冠军每赛季有额外金币，奖杯上限仅取最高值不叠加且兼容旧挑战杯；传奇杯首冠发彩书《传奇之星》', () => {
     const game = createInitialGame(1002)
     const initial = game.economy!.balance
     const player = game.roster.find(item => item.positions.GK === 0)!
@@ -38,14 +38,27 @@ describe('赛季杯赛金币与上限奖励', () => {
     const cross = trophy('cross')
     expect(awardSeasonCupChampion(game, 'cross', 1, cross)).toEqual({ gold: 1_500_000, ceiling: 250 })
     game.pve!.trophies.push(cross)
-    expect(cupCeilingBonus(game)).toBe(350)
-    expect(game.training[player.id].cupCeilingBonus).toBe(350)
-    expect(effectiveClubCeilings(player, cupCeilingBonus(game)).passing).toBe(Math.min(2000, raw + 350))
+    expect(cupCeilingBonus(game)).toBe(250)
+    expect(game.training[player.id].cupCeilingBonus).toBe(250)
+    expect(effectiveClubCeilings(player, cupCeilingBonus(game)).passing).toBe(Math.min(2000, raw + 250))
     ensureCupCeilingClaims(game)
-    expect(cupCeilingBonus(game)).toBe(350)
+    expect(cupCeilingBonus(game)).toBe(250)
     expect(awardSeasonCupChampion(game, 'cross', 2, trophy('cross', 2))).toEqual({ gold: 1_500_000, ceiling: 0 })
-    expect(cupCeilingBonus(game)).toBe(350)
-    expect(game.economy!.balance).toBe(initial + 300_000 + 1_500_000 * 2)
+    expect(cupCeilingBonus(game)).toBe(250)
+    // 传奇杯首次夺冠不叠加属性上限，改发专属彩书《传奇之星》；第二次夺冠不再重复发书
+    const legend1 = trophy('legend', 2)
+    expect(awardSeasonCupChampion(game, 'legend', 2, legend1)).toEqual({
+      gold: 3_000_000,
+      ceiling: 0,
+      book: { id: 'lg_legend_star', tier: 'rainbow' },
+    })
+    expect(legend1.ceilingBonus).toBeUndefined()
+    expect(legend1.rewardBook).toEqual({ id: 'lg_legend_star', tier: 'rainbow' })
+    expect(cupCeilingBonus(game)).toBe(250)
+    expect(game.legendBooks?.filter((b) => b.id === 'lg_legend_star')).toEqual([{ id: 'lg_legend_star', tier: 'rainbow' }])
+    expect(awardSeasonCupChampion(game, 'legend', 3, trophy('legend', 3))).toEqual({ gold: 3_000_000, ceiling: 0 })
+    expect(game.legendBooks?.filter((b) => b.id === 'lg_legend_star')).toHaveLength(1)
+    expect(game.economy!.balance).toBe(initial + 300_000 + 1_500_000 * 2 + 3_000_000 * 2)
   })
 
   it('AI 奖金同样幂等，上限加成应用到后续培养', () => {

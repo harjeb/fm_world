@@ -1,4 +1,4 @@
-import type { GameState, LeagueBookDrop, Player, PlayerMatchStats, SkillId } from './types.ts'
+import type { GameState, LeagueBookDrop, Player, PlayerMatchStats, SkillId, SkillTier } from './types.ts'
 import { SKILLS } from './data/skills.ts'
 import { getSkillTier } from './inheritance.ts'
 import { addLegendBook, ensureLegendBooks, hasBookAtOrAbove } from './legend-books.ts'
@@ -7,6 +7,11 @@ import { derivedRng } from './rng.ts'
 
 /** 踢满 90 分钟的球员掉书概率；按上场分钟线性折算，换人不会增加整场期望。 */
 export const LEAGUE_BOOK_DROP_CHANCE = 0.05
+
+/** 联赛赛后掉书最高只掉金色，让球员身上的彩虹招牌技能保持唯一稀缺性。 */
+export function cappedLeagueDropTier(tier: SkillTier): SkillTier {
+  return tier === 'rainbow' ? 'gold' : tier
+}
 
 export function leagueBookDropChance(minutes: number): number {
   return LEAGUE_BOOK_DROP_CHANCE * Math.max(0, Math.min(1, minutes / FULL_MATCH_MINUTES))
@@ -27,7 +32,7 @@ function statPlayerId(stat: PlayerMatchStats): string {
 
 /**
  * 联赛赛后掉书：场上（上场分钟 > 0）每名球员独立判定，命中后从其尚未收集到（同档或更高档）的技能里随机一项，
- * 按该球员的技能档位入库。不设个数上限；同一场里先掉的书会让后面的同技能同档不再重复。
+ * 按该球员的技能档位入库（最高封顶金色，彩虹技能降为金书）。不设个数上限；同一场里先掉的书会让后面的同技能同档不再重复。
  */
 export function awardLeagueBookDrops(game: GameState, input: LeagueBookDropInput): LeagueBookDrop[] {
   ensureLegendBooks(game)
@@ -45,10 +50,14 @@ export function awardLeagueBookDrops(game: GameState, input: LeagueBookDropInput
     if (roll >= leagueBookDropChance(stat.minutes)) continue
     const player = roster.get(statPlayerId(stat))
     if (!player) continue
-    const eligible = (player.skills ?? []).filter((id: SkillId) => Object.hasOwn(SKILLS, id) && !hasBookAtOrAbove(game, id, getSkillTier(player, id)))
+    const eligible = (player.skills ?? []).filter((id: SkillId) => {
+      if (!Object.hasOwn(SKILLS, id)) return false
+      const dropTier = cappedLeagueDropTier(getSkillTier(player, id))
+      return !hasBookAtOrAbove(game, id, dropTier)
+    })
     if (!eligible.length) continue
     const id = eligible[Math.min(eligible.length - 1, Math.floor(pickRoll * eligible.length))]
-    const tier = getSkillTier(player, id)
+    const tier = cappedLeagueDropTier(getSkillTier(player, id))
     if (!addLegendBook(game, id, tier)) continue
     drops.push({ playerId: player.id, playerName: stat.name || player.name, side: stat.side, id, tier, minutes: Math.round(stat.minutes) })
   }
