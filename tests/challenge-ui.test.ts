@@ -101,10 +101,9 @@ describe('挑战页面', () => {
     ui.legendEra = 'ALL'
     const html = renderChallenge()
     expect(html).toContain('掉落技能书')
+    expect(html).toContain('<td><span class="tag skill-rainbow"><span class="skill-label">训练狂人</span></span></td>')
     expect(html).toContain('技能书库存')
-    expect(html).toContain('skill-rainbow')
-    expect(html).toContain('训练狂人')
-    expect(html).toContain('彩')
+    expect(html).toContain('<span class="tag skill-rainbow"><span class="skill-label">彩</span></span> 训练狂人')
     ui.legendSearch = ''
   })
 
