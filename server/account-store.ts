@@ -20,27 +20,33 @@ export type Account = {
   /** 最近一次 AI 报价的“赛季:轮次”。 */
   offerKey?: string
   lastOnlineAt?: number
+  lastOnlineSeason?: number
   aiTakeoverKey?: string
   createdAt: number
   updatedAt: number
 }
+
+/** 无登录凭据的俱乐部托管席。它走原球队的比赛/经营路径，但不是玩家账号。 */
+export const vacantSeatId = (clubId: string) => `club:${clubId}`
+export const isVacantSeat = (id: string | undefined) => id?.startsWith('club:') === true
 
 export const ACCOUNT_DB_FILE = 'accounts.sqlite'
 /** Keep serialization/worker copies bounded when a recovery tick dirties every large save. */
 export const ACCOUNT_WRITE_BATCH_SIZE = 2
 const ACCOUNT_SQL = `INSERT INTO accounts
   (id, username, username_key, salt, password_hash, agent_token, game_json, revision,
-   last_user_revision, applied_match_ids, offer_key, last_online_at, ai_takeover_key, created_at, updated_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+   last_user_revision, applied_match_ids, offer_key, last_online_at, ai_takeover_key, created_at, updated_at, last_online_season)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
     username=excluded.username, username_key=excluded.username_key, salt=excluded.salt,
     password_hash=excluded.password_hash, agent_token=excluded.agent_token,
     game_json=excluded.game_json, revision=excluded.revision,
     last_user_revision=excluded.last_user_revision, applied_match_ids=excluded.applied_match_ids,
     offer_key=excluded.offer_key, last_online_at=excluded.last_online_at, ai_takeover_key=excluded.ai_takeover_key,
-    created_at=excluded.created_at, updated_at=excluded.updated_at`
+    created_at=excluded.created_at, updated_at=excluded.updated_at, last_online_season=excluded.last_online_season`
 const SESSION_SQL = 'INSERT INTO sessions (token, account_id) VALUES (?, ?) ON CONFLICT(token) DO UPDATE SET account_id=excluded.account_id'
 const DELETE_SESSION_SQL = 'DELETE FROM sessions WHERE token = ?'
+type ClubHandover = { club_id: string; holder: string; initial_name: string }
 type Values = Array<string | number | null>
 type AccountWrite = { id: string; values: Values; parts: AccountPart[] }
 type Batch = {
@@ -57,7 +63,7 @@ function accountValues(account: Account, gameJson: string): Values {
   return [account.id, account.username, account.username.toLowerCase(), account.salt, account.passwordHash,
     account.agentToken ?? null, gameJson, account.revision,
     account.lastUserRevision ?? null, account.appliedMatchIds ? JSON.stringify(account.appliedMatchIds) : null,
-    account.offerKey ?? null, account.lastOnlineAt ?? null, account.aiTakeoverKey ?? null, account.createdAt, account.updatedAt]
+    account.offerKey ?? null, account.lastOnlineAt ?? null, account.aiTakeoverKey ?? null, account.createdAt, account.updatedAt, account.lastOnlineSeason ?? null]
 }
 
 function transaction(db: DatabaseSync, run: () => void): void {
@@ -74,6 +80,7 @@ export class AccountStore {
   readonly sessions: Record<string, string>
   private readonly db: DatabaseSync
   private readonly filename: string
+  private readonly retired = new WeakSet<Account>()
   private readonly dirty = new Map<string, Account>()
   private readonly dirtySessions = new Map<string, string | null>()
   private timer: ReturnType<typeof setTimeout> | null = null
@@ -113,6 +120,10 @@ export class AccountStore {
           account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS sessions_account ON sessions(account_id);
+        CREATE TABLE IF NOT EXISTS club_handovers (
+          club_id TEXT PRIMARY KEY, holder TEXT UNIQUE NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+          initial_name TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS account_game_parts (hash TEXT PRIMARY KEY, json TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS account_game_refs (
           account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
@@ -124,6 +135,7 @@ export class AccountStore {
       const columns = new Set(this.db.prepare('PRAGMA table_info(accounts)').all().map((row) => row.name as string))
       if (!columns.has('last_online_at')) this.db.exec('ALTER TABLE accounts ADD COLUMN last_online_at INTEGER')
       if (!columns.has('ai_takeover_key')) this.db.exec('ALTER TABLE accounts ADD COLUMN ai_takeover_key TEXT')
+      if (!columns.has('last_online_season')) this.db.exec('ALTER TABLE accounts ADD COLUMN last_online_season INTEGER')
       this.migrateLegacy(dataDir)
       const loadParts = this.db.prepare(`SELECT refs.slot, parts.hash, parts.json FROM account_game_refs refs
         JOIN account_game_parts parts ON refs.hash = parts.hash WHERE refs.account_id = ? ORDER BY refs.slot`)
@@ -141,6 +153,7 @@ export class AccountStore {
         ...(row.applied_match_ids !== null ? { appliedMatchIds: JSON.parse(row.applied_match_ids as string) as string[] } : {}),
         ...(row.offer_key !== null ? { offerKey: row.offer_key as string } : {}),
         ...(row.last_online_at !== null ? { lastOnlineAt: row.last_online_at as number } : {}),
+        ...(row.last_online_season !== null ? { lastOnlineSeason: row.last_online_season as number } : {}),
         ...(row.ai_takeover_key !== null ? { aiTakeoverKey: row.ai_takeover_key as string } : {}),
         createdAt: row.created_at as number,
         updatedAt: row.updated_at as number,
@@ -194,6 +207,7 @@ export class AccountStore {
 
   save(account: Account): void {
     this.assertOpen()
+    if (this.retired.has(account)) return
     this.dirty.set(account.id, account)
     this.schedule()
   }
@@ -202,6 +216,30 @@ export class AccountStore {
     this.assertOpen()
     this.dirtySessions.set(token, accountId)
     this.schedule()
+  }
+
+  /** SQLite 是交接的提交点；若随后更新 world.json 前宕机，启动时按此表修复归属。 */
+  handovers(): ClubHandover[] {
+    return this.db.prepare('SELECT * FROM club_handovers').all() as ClubHandover[]
+  }
+
+  replaceHolder(previous: Account, next: Account, clubId: string, initialName: string): void {
+    this.assertOpen()
+    this.flushSync() // 不允许在途 worker 的旧快照复活已删除的账号。
+    const index = this.accounts.indexOf(previous)
+    if (index < 0 || this.accounts.some(account => account.id === next.id)) throw new Error('球队归属已变化')
+    const write = this.prepareWrite(next)
+    transaction(this.db, () => {
+      this.db.prepare(ACCOUNT_SQL).run(...write.values)
+      prepareAccountParts(this.db)(next.id, write.parts)
+      // 先为新持有人记录部件引用，再清旧引用，仍共享的部件不能删。
+      prepareAccountParts(this.db)(previous.id, [])
+      this.db.prepare('DELETE FROM accounts WHERE id=?').run(previous.id)
+      this.db.prepare('INSERT INTO club_handovers (club_id, holder, initial_name) VALUES (?, ?, ?)').run(clubId, next.id, initialName)
+    })
+    this.retired.add(previous)
+    this.accounts[index] = next
+    for (const [token, id] of Object.entries(this.sessions)) if (id === previous.id) delete this.sessions[token]
   }
 
   private assertOpen(): void {

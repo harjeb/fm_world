@@ -47,27 +47,27 @@ export type LegendCupClubSpec = {
   id: string
   /** 历史球队定义 ID（来自 LEGEND_TEAMS 或传奇杯专属定义）。 */
   defId: string
-  /** 传奇杯首发平均 CA 目标（严格落在 1600–1900 之间）。 */
+  /** 传奇杯首发平均 CA 目标。 */
   targetCa: number
 }
 
 /**
  * 传奇杯特邀的 12 支真实历史最强俱乐部：
- * 严格要求“一个俱乐部一支”，覆盖欧洲与南美最具统治力的单季巅峰阵容，首发 CA 位于 1600–1900。
+ * 严格要求“一个俱乐部一支”，覆盖欧洲与南美最具统治力的单季巅峰阵容，按首发 CA（1300–1600）从高到低排序供分档抽签。
  */
 export const LEGEND_CUP_SPECS: readonly LegendCupClubSpec[] = [
-  { id: 'lcup-barcelona-2010-11', defId: 'barcelona-2010-11', targetCa: 1900 },
-  { id: 'lcup-real-madrid-2016-17', defId: 'real-madrid-2016-17', targetCa: 1880 },
-  { id: 'lcup-milan-1988-89', defId: 'milan-1988-89', targetCa: 1855 },
-  { id: 'lcup-bayern-2012-13', defId: 'bayern-2012-13', targetCa: 1830 },
-  { id: 'lcup-ajax-1971-72', defId: 'ajax-1971-72', targetCa: 1800 },
-  { id: 'lcup-man-city-2022-23', defId: 'man-city-2022-23', targetCa: 1775 },
-  { id: 'lcup-man-utd-1998-99', defId: 'man-utd-1998-99', targetCa: 1750 },
-  { id: 'lcup-inter-2009-10', defId: 'inter-2009-10', targetCa: 1720 },
-  { id: 'lcup-liverpool-1983-84', defId: 'liverpool-1983-84', targetCa: 1690 },
-  { id: 'lcup-santos-1962-63', defId: 'santos-1962-63', targetCa: 1660 },
-  { id: 'lcup-arsenal-2003-04', defId: 'arsenal-2003-04', targetCa: 1630 },
-  { id: 'lcup-juventus-1995-96', defId: 'juventus-1995-96', targetCa: 1600 },
+  { id: 'lcup-barcelona-2010-11', defId: 'barcelona-2010-11', targetCa: 1600 },
+  { id: 'lcup-real-madrid-2016-17', defId: 'real-madrid-2016-17', targetCa: 1580 },
+  { id: 'lcup-milan-1988-89', defId: 'milan-1988-89', targetCa: 1555 },
+  { id: 'lcup-bayern-2012-13', defId: 'bayern-2012-13', targetCa: 1530 },
+  { id: 'lcup-ajax-1971-72', defId: 'ajax-1971-72', targetCa: 1500 },
+  { id: 'lcup-man-city-2022-23', defId: 'man-city-2022-23', targetCa: 1475 },
+  { id: 'lcup-man-utd-1998-99', defId: 'man-utd-1998-99', targetCa: 1450 },
+  { id: 'lcup-inter-2009-10', defId: 'inter-2009-10', targetCa: 1420 },
+  { id: 'lcup-liverpool-1983-84', defId: 'liverpool-1983-84', targetCa: 1390 },
+  { id: 'lcup-santos-1962-63', defId: 'santos-1962-63', targetCa: 1360 },
+  { id: 'lcup-arsenal-2003-04', defId: 'arsenal-2003-04', targetCa: 1330 },
+  { id: 'lcup-juventus-1995-96', defId: 'juventus-1995-96', targetCa: 1300 },
 ] as const
 
 export const LEGEND_CUP_TEAM_IDS: readonly string[] = LEGEND_CUP_SPECS.map((spec) => spec.id)
@@ -130,7 +130,7 @@ export function legendCupMetaById(id: string): LegendCupClubMeta | undefined {
 }
 
 /**
- * 构建传奇杯特邀历史强队（首发 CA 精确校准至 1600–1900）；
+ * 构建传奇杯特邀历史强队（首发 CA 精确校准至各队目标）；
  * 球队与球员 ID 均以 `lcup-` 为前缀，与联赛俱乐部及普通传奇挑战隔离。
  */
 export function legendCupTeamById(id: string): AITeam | undefined {

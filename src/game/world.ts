@@ -670,7 +670,7 @@ export function syncAllClubLiveTactics(world: WorldState, teams: Record<string, 
  * 只在服务器注册或预览空位时按需调用。
  */
 export function expandWorldConference(world: WorldState, seed: number): { conference: ConferenceId; divisionId: string } {
-  const used = new Set(world.clubs.map((club) => club.name))
+  const used = new Set(world.clubs.flatMap((club) => [club.name, club.initialName ?? club.name]))
   let zoneNo = 3
   while (world.clubs.some((club) => club.conference === `zone${zoneNo}`)) zoneNo++
   const conference: ConferenceId = `zone${zoneNo}`

@@ -169,8 +169,8 @@ export function renderWorld(): string {
     return pageHead({
       kicker: '世界',
       title: '旧存档',
-      sub: '当前存档使用旧的单级联赛；开始新游戏即可进入三级共享世界。',
-      actions: '<button class="btn primary" data-action="new-game">开始三级世界</button>',
+      sub: onlineState.status === 'online' ? '当前联机存档没有世界数据。' : '当前存档使用旧的单级联赛；开始新游戏即可进入三级共享世界。',
+      actions: onlineState.status === 'online' ? '' : '<button class="btn primary" data-action="new-game">开始三级世界</button>',
     })
   }
   const world = game.world
@@ -236,7 +236,7 @@ export function renderWorld(): string {
         `)}
         ${world.history.length ? panel('历届荣誉', `<div class="rows">${world.history.slice().reverse().slice(0, 5).map((item) => `<div class="row-line"><span class="dim">第 ${item.seasonIndex} 赛季</span><span>冠军 ${ownName(item.champion, item.champion === game.clubName)}</span><span class="muted small">升级 ${item.promotions.length} 队</span></div>`).join('')}</div>`, { flush: true }) : ''}
         ${panel('球队席位', `
-          <p class="hint">新账号只会接管<b>二级联赛</b>的空位；二级满员后服务器自动开一个新赛区（东区、西区、中区……），不会把你塞进一级或冠军联赛。联机账号不能自行重开世界；退出账号后可以创建独立的本地存档。</p>
+          <p class="hint">新账号可选择二级联赛空位，也可接手原教练连续两个完整赛季未上线后释放的球队（不限级别）。释放时恢复原队名，保留阵容与经营进度。没有可接管球队时，服务器会增开二级赛区。联机账号不能自行重开世界；退出账号后可以创建独立的本地存档。</p>
           <div class="club-chips">${picks.slice(0, 8).map((club) => `<span class="club-chip">${crest({ name: club.name, color: colorOf(club.id) }, 15)}${esc(club.name)}<small>${club.conference === 'north' ? '北区' : '南区'}</small></span>`).join('')}</div>
         `)}
       </div>

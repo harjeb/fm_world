@@ -99,6 +99,24 @@ describe('持久化比赛任务队列', () => {
     expect(compute.mock.calls[1][0]).toEqual(compute.mock.calls[0][0])
   })
 
+  it('仅清早于新赛季的 published 项，半删后重启不重算', () => {
+    const dir = makeDir()
+    const entry = (n: number, season: number, status: string) => ({ id: 'q-' + String(n).padStart(64, '0'), season, status })
+    const rows = [entry(1, 1, 'published'), entry(2, 1, 'ready'), entry(3, 1, 'queued'), entry(4, 2, 'published'), entry(5, 3, 'published'), entry(6, 1, 'pruning')]
+    for (const row of rows) {
+      fs.writeFileSync(path.join(dir, row.id + '.input.json'), '{}')
+      if (!['queued', 'pruning'].includes(row.status)) fs.writeFileSync(path.join(dir, row.id + '.result.json'), '{}')
+    }
+    fs.writeFileSync(path.join(dir, 'index.json'), JSON.stringify(rows))
+    const queue = makeQueue(dir)
+    expect(queue.entries.has(rows[5].id)).toBe(false)
+    queue.prunePublishedBefore(2); queue.prunePublishedBefore(2)
+    const restored = makeQueue(dir)
+    expect([...restored.entries.keys()]).toEqual(rows.slice(1, 5).map(item => item.id))
+    for (const row of [rows[0], rows[5]]) for (const kind of ['input', 'result']) expect(fs.existsSync(path.join(dir, row.id + '.' + kind + '.json'))).toBe(false)
+    for (const row of rows.slice(1, 5)) expect(fs.existsSync(path.join(dir, row.id + '.input.json'))).toBe(true)
+  })
+
   it('索引损坏时明确报错，不静默丢弃锁定快照', () => {
     const dir = makeDir()
     fs.writeFileSync(path.join(dir, 'index.json'), '{invalid')

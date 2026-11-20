@@ -206,10 +206,11 @@ export function renderAccountOverlay(): string {
       <div class="modal account-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="联机账号">
         <button class="modal-close" data-action="account-close" aria-label="关闭">${icon('close', 16)}</button>
         <div class="kicker">联机账号</div>
-        <h1>${online ? '已连接服务器' : registering ? '注册账号' : '登录账号'}</h1>
+        <h1>${online ? '联机账号' : registering ? '注册账号' : '登录账号'}</h1>
         ${online ? `
-          <p>当前账号：<b>${esc(onlineState.user?.username ?? '')}</b> · ${onlineState.connected ? '实时同步中' : '正在重连服务器'}</p>
-          <p class="hint">另一台设备保存后会自动同步到这里。冲突时服务器版本优先。</p>
+          <p>当前账号：<b>${esc(onlineState.user?.username ?? '')}</b> · ${onlineState.error ? '存档同步失败' : onlineState.connected ? '实时同步中' : '正在重连服务器'}</p>
+          ${onlineState.error ? `<p class="warn-text small">${esc(onlineState.error)}<br>刷新页面可重新读取服务器已保存的进度，未同步的修改可能丢失。</p>` : ''}
+          <p class="hint">另一台设备保存后会自动同步到这里。连续两个完整赛季未上线，换季时将删除教练账号，球队保留并开放接管。</p>
           <div class="btn-row"><button class="btn primary" data-action="agent-token">复制给 AI（令牌 + 文档 + 简介）</button><button class="btn ghost" data-action="agent-revoke">重置令牌</button></div>
           <p class="hint">复制的内容包含 fm_... 令牌、API 文档链接和游戏简介，直接粘贴给能发 HTTP 请求的 AI（Claude / ChatGPT / Cursor），或把令牌填进 MCP 配置；不需要给账号密码。令牌可随时重置。</p>
           <div class="btn-row"><button class="btn ghost" data-action="account-logout">退出登录</button><button class="btn" data-action="account-close">关闭</button></div>
@@ -220,11 +221,11 @@ export function renderAccountOverlay(): string {
           ${registering && mode === 'invite' ? '<div class="form-row"><label for="account-invite">邀请码</label><input id="account-invite" autocomplete="off" placeholder="向管理员索取" /></div>' : ''}
           ${registering ? `
             <div class="form-row"><label for="account-club">执教球队</label><select id="account-club">
-              <option value="">${registrationClubs === null ? '正在加载球队…' : clubs.length ? '请选择一支空缺的二级球队' : '暂无空缺球队'}</option>
-              ${clubs.map((club) => `<option value="${esc(club.id)}" ${selectedClub?.id === club.id ? 'selected' : ''}>${esc(club.name)} · ${esc(conferenceLabel(club.conference))} · RANK ${club.rating ?? '—'}</option>`).join('')}
+              <option value="">${registrationClubs === null ? '正在加载球队…' : clubs.length ? '请选择一支可接管的球队' : '暂无空缺球队'}</option>
+              ${clubs.map((club) => `<option value="${esc(club.id)}" ${selectedClub?.id === club.id ? 'selected' : ''}>${esc(club.name)} · ${esc(club.tier === 'champions' ? '冠军联赛' : club.tier === 'division1' ? '一级联赛' : conferenceLabel(club.conference))} · RANK ${club.rating ?? '—'}</option>`).join('')}
             </select></div>
             ${selectedClub ? `<p class="hint">${[...selectedClub.players].sort((a, b) => b.ca - a.ca).slice(0, 3).map((player) => `${posBadge(primaryPosition(player))} ${esc(player.name)} · CA ${player.ca.toFixed(0)}`).join(' / ')}</p>` : ''}
-            <p class="hint">球队在注册时确定，注册后不允许换队；直接继承球队已有战绩，不因注册另算比赛。联赛每天固定 6 轮（北京时间 02/06/10/14/18/22 点）。</p>
+            <p class="hint">球队在注册时确定，注册后不允许换队。连续两个完整赛季未上线的教练账号会在换季时删除，球队恢复原名，保留球队进度供新教练接手。联赛每天固定 6 轮（北京时间 02/06/10/14/18/22 点）。</p>
             <button class="btn ghost small" data-action="registration-clubs-refresh">刷新球队列表</button>
           ` : ''}
           ${registering && publicConfig.turnstileSiteKey ? '<div class="turnstile-slot" id="turnstile-slot" data-morph-skip></div>' : ''}

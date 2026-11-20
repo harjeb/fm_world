@@ -149,7 +149,7 @@ function legendPreview(game: GameState, ownId: string): string {
     <td class="dim">${esc(meta.note)}</td>
   </tr>`).join('')
   const summary = `<div class="sc-summary"><span>状态：<b>${prevTop4.length === 4 ? '第 5 轮后开赛（至赛季末）' : '下赛季开启'}</b></span><span>赛制：<b>4 组 × 4 队小组赛 + 8 强主客场淘汰赛（决赛单场）</b></span><span>淘汰赛每轮参赛金：<b>${reward.appearance.toLocaleString()}（小组赛不发奖金）</b></span><span>冠军额外金币：<b>${reward.champion.toLocaleString()}</b></span><span>首次夺冠专属奖励：${tag('彩书 · 传奇之星', 'skill-rainbow')}</span></div>
-    <p class="hint pad">冠军联赛每赛季最终前 4 名获得下赛季传奇杯资格，与真实足球史上最强的 12 支传奇俱乐部（一俱乐部一支，首发 CA 1600–1900）分入 4 个小组（每组 1 支联赛队 + 3 支历史豪门）踢单循环小组赛；赛程从第 5 轮起一直延续到赛季结束（决赛在赛季收官休整期压轴进行），小组赛允许平局且不发奖金，各组前 2 名晋级 8 强（1/4 决赛与半决赛主客场两回合、决赛单场，淘汰赛每轮发放一次参赛金）。传奇杯首次夺冠不叠加属性上限，改为发放唯一彩书《传奇之星》：培养前带入书槽即全程生效（不占实战技能槽），每次常规行动 10% 概率触发彩色事件，从 2 项随机未满主属性中二选一 +100（每轮最多 3 次）。</p>`
+    <p class="hint pad">冠军联赛每赛季最终前 4 名获得下赛季传奇杯资格，与真实足球史上最强的 12 支传奇俱乐部（一俱乐部一支，首发 CA 1300–1600）分入 4 个小组（每组 1 支联赛队 + 3 支历史豪门）踢单循环小组赛；赛程从第 5 轮起一直延续到赛季结束（决赛在赛季收官休整期压轴进行），小组赛允许平局且不发奖金，各组前 2 名晋级 8 强（1/4 决赛与半决赛主客场两回合、决赛单场，淘汰赛每轮发放一次参赛金）。传奇杯首次夺冠不叠加属性上限，改为发放唯一彩书《传奇之星》：培养前带入书槽即全程生效（不占实战技能槽），每次常规行动 10% 概率触发彩色事件，从 2 项随机未满主属性中二选一 +100（每轮最多 3 次）。</p>`
   const rosterTable = panel('特邀 12 支历史最强俱乐部（点击查看阵容）', `<div class="table-scroll"><table class="dt"><thead><tr><th class="num">#</th><th>俱乐部</th><th>主教练</th><th class="num">首发 CA</th><th>历史成就</th></tr></thead><tbody>${legendRows}</tbody></table></div>`, { flush: true })
   return `${summary}${panel(qualifierTitle, qualifierHtml, { flush: true })}${rosterTable}`
 }

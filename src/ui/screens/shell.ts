@@ -186,7 +186,7 @@ export function renderTopbar(): string {
   const economy = economyOf(game)
   const online = onlineState.status === 'online'
   const account = onlineState.user ? esc(onlineState.user.username) : '登录 / 注册'
-  const sync = online ? (onlineState.connected ? '已同步' : '连接中') : ''
+  const sync = !online ? '' : onlineState.error ? '同步失败' : onlineState.connected ? '已同步' : '连接中'
   return `<header class="topbar">
     <div class="top-stats">
       <div class="top-stat optional"><span>当前进度</span><b>${esc(seasonRoundLabel(game))}</b></div>
@@ -204,8 +204,8 @@ export function renderTopbar(): string {
         ${auctionChip()}
         ${chatChip()}
         <button class="btn ghost top-version" data-action="changelog-open" title="查看版本更新说明">${icon('info', 15)}<span>${esc(APP_VERSION)}</span><span class="optional">更新说明</span></button>
-        <button class="btn ghost top-account" data-action="account-open">${icon('user', 15)}<span class="account-name">${account}</span>${sync ? `<span class="sync-state ${onlineState.connected ? 'ok' : 'muted'}">${sync}</span>` : ''}</button>
-        <button class="btn ghost" data-action="new-game" title="开始新游戏">${icon('newgame', 15)}<span class="optional">新游戏</span></button>
+        <button class="btn ghost top-account" data-action="account-open">${icon('user', 15)}<span class="account-name">${account}</span>${sync ? `<span class="sync-state ${onlineState.connected && !onlineState.error ? 'ok' : 'muted'}">${sync}</span>` : ''}</button>
+        ${online ? '' : `<button class="btn ghost" data-action="new-game" title="开始新游戏">${icon('newgame', 15)}<span class="optional">新游戏</span></button>`}
       </div>
       ${continueAction()}
     </div>

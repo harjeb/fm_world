@@ -27,7 +27,7 @@ import { ensurePve } from '../src/game/pve.ts'
 import { loadPveContent } from '../src/game/pve-content.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
 import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, migrateLegacyExpandedTactics, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, repairInflatedContractWages, syncAllClubLiveTactics, syncClubLiveTactics, wageForPlayer, worldForClub, worldSlots, worldWageBill } from '../src/game/world.ts'
-import { pickExpandedZoneClubs } from '../src/game/data/world-clubs.ts'
+import { WORLD_CLUB_DEFS, pickExpandedZoneClubs } from '../src/game/data/world-clubs.ts'
 import { lineupLockState } from '../src/game/season.ts'
 import { completedWorldRound, paysSeasonCupAppearanceGold, seasonRoundKickoff, worldRoundsKickedOff } from '../src/game/season-cups.ts'
 import { legendCupTeamById } from '../src/game/data/legend-cup-teams.ts'
@@ -94,7 +94,7 @@ import {
 export const AI_TAKEOVER_INACTIVE_MS = 3 * 24 * 60 * 60_000
 const ONLINE_PERSIST_INTERVAL_MS = 5 * 60_000
 
-import { AccountStore, type Account } from './account-store.ts'
+import { AccountStore, isVacantSeat, vacantSeatId, type Account } from './account-store.ts'
 
 type SharedWorld = {
   seed: number
@@ -227,6 +227,17 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     sharedWorld.world = ownerless.world
     sharedWorld.freeStars = ownerless.freeStars
     sharedWorld.reserveStars = ownerless.reserveStars
+  }
+  // SQLite 原子交接后、world.json 更新前可能重启；以已提交的接管者为准。
+  for (const { club_id, holder, initial_name } of accountStore.handovers()) {
+    const account = db.accounts.find(item => item.id === holder)
+    const club = sharedWorld.world.clubs.find(item => item.id === club_id)
+    if (!club || !account || account.game.world?.clubs.find(item => item.id === 'player')?.squadKey !== club_id) throw new Error('俱乐部交接记录与存档不一致')
+    club.initialName = initial_name
+    sharedWorld.owners[club_id] = holder
+    club.name = account.game.clubName
+    if (sharedWorld.teams?.[club_id]) sharedWorld.teams[club_id].name = club.name
+    if (isVacantSeat(holder) && sharedWorld.cupOpening?.teams[club_id]) sharedWorld.cupOpening.teams[club_id].name = club.name
   }
   upgradeSharedWorldNames(sharedWorld)
   if (!sharedWorld.aiClubs) sharedWorld.aiClubs = seedAIClubs(sharedWorld.world, sharedWorld.seed)
@@ -513,6 +524,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   }
 
   function isAccountAITakeover(account: Account, at = now()): boolean {
+    if (isVacantSeat(account.id)) return true
     if (isAccountOnlineNow(account)) return false
     const lastOnline = account.lastOnlineAt ?? account.createdAt
     return at - lastOnline > AI_TAKEOVER_INACTIVE_MS
@@ -525,7 +537,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const at = now()
     for (const [clubId, ownerId] of Object.entries(sharedWorld.owners)) {
       const owner = accounts.get(ownerId)
-      if (owner) result[clubId] = isAccountAITakeover(owner, at) ? 'takeover' : 'human'
+      if (owner && !isVacantSeat(ownerId)) result[clubId] = isAccountAITakeover(owner, at) ? 'takeover' : 'human'
     }
     return result
   }
@@ -534,8 +546,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const t = now()
     const prev = account.lastOnlineAt
     const wasTakeover = prev !== undefined && t - prev > AI_TAKEOVER_INACTIVE_MS
+    const newSeason = account.lastOnlineSeason !== sharedWorld.world.seasonIndex
+    account.lastOnlineSeason = sharedWorld.world.seasonIndex
     account.lastOnlineAt = t
-    if (!closed && (forcePersist || prev === undefined || wasTakeover || t - prev >= ONLINE_PERSIST_INTERVAL_MS)) {
+    if (!closed && (newSeason || forcePersist || prev === undefined || wasTakeover || t - prev >= ONLINE_PERSIST_INTERVAL_MS)) {
       persistAccount(account)
     }
   }
@@ -1208,6 +1222,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       account.lastUserRevision = account.revision
       removedPreparation = true
     }
+    if (!isVacantSeat(account.id) && account.lastOnlineSeason === undefined) {
+      // 老库没有可靠的上线赛季，从升级时开始计数，不追溯删号。
+      account.lastOnlineSeason = sharedWorld.world.seasonIndex
+      removedPreparation = true
+    }
     if (account.lastOnlineAt === undefined) {
       account.lastOnlineAt = account.updatedAt || account.createdAt || now()
       removedPreparation = true
@@ -1433,7 +1452,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const validOwner = owner?.game.world?.clubs.find((item) => item.id === 'player')?.squadKey === club.id
     return {
       id: club.id, name: validOwner ? owner.game.clubName : club.name, color: club.color,
-      tier: club.tier, conference: club.conference, managed: !!owner, aiTakeover: !!owner && isAccountAITakeover(owner),
+      tier: club.tier, conference: club.conference, managed: !!owner && !isVacantSeat(owner.id), aiTakeover: !!owner && !isVacantSeat(owner.id) && isAccountAITakeover(owner),
       formationId: validOwner ? owner.game.lineup.formationId : team?.formationId ?? club.formationId,
       players: includeRoster ? (validOwner ? owner.game.roster : team?.players ?? []).map(publicPlayer) : [],
       ...(includeRoster ? {} : { rosterDeferred: true }),
@@ -1532,12 +1551,14 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const name = normalizeClubName(rawName)
     if (name === account.game.clubName) return { ok: true, name }
     const taken = [
-      ...sharedWorld.world.clubs.filter((club) => club.id !== clubId).map((club) => club.name),
+      ...sharedWorld.world.clubs.filter((club) => club.id !== clubId).flatMap((club) => [club.name, initialClubName(club) ?? club.name]),
       ...Object.entries(sharedWorld.teams ?? {}).filter(([id]) => id !== clubId).map(([, team]) => team.name),
       ...db.accounts.filter((item) => item.id !== account.id && item.game).map((item) => item.game.clubName),
     ]
     const error = clubNameError(name, taken)
     if (error) return { ok: false, error, status: 400 }
+    const club = sharedWorld.world.clubs.find(item => item.id === clubId)!
+    club.initialName ??= initialClubName(club) ?? club.name
     account.game.clubName = name
     let chatRenamed = false
     for (const item of chatMessages) {
@@ -2105,6 +2126,34 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   /** 最近一次全服换季的时间，用来让“开始下一赛季”请求在自动换季后保持幂等。 */
   let lastRollAt = -Infinity
 
+  function initialClubName(club: WorldClub): string | undefined {
+    return club.initialName ?? WORLD_CLUB_DEFS.find(item => item.id === club.id)?.name
+      ?? (club.enName && expandedNames.get(club.enName))
+  }
+  // 扩区名按当时可用的名字抽取，不能只按队号倒推。旧版改名不改 enName。
+  const expandedNames = new Map(pickExpandedZoneClubs(3, new Set(), Infinity).map(([name, en]) => [en, name]))
+
+  function releaseIdleCoach(account: Account, clubId: string, finishedSeason: number): boolean {
+    if (isVacantSeat(account.id) || isAccountOnlineNow(account) || account.lastOnlineSeason === undefined || finishedSeason - account.lastOnlineSeason < 2) return false
+    const club = sharedWorld.world.clubs.find(item => item.id === clubId)!
+    const name = initialClubName(club)
+    if (!name || sharedWorld.world.clubs.some(other => other.id !== clubId && other.name === name)) {
+      console.warn(`闲置席位 ${clubId} 原名不明或被占用，保留账号等待核查`)
+      return false
+    }
+    const id = vacantSeatId(clubId)
+    const seat: Account = { id, username: id, salt: '', passwordHash: '', game: { ...account.game, clubName: name },
+      revision: account.revision, lastUserRevision: account.lastUserRevision, appliedMatchIds: account.appliedMatchIds,
+      offerKey: account.offerKey, aiTakeoverKey: account.aiTakeoverKey, createdAt: account.createdAt, updatedAt: now() }
+    accountStore.replaceHolder(account, seat, clubId, name)
+    sharedWorld.owners[clubId] = id
+    club.name = name
+    sharedWorld.teams![clubId].name = name
+    const openingTeam = sharedWorld.cupOpening?.teams[clubId]
+    if (openingTeam) openingTeam.name = name
+    return true
+  }
+
   /** 全服赛季一次性结算：先在副本中算完升降级和所有教练的阵容，再一起发布。 */
   function rollSharedSeason(force = false): { ok: boolean; error?: string } {
     const old = sharedWorld.world
@@ -2117,6 +2166,13 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     })
     if (managed.some(({ account }) => account.game.activeMatch?.context.isLeague)) return { ok: false, error: '有教练的联赛比赛仍在进行' }
     try {
+      // 手动、Agent 和自动换季共用此屏障：包括离线教练的最后一轮联赛/杯赛奖励。
+      for (const { account } of managed) {
+        if (account.game.season.index !== old.seasonIndex) continue
+        pullSharedFixtures(account)
+        const settled = syncPublishedMatches(account)
+        if (settled.changed) persistAccount(account)
+      }
       const sample = managed.find(({ account }) => account.game.season.index === old.seasonIndex)
       const representativeId = sample?.clubId ?? old.clubs.find((club) => club.tier === 'division2')!.id
       const representative = sample
@@ -2205,10 +2261,29 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       for (const state of Object.values(sharedWorld.aiClubs ?? {})) state.signings = []
       persistWorld({ world: true, teams: true, matchBook: true, immediate: true })
       for (const { account } of drafts) {
+        if (isAccountOnlineNow(account)) account.lastOnlineSeason = next.seasonIndex
         persistAccount(account)
-        broadcast(account)
+      }
+      accountStore.flushSync()
+      // 临时文件 rename 只保证原子可见。回收不可逆，先同步世界文件及其目录项。
+      for (const file of process.platform === 'win32' ? [worldPath] : [worldPath, dataDir]) {
+        const fd = fs.openSync(file, 'r')
+        try { fs.fsyncSync(fd) } finally { fs.closeSync(fd) }
       }
       lastRollAt = now()
+      // world.json、赛果及所有换季存档均已提交。维护失败不能误报换季失败。
+      try { matchQueue.prunePublishedBefore(next.seasonIndex) }
+      catch (error) { console.error('换季后的比赛任务清理失败', error) }
+      let holderChanged = false
+      for (const { account, clubId } of drafts) {
+        try { if (releaseIdleCoach(account, clubId, old.seasonIndex)) holderChanged = true }
+        catch (error) { console.error('闲置教练交接失败', error) }
+      }
+      if (holderChanged) {
+        try { persistWorld({ world: true, teams: true, immediate: true }) }
+        catch (error) { console.error('交接已记入 SQLite，世界归属将在重启时恢复', error) }
+      }
+      for (const { account } of drafts) if (isAccountOnlineNow(account)) broadcast(account)
       return { ok: true }
     } catch (error) {
       console.error('全服赛季结算失败', error)
@@ -2265,12 +2340,12 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   function accountFromToken(token: string | undefined): Account | undefined {
     if (!token) return undefined
     const id = sessions[token]
-    return db.accounts.find((account) => account.id === id)
+    return !isVacantSeat(id) ? db.accounts.find((account) => account.id === id) : undefined
   }
 
   function agentAccountFromToken(token: string | undefined): Account | undefined {
     if (!token?.startsWith('fm_')) return undefined
-    return db.accounts.find((account) => account.agentToken === token)
+    return db.accounts.find((account) => !isVacantSeat(account.id) && account.agentToken === token)
   }
 
   function tokenFromRequest(req: IncomingMessage): string | undefined {
@@ -2377,15 +2452,15 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     return view
   }
 
-  const aliveAccountIds = () => db.accounts.map((account) => account.id)
+  function aliveAccountIds() { return db.accounts.filter(account => !isVacantSeat(account.id)).map(account => account.id) }
   /** 空位统计（owners 里指向已删除账号的条目视为空位）。 */
   function slotInfo() {
     return worldSlots(sharedWorld.world, sharedWorld.owners, aliveAccountIds())
   }
 
   /** 二级联赛满员时按需开出新赛区，并补齐名册、AI 经营轮次与前序已公布轮次。 */
-  function ensureFreeD2Club(): WorldClub | undefined {
-    const existing = pickFreeClubForNewAccount(sharedWorld.world, sharedWorld.owners, aliveAccountIds())
+  function availableRegistrationClub(): WorldClub | undefined {
+    const existing = sharedWorld.world.clubs.find(item => isVacantSeat(sharedWorld.owners[item.id])) ?? pickFreeClubForNewAccount(sharedWorld.world, sharedWorld.owners, aliveAccountIds())
     if (existing) return existing
     const completedBefore = completedWorldRound(sharedWorld.world)
     const { divisionId } = expandWorldConference(
@@ -2437,7 +2512,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     autoRollSharedSeason()
     autoPlayoff()
     if (url.pathname === '/api/health') {
-      json(res, 200, { ok: true, accounts: db.accounts.length, version: GAME_VERSION, worldSeasonStartedAt: sharedWorld.startedAt, memory: memoryMonitor.snapshot() })
+      json(res, 200, { ok: true, accounts: aliveAccountIds().length, version: GAME_VERSION, worldSeasonStartedAt: sharedWorld.startedAt, memory: memoryMonitor.snapshot() })
       return
     }
 
@@ -2445,12 +2520,12 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       advanceAllMatches()
       const aiTakeoverClubs = sharedWorld.world.clubs.flatMap((club) => {
         const owner = db.accounts.find((item) => item.id === sharedWorld.owners[club.id])
-        return owner && isAccountAITakeover(owner) ? [club.id] : []
+        return owner && !isVacantSeat(owner.id) && isAccountAITakeover(owner) ? [club.id] : []
       })
       await sendJson(200, {
         seed: sharedWorld.seed,
         startedAt: sharedWorld.startedAt,
-        owners: sharedWorld.owners,
+        owners: Object.fromEntries(Object.entries(sharedWorld.owners).filter(([, id]) => !isVacantSeat(id))),
         aiTakeoverClubs,
         slots: slotInfo(),
         round: sharedWorld.world.divisions[0]?.round ?? 1,
@@ -2478,16 +2553,16 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
     if (url.pathname === '/api/public-config' && req.method === 'GET') {
       /* 只暴露注册模式与 sitekey，邀请码与 secret 永不下发。 */
-      json(res, 200, { registration: registrationMode, turnstileSiteKey, accounts: db.accounts.length, slots: slotInfo() })
+      json(res, 200, { registration: registrationMode, turnstileSiteKey, accounts: aliveAccountIds().length, slots: slotInfo() })
       return
     }
 
-    // 注册前只读预览：不创建账号、不预占球队，只提供空缺二级球队的公开名单；二级满员时自动开出新赛区。
+    // 注册预览不预占球队：二级空位及各级别释放的托管席都可选。
     if (url.pathname === '/api/registration/clubs' && req.method === 'GET') {
       if (registrationMode === 'closed') return json(res, 403, { error: '本服务器已关闭注册' })
       advanceAllMatches()
-      ensureFreeD2Club()
-      const clubs = worldSnapshot().clubs.filter((club) => club.tier === 'division2' && !club.managed)
+      availableRegistrationClub()
+      const clubs = worldSnapshot().clubs.filter((club) => !club.managed && (club.tier === 'division2' || isVacantSeat(sharedWorld.owners[club.id])))
       await sendJson(200, { clubs }, true)
       return
     }
@@ -2516,34 +2591,35 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       let club = requestedClubId ? sharedWorld.world.clubs.find((item) => item.id === requestedClubId) : undefined
       if (requestedClubId) {
         if (!club) return json(res, 400, { error: '找不到这支球队，请刷新列表' })
-        if (club.tier !== 'division2') return json(res, 400, { error: '只能选择空缺的二级联赛球队' })
         const ownerId = sharedWorld.owners[club.id]
-        if (db.accounts.some((item) => item.id === ownerId)) {
+        if (!isVacantSeat(ownerId) && db.accounts.some((item) => item.id === ownerId)) {
           return json(res, 409, { error: '这支球队已经有人执教，请选择其他球队' })
         }
+        if (club.tier !== 'division2' && !isVacantSeat(ownerId)) return json(res, 400, { error: '只能选择空缺的二级球队或前任教练释放的球队' })
       } else {
-        // 兼容未指定球队的 API 客户端：只在二级联赛找空位，满员就开新赛区并补齐赛果与名单。
-        club = ensureFreeD2Club()
+        // 未指定球队时优先交接托管席，再选二级空位；满员才扩区。
+        club = availableRegistrationClub()
       }
       if (!club) return json(res, 503, { error: '服务器席位已满：新赛区也没能开出空位，请稍后再试' })
       const accountId = crypto.randomUUID()
-      sharedWorld.owners[club.id] = accountId
-      persistWorld({ world: false, teams: false, matchBook: false, immediate: true })
+      const previous = db.accounts.find(item => item.id === sharedWorld.owners[club.id] && isVacantSeat(item.id))
+      club.initialName ??= initialClubName(club) ?? club.name
       const account: Account = {
         id: accountId,
         username,
         salt,
         passwordHash: hashPassword(password, salt),
         // 自由球员全服共用，账号里不再有自己的一份。
-        game: createWorldGameFromWorld(sharedWorld.world, club.id, sharedWorld.seed, sharedWorld.startedAt, [], sharedWorld.reserveStars),
+        game: previous?.game ?? createWorldGameFromWorld(sharedWorld.world, club.id, sharedWorld.seed, sharedWorld.startedAt, [], sharedWorld.reserveStars),
         revision: 1,
         lastUserRevision: 1,
+        lastOnlineSeason: sharedWorld.world.seasonIndex,
         lastOnlineAt: now(),
         createdAt: now(),
         updatedAt: now(),
       }
       const initialTeam = sharedWorld.teams?.[club.id]
-      if (initialTeam) {
+      if (initialTeam && !previous) {
         account.game.roster = structuredClone(initialTeam.players).map((player) => ({
           ...player,
           contract: { clubId: 'player', wage: wageForPlayer(player), expiresSeason: account.game.season.index + 3 },
@@ -2551,14 +2627,20 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         account.game.lineup = structuredClone(initialTeam.lineup)
       }
       const inheritedCupBonuses = sharedWorld.aiClubs?.[club.id]?.cupCeilingClaims
-      if (inheritedCupBonuses) {
+      if (inheritedCupBonuses && !previous) {
         ensurePve(account.game)
         account.game.pve!.cupCeilingClaims = { ...account.game.pve!.cupCeilingClaims, ...inheritedCupBonuses }
         ensureCupCeilingClaims(account.game)
       }
       forgetMarketAges(account)
-      account.appliedMatchIds = inheritedMatchIds(account.game, club.id)
-      db.accounts.push(account)
+      account.appliedMatchIds = previous?.appliedMatchIds ?? inheritedMatchIds(account.game, club.id)
+      if (previous) {
+        account.aiTakeoverKey = previous.aiTakeoverKey
+        account.offerKey = previous.offerKey
+        accountStore.replaceHolder(previous, account, club.id, club.initialName)
+      } else db.accounts.push(account)
+      sharedWorld.owners[club.id] = accountId
+      persistWorld({ world: true, teams: true, immediate: true })
       const token = createSession(account.id)
       persistAccount(account)
       advanceAccount(account)
@@ -2572,7 +2654,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const username = String(body.username ?? '').trim().toLowerCase()
       const password = String(body.password ?? '')
       const account = db.accounts.find((item) => item.username.toLowerCase() === username)
-      if (!account || hashPassword(password, account.salt) !== account.passwordHash) return json(res, 401, { error: '用户名或密码错误' })
+      if (!account || isVacantSeat(account.id) || hashPassword(password, account.salt) !== account.passwordHash) return json(res, 401, { error: '用户名或密码错误' })
       if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
       touchAccountOnline(account, true)
       const token = createSession(account.id)
@@ -3536,7 +3618,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       flushWorldSync()
       accountStore.close()
     },
-    accountCount: () => db.accounts.length,
+    accountCount: () => aliveAccountIds().length,
     runMatchQueue,
   }
 }

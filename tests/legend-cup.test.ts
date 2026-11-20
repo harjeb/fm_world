@@ -130,8 +130,8 @@ function makeSeason2World(seed = 2026, start = Date.UTC(2026, 10, 9, 2), complet
   return { world, top4, freeStars, reserveStars }
 }
 
-describe('传奇杯特邀 12 支历史最强俱乐部（一俱乐部一支，CA 1600–1900）', () => {
-  it('12 支历史强队俱乐部完全不重复，全部合法且首发 CA 精确落在 1600–1900', () => {
+describe('传奇杯特邀 12 支历史最强俱乐部（一俱乐部一支，CA 1300–1600）', () => {
+  it('12 支历史强队俱乐部完全不重复，全部合法且首发 CA 精确落在 1300–1600', () => {
     expect(LEGEND_CUP_SPECS).toHaveLength(12)
     expect(LEGEND_CUP_META).toHaveLength(12)
     expect(LEGEND_CUP_TEAM_IDS).toHaveLength(12)
@@ -150,9 +150,10 @@ describe('传奇杯特邀 12 支历史最强俱乐部（一俱乐部一支，CA 
       expect(new Set(team.players.map((p) => p.enName)).size).toBe(16)
 
       const ca = startingCa(team)
-      expect(ca).toBeGreaterThanOrEqual(1600 - 1e-4)
-      expect(ca).toBeLessThanOrEqual(1900 + 1e-4)
+      expect(ca).toBeGreaterThanOrEqual(1300 - 1e-4)
+      expect(ca).toBeLessThanOrEqual(1600 + 1e-4)
       expect(ca).toBeCloseTo(spec.targetCa, 4)
+      if (i > 0) expect(spec.targetCa).toBeLessThan(LEGEND_CUP_SPECS[i - 1].targetCa)
 
       for (const player of team.players) {
         expect(player.id.startsWith(`${team.id}-`)).toBe(true)
@@ -782,7 +783,7 @@ describe('传奇杯奖金规则（小组赛 0 金币，淘汰赛每轮发一次�
     const clubBody = (await clubRes.json()) as { club: { id: string; name: string; players: { ca: number }[]; rating: number } }
     expect(clubBody.club.name).toBe('巴塞罗那 2010-11')
     expect(clubBody.club.players).toHaveLength(16)
-    expect(clubBody.club.rating).toBeGreaterThanOrEqual(1900 * 11 - 50)
+    expect(clubBody.club.rating).toBe(1600 * 11)
 
     const beforeKo = (await (await fetch(`${koBase}/api/game`, { headers: koHeaders })).json()) as { game: GameState; revision: number }
     const bal0 = beforeKo.game.economy!.balance
@@ -849,7 +850,7 @@ describe('传奇杯奖金规则（小组赛 0 金币，淘汰赛每轮发一次�
     const pubBarca = publicClubFor(uiGame.world, 'lcup-barcelona-2010-11')!
     expect(pubBarca.players).toHaveLength(16)
     const modalHtml = clubRosterPanel(pubBarca, pubBarca.players[0].id)
-    expect(modalHtml).toContain('传奇杯 CA 1900')
+    expect(modalHtml).toContain('传奇杯 CA 1600')
     expect(modalHtml).not.toContain('派出球探')
     expect(legendCupMetaById('lcup-barcelona-2010-11')?.coach).toBe('瓜迪奥拉')
   }, 120_000)
@@ -873,6 +874,7 @@ describe('传奇杯奖金规则（小组赛 0 金币，淘汰赛每轮发一次�
     expect(html).toContain('小组赛不发奖金')
     expect(html).toContain('彩书 · 传奇之星')
     expect(html).toContain('特邀 12 支历史最强俱乐部')
+    expect(html).toContain('首发 CA 1300–1600')
 
     // 第 2 赛季第 6 轮前：传奇杯已提前开赛，其余 4 项杯赛等待第 6 轮公布
     const { world: s2w, top4: s2Top4, freeStars: s2Free, reserveStars: s2Res } = makeSeason2World(708, start, 1)

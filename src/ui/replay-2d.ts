@@ -14,7 +14,7 @@ import { fetchMatchReplay } from '../online.ts'
 import { chaseReplayClock, paintReplay, replayBannerActive, resetReplayPaint } from './pes-pitch.ts'
 import { clubLook, crest, distinctKit, icon, ownName, panel } from './components.ts'
 import { clockText, esc } from './format.ts'
-import { ui } from './state.ts'
+import { game, ui } from './state.ts'
 
 export const REPLAY_SPEEDS = [1, 2, 4, 8] as const
 /** 文字直播里同时显示最近几条。 */
@@ -81,7 +81,7 @@ export function resetReplay2D(): void {
 
 /** 复盘页打开某场战报时调用：有 2D 回放就去取，没有就清掉上一场的。 */
 export function ensureReplay2D(record: MatchRecord | undefined): void {
-  if (!record?.hasReplay) {
+  if (!record?.hasReplay || replayExpired(record)) {
     if (replay2d.id) resetReplay2D()
     return
   }
@@ -221,10 +221,15 @@ export function previewReplay2DSeek(fraction: number): void {
   if (clock) clock.textContent = clockText(Math.round(Math.max(0, Math.min(1, fraction)) * MATCH_DISPLAY_SECONDS * 10) / 10)
 }
 
+function replayExpired(record: MatchRecord): boolean {
+  return !!game?.shared && record.seasonIndex !== undefined && record.seasonIndex < game.season.index
+}
+
 /** 复盘页上的 2D 面板；没有回放的战报（友谊赛、旧战报）不显示。 */
 export function renderReplay2D(record: MatchRecord): string {
   if (!record.hasReplay) return ''
   const title = '2D 重看'
+  if (replayExpired(record)) return panel(title, '<p class="muted pad">2D 回放仅保留本赛季，历史文字战报仍可查看。</p>')
   if (replay2d.id !== record.id || replay2d.status === 'loading') return panel(title, '<p class="muted pad">正在载入 2D 回放…</p>', { className: 'replay2d-panel' })
   if (replay2d.status === 'error' || !replay2d.sim) return panel(title, `<p class="muted pad">${esc(replay2d.error || '回放暂时不可用')}</p>`, { className: 'replay2d-panel' })
   const sim = replay2d.sim

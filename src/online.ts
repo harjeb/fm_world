@@ -753,10 +753,9 @@ async function flushSave(): Promise<void> {
     syncedGame = game
     onlineState.lastSync = result.updatedAt
     onlineState.error = ''
-    onlineState.status = 'online'
   } catch (error) {
+    // 保存失败不等于退出联机会话；保留服务器球队快照，不能切到本地推进逻辑。
     onlineState.error = error instanceof Error ? error.message : '同步失败'
-    onlineState.status = 'offline'
     if (onlineState.error.includes('另一设备')) {
       try {
         const current = await requestJson<{ game: GameState; revision: number }>('/api/game', undefined, RECOVERY_TIMEOUT_MS)
@@ -764,7 +763,6 @@ async function flushSave(): Promise<void> {
         onlineState.revision = current.revision
         syncedGame = current.game
         remoteGameHandler?.(current.game)
-        onlineState.status = 'online'
       } catch {
         // 留到下一次 SSE/手动刷新。
       }
@@ -827,7 +825,7 @@ export function hasOnlineSession(): boolean {
 }
 
 /**
- * 本次会话是否真的连着服务器。
+ * 本次是否已载入联机存档；临时断流或保存失败都不改变游戏模式。
  * 启动页选了「离线模式」时，本地令牌仍然保留（方便下次继续联机），
  * 但这一局的所有推进都必须走本地，不能因为“有令牌”就去请求服务器。
  */

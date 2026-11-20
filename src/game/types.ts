@@ -402,6 +402,8 @@ export type TierId = 'champions' | 'division1' | 'division2'
 export type ConferenceId = 'north' | 'south' | `zone${number}`
 
 export type WorldClub = AITeamDef & {
+  /** 接管/改名前的队名，换教练时只恢复此名。 */
+  initialName?: string
   tier: TierId
   conference?: ConferenceId
   starPlayerIds: string[]

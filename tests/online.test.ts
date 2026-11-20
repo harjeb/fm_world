@@ -109,6 +109,40 @@ function stallRequest(init: RequestInit): Promise<Response> {
   })
 }
 
+it('后台保存超时后仍显示联机球队状态，只有退出账号后才出现本地新游戏', async () => {
+  vi.useFakeTimers()
+  vi.stubGlobal('window', { setTimeout, clearTimeout })
+  vi.stubGlobal('EventSource', FakeEvents)
+  const { createWorldGame } = await import('../src/game/world.ts')
+  const { saveGame } = await import('../src/game/state.ts')
+  const online = await import('../src/online.ts')
+  const { setGame } = await import('../src/ui/state.ts')
+  const { renderWorld } = await import('../src/ui/screens/world.ts')
+  const { renderTopbar } = await import('../src/ui/screens/shell.ts')
+  const game = createWorldGame(193)
+  const opponent = game.season.table.find(row => row.teamId !== 'player')!.teamId
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/login') return Response.json({ token: 'session', user: { id: '1', username: 'u' }, revision: 1, game, clubCoaches: { [opponent]: 'takeover' } })
+    if (init?.method === 'PUT') return stallRequest(init)
+    if (url === '/api/logout') return Response.json({ ok: true })
+    throw new Error('unexpected request: ' + url)
+  }))
+  setGame((await online.loginOnline('u', 'password')).game)
+  FakeEvents.current.onopen?.()
+  expect(renderWorld()).toContain('human-mark ai-takeover')
+  saveGame(game)
+  await vi.advanceTimersByTimeAsync(30_000)
+  expect(online.onlineState.error).toContain('超时')
+  expect(renderTopbar()).toContain('同步失败')
+  expect(renderTopbar()).not.toContain('data-action="new-game"')
+  const world = renderWorld()
+  expect(world).toContain('human-mark ai-takeover')
+  expect(world).not.toContain('开始本地新游戏')
+  await online.logoutOnline()
+  expect(renderWorld()).toContain('开始本地新游戏')
+  expect(renderWorld()).not.toContain('human-mark ai-takeover')
+})
+
 it.each(['PUT', 'POST'])('青训等待中的 %s 超时后取消请求，不自动重复提交', async (stalledMethod) => {
   vi.useFakeTimers()
   vi.stubGlobal('window', { setTimeout, clearTimeout })

@@ -5,7 +5,7 @@ import { fork, type ChildProcess } from 'node:child_process'
 import type { MatchJob, MatchJobResult } from './match-job.ts'
 
 export type JobEntry = Pick<MatchJob, 'id' | 'season' | 'divisionId' | 'round' | 'kickoffAt' | 'lockedAt'> & {
-  status: 'queued' | 'running' | 'ready' | 'published'
+  status: 'queued' | 'running' | 'ready' | 'published' | 'pruning'
   attempts: number
   retryAt?: number
   error?: string
@@ -40,10 +40,38 @@ export class MatchQueue {
       // 损坏的队列不能静默丢弃，否则会用新阵容重算已经锁定的比赛。
       const entries = JSON.parse(fs.readFileSync(this.indexPath, 'utf8')) as JobEntry[]
       for (const entry of entries) {
-        if (entry.status !== 'published') entry.status = fs.existsSync(this.file(entry.id, 'result')) ? 'ready' : 'queued'
+        if (entry.status !== 'published' && entry.status !== 'pruning') entry.status = fs.existsSync(this.file(entry.id, 'result')) ? 'ready' : 'queued'
         this.entries.set(entry.id, entry)
       }
+      // 仅续做已经在换季提交后获准的删除，不从文件时间猜赛季。
+      this.finishPruning()
     }
+  }
+
+  prunePublishedBefore(season: number): void {
+    const expired = [...this.entries.values()].filter(entry => entry.status === 'published' && entry.season < season)
+    if (expired.length) {
+      for (const entry of expired) entry.status = 'pruning'
+      // 删除授权先原子写入索引；中途退出不会把半删的任务重新排队。
+      try { this.persist() } catch (error) {
+        for (const entry of expired) entry.status = 'published'
+        throw error
+      }
+    }
+    this.finishPruning()
+  }
+
+  private finishPruning(): void {
+    let changed = false
+    for (const entry of this.entries.values()) {
+      if (entry.status !== 'pruning') continue
+      try {
+        for (const kind of ['input', 'result'] as const) fs.rmSync(this.file(entry.id, kind), { force: true })
+        this.entries.delete(entry.id)
+        changed = true
+      } catch (error) { console.error(`旧比赛任务 ${entry.id} 清理失败，下次重试`, error) }
+    }
+    if (changed) this.persist()
   }
 
   private file(id: string, kind: 'input' | 'result'): string {
