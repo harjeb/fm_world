@@ -7,7 +7,7 @@ import { FORMATIONS } from '../data/formations.ts'
 import { MatchEngine, normalizePossession } from './engine.ts'
 import { PesEngine, type GameEngine } from '../pes/engine.ts'
 import { cloneInstructions, instructionsFromLegacyTactics, legacyTacticsFromInstructions } from '../pes/tactics.ts'
-import { aiNeedsRotation, aiRotatedLineup, autoFillLineup, computeLineupFamiliarity, validateLineup } from '../squad.ts'
+import { aiNeedsRotation, aiRotatedLineup, autoFillLineup, computeBaseLineupFamiliarity, computeLineupFamiliarity, validateLineup } from '../squad.ts'
 import { applyAITacticsToLineup, defaultAIAutoSubs, defaultAITacticsStage } from '../ai-tactics.ts'
 import { injuryUntil, prepareMatchInjuries } from '../injury.ts'
 import { suspendedPlayerIds } from '../discipline.ts'
@@ -62,6 +62,7 @@ export function teamInputFromLineup(
           ...(lineup.tacticalStyle ? { tacticalStyle: lineup.tacticalStyle } : {}),
           instructions,
           familiarity: computeLineupFamiliarity(roster, lineup, options?.tacticsStage ?? 1),
+          baseFamiliarity: computeBaseLineupFamiliarity(roster, lineup, options?.tacticsStage ?? 1),
         }
       : {}),
     starters,

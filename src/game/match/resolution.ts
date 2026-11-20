@@ -7,6 +7,7 @@ import type { PCG32 } from '../rng.ts'
 import { chooseShotFoot, chooseShotTarget, isWeakShotFoot } from './shooting.ts'
 import { GOAL_WIDTH, GOAL_Y, PITCH_LENGTH, PITCH_WIDTH, skillTierMultiplier } from './team.ts'
 import { legendMultiplier } from '../legend-bonus.ts'
+import { ageProfileOf, lowStaminaStabilityDelta } from '../age-profile.ts'
 import { clamp, dirOf, distance, distanceToSegment, goalXOf, inBox, logit, ownGoalXOf, progressOf, sigmoid, weakFoot, wideZone } from './pitch.ts'
 import type { MatchRatings } from './ratings.ts'
 import type { MatchPlayerState, MatchSide, MatchTeamState } from './types.ts'
@@ -89,7 +90,7 @@ export type ShotModel = {
 }
 
 /** 内核对评分的依赖：有效属性和特性触发条件。MatchRatings 满足它。 */
-export type KernelRatings = Pick<MatchRatings, 'eff' | 'traitConditionMet'> & Partial<Pick<MatchRatings, 'pairChemistry'>>
+export type KernelRatings = Pick<MatchRatings, 'eff' | 'traitConditionMet'> & Partial<Pick<MatchRatings, 'pairChemistry' | 'matchProgress' | 'teamHighIntensity'>>
 
 /** 内核对调用方的依赖：技能触发统计（只在 markSkills 为真时调用）和旧存档规则开关。 */
 export interface KernelHooks {
@@ -285,7 +286,16 @@ export class SettlementKernel {
         if (markSkills) this.hooks.markSkill(carrier, 'lg_quick_throw', true, true)
       }
     }
-    const p = clamp(sigmoid(logit(p0) + (a - d + c) / 30) + this.passTraitDelta(carrier, main, type, pressure, dist), 0.05, 0.97)
+    let agePassDelta = 0
+    if (this.hooks.simV2 && carrier.age !== undefined) {
+      const isGk = carrier.position === 'GK'
+      const profile = ageProfileOf(carrier.age, isGk)
+      const stamRatio = carrier.stamina / Math.max(1, carrier.maxStamina)
+      const highInt = this.ratings.teamHighIntensity?.(carrier.side) ?? false
+      agePassDelta = (pressure > 2.5 ? profile.pressuredPassDelta : profile.passDelta)
+        + lowStaminaStabilityDelta(carrier.age, isGk, stamRatio, highInt)
+    }
+    const p = clamp(sigmoid(logit(p0) + (a - d + c) / 30) + this.passTraitDelta(carrier, main, type, pressure, dist) + agePassDelta, 0.05, 0.97)
     return { p, a, d, c, p0, interceptor: main, support, weakFoot: weak }
   }
 
@@ -399,8 +409,25 @@ export class SettlementKernel {
     if (stopper?.kind === 'defend' && this.ratings.traitConditionMet(defender, stopper.when)) traitDelta -= stopper.success / 100
     const floor = 0.12 + (carrier.skills.includes('lg_elastico') && !this.hooks.legacyRules ? 0.08 * legendMultiplier(carrier, 'lg_elastico') : 0)
     if (carrier.skills.includes('lg_elastico') && markSkills && !this.hooks.legacyRules) this.hooks.markSkill(carrier, 'lg_elastico', true, true)
+    let ageDribbleDelta = 0
+    if (this.hooks.simV2) {
+      if (carrier.age !== undefined) {
+        const isGk = carrier.position === 'GK'
+        const carrierProfile = ageProfileOf(carrier.age, isGk)
+        const stamRatio = carrier.stamina / Math.max(1, carrier.maxStamina)
+        const highInt = this.ratings.teamHighIntensity?.(carrier.side) ?? false
+        ageDribbleDelta += carrierProfile.dribbleDelta + lowStaminaStabilityDelta(carrier.age, isGk, stamRatio, highInt)
+      }
+      if (defender.age !== undefined) {
+        const isGk = defender.position === 'GK'
+        const defenderProfile = ageProfileOf(defender.age, isGk)
+        const stamRatio = defender.stamina / Math.max(1, defender.maxStamina)
+        const highInt = this.ratings.teamHighIntensity?.(defender.side) ?? false
+        ageDribbleDelta -= defenderProfile.tackleDelta + lowStaminaStabilityDelta(defender.age, isGk, stamRatio, highInt)
+      }
+    }
     const divisor = this.hooks.simV2 ? 22 : 30
-    return { p: clamp(sigmoid(logit(0.72) + (a - d + c) / divisor) + traitDelta, floor, 0.95), a, d }
+    return { p: clamp(sigmoid(logit(0.72) + (a - d + c) / divisor) + traitDelta + ageDribbleDelta, floor, 0.95), a, d }
   }
 
   /** 旧活动比赛恢复路径：只用于没有 rulesVersion 的存档。 */
@@ -834,6 +861,30 @@ export class SettlementKernel {
     // 失位的门将不能隔空扑救，特性也一样；空门本来就没有扑救。
     const keeper = gk ? STAR_TRAITS[gk.traitId] : undefined
     if (gk && keeperInPosition && chance.type !== 'open_goal' && keeper?.kind === 'save' && this.shotScopeMatches(keeper.scope, chance, inBoxShot, opts) && this.ratings.traitConditionMet(gk, keeper.when)) goalGiven -= keeper.goal / 100
+    if (simV2) {
+      const clutch = opts.penalty || chance.type === 'clear_chance' || (this.ratings.matchProgress?.() ?? 0) >= 75 / 90
+      if (shooter.age !== undefined) {
+        const isGk = shooter.position === 'GK'
+        const shooterProfile = ageProfileOf(shooter.age, isGk)
+        const stamRatio = shooter.stamina / Math.max(1, shooter.maxStamina)
+        const highInt = this.ratings.teamHighIntensity?.(shooter.side) ?? false
+        const shooterDelta = (clutch ? shooterProfile.clutchShotDelta : shooterProfile.shotDelta)
+          + (opts.penalty ? 0 : lowStaminaStabilityDelta(shooter.age, isGk, stamRatio, highInt))
+        if (noKeeper || chance.type === 'open_goal') {
+          onTarget += shooterDelta
+        } else {
+          onTarget += shooterDelta * 0.5
+          goalGiven += shooterDelta * 0.5
+        }
+      }
+      if (gk && keeperInPosition && chance.type !== 'open_goal' && gk.age !== undefined) {
+        const gkProfile = ageProfileOf(gk.age, true)
+        const gkStamRatio = gk.stamina / Math.max(1, gk.maxStamina)
+        const gkDelta = (clutch ? gkProfile.clutchShotDelta : gkProfile.shotDelta)
+          + (opts.penalty ? 0 : lowStaminaStabilityDelta(gk.age, true, gkStamRatio, false))
+        goalGiven -= gkDelta
+      }
+    }
     onTarget = clamp(onTarget, chance.floor, chance.ceiling)
     goalGiven = clamp(goalGiven, 0.05, noKeeper || chance.type === 'open_goal' ? 1 : 0.95)
     let block = 0
@@ -1059,9 +1110,10 @@ export class SettlementKernel {
     const discipline = !this.hooks.legacyRules && player.skills.includes('sh_aux_discipline')
     if (discipline) this.hooks.markSkill(player, 'sh_aux_discipline', true, true)
     const disciplineScale = discipline ? clamp(1 - 0.25 * skillTierMultiplier(player, 'sh_aux_discipline'), 0.2, 1) : 1
+    const ageCardScale = this.hooks.simV2 && player.age !== undefined ? ageProfileOf(player.age, player.position === 'GK').cardScale : 1
     return {
-      straightRed: redChance * cardScale * disciplineScale * (this.hooks.legacyRules ? 1 : 0.25),
-      yellow: yellowChance * cardScale * disciplineScale * (this.hooks.legacyRules ? 1 : 0.8),
+      straightRed: redChance * cardScale * disciplineScale * ageCardScale * (this.hooks.legacyRules ? 1 : 0.25),
+      yellow: yellowChance * cardScale * disciplineScale * ageCardScale * (this.hooks.legacyRules ? 1 : 0.8),
     }
   }
 
@@ -1122,6 +1174,10 @@ export class SettlementKernel {
     if (!this.hooks.legacyRules && gk?.skills.includes('sh_gk_penalty')) {
       p -= 0.05 * skillTierMultiplier(gk, 'sh_gk_penalty')
       this.hooks.markSkill(gk, 'sh_gk_penalty', true, true)
+    }
+    if (simV2) {
+      if (taker.age !== undefined) p += ageProfileOf(taker.age, taker.position === 'GK').clutchShotDelta
+      if (gk?.age !== undefined) p -= ageProfileOf(gk.age, true).clutchShotDelta
     }
     return clamp(p, simV2 ? 0.38 : 0.45, simV2 ? 0.95 : 0.92)
   }

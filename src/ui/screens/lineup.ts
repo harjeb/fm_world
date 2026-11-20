@@ -7,6 +7,7 @@ import { ROLES, ROLES_BY_POSITION, roleFit } from '../../game/data/roles.ts'
 import { PLAYABLE_PROFICIENCY, positionMultiplier } from '../../game/ca.ts'
 import { formOf, recentAnalysis, squadForm, type PlayerForm } from '../../game/form.ts'
 import { injuryUntil } from '../../game/injury.ts'
+import { lineupAgeAnalysis } from '../../game/age-profile.ts'
 import { emptyAutoSubs, validateAutoSubPlan } from '../../game/match/management.ts'
 import { LINEUP_LOCK_MS, PLAYER_TEAM_ID, lineupLockState, matchdayCountdown, playerFixture, teamName } from '../../game/season.ts'
 import { isOnlineMode } from '../../online.ts'
@@ -297,6 +298,7 @@ function coachCheck(draft: Lineup): string {
     const matches = game.suspensions?.[player.id]?.matches ?? 0
     return matches > 0 ? [{ name: player.name, matches }] : []
   })
+  const ageTips = lineupAgeAnalysis(game.roster, draft).tips
   const planId = draft.matchPlan && isMatchPlanId(draft.matchPlan) ? draft.matchPlan : 'standard'
   const plan = MATCH_PLANS[planId]
   const starterConds = draft.starters.flatMap((s) => {
@@ -315,6 +317,7 @@ function coachCheck(draft: Lineup): string {
     ${planLine}
     ${autoErrors.map((error) => line('bad', 'alert', error)).join('')}
     ${check.warnings.map((warning) => line('warn', 'alert', warning)).join('')}
+    ${ageTips.map((tip) => line('warn', 'alert', tip)).join('')}
     ${injured.map((player) => line('warn', 'cross', `${player.name}：${injuryLabel(player)}`)).join('')}
     ${suspensions.map(({ name, matches }) => line('bad', 'flag', `${name} 停赛 ${matches} 场`)).join('')}
   </ul>`

@@ -411,7 +411,7 @@ describe('simV2 2D 动画与 AI 演进回归', () => {
         for (const a of ['shooting', 'composure', 'dribbling', 'strength', 'tackling', 'heading', 'anticipation', 'defPos', 'offBall', 'speed', 'acceleration', 'agility', 'firstTouch', 'passing', 'reflexes', 'oneOnOne', 'handling', 'rushing'] as AttrKey[]) {
           p.attrs[a] = 95
         }
-        p.skills = []; p.traitId = 'star_none'; p.foot = 'R'; p.stamina = p.maxStamina; p.positions[p.position] = 100; p.detailedPosition = undefined
+        p.skills = []; p.traitId = 'star_none'; p.foot = 'R'; p.age = 28; p.stamina = p.maxStamina; p.positions[p.position] = 100; p.detailedPosition = undefined
       }
       for (const p of aTeam.players) if (p !== def && p !== gk) { p.x = 20; p.y = 32 }
       att.x = 89; att.y = 32

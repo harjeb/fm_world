@@ -14,6 +14,7 @@ import { renderClubRankTrendPanel } from './rank-chart.ts'
 import { game, ui } from './state.ts'
 import { renderScoutControls } from './screens/scouting.ts'
 import { youthBadge } from './components.ts'
+import { ageProfileOf } from '../game/age-profile.ts'
 
 let ownerlessMemo: { key: string; teams: Record<string, AITeam> } | null = null
 
@@ -118,7 +119,8 @@ export function publicPlayerPanel(player: WorldPublicPlayer): string {
       ? `<div class="attr-group"><div class="attr-group-title">${esc(group.name)}</div>${keys.map((key) => `<div class="attr-row"><span>${esc(attrLabel(key))}</span><span class="attr-bar"><i style="width:${Math.min(100, attrRating(key, player.attrs[key] ?? 0, gk)).toFixed(1)}%"></i></span>${attrHeat(player.attrs[key] ?? 0)}</div>`).join('')}</div>`
       : ''
   }).join('')
-  return `<div class="profile-grid"><div>${attributeRadar(player)}${attrs}</div><div><h3>位置熟练度</h3>${positionMap(player)}<h3>技能与特性</h3>${traitLabel(player.traitId, true)}${skillGroups(player)}</div><div><h3>档案</h3><dl class="facts"><div><dt>年龄</dt><dd>${player.age ?? 24}</dd></div><div><dt>国籍</dt><dd>${esc(player.country)}</dd></div><div><dt>身高</dt><dd>${player.height} cm</dd></div><div><dt>惯用脚</dt><dd>${esc(player.foot)}</dd></div><div><dt>装备球员卡</dt><dd>${equippedCardCell(player)}</dd></div></dl><p class="hint">实时体能、训练精力与伤病状态不公开。</p></div></div>`
+  const ageInfo = ageProfileOf(player.age ?? 24, gk)
+  return `<div class="profile-grid"><div>${attributeRadar(player)}${attrs}</div><div><h3>位置熟练度</h3>${positionMap(player)}<h3>技能与特性</h3>${traitLabel(player.traitId, true)}${skillGroups(player)}</div><div><h3>档案</h3><dl class="facts"><div><dt>年龄</dt><dd>${player.age ?? 24} 岁 · ${esc(ageInfo.stageLabel)}</dd></div><div><dt>年龄影响</dt><dd>${esc(ageInfo.summary)}</dd></div><div><dt>国籍</dt><dd>${esc(player.country)}</dd></div><div><dt>身高</dt><dd>${player.height} cm</dd></div><div><dt>惯用脚</dt><dd>${esc(player.foot)}</dd></div><div><dt>装备球员卡</dt><dd>${equippedCardCell(player)}</dd></div></dl><p class="hint">实时体能、训练精力与伤病状态不公开。</p></div></div>`
 }
 
 const FACILITY_IDS = Object.keys(FACILITIES) as FacilityId[]

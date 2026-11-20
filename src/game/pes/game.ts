@@ -7,6 +7,7 @@
  * 点球大战不进 2D，沿用现有引擎的纯结算（`SettlementKernel.shootoutOrder / shootoutKickOdds`）。
  */
 import { ROLES } from '../data/roles.ts'
+import { effectivePlayerFamiliarity, isHighIntensityTactics } from '../age-profile.ts'
 import { MAX_SUBS, customSpotFor } from '../squad.ts'
 import { MATCH_MENTALITY_LABELS, MATCH_TACTICS, executeTeamAutoSubs, validateLiveAutoSubPlan } from '../match/management.ts'
 import { evaluateAICoachTactics, executeAICoachSubs } from '../ai-tactics.ts'
@@ -121,7 +122,36 @@ export interface PesGameOptions {
   tacticsParams?: Partial<TacticsParams>
 }
 
-function pesTeam(input: MatchTeamInput, team: MatchTeamState, ratings: MotionRatings): PesTeamInit {
+function playerFamiliarityForTeam(
+  team: MatchTeamState,
+  input: MatchTeamInput | undefined,
+  player: MatchPlayerState,
+  simV2: boolean,
+): number {
+  const base = team.baseFamiliarity ?? input?.baseFamiliarity
+  if (!simV2 || base === undefined) return team.familiarity ?? input?.familiarity ?? 1
+  const highIntensity = isHighIntensityTactics(team.tactics, team.instructions)
+  return effectivePlayerFamiliarity(base, player.age, player.position === 'GK', highIntensity)
+}
+
+function refreshPlayerFamiliarities(match: PesMatch, settlement: PesSettlement): void {
+  if (!match.rules.simV2) return
+  const game = settlement.game
+  for (let idx = 0; idx < match.teams.length; idx++) {
+    const team = game.teams[idx]
+    const physTeam = match.teams[idx]
+    if (!team || !physTeam || team.baseFamiliarity === undefined) continue
+    const highIntensity = isHighIntensityTactics(team.tactics, team.instructions)
+    const base = team.baseFamiliarity
+    for (const q of physTeam.players) {
+      const player = settlement.gamePlayer(q.pid)
+      if (!player || player.age === undefined) continue
+      q.familiarity = effectivePlayerFamiliarity(base, player.age, player.position === 'GK', highIntensity)
+    }
+  }
+}
+
+function pesTeam(input: MatchTeamInput, team: MatchTeamState, ratings: MotionRatings, simV2: boolean): PesTeamInit {
   const custom: Record<string, { x: number; y: number }> = {}
   for (const starter of input.starters) {
     const spot = customSpotFor(starter.player)
@@ -143,7 +173,7 @@ function pesTeam(input: MatchTeamInput, team: MatchTeamState, ratings: MotionRat
         num: player.number,
         stamina: player.stamina / Math.max(1, player.maxStamina),
         ref: player.id,
-        familiarity: team.familiarity ?? input.familiarity ?? 1,
+        familiarity: playerFamiliarityForTeam(team, input, player, simV2),
       }
     }),
   }
@@ -174,13 +204,15 @@ export class PesGame {
     const game = this.settlement.game
     if (source.shootoutOffset) game.shootoutOffset = { ...source.shootoutOffset }
     const ratings = new MotionRatings(() => game, () => game.durationSeconds)
+    const rules = { ...GAME_RULES, offside: source.offside ?? false, ...source.rules }
+    const simV2 = !!rules.simV2
     this.match = new PesMatch({
       spec: source.spec ?? makeGamePitch(duration),
       seed: source.seed,
-      home: pesTeam(source.home, game.teams[0], ratings),
-      away: pesTeam(source.away, game.teams[1], ratings),
+      home: pesTeam(source.home, game.teams[0], ratings, simV2),
+      away: pesTeam(source.away, game.teams[1], ratings, simV2),
       recordHz: source.recordHz,
-      rules: { ...GAME_RULES, offside: source.offside ?? false, ...source.rules },
+      rules,
       contact: this.settlement,
       metrics: source.metrics,
       tacticsParams: source.tacticsParams,
@@ -354,7 +386,9 @@ export class PesGame {
       stamina: incoming.stamina / Math.max(1, incoming.maxStamina),
       ref: incoming.id,
       num: incoming.number,
-      ...(team.familiarity !== undefined ? { familiarity: team.familiarity } : {}),
+      ...(team.familiarity !== undefined || (this.match.rules.simV2 && incoming.age !== undefined)
+        ? { familiarity: playerFamiliarityForTeam(team, undefined, incoming, !!this.match.rules.simV2) }
+        : {}),
     })
     this.settlement.bind(physical.pid, incoming)
     this.settlement.markLeft(outPid, this.match.time)
@@ -387,6 +421,7 @@ export class PesGame {
       this.match.teams[idx].tactics = tacticsOf(tactics)
       g.instructions.push({ step: g.step, kind: 'tactic', mentality, tactics: { ...tactics } })
     }
+    refreshPlayerFamiliarities(this.match, this.settlement)
     this.settlement.note('tactic', side, `教练调整战术：${MATCH_MENTALITY_LABELS[mentality]}。`, {}, at ?? this.match.time)
     return { ok: true }
   }
@@ -473,6 +508,7 @@ export class PesGame {
         }
       }
     }
+    if (changed) refreshPlayerFamiliarities(this.match, this.settlement)
     return changed
   }
 

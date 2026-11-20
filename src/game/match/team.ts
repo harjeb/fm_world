@@ -50,6 +50,7 @@ export function toMatchPlayer(player: Player, side: MatchSide, role: MatchPlayer
     sourceId: player.id,
     personId: personKey(player),
     name: player.name,
+    ...(typeof player.age === 'number' && Number.isFinite(player.age) ? { age: player.age } : {}),
     number: player.number,
     side,
     attrs,
@@ -131,6 +132,7 @@ export function buildMatchTeam(input: MatchTeamInput, side: MatchSide): MatchTea
           baseInstructions: cloneInstructions(effectiveInstructions),
           instructions: cloneInstructions(effectiveInstructions),
           familiarity: input.familiarity ?? 1,
+          ...(input.baseFamiliarity !== undefined ? { baseFamiliarity: input.baseFamiliarity } : {}),
         }
       : {}),
   }

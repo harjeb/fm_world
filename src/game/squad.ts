@@ -1,6 +1,7 @@
 import type { FormationId, Lineup, Player, Position, RoleId, Tactics, TacticPreset, TierId } from './types.ts'
 import { applyAITacticsToLineup } from './ai-tactics.ts'
 import { slotPositionValue } from './detailed-positions.ts'
+import { effectivePlayerFamiliarity, isHighIntensityTactics } from './age-profile.ts'
 import { FORMATIONS, type FormationSlot } from './data/formations.ts'
 import { ROLES, ROLES_BY_POSITION, roleFit, rolesForSlot } from './data/roles.ts'
 import { PLAYABLE_PROFICIENCY, caOf, positionMultiplier } from './ca.ts'
@@ -586,7 +587,8 @@ export function validateLineup(roster: Player[], lineup: Lineup): LineupValidati
  * - 未启用十二项指令或全部处于中性档（空白模板）且未启用特殊比赛计划时为 1.0；
  * - 启用战术指令或比赛计划时，由首发位置熟练度（权重最高）、战术意识（决断 + 团队配合）与战术研究室阶段（1–25）共同决定。
  */
-export function computeLineupFamiliarity(roster: Player[], lineup: Lineup, tacticsStage = 1): number {
+/** 不含年龄修正的球队基础战术熟练度 0.50–1.00。 */
+export function computeBaseLineupFamiliarity(roster: Player[], lineup: Lineup, tacticsStage = 1): number {
   const neutralInst = !lineup.tacticalInstructions || sameInstructions(lineup.tacticalInstructions, NEUTRAL_INSTRUCTIONS)
   const neutralPlan = !lineup.matchPlan || lineup.matchPlan === 'standard'
   if (neutralInst && neutralPlan) return 1
@@ -611,6 +613,28 @@ export function computeLineupFamiliarity(roster: Player[], lineup: Lineup, tacti
   const facilityScore = (clampedStage - 1) / 24
   const raw = 0.44 + 0.34 * profScore + 0.12 * iqScore + 0.12 * facilityScore
   return Math.round(Math.min(1, Math.max(0.5, raw)) * 1000) / 1000
+}
+
+export function computeLineupFamiliarity(roster: Player[], lineup: Lineup, tacticsStage = 1): number {
+  const neutralInst = !lineup.tacticalInstructions || sameInstructions(lineup.tacticalInstructions, NEUTRAL_INSTRUCTIONS)
+  const neutralPlan = !lineup.matchPlan || lineup.matchPlan === 'standard'
+  if (neutralInst && neutralPlan) return 1
+  const base = computeBaseLineupFamiliarity(roster, lineup, tacticsStage)
+  const formation = FORMATIONS[lineup.formationId]
+  if (!formation) return base
+  const highIntensity = isHighIntensityTactics(lineup.tactics, lineup.tacticalInstructions)
+  let sum = 0
+  let count = 0
+  for (const slot of formation.slots) {
+    const starter = lineup.starters.find((item) => item.slotId === slot.id)
+    const player = starter ? playerById(roster, starter.playerId) : undefined
+    if (!player) continue
+    const isGk = slot.position === 'GK' || player.positions.GK > 0
+    sum += effectivePlayerFamiliarity(base, player.age, isGk, highIntensity)
+    count++
+  }
+  if (count === 0) return base
+  return Math.round(Math.min(1, Math.max(0.45, sum / count)) * 1000) / 1000
 }
 
 /**

@@ -9,6 +9,7 @@ import { chemistryKey } from '../chemistry.ts'
 import { derivedRng } from '../rng.ts'
 import { legendMultiplier } from '../legend-bonus.ts'
 import { homeAtmosphereBonus } from '../economy.ts'
+import { isHighIntensityTactics } from '../age-profile.ts'
 import { opponentSide, skillTierMultiplier } from './team.ts'
 import { clamp, progressOf, wideZone } from './pitch.ts'
 import type { MatchEventContext, MatchPlayerState, MatchSide, MatchState } from './types.ts'
@@ -152,6 +153,11 @@ export class MatchRatings {
 
   matchProgress(): number {
     return this.durationOf() > 0 ? this.stateOf().clock / this.durationOf() : 0
+  }
+
+  teamHighIntensity(side: MatchSide): boolean {
+    const team = this.stateOf().teams[side === 'home' ? 0 : 1]
+    return team ? isHighIntensityTactics(team.tactics, team.instructions) : false
   }
 
   traitRoll(player: MatchPlayerState, purpose: string, chance: number): boolean {

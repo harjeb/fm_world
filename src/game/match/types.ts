@@ -35,6 +35,7 @@ export type MatchPlayerState = {
   personId?: string
   injuryProneness?: number
   name: string
+  age?: number
   number: number
   side: MatchSide
   attrs: Attributes
@@ -91,8 +92,10 @@ export type MatchTeamState = {
   baseInstructions?: import('../pes/tactics.ts').TacticalInstructionsV2
   /** 当前生效的战术指令。 */
   instructions?: import('../pes/tactics.ts').TacticalInstructionsV2
-  /** 全队战术执行熟练度 0–1。 */
+  /** 全队战术执行熟练度 0–1（含首发年龄结构影响）。 */
   familiarity?: number
+  /** 不含年龄修正的球队基础战术熟练度 0–1，用于比赛内按球员个体年龄派生执行度。 */
+  baseFamiliarity?: number
   /** 主队球场阶段（1–25）；仅主队生效，提供微弱主场氛围加成，缺省为 0 以兼容旧回放与中立赛。 */
   stadiumStage?: number
   players: MatchPlayerState[]
@@ -300,6 +303,8 @@ export type MatchTeamInput = {
   instructions?: import('../pes/tactics.ts').TacticalInstructionsV2
   /** 全队战术熟练度 0–1（缺省 1）。只在新指令下生效。 */
   familiarity?: number
+  /** 不含年龄修正的球队基础战术熟练度 0–1（可选）。 */
+  baseFamiliarity?: number
   /** 主队球场阶段（1–25）；仅主队生效，提供微弱主场氛围加成。 */
   stadiumStage?: number
   /** 是否启用 AI 主教练临场战术调度与智能换人。 */

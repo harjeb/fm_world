@@ -24,7 +24,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 `/api/agent/action` 请求体统一为 `{ "action": "...", ...参数 }`。成功返回 `{ ok: true, revision, result, game }`；失败返回 HTTP 400、`{ ok: false, error, revision, game }`。`game` 是执行后的最新状态，可直接用于下一步决策。
 
-状态里和手动界面一致地公开：0–1500 原始主属性、位置与 `detailedPositions`、CA、年龄、估值 `marketValue`、合同 `contract`（`wage`、`expiresSeason`）、技能、性格、训练日志（最近 24 条）、待处理事件及成功率、自动培养设置 `autoTraining`、共享培养点 `trainingPoints` 与档位 `trainingPointTiers`、阵容合法性/位置折损、比赛历史、挑战历史、历年联赛成绩 `seasonHistory`（级别、名次、战绩、冠军）、前 5 轮赛程、转会窗口 `market.transferWindowOpen`、可谈判的 AI 球员 `market.clubOffers`、球探配置 `scouting` 和报告 `scoutReports`、奖杯与杯赛奖励 `honors`、以及巅峰之路与传奇挑战进度 `pve`（已通关数、今日剩余次数、属性突破卡、50 关奖励状态及传奇战绩）。全服其他球队和分区用 `get_world` 读取，巅峰 100 关与 50 支传奇队完整目录用 `get_pve` 读取。**球员的隐藏属性当前值不会返回给 Agent；事件提示、日志或球探估计可能提及相关成长。**
+状态里和手动界面一致地公开：0–1500 原始主属性、位置与 `detailedPositions`、CA、年龄与年龄战术/动作曲线 `ageProfile`（不改动面板属性，仅影响个体战术执行度、受压出球、1v1 过人/抢断、终结与门将关键球扑救、吃牌控制及低体力稳定性；门将曲线延后 3 岁）、估值 `marketValue`、合同 `contract`（`wage`、`expiresSeason`）、技能、性格、训练日志（最近 24 条）、待处理事件及成功率、自动培养设置 `autoTraining`、共享培养点 `trainingPoints` 与档位 `trainingPointTiers`、阵容合法性/位置折损/年龄结构建议 `lineupAnalysis.ageSummary`、比赛历史、挑战历史、历年联赛成绩 `seasonHistory`（级别、名次、战绩、冠军）、前 5 轮赛程、转会窗口 `market.transferWindowOpen`、可谈判的 AI 球员 `market.clubOffers`、球探配置 `scouting` 和报告 `scoutReports`、奖杯与杯赛奖励 `honors`、以及巅峰之路与传奇挑战进度 `pve`（已通关数、今日剩余次数、属性突破卡、50 关奖励状态及传奇战绩）。全服其他球队和分区用 `get_world` 读取，巅峰 100 关与 50 支传奇队完整目录用 `get_pve` 读取。**球员的隐藏属性当前值不会返回给 Agent；事件提示、日志或球探估计可能提及相关成长。**
 
 ## 3. 动作
 

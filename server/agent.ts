@@ -34,6 +34,7 @@ import { ROLES, ROLES_BY_POSITION } from '../src/game/data/roles.ts'
 import { bookKey, bookLearnChance, bookName, bookRequirementText, eventForSession, trainingSkillChance } from '../src/game/legend-learning.ts'
 import { branchProbability, eventChance, trainingActionsTotal, eventGrowthScale, trainingQualityChances, TRAINING_ACTION_INFO, TRAINING_POINT_TIERS } from '../src/game/training.ts'
 import { computeLineupFamiliarity, lineupSlots, setSlotPosition, validateLineup } from '../src/game/squad.ts'
+import { ageProfileOf, lineupAgeAnalysis } from '../src/game/age-profile.ts'
 import {
   STYLE_LIST_REV3,
   STYLE_META,
@@ -204,6 +205,7 @@ export function playerView(player: GameState['roster'][number], game: GameState,
     country: player.country,
     era: player.era,
     age: player.age ?? 24,
+    ageProfile: ageProfileOf(player.age ?? 24, isGk),
     number: player.number,
     foot: player.foot,
     height: player.height,
@@ -599,6 +601,7 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
     lineupAnalysis: {
       validation: lineupCheck,
       tacticalFamiliarity: computeLineupFamiliarity(game.roster, game.lineup, economyOf(game).tactics),
+      ageSummary: lineupAgeAnalysis(game.roster, game.lineup),
       starters: slots.map((slot) => ({
         slotId: slot.slotId,
         position: slot.position,

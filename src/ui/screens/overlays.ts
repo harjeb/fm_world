@@ -25,6 +25,7 @@ import { comparisonCandidates, renderPlayerComparison } from './player-compariso
 import { publicPlayerPanel } from '../club-view.ts'
 import { renderPlayerPerformance } from './player-performance.ts'
 import { renderRelativePositionRatings, renderScoutControls } from './scouting.ts'
+import { ageProfileOf } from '../../game/age-profile.ts'
 
 function cardRows(player: Player): string {
   const cards = playerCards(game, player.id)
@@ -125,8 +126,10 @@ export function renderDetailOverlay(): string {
       }).join('')}
     </div>`
   }).join('')
+  const ageInfo = ageProfileOf(player.age ?? 24, gk)
   const facts: [string, string][] = [
-    ['年龄', `${player.age ?? 24} 岁`],
+    ['年龄', `${player.age ?? 24} 岁 · ${esc(ageInfo.stageLabel)}`],
+    ['年龄影响', esc(ageInfo.summary)],
     ['国籍', esc(countryLabel(player))],
     ['年代', esc(eraLabel(player.era))],
     ['惯用脚', esc(player.foot)],
