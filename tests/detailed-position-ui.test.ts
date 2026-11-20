@@ -30,6 +30,24 @@ beforeEach(() => {
   Object.assign(ui, originalUi, { trainingPlayerId: null, trainingBookIds: [], trainingTeammateIds: [], lineupDraft: null, autoSubsDraft: null, lineupSlot: null })
 })
 
+describe('教练检查', () => {
+  it('停赛仅显示本队仍在停赛的球员姓名，不显示对手和离队球员的编号', () => {
+    const [suspended, cleared] = game.roster
+    const opponent = game.aiTeams[0].players[0]
+    game.suspensions = {
+      [suspended.id]: { matches: 1, atRound: 2 },
+      [cleared.id]: { matches: 0, atRound: 1 },
+      [opponent.id]: { matches: 2, atRound: 2 },
+      'd2n_05-former-player': { matches: 4, atRound: 2 },
+    }
+    const html = renderLineup()
+    const check = html.match(/<h3>教练检查<\/h3>([\s\S]*?)<\/section>/)![1]
+    expect(check).toContain(`<span>${suspended.name} 停赛 1 场</span>`)
+    expect(check.match(/停赛 \d+ 场/g)).toEqual(['停赛 1 场'])
+    expect(game.suspensions[opponent.id]?.matches).toBe(2)
+  })
+})
+
 describe('细分位置界面', () => {
   it('培养选择细分位置并实际只提升选中位置', () => {
     const player = game.roster.find(item => item.positions.GK === 0)!

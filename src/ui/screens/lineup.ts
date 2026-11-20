@@ -293,7 +293,10 @@ function coachCheck(draft: Lineup): string {
   const autoSubs = ui.autoSubsDraft ?? emptyAutoSubs()
   const autoErrors = validateAutoSubPlan(game.roster, draft, autoSubs)
   const injured = game.roster.filter((player) => (draft.starters.some((starter) => starter.playerId === player.id) || draft.bench.includes(player.id)) && injuryUntil(game, player))
-  const suspensions = Object.entries(game.suspensions ?? {})
+  const suspensions = game.roster.flatMap((player) => {
+    const matches = game.suspensions?.[player.id]?.matches ?? 0
+    return matches > 0 ? [{ name: player.name, matches }] : []
+  })
   const planId = draft.matchPlan && isMatchPlanId(draft.matchPlan) ? draft.matchPlan : 'standard'
   const plan = MATCH_PLANS[planId]
   const starterConds = draft.starters.flatMap((s) => {
@@ -313,7 +316,7 @@ function coachCheck(draft: Lineup): string {
     ${autoErrors.map((error) => line('bad', 'alert', error)).join('')}
     ${check.warnings.map((warning) => line('warn', 'alert', warning)).join('')}
     ${injured.map((player) => line('warn', 'cross', `${player.name}：${injuryLabel(player)}`)).join('')}
-    ${suspensions.map(([id, value]) => line('bad', 'flag', `${game.roster.find((player) => player.id === id)?.name ?? id} 停赛 ${value.matches} 场`)).join('')}
+    ${suspensions.map(({ name, matches }) => line('bad', 'flag', `${name} 停赛 ${matches} 场`)).join('')}
   </ul>`
 }
 
