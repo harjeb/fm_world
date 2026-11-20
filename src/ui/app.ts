@@ -114,7 +114,7 @@ import { ownerlessTeamsNow, renderClubOverlay } from './club-view.ts'
 import { renderCommentary, renderReview } from './screens/review.ts'
 import { cycleReplay2DSpeed, drawReplay2D, ensureReplay2D, previewReplay2DSeek, replay2d, resetReplay2D, restartReplay2D, seekReplay2D, setReplay2DHooks, toggleReplay2D } from './replay-2d.ts'
 import { renderSeason } from './screens/season.ts'
-import { renderMarketTicker, renderSidebar, renderTopbar } from './screens/shell.ts'
+import { renderMarketTicker, renderMobileNavSheet, renderSidebar, renderTopbar } from './screens/shell.ts'
 import { buildTrainingRequest, renderAutoStrategyOverlay, renderTraining } from './screens/training.ts'
 import { renderWorld } from './screens/world.ts'
 import { renderSeasonCups } from './season-cup-view.ts'
@@ -242,6 +242,7 @@ function go(screen: Screen): void {
   ui.coachPanel = false
   ui.matchAutoSubsDraft = null
   ui.changelogOpen = false
+  ui.mobileNavOpen = false
   ui.detailPlayerId = null
   ui.lineupSlot = null
   ui.screen = screen
@@ -353,6 +354,7 @@ function render(): void {
         <footer class="footer">真实球星和俱乐部名称仅用于原型玩法测试；正式发行需取得相应授权。固定 PCG32 随机；同种子同输入可复现。<span class="muted"> · 构建 ${BUILD_ID}</span></footer>
       </div>
     </div>
+    ${renderMobileNavSheet()}
     ${renderChatDrawer()}
     ${renderDetailOverlay()}
     ${renderNegotiationOverlay()}
@@ -370,6 +372,7 @@ function render(): void {
   if (pageChanged) {
     lastPageKey = pageKey
     window.scrollTo(0, 0)
+    document.querySelector<HTMLElement>('.side-nav .nav-item.active')?.scrollIntoView?.({ inline: 'center', block: 'nearest' })
   }
   syncNoticeTimer()
   syncTooltip()
@@ -2588,6 +2591,21 @@ document.addEventListener('click', async (event) => {
       ui.reviewId = null
       render()
       break
+    case 'mobile-nav-toggle':
+      ui.mobileNavOpen = !ui.mobileNavOpen
+      render()
+      break
+    case 'mobile-nav-close':
+      ui.mobileNavOpen = false
+      render()
+      break
+    case 'mobile-nav-go': {
+      const targetScreen = actionEl.dataset.screen as Screen | undefined
+      ui.mobileNavOpen = false
+      if (targetScreen) go(targetScreen)
+      else render()
+      break
+    }
     case 'chat-toggle':
       ui.chatOpen = !ui.chatOpen
       ui.chatError = ''
@@ -2908,6 +2926,7 @@ document.addEventListener('keydown', (event) => {
     else if (ui.clubViewId) { ui.clubViewId = null; ui.clubViewPlayerId = null }
     else if (ui.detailPlayerId) ui.detailPlayerId = null
     else if (ui.chatOpen) { ui.chatOpen = false; ui.chatError = '' }
+    else if (ui.mobileNavOpen) ui.mobileNavOpen = false
     else return
     render()
     return

@@ -9,3 +9,7 @@
 .youth-ratings > div { display: flex; flex-direction: column; gap: 9px; }
 .youth-rating-label { color: var(--muted, var(--text-3)); font-size: 12px; }
 .youth-ratings .rating-stars { font-size: 20px; }
+@media (max-width: 360px) {
+  .youth-ratings { gap: 8px; }
+  .youth-ratings .rating-stars { font-size: 17px; }
+}

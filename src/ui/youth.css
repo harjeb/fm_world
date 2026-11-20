@@ -14,12 +14,23 @@
 .youth-plan { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 .youth-plan label, .youth-recruit label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
 .youth-plan select { width: 100%; min-width: 0; }
-.youth-growth { display: flex; gap: 24px; padding-top: 14px; font-size: 12px; color: var(--muted); }
+.youth-growth { display: flex; flex-wrap: wrap; gap: 6px 20px; padding-top: 14px; font-size: 12px; color: var(--muted); }
 .youth-growth b { color: var(--good); margin-left: 4px; }
 .youth-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .youth-log { margin-top: 14px; font-size: 12px; }
 .youth-log summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
-.youth-recruit { display: flex; align-items: flex-end; gap: 10px; }
+.youth-recruit { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.youth-recruit label { flex: 1 1 160px; min-width: 0; }
+.youth-recruit select { width: 100%; min-width: 0; }
 .youth-rules { font-size: 13px; line-height: 1.8; }
 .youth-rules p { margin: 8px 0; }
-@media (max-width: 650px) { .youth-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); } .youth-card { padding: 14px; } }
+@media (max-width: 650px) {
+  .youth-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .youth-overview > div { padding: 12px; }
+  .youth-overview b { font-size: 22px; }
+  .youth-overview .youth-countdown { font-size: 16px; }
+  .youth-card { padding: 14px; }
+}
+@media (max-width: 350px) {
+  .youth-plan { grid-template-columns: 1fr; }
+}

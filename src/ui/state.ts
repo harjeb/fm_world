@@ -134,6 +134,8 @@ export type UIState = {
   /** 全服聊天侧边抽屉是否打开。 */
   chatOpen: boolean
   chatError: string
+  /** 手机端底部“全部页面”导航抽屉是否打开。 */
+  mobileNavOpen: boolean
   completing: boolean
   accountOpen: boolean
   /** 注册表单预选的球队；注册成功后不允许更换。 */
@@ -250,6 +252,7 @@ export const ui: UIState = {
   changelogOpen: false,
   chatOpen: false,
   chatError: '',
+  mobileNavOpen: false,
   completing: false,
   accountOpen: false,
   registrationClubId: '',

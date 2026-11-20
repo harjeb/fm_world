@@ -57,8 +57,29 @@ function divisionText(): string {
   return worldDivisionLabel(game.world, game.season.divisionId ?? game.world.playerDivisionId)
 }
 
+function visibleNavGroups(): { label: string; items: NavItem[] }[] {
+  return NAV_GROUPS.map((group) => ({
+    label: group.label,
+    items: group.items.filter((item) => item.id !== 'cups' || game.world?.seasonCupMode === 1),
+  })).filter((group) => group.items.length > 0)
+}
+
 export function renderSidebar(): string {
   const look = clubLook(PLAYER_TEAM_ID)
+  const groups = visibleNavGroups()
+  let totalAlerts = 0
+  let totalBadges = 0
+  for (const group of groups) {
+    for (const item of group.items) {
+      totalAlerts += item.alert?.() ?? 0
+      totalBadges += item.badge?.() ?? 0
+    }
+  }
+  const moreBadge = totalAlerts > 0
+    ? `<span class="mobile-more-badge is-alert">${totalAlerts}</span>`
+    : totalBadges > 0
+      ? `<span class="mobile-more-badge">${totalBadges}</span>`
+      : ''
   return `<aside class="sidebar" style="--club:${esc(look.color)}">
     <button class="side-club" data-action="go-home" title="回到总览">
       ${crest(look, 38)}
@@ -66,9 +87,9 @@ export function renderSidebar(): string {
     </button>
     <nav class="side-nav" aria-label="主导航">
       ${game.activeMatch ? `<button class="nav-item live ${ui.screen === 'match' ? 'active' : ''}" data-nav="match">${icon('live', 18)}<span class="nav-label">比赛<span class="nav-extra">进行中</span></span></button>` : ''}
-      ${NAV_GROUPS.map((group) => `
+      ${groups.map((group) => `
         ${group.label ? `<div class="nav-group">${group.label}</div>` : ''}
-        ${group.items.filter(item => item.id !== 'cups' || game.world?.seasonCupMode === 1).map((item) => {
+        ${group.items.map((item) => {
           const alert = item.alert?.() ?? 0
           const count = alert || (item.badge?.() ?? 0)
           const badge = alert
@@ -78,11 +99,52 @@ export function renderSidebar(): string {
         }).join('')}
       `).join('')}
     </nav>
+    <button type="button" class="mobile-nav-more ${ui.mobileNavOpen ? 'active' : ''}" data-action="mobile-nav-toggle" aria-expanded="${ui.mobileNavOpen}" aria-label="打开全部页面菜单">
+      ${icon('menu', 18)}
+      <span class="nav-label">全部</span>
+      ${moreBadge}
+    </button>
     <div class="side-foot">
       <span class="brand-mark">FM</span>
       <span class="brand-text"><b>FM 世界</b><small>${esc(APP_VERSION)} · 种子 ${game.seed}</small></span>
     </div>
   </aside>`
+}
+
+/** 手机端“全部页面”底部抽屉：所有 14 个页面分组直达，并补回桌面侧栏的俱乐部与余额信息。 */
+export function renderMobileNavSheet(): string {
+  if (!ui.mobileNavOpen) return ''
+  const look = clubLook(PLAYER_TEAM_ID)
+  const economy = economyOf(game)
+  const groups = visibleNavGroups()
+  return `<div class="mobile-nav-backdrop" data-action="mobile-nav-close">
+    <nav class="mobile-nav-sheet" data-stop="true" role="dialog" aria-modal="true" aria-label="全部导航">
+      <header class="mobile-nav-head" style="--club:${esc(look.color)}">
+        <div class="mobile-nav-club">
+          ${crest(look, 34)}
+          <div class="mobile-nav-club-text">
+            <b>${ownName(game.clubName)}</b>
+            <small>第 ${game.season.index} 赛季 · ${esc(divisionText())} · 余额 ${economy.balance.toLocaleString()}</small>
+          </div>
+        </div>
+        <button type="button" class="modal-close mobile-nav-close" data-action="mobile-nav-close" aria-label="关闭导航">${icon('close', 16)}</button>
+      </header>
+      <div class="mobile-nav-body">
+        ${game.activeMatch ? `<button type="button" class="mobile-nav-live ${ui.screen === 'match' ? 'active' : ''}" data-action="mobile-nav-go" data-screen="match">${icon('live', 18)}<span>比赛进行中 · 点击返回球场</span></button>` : ''}
+        ${groups.map((group) => `<section class="mobile-nav-group">
+          ${group.label ? `<h3>${group.label}</h3>` : ''}
+          <div class="mobile-nav-grid">${group.items.map((item) => {
+            const alert = item.alert?.() ?? 0
+            const count = alert || (item.badge?.() ?? 0)
+            const badge = alert
+              ? `<span class="nav-badge alert">${alert}</span>`
+              : count ? `<span class="nav-badge">${count}</span>` : ''
+            return `<button type="button" class="mobile-nav-tile ${ui.screen === item.id ? 'active' : ''}" data-action="mobile-nav-go" data-screen="${item.id}">${icon(item.icon, 20)}<span>${item.label}</span>${badge}</button>`
+          }).join('')}</div>
+        </section>`).join('')}
+      </div>
+    </nav>
+  </div>`
 }
 
 function continueAction(): string {
@@ -134,7 +196,7 @@ export function renderTopbar(): string {
         : isOnlineMode()
           ? `<div class="top-stat optional"><span>下场比赛</span><b>${esc(nextMatchCountdown(game, serverNow()))}</b></div>`
           : `<div class="top-stat optional"><span>距下一轮</span><b>${esc(matchdayCountdown(game))}</b></div>`}
-      <div class="top-stat"><span>余额</span><b>${economy.balance.toLocaleString()}</b></div>
+      <div class="top-stat top-stat-balance"><span>余额</span><b>${economy.balance.toLocaleString()}</b></div>
       <div class="top-stat optional"><span>转会窗</span><b class="${transferWindowOpen(game) ? 'ok' : 'muted'}">${transferWindowOpen(game) ? '开放' : '关闭'}</b></div>
     </div>
     <div class="top-actions">

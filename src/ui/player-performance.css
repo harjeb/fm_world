@@ -58,10 +58,15 @@
 .pp-ring-unknown b { color: #b5b5bf; }
 
 @media (max-width: 700px) {
-  .player-performance { padding: 16px; }
-  .pp-header { align-items: flex-start; flex-direction: column; }
-  .pp-summary-grid, .pp-bottom { grid-template-columns: repeat(2, 1fr); }
+  .player-performance { padding: 14px; }
+  .pp-header { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .pp-header h2 { font-size: 18px; }
+  .pp-summary-grid, .pp-bottom { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .pp-analytics { grid-template-columns: 1fr; }
+  .pp-block { padding: 14px 0; }
   .pp-block:nth-child(even) { border-left: 0; padding-left: 0; }
-  .pp-block-body { grid-template-columns: 1fr 1fr; }
+  .pp-block-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+}
+@media (max-width: 420px) {
+  .pp-block-body { grid-template-columns: 1fr; gap: 12px; }
 }
