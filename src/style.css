@@ -25,6 +25,8 @@
   --warn: #f2b84b;
   --bad: #f2706a;
   --info: #62aef5;
+  --legend: #b57bff;
+  --hidden-attr: #c4a6ff;
   --h1: #f2706a;
   --h2: #f0975a;
   --h3: #e9c753;
@@ -373,13 +375,19 @@ h3:first-child { margin-top: 0; }
 .table-rank-change { display: inline-block; width: 16px; margin-right: 4px; text-align: center; vertical-align: middle; font: 700 15px/1 var(--font-num); }
 .table-rank-change.flat { color: #76818c; font-size: 13px; }
 .dt tr td.zone-champion { box-shadow: inset 3px 0 var(--accent); }
+.dt tr td.zone-legend { box-shadow: inset 3px 0 var(--legend); }
 .dt tr td.zone-promote { box-shadow: inset 3px 0 var(--good); }
-.dt tr td.zone-playoff { box-shadow: inset 3px 0 var(--info); }
+.dt tr td.zone-playoff { box-shadow: inset 3px 0 var(--warn); }
+.dt tr td.zone-cup { box-shadow: inset 3px 0 var(--info); }
 .dt tr td.zone-relegate { box-shadow: inset 3px 0 var(--bad); }
 .swatch.zone-champion { background: var(--accent); }
+.swatch.zone-legend { background: var(--legend); }
 .swatch.zone-promote { background: var(--good); }
-.swatch.zone-playoff { background: var(--info); }
+.swatch.zone-playoff { background: var(--warn); }
+.swatch.zone-cup { background: var(--info); }
 .swatch.zone-relegate { background: var(--bad); }
+.hidden-attr, .hidden-attr-text { color: var(--hidden-attr); }
+.hidden-attr b { color: #e2d4ff; }
 
 .heat { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 500; }
 .h1 { color: var(--h1); } .h2 { color: var(--h2); } .h3 { color: var(--h3); }
@@ -1815,8 +1823,9 @@ circle.pm-5 { fill: var(--h6); }
   background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius);
 }
 .rank-zone.champion { fill: rgba(205, 243, 63, 0.085); }
+.rank-zone.legend { fill: rgba(181, 123, 255, 0.085); }
 .rank-zone.promote { fill: rgba(79, 208, 138, 0.08); }
-.rank-zone.playoff { fill: rgba(98, 174, 245, 0.08); }
+.rank-zone.playoff { fill: rgba(242, 184, 75, 0.09); }
 .rank-zone.relegate { fill: rgba(242, 112, 106, 0.08); }
 .rank-grid-line { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 3; }
 .rank-grid-line.top { stroke: var(--line-2); stroke-dasharray: none; }

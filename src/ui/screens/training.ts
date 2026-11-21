@@ -17,7 +17,7 @@ import { isPassiveTrainingBook, LEGEND_STAR_MAX_TRIGGERS } from '../../game/data
 import { MAX_BOOKS } from '../../game/data/legend-skills.ts'
 import { keyAttrsOf } from '../../game/data/key-attrs.ts'
 import { activityColor, attrColor, attributeRadar, attrHeat, caHeat, cardName, cardSelect, icon, mainAttrs, meter, pageHead, panel, posBadge, primaryPosition, skillGroups, tag, tile, traitLabel } from '../components.ts'
-import { attrLabel, attrValue, caDelta, displayEventHint, esc, gainText, pct, playerCA, positionLabel, skillName, trainingLogText } from '../format.ts'
+import { attrLabel, attrValue, caDelta, displayEventHint, esc, gainHtml, gainText, pct, playerCA, positionLabel, skillName, trainingLogText } from '../format.ts'
 import { game, ui } from '../state.ts'
 import { filterTrainingBookIds } from '../training-books.ts'
 import { isYouthTrainee } from '../../game/youth.ts'
@@ -509,7 +509,7 @@ function previewBox(session: TrainingSession, plan: ReturnType<typeof planTraini
   const riskAction = plan.fatigue > 0 || Object.keys(plan.gains).length > 0
   return `<div class="preview">
     <div class="preview-grid">
-      <div class="preview-cell wide"><span>属性成长</span><b class="${gainText(plan.gains, isGk) ? 'up' : ''}">${gainText(plan.gains, isGk) || '—'}</b></div>
+      <div class="preview-cell wide"><span>属性成长</span><b class="${gainText(plan.gains, isGk) ? 'up' : ''}">${gainHtml(plan.gains, isGk) || '—'}</b></div>
       <div class="preview-cell"><span>CA</span><b>${displayCA(plan.caBefore).toFixed(1)} → ${displayCA(plan.caAfter).toFixed(1)}</b></div>
       <div class="preview-cell training-stamina-preview"><span>训练体力</span><b>${stamina} → ${100 - Math.max(0, Math.min(100, session.fatigue + plan.fatigue))}</b></div>
     </div>

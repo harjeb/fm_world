@@ -30,7 +30,7 @@ function canCover(players: Player[], slots: DetailedPosition[]): boolean {
 describe('天然位置生成与覆盖', () => {
   it('旧生成路径的身份/属性/CA/风格随机流完全不变', () => {
     const random = (['GK', 'CB', 'W', 'CM', 'ST'] as Position[]).flatMap(position => Array.from({ length: 20 }, (_, seed) => fingerprint(createRandomPlayer({ seed: seed + 723, position, tier: 2, idPrefix: `d2n01-${seed + 1}`, modernPositions: false }))))
-    expect(hash(random)).toBe('adbd2d0182e705974812fd957f4e9053c4b78ad6eae4e07c69f5ab0d87ae82e2')
+    expect(hash(random)).toBe('9dc5bc33547102d55218c88cdd606726eee6864d0a7e9abba21149ada4e9afbb')
     expect(hash(PLAYER_SEEDS.map(s => fingerprint(createPlayerFromSeed(s))))).toBe('0e293a83a86b4a501cf9d896e0bdfa59b520a156b4d981b6fdd1e793a97e19dc')
   })
   it('所有具体位置都能作为90–99天然主位置，副位置80–89，非相关位置不冒充主位置', () => {

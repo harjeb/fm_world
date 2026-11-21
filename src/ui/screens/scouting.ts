@@ -28,7 +28,7 @@ export function renderScoutReport(report: VisibleScoutReport, roster: GameState[
   const gk = 'isGk' in report && report.isGk === true
   const hidden = ALL_ATTRIBUTES.filter(key => !isMainAttr(key, gk) && (gk || !(GK_ATTRIBUTES as readonly string[]).includes(key)))
   const rating = 'positions' in report && report.positions ? renderRelativePositionRatings({ attrs, positions: report.positions, detailedPositions: 'detailedPositions' in report ? report.detailedPositions : undefined }, roster) : '<p>位置评分：—（数据不足）</p>'
-  return `<article class="scout-report">${heading}${deleteButton}<p>报告产生时间 ${esc(new Date(report.readyAt).toLocaleString())} · 估计属性有随机误差（±${SCOUT_LEVELS.find(x => x.level === report.level)?.maxError ?? '—'}）</p>${rating}<div class="scout-attrs">${hidden.map(key => `<span>${esc(attrLabel(key))} <b>${typeof attrs[key] === 'number' && Number.isFinite(attrs[key]) ? attrs[key] : '—'}</b></span>`).join('')}</div></article>`
+  return `<article class="scout-report">${heading}${deleteButton}<p>报告产生时间 ${esc(new Date(report.readyAt).toLocaleString())} · 估计属性有随机误差（±${SCOUT_LEVELS.find(x => x.level === report.level)?.maxError ?? '—'}）</p>${rating}<div class="scout-attrs">${hidden.map(key => `<span class="hidden-attr">${esc(attrLabel(key))} <b>${typeof attrs[key] === 'number' && Number.isFinite(attrs[key]) ? attrs[key] : '—'}</b></span>`).join('')}</div></article>`
 }
 
 export function renderScoutControls(playerId: string, source: ScoutSource, clubId?: string): string {

@@ -477,6 +477,45 @@ function makePersonality(seed: PlayerSeed, rng: () => number): { professionalism
   }
 }
 
+/** 随机球员基础 CA 区间（压低至真实球星与 1% 天才青训之下，避免随机人混入 260–270 球星档）。 */
+export const RANDOM_BASE_CA_MIN = 175
+export const RANDOM_BASE_CA_MAX = 230
+
+export function randomStartingCa(initialCa: number): number {
+  return Math.max(RANDOM_BASE_CA_MIN, Math.min(RANDOM_BASE_CA_MAX, 115 + initialCa * 0.19))
+}
+
+/**
+ * 存量旧版随机球员（自由市场 / 无主 AI 球队）按方案 A 回调基础 CA，保留真实球星与青训苗子不变。
+ * 若 AI 已对其装备训练卡，仅扣除虚高的基础属性差额，保留已练出的成长幅度。
+ */
+export function rescaleLegacyRandomPlayer(player: Player): boolean {
+  if (!player || player.era !== 'random' || player.starKey || player.youthOrigin) return false
+  const isGk = (player.basePositions ?? player.positions).GK > 0
+  const baseAttrs = player.baseAttrs ?? player.attrs
+  const oldBaseCa = caOf(baseAttrs, isGk)
+  if (!(oldBaseCa > RANDOM_BASE_CA_MIN + 0.5)) return false
+  const estimatedInitialCa = Math.max(320, (oldBaseCa - 85) / 0.3)
+  const targetCa = randomStartingCa(estimatedInitialCa)
+  if (targetCa >= oldBaseCa - 0.5) return false
+  const scale = Math.sqrt(targetCa / oldBaseCa)
+  const nextBase = { ...baseAttrs }
+  for (const key of ALL_ATTRIBUTES) {
+    nextBase[key] = Math.round(baseAttrs[key] * scale * 10) / 10
+  }
+  const untrained = !player.equippedCardId && caOf(player.attrs, isGk) <= oldBaseCa + 1
+  if (untrained) {
+    player.attrs = { ...nextBase }
+  } else {
+    for (const key of ALL_ATTRIBUTES) {
+      const drop = Math.max(0, baseAttrs[key] - nextBase[key])
+      player.attrs[key] = Math.round(Math.max(nextBase[key], player.attrs[key] - drop) * 10) / 10
+    }
+  }
+  player.baseAttrs = nextBase
+  return true
+}
+
 export function createPlayerFromSeed(seed: PlayerSeed): Player {
   const rng = mulberry32(hashString(`${seed.enName}|${seed.era}|${seed.pos}`))
   const { attrs, ceilings } = makeAttributes(seed, rng)
@@ -490,7 +529,9 @@ export function createPlayerFromSeed(seed: PlayerSeed): Player {
   if (pa < initialCa) pa = initialCa
   pa = Math.round(pa * 10) / 10
   // CA is quadratic, so square-root scaling preserves the player's attribute profile.
-  const startingCa = Math.max(203, Math.min(297, 85 + initialCa * 0.3))
+  const startingCa = seed.era === 'random'
+    ? randomStartingCa(initialCa)
+    : Math.max(203, Math.min(297, 85 + initialCa * 0.3))
   const startScale = Math.sqrt(startingCa / initialCa)
   for (const key of ALL_ATTRIBUTES) attrs[key] = Math.round(attrs[key] * startScale * 10) / 10
   // 缩放后重新对齐上限，保证「上限不低于当前属性」这个不变量始终成立。

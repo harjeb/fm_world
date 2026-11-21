@@ -251,6 +251,17 @@ export function gainText(gains: Partial<Record<AttrKey, number>> | undefined, gk
     .join(' · ')
 }
 
+export function gainHtml(gains: Partial<Record<AttrKey, number>> | undefined, gk = false): string {
+  if (!gains) return ''
+  return (Object.entries(gains) as [AttrKey, number][])
+    .filter(([, value]) => value > 0.01)
+    .map(([key, value]) => {
+      const text = `${esc(attrLabel(key))} +${displayGain(key, value, gk).toFixed(1)}`
+      return isMainAttr(key, gk) ? text : `<span class="hidden-attr">${text}</span>`
+    })
+    .join(' · ')
+}
+
 export function attrsOf(player: Player, gk: boolean): AttrKey[] {
   const field: AttrKey[] = ['passing', 'firstTouch', 'dribbling', 'shooting', 'tackling', 'heading', 'vision', 'decisions', 'offBall', 'defPos', 'anticipation', 'composure', 'teamwork', 'acceleration', 'speed', 'agility', 'strength', 'endurance']
   return gk ? [...field, 'reflexes', 'handling', 'rushing', 'oneOnOne'] : field

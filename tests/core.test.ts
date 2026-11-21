@@ -31,7 +31,7 @@ describe('CA / PA 与初始数据', () => {
     }
   })
 
-  it('新球员初始 CA 约为 200–300，保留原有潜力和单项上限', () => {
+  it('新球员初始 CA：真实球星约为 200–300、随机球员约为 175–230，保留原有潜力和单项上限', () => {
     const stars = PLAYER_SEEDS.map(createPlayerFromSeed)
     const league = createInitialGame(4)
     const random = POSITIONS.flatMap((position) => [1, 2, 3, 4].flatMap((tier) =>
@@ -40,8 +40,13 @@ describe('CA / PA 与初始数据', () => {
     for (const player of players) {
       const gk = player.positions.GK > 0
       const ca = caOf(player.attrs, gk)
-      expect(ca).toBeGreaterThanOrEqual(200)
-      expect(ca).toBeLessThanOrEqual(300)
+      if (player.era === 'random') {
+        expect(ca).toBeGreaterThanOrEqual(174)
+        expect(ca).toBeLessThanOrEqual(231)
+      } else {
+        expect(ca).toBeGreaterThanOrEqual(200)
+        expect(ca).toBeLessThanOrEqual(300)
+      }
       expect(ca).toBeLessThanOrEqual(player.pa)
       expect(player.pa).toBeLessThanOrEqual(caCeilingOf(player.ceilings, gk) + 1e-6)
       expect(player.baseAttrs).toEqual(player.attrs)

@@ -26,16 +26,16 @@ function setToday(game: GameState, dayOfMonth: number): void {
 }
 
 describe('身价曲线', () => {
-  it('普通球员十几万到几十万，二级能碰到的最贵球星数百万', () => {
+  it('普通随机球员数万到数十万，二级能碰到的最贵球星数百万', () => {
     const game = createWorldGame(20241107)
     const all = [...game.roster, ...game.freeStars, ...game.aiTeams.flatMap((team) => team.players)]
     const values = all.map((player) => playerMarketValue(player)).sort((a, b) => a - b)
     const pick = (q: number) => values[Math.min(values.length - 1, Math.floor(values.length * q))]
-    expect(pick(0.05)).toBeGreaterThanOrEqual(100_000)
-    expect(pick(0.05)).toBeLessThan(400_000)
-    // 11 人制每队多了 7 个随机球员（多是替补级别），中位数比 7 人制时低一些。
-    expect(pick(0.5)).toBeGreaterThan(200_000)
-    expect(pick(0.5)).toBeLessThan(2_000_000)
+    expect(pick(0.05)).toBeGreaterThanOrEqual(30_000)
+    expect(pick(0.05)).toBeLessThan(150_000)
+    // 随机球员按方案 A 压低基础 CA（175–230）并乘 0.75× 身价折价，与真实球星拉开明显分层。
+    expect(pick(0.5)).toBeGreaterThanOrEqual(50_000)
+    expect(pick(0.5)).toBeLessThan(300_000)
     // 二级开局看得到的最贵球星在自由市场里；千万级的大牌在更高级别的球队手里。
     expect(values[values.length - 1]).toBeGreaterThanOrEqual(5_000_000)
     expect(values[values.length - 1]).toBeLessThanOrEqual(20_000_000)

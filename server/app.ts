@@ -28,6 +28,7 @@ import { loadPveContent } from '../src/game/pve-content.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
 import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, migrateLegacyExpandedTactics, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, repairInflatedContractWages, syncAllClubLiveTactics, syncClubLiveTactics, wageForPlayer, worldForClub, worldSlots, worldWageBill } from '../src/game/world.ts'
 import { WORLD_CLUB_DEFS, pickExpandedZoneClubs } from '../src/game/data/world-clubs.ts'
+import { rescaleLegacyRandomPlayer } from '../src/game/data/players.ts'
 import { lineupLockState } from '../src/game/season.ts'
 import { completedWorldRound, paysSeasonCupAppearanceGold, seasonRoundKickoff, worldRoundsKickedOff } from '../src/game/season-cups.ts'
 import { legendCupTeamById } from '../src/game/data/legend-cup-teams.ts'
@@ -112,6 +113,7 @@ type SharedWorld = {
   auctionLog?: AuctionResult[]
   marketVersion?: number
   positionProfilesVersion?: 1
+  randomBaseCaVersion?: 1
   /** 电脑球队的钱、设施和培养成果；全服一份，跟着赛季一起滚。 */
   aiClubs?: Record<string, AIClubState>
   /** 自由市场最近一次每日补充是第几个游戏日。 */
@@ -211,6 +213,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     auctionLog: loadedWorld?.auctionLog ?? [],
     marketVersion: loadedWorld?.marketVersion ?? 1,
     positionProfilesVersion: loadedWorld?.positionProfilesVersion,
+    randomBaseCaVersion: loadedWorld ? loadedWorld.randomBaseCaVersion : 1,
     aiClubs: loadedWorld?.aiClubs,
     aiRound: loadedWorld?.aiRound,
     matchBook: loadedWorld?.matchBook,
@@ -364,6 +367,29 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     sharedWorld.positionProfilesVersion = 1
     sharedWorld.marketVersion = (sharedWorld.marketVersion ?? 1) + 1
   }
+  // 方案 A 存量随机球员基础 CA 回调（自由市场 + 无主 AI 球队），不改动真人执教球队名单与进行中的竞拍。
+  let rescaledLegacyRandoms = false
+  if (sharedWorld.randomBaseCaVersion !== 1) {
+    const activeAuctionIds = new Set((sharedWorld.auctions ?? []).map((auction) => auction.playerId))
+    for (const player of sharedWorld.freeStars) {
+      if (activeAuctionIds.has(player.id)) continue
+      if (rescaleLegacyRandomPlayer(player)) rescaledLegacyRandoms = true
+    }
+    for (const [clubId, team] of Object.entries(sharedWorld.teams ?? {})) {
+      if (sharedWorld.owners[clubId]) continue
+      for (const player of team.players) {
+        if (rescaleLegacyRandomPlayer(player)) rescaledLegacyRandoms = true
+      }
+    }
+    for (const [clubId, clubState] of Object.entries(sharedWorld.aiClubs ?? {})) {
+      if (sharedWorld.owners[clubId]) continue
+      for (const player of clubState.signings ?? []) {
+        if (rescaleLegacyRandomPlayer(player)) rescaledLegacyRandoms = true
+      }
+    }
+    sharedWorld.randomBaseCaVersion = 1
+    if (rescaledLegacyRandoms) sharedWorld.marketVersion = (sharedWorld.marketVersion ?? 1) + 1
+  }
   // 早期扩区（v0.4.18 前）的 d2z* 球队战术统一写死为默认均衡：按确定性洗牌补齐多样化基底战术，
   // 同步更新无主 AI 球队的基底战术（真人执教球队阵容不动）。
   migrateLegacyExpandedTactics(sharedWorld.world, sharedWorld.seed, {
@@ -386,7 +412,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   let sharedWorldVersion = 1
   let sharedTeamsPublicVersion = 1
   let sharedMatchBookVersion = 1
-  let worldDirty = false
+  let worldDirty = rescaledLegacyRandoms
   let worldWriteUrgent = false
   let worldWriteGen = 0
   let worldWriteTimer: ReturnType<typeof setTimeout> | null = null

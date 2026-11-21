@@ -1,5 +1,5 @@
 import { ATTR_GROUPS, ATTR_META, POSITION_LABELS } from '../../game/data/attributes.ts'
-import { attrRating } from '../../game/scale.ts'
+import { attrRating, isMainAttr } from '../../game/scale.ts'
 import { DETAILED_POSITIONS, DETAILED_POSITION_LABELS, detailedPositionValue } from '../../game/detailed-positions.ts'
 import type { DetailedPosition } from '../../game/types.ts'
 import { GK_ATTRIBUTES, POSITIONS, type AttrKey, type Player, type Position } from '../../game/types.ts'
@@ -83,7 +83,8 @@ function statTable(p: Player, other?: Player): string {
 }
 function attributeTable(p: Player, other?: Player): string {
   const raw = (target: Player | undefined, key: AttrKey) => attr(target, key) === undefined ? '—' : number(target!.attrs[key])
-  return `<p class="pc-muted">显示与球员档案一致的属性原始值；主属性和其他属性采用不同量纲。外场球员门将属性不适用。</p>${ATTR_GROUPS.map(group => `<section class="pc-group"><h3>${group.name}</h3><div class="pc-table-wrap"><table class="pc-table"><thead><tr><th>属性</th><th>球员</th><th>对比球员</th></tr></thead><tbody>${group.attrs.map(key => `<tr><th>${esc(ATTR_META[key].label)}</th><td>${raw(p, key)}</td><td>${raw(other, key)}</td></tr>`).join('')}</tbody></table></div></section>`).join('')}`
+  const isHiddenRow = (key: AttrKey) => !isMainAttr(key, isKeeper(p)) && (!other || !isMainAttr(key, isKeeper(other)))
+  return `<p class="pc-muted">显示与球员档案一致的属性原始值；主属性（0–1500）与<span class="pc-hidden-note">淡紫色隐藏属性（0–20）</span>采用不同量纲。外场球员门将属性不适用。</p>${ATTR_GROUPS.map(group => `<section class="pc-group"><h3>${group.name}</h3><div class="pc-table-wrap"><table class="pc-table"><thead><tr><th>属性</th><th>球员</th><th>对比球员</th></tr></thead><tbody>${group.attrs.map(key => `<tr${isHiddenRow(key) ? ' class="pc-attr-hidden"' : ''}><th>${esc(ATTR_META[key].label)}</th><td>${raw(p, key)}</td><td>${raw(other, key)}</td></tr>`).join('')}</tbody></table></div></section>`).join('')}`
 }
 function positionsTable(p: Player, other?: Player): string {
   return `<p class="pc-muted">显示球员的位置熟练度原始值；球场上由灰、红、黄、绿到青色表示熟练度由低到高。</p><div class="pc-position-pair"><div>${pitch(p)}<p>${esc(p.name)} · ${esc(positionName(p))}</p></div><div>${pitch(other)}<p>${other ? `${esc(other.name)} · ${esc(positionName(other))}` : '未选择球员'}</p></div></div><table class="pc-table"><thead><tr><th>位置</th><th>球员</th><th>对比球员</th></tr></thead><tbody>${DETAILED_POSITIONS.map(pos => `<tr><th>${DETAILED_POSITION_LABELS[pos]}</th><td>${number(detailedPositionValue(p, pos))}</td><td>${other ? number(detailedPositionValue(other, pos)) : '—'}</td></tr>`).join('')}</tbody></table>`

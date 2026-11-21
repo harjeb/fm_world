@@ -64,7 +64,7 @@ export function renderRankTrendChart(
 
   let zones = ''
   if (options.tier === 'champions') {
-    zones = `${bandRect(1, 1, 'champion')}${totalTeams >= 6 ? bandRect(totalTeams - 2, totalTeams, 'relegate') : ''}`
+    zones = `${bandRect(1, 1, 'champion')}${totalTeams >= 4 ? bandRect(2, 4, 'legend') : ''}${totalTeams >= 6 ? bandRect(totalTeams - 2, totalTeams, 'relegate') : ''}`
   } else if (options.tier === 'division1') {
     zones = `${bandRect(1, Math.min(3, totalTeams), 'promote')}${totalTeams >= 6 ? bandRect(totalTeams - 2, totalTeams, 'relegate') : ''}`
   } else if (options.tier === 'division2') {
@@ -141,7 +141,7 @@ export function renderRankTrendChart(
         : '<span class="rank-delta flat">持平</span>'
 
   const zoneLegend = options.tier === 'champions'
-    ? '<span class="legend-item"><i class="swatch zone-champion"></i>榜首争冠</span><span class="legend-item"><i class="swatch zone-relegate"></i>降级区</span>'
+    ? '<span class="legend-item"><i class="swatch zone-champion"></i>榜首争冠</span><span class="legend-item"><i class="swatch zone-legend"></i>前四传奇杯</span><span class="legend-item"><i class="swatch zone-relegate"></i>降级区</span>'
     : options.tier === 'division1'
       ? '<span class="legend-item"><i class="swatch zone-promote"></i>前三升级区</span><span class="legend-item"><i class="swatch zone-relegate"></i>后三降级区</span>'
       : options.tier === 'division2'

@@ -21,7 +21,7 @@ function row(player: Player, label: string): string {
   const keys = mainAttrsFor(gk)
   const values = keys.map((key) => `<td class="num">${attrValue(player, key).toFixed(0)}</td>`).join('')
   const hidden = ALL_ATTRIBUTES.filter((key) => !keys.includes(key) && (gk || !['reflexes', 'handling', 'rushing', 'oneOnOne'].includes(key)))
-  return `<tr><td>${esc(label)}</td><td><b>${esc(player.name)}</b><small class="muted"> ${esc(player.enName)}</small><details><summary>技能与其他属性</summary><p>${player.skills.map((id) => esc(skillName(id))).join('、') || '无技能'}</p><p class="small">${hidden.map((key) => `${esc(ATTR_META[key].label)} ${player.attrs[key].toFixed(1)}`).join(' · ')}</p><p class="muted small">年龄 ${player.age ?? '未核实'}；身高 ${player.height || '未核实'}${player.height ? 'cm' : ''}。</p></details></td><td class="num">${caHeat(caOf(player.attrs, gk))}</td>${values}${gk ? '<td>—</td>' : ''}</tr>`
+  return `<tr><td>${esc(label)}</td><td><b>${esc(player.name)}</b><small class="muted"> ${esc(player.enName)}</small><details><summary>技能与其他属性</summary><p>${player.skills.map((id) => esc(skillName(id))).join('、') || '无技能'}</p><p class="small hidden-attr-text">${hidden.map((key) => `${esc(ATTR_META[key].label)} ${player.attrs[key].toFixed(1)}`).join(' · ')}</p><p class="muted small">年龄 ${player.age ?? '未核实'}；身高 ${player.height || '未核实'}${player.height ? 'cm' : ''}。</p></details></td><td class="num">${caHeat(caOf(player.attrs, gk))}</td>${values}${gk ? '<td>—</td>' : ''}</tr>`
 }
 
 /** 外场七项和门将六项分表，不能把反应/手控球塞到射门/抢断列下。 */
