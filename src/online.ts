@@ -1043,6 +1043,25 @@ export async function buyShopBookOnline(skillId: string): Promise<GameState> {
   return protectedGameAction('/api/shop/buy', { skillId })
 }
 
+export async function chooseBoardAmbitionOnline(
+  ambition: import('./game/types.ts').BoardAmbition,
+  options: { scope?: 'offseason' | 'current'; lock?: boolean } = {},
+): Promise<GameState> {
+  return protectedGameAction('/api/board/choose', {
+    ambition,
+    ...(options.scope ? { scope: options.scope } : {}),
+    ...(options.lock ? { lock: true } : {}),
+  })
+}
+
+export async function adjustBoardBudgetOnline(transferDelta: number): Promise<GameState> {
+  return protectedGameAction('/api/board/slider', { transferDelta })
+}
+
+export async function upgradeFacilityOnline(facilityId: import('./game/types.ts').FacilityId): Promise<GameState> {
+  return protectedGameAction('/api/club/upgrade', { facilityId })
+}
+
 export async function nextWorldSeasonOnline(): Promise<GameState> {
   const next = await onlineGameAction('/api/world/next-season', {})
   if (publicWorld) void refreshPublicWorld()

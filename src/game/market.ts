@@ -12,6 +12,7 @@ import { sanitizeAutoSubPlan } from './match/management.ts'
 import { negotiationDemands, negotiationFailure, negotiationRoll, negotiationTerms, type NegotiationAnswers, type NegotiationDemands } from './negotiation.ts'
 import { isLocalFreeAgentAvailable } from './free-market.ts'
 import { isYouthTrainee, youthTransferBlocked } from './youth.ts'
+import { checkTransferBudget, checkWageCapForRenewal, checkWageCapForSigning, creditTransferSale, spendTransferBudget } from './board.ts'
 
 type Market = NonNullable<GameState['market']>
 type Listing = Market['listings'][number]
@@ -214,6 +215,7 @@ export type { NegotiationAnswers, NegotiationDemands } from './negotiation.ts'
 function completeSigning(game: GameState, player: Player, fee: number): void {
   const economy = economyOf(game)
   economy.balance -= fee
+  spendTransferBudget(game, fee)
   arriveWithoutCards(player)
   game.roster.push(player)
   assignContract(game, player)
@@ -232,6 +234,10 @@ function negotiate(
   if (!Number.isSafeInteger(offer) || offer <= 0) return fail('报价必须是正整数')
   const economy = economyOf(game)
   if (!economy || !validBalance(economy.balance)) return fail('余额数据无效')
+  const budgetCheck = checkTransferBudget(game, offer)
+  if (!budgetCheck.ok) return fail(budgetCheck.error)
+  const wageCheck = checkWageCapForSigning(game, player)
+  if (!wageCheck.ok) return fail(wageCheck.error)
   const demands = negotiationDemands({ seed: game.seed, world: game.world, season: game.season }, player)
   const clubTier = game.season?.tier ?? 'division2'
   const terms = negotiationTerms({ demands, value, asking, offer, answers, clubTier, clubId: 'player' })
@@ -356,6 +362,10 @@ export function buyFreeAgent(game: GameState, playerId: string): MarketOutcome {
   if (!isLocalFreeAgentAvailable(game, player, Date.now())) return fail(`${player.name} 现在不在市场，过些天再来看看`)
   const economy = economyOf(game)
   if (!economy || !validBalance(economy.balance)) return fail('余额数据无效')
+  const budgetCheck = checkTransferBudget(game, price)
+  if (!budgetCheck.ok) return fail(budgetCheck.error)
+  const wageCheck = checkWageCapForSigning(game, player)
+  if (!wageCheck.ok) return fail(wageCheck.error)
   if (economy.balance < price) return fail('余额不足')
   completeSigning(game, player, price)
   game.freeStars = game.freeStars.filter(p => p.id !== playerId)
@@ -436,6 +446,7 @@ export function settleMarket(game: GameState, round: number): number {
     soldIds.add(listing.player.id)
   }
   economy.balance += proceeds
+  creditTransferSale(game, proceeds)
   // 卖出去就是卖出去：他练出来的卡全部销毁，人回到原始属性，买回来也是白板。
   for (const listing of sold) {
     listing.player.contract = undefined
@@ -457,6 +468,10 @@ export function buyFromClub(game: GameState, clubId: string, playerId: string): 
   if (!team || !player) return fail('球员不在该球队')
   const price = clubAsking(game, player)
   const economy = economyOf(game)
+  const budgetCheck = checkTransferBudget(game, price)
+  if (!budgetCheck.ok) return fail(budgetCheck.error)
+  const wageCheck = checkWageCapForSigning(game, player)
+  if (!wageCheck.ok) return fail(wageCheck.error)
   if (!validBalance(economy.balance) || economy.balance < price) return fail('余额不足')
   completeSigning(game, player, price)
   team.players = team.players.filter((item) => item.id !== playerId)
@@ -515,9 +530,12 @@ export function renewContract(game: GameState, playerId: string, years = 2): Mar
   const fair = wageForPlayer(player)
   const current = player.contract?.wage ?? 0
   const baseWage = current <= Math.round(fair * 1.15) ? current : fair
+  const nextWage = Math.max(baseWage, Math.round(fair * 1.1))
+  const wageCheck = checkWageCapForRenewal(game, playerId, nextWage)
+  if (!wageCheck.ok) return fail(wageCheck.error)
   player.contract = {
     clubId: 'player',
-    wage: Math.max(baseWage, Math.round(fair * 1.1)),
+    wage: nextWage,
     expiresSeason: Math.max((player.contract?.expiresSeason ?? game.season.index) + years, game.season.index + years),
   }
   return { ok: true }

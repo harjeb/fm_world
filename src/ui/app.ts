@@ -72,12 +72,13 @@ import { displayClock } from '../game/match/time.ts'
 import { hasSeenLatestChangelog, markChangelogSeen } from '../game/changelog.ts'
 import { emptyAutoSubs } from '../game/match/management.ts'
 import { payWageArrears, upgradeFacility, type FacilityId } from '../game/economy.ts'
+import { BOARD_AMBITION_META, BOARD_WAGE_SLIDER_ROUNDS, adjustBoardBudgetSlider, chooseBoardAmbition, isBoardAmbition } from '../game/board.ts'
 import { leadingBid, type Auction, type AuctionResult } from '../game/auction.ts'
 import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPlayer, refreshClubMarket, releasePlayer, renewContract, signWorldClubPlayer, signFreeAgent } from '../game/market.ts'
 import { minimumBid } from '../game/auction.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
 import { clubNameError, normalizeClubName } from '../game/club-name.ts'
-import { aiTransferMarket, bidOnline, buyFromAIClubOnline, buyShopBookOnline, chatState, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, recycleCardsOnline, refreshAITransferMarket, refreshChatOnline, refreshGameOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setCardRecycleLockOnline, startPeakOnline, startScoutingOnline, deleteScoutingOnline, startTrainingOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline } from '../online.ts'
+import { adjustBoardBudgetOnline, aiTransferMarket, bidOnline, buyFromAIClubOnline, buyShopBookOnline, chatState, chooseBoardAmbitionOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, recycleCardsOnline, refreshAITransferMarket, refreshChatOnline, refreshGameOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setCardRecycleLockOnline, startPeakOnline, startScoutingOnline, deleteScoutingOnline, startTrainingOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline, upgradeFacilityOnline } from '../online.ts'
 import { agentHandoffText } from './agent-handoff.ts'
 import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
 import { UNHAPPY_HOURS } from '../game/transfer-rules.ts'
@@ -1487,12 +1488,78 @@ document.addEventListener('click', async (event) => {
       }
       break
     }
-        case 'club-upgrade': {
-      const result = upgradeFacility(game, actionEl.dataset.facility as FacilityId)
+    case 'club-upgrade': {
+      const facilityId = actionEl.dataset.facility as FacilityId
+      if (isOnlineMode()) {
+        try {
+          const next = await upgradeFacilityOnline(facilityId)
+          applyOnlineGame(next, '设施已升级。')
+        } catch (failure) {
+          showNotice(failure instanceof Error ? `升级失败：${failure.message}` : '升级失败')
+        }
+        break
+      }
+      const result = upgradeFacility(game, facilityId)
       if (result.ok) persist()
       showNotice(result.ok ? '设施已升级。' : `升级失败：${result.error ?? '未知错误'}`)
       break
     }
+    case 'board-choose': {
+      const ambition = actionEl.dataset.ambition
+      if (!isBoardAmbition(ambition)) break
+      const scope = actionEl.dataset.scope === 'offseason' || actionEl.dataset.scope === 'current'
+        ? actionEl.dataset.scope
+        : undefined
+      const lock = actionEl.dataset.lock === '1'
+      const label = BOARD_AMBITION_META[ambition].label
+      const successText = scope === 'offseason'
+        ? `已预选下赛季目标：${label}（换季时生效）。`
+        : lock
+          ? `已确认并锁定本赛季目标：${label}。`
+          : `已切换本赛季目标为「${label}」，预算与余额已同步更新。`
+      if (isOnlineMode()) {
+        try {
+          const next = await chooseBoardAmbitionOnline(ambition, { ...(scope ? { scope } : {}), ...(lock ? { lock: true } : {}) })
+          ui.boardSliderDraft = 0
+          applyOnlineGame(next, successText)
+        } catch (failure) {
+          showNotice(failure instanceof Error ? failure.message : '董事会操作失败')
+        }
+        break
+      }
+      const result = chooseBoardAmbition(game, ambition, { ...(scope ? { scope } : {}), ...(lock ? { lock: true } : {}) })
+      if (result.ok) {
+        ui.boardSliderDraft = 0
+        persist()
+      }
+      showNotice(result.ok ? successText : (result.error ?? '董事会操作失败'))
+      break
+    }
+    case 'board-slider-apply': {
+      const delta = ui.boardSliderDraft
+      if (!delta) break
+      if (isOnlineMode()) {
+        try {
+          const next = await adjustBoardBudgetOnline(delta)
+          ui.boardSliderDraft = 0
+          applyOnlineGame(next, '董事会转会预算与工资帽已按滑块更新。')
+        } catch (failure) {
+          showNotice(failure instanceof Error ? failure.message : '预算调整失败')
+        }
+        break
+      }
+      const result = adjustBoardBudgetSlider(game, delta)
+      if (result.ok) {
+        ui.boardSliderDraft = 0
+        persist()
+      }
+      showNotice(result.ok ? '董事会转会预算与工资帽已按滑块更新。' : (result.error ?? '预算调整失败'))
+      break
+    }
+    case 'board-slider-reset':
+      ui.boardSliderDraft = 0
+      render()
+      break
     case 'pay-wage-arrears': {
       const result = payWageArrears(game)
       if (result.ok) persist()
@@ -2847,6 +2914,43 @@ document.addEventListener('change', (event) => {
 document.addEventListener('input', (event) => {
   if (trainingStartPending || cardActionPending) return
   const target = event.target as HTMLInputElement
+  if (target.id === 'board-budget-slider') {
+    const raw = Math.trunc(Number(target.value) || 0)
+    const wageDelta = raw === 0
+      ? 0
+      : raw > 0
+        ? -Math.floor(raw / BOARD_WAGE_SLIDER_ROUNDS)
+        : Math.floor((-raw) / BOARD_WAGE_SLIDER_ROUNDS)
+    const appliedTransfer = -wageDelta * BOARD_WAGE_SLIDER_ROUNDS
+    ui.boardSliderDraft = appliedTransfer
+    const box = document.querySelector<HTMLElement>('[data-board-slider-preview]')
+    if (box) {
+      const baseTransfer = Number(box.dataset.baseTransfer ?? 0)
+      const baseWage = Number(box.dataset.baseWage ?? 0)
+      const commercial = Number(box.dataset.commercial ?? 0)
+      const tEl = box.querySelector<HTMLElement>('[data-board-preview-transfer]')
+      const tdEl = box.querySelector<HTMLElement>('[data-board-preview-tdelta]')
+      const wEl = box.querySelector<HTMLElement>('[data-board-preview-wage]')
+      const wdEl = box.querySelector<HTMLElement>('[data-board-preview-wdelta]')
+      if (tEl) tEl.textContent = (baseTransfer + appliedTransfer).toLocaleString()
+      if (tdEl) {
+        tdEl.textContent = appliedTransfer === 0 ? '未变动' : `${appliedTransfer > 0 ? '+' : ''}${appliedTransfer.toLocaleString()}`
+        tdEl.className = appliedTransfer > 0 ? 'up' : appliedTransfer < 0 ? 'down' : 'muted'
+      }
+      if (wEl) wEl.textContent = (baseWage + wageDelta + commercial).toLocaleString()
+      if (wdEl) {
+        wdEl.textContent = wageDelta === 0
+          ? `基础 ${baseWage.toLocaleString()} + 商业 ${commercial.toLocaleString()}`
+          : `${wageDelta > 0 ? '+' : ''}${wageDelta.toLocaleString()}/轮（基础 ${(baseWage + wageDelta).toLocaleString()}）`
+        wdEl.className = wageDelta > 0 ? 'up' : wageDelta < 0 ? 'down' : 'muted'
+      }
+    }
+    const applyBtn = document.querySelector<HTMLButtonElement>('[data-board-slider-apply]')
+    const resetBtn = document.querySelector<HTMLButtonElement>('[data-board-slider-reset]')
+    if (applyBtn) applyBtn.disabled = appliedTransfer === 0
+    if (resetBtn) resetBtn.disabled = appliedTransfer === 0
+    return
+  }
   if (target.id === 'legend-search') { ui.legendSearch = target.value; render(); return }
   if (target.matches?.('[data-rp-seek]')) {
     previewReplay2DSeek(Number(target.value) / 1000)

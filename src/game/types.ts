@@ -1231,11 +1231,110 @@ export type ShopState = {
   lastPeakBackfill?: number
 }
 
+export type BoardAmbition = 'safe' | 'expected' | 'ambitious'
+export type BoardGrade = 'S' | 'A' | 'B' | 'C' | 'D'
+export type BoardCupStage = 'none' | 'qualified' | 'r16' | 'qf' | 'sf' | 'final' | 'champion'
+export type BoardCupId = 'community' | 'league' | 'champions'
+
+export type BoardGoalOption = {
+  ambition: BoardAmbition
+  label: string
+  leagueTarget: number
+  cupId: BoardCupId
+  cupTarget: BoardCupStage
+  transferGrant: number
+  facilityGrant: number
+  wageCap: number
+  meetBonus: number
+  exceedBonus: number
+}
+
+export type BoardSeasonMandate = {
+  seasonIndex: number
+  tier: TierId
+  powerRank: number
+  totalClubs: number
+  ambition: BoardAmbition
+  leagueTarget: number
+  cupId: BoardCupId
+  cupTarget: BoardCupStage
+  /** 本赛季董事会初始拨付的转会预算。 */
+  initialTransferBudget: number
+  /** 本赛季当前剩余可用转会预算（买人扣减、卖人按留存率回流、滑块可与工资帽互转）。 */
+  transferBudget: number
+  /** 本赛季董事会初始拨付的设施预算。 */
+  initialFacilityBudget: number
+  /** 本赛季当前剩余可用设施预算（仅设施升级消耗，不与转会/工资帽互通）。 */
+  facilityBudget: number
+  /** 本赛季初始基础工资帽（每轮）。 */
+  initialWageCap: number
+  /** 当前基础工资帽（每轮，可通过滑块与转会预算按 38:1 互转；有效工资帽另加商业设施 30% 分成）。 */
+  wageCap: number
+  /** 卖人收入回流至转会预算的比例（0.5 / 0.75 / 0.85）。 */
+  retentionRate: number
+  /** 滑块累计调整到转会预算的净额（正=从工资帽转入转会预算，负=从转会预算转入工资帽）。 */
+  sliderShift: number
+  /** 达标 / 超额奖金（赛季末考核后发放至余额）。 */
+  meetBonus: number
+  exceedBonus: number
+  /** 本赛季目标档位是否已锁定（第 4 轮起或手动确认锁定后不可更改）。 */
+  locked: boolean
+  /** 本赛季三档方案快照，供开季第 1–3 轮切换对比。 */
+  options: BoardGoalOption[]
+}
+
+export type BoardOffseasonPreview = {
+  nextSeasonIndex: number
+  projectedTier: TierId
+  confirmed: boolean
+  powerRank: number
+  totalClubs: number
+  budgetMultiplier: number
+  wageMultiplier: number
+  retentionRate: number
+  options: BoardGoalOption[]
+}
+
+export type BoardEvaluation = {
+  seasonIndex: number
+  tier: TierId
+  ambition: BoardAmbition
+  leagueTarget: number
+  leagueActual: number
+  cupId: BoardCupId
+  cupTarget: BoardCupStage
+  cupActual: BoardCupStage
+  grade: BoardGrade
+  confidenceBefore: number
+  confidenceAfter: number
+  bonusPaid: number
+  nextBudgetMultiplier: number
+  summary: string
+}
+
+export type BoardState = {
+  version: 1
+  /** 董事会信任度（15–100，初始 60）。 */
+  confidence: number
+  /** 最近一次赛季考核评级（直接参与下赛季预算奖惩系数）。 */
+  lastGrade?: BoardGrade
+  /** 当前赛季激活的董事会目标与独立预算（第 2 赛季起生效）。 */
+  current?: BoardSeasonMandate
+  /** 休赛期预选的下赛季目标档位（换季时自动生效，未选默认 expected）。 */
+  pendingChoice?: BoardAmbition
+  /** 休赛期生成的下赛季目标与预算预览。 */
+  offseasonPreview?: BoardOffseasonPreview
+  /** 历年董事会考核记录（最新在前，最多保留 20 条）。 */
+  history: BoardEvaluation[]
+}
+
 export type GameState = {
   /** 独立青训营；缺省旧档首次进入时初始化一次。 */
   youth?: YouthState
   /** 技能书商店点数与领取账本；旧档首次进入时初始化并补发已通关巅峰关卡点数。 */
   shop?: ShopState
+  /** 俱乐部董事会目标、独立转会/设施预算、工资帽与考核记录（第 2 赛季起激活）。 */
+  board?: BoardState
   scoutReports?: ScoutReport[]
   /** 全俱乐部共用的回收培养点；旧档不存在时为 0。 */
   trainingPoints?: number

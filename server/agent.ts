@@ -1,4 +1,20 @@
-import type { AttrKey, DetailedPosition, EventDef, FormationId, GameState, Lineup, PlayerCard, Position, RoleId, Tactics, TrainingAutoConfig, TrainingSession } from '../src/game/types.ts'
+import type { AITeam, AttrKey, DetailedPosition, EventDef, FormationId, GameState, Lineup, PlayerCard, Position, RoleId, Tactics, TrainingAutoConfig, TrainingSession } from '../src/game/types.ts'
+import {
+  BOARD_CHOICE_MAX_ROUND,
+  BOARD_WAGE_SLIDER_ROUNDS,
+  adjustBoardBudgetSlider,
+  boardCommercialWageBonus,
+  boardEffectiveWageCap,
+  boardSliderBounds,
+  canSwitchCurrentBoardAmbition,
+  chooseBoardAmbition,
+  ensureBoard,
+  isBoardAmbition,
+  isBoardBudgetActive,
+  refreshOffseasonBoardPreview,
+  syncBoardLockState,
+} from '../src/game/board.ts'
+import { worldWageBill } from '../src/game/world.ts'
 import { detailedPositionForSlot, isDetailedPosition, readDetailedPositions, slotPositionValue } from '../src/game/detailed-positions.ts'
 import { MAX_SCOUT_REPORTS, SCOUT_LEVELS, deleteScoutReport, startScouting, visibleScoutReports, type ScoutReport, type ScoutSource, type ScoutTarget, type VisibleScoutReport } from '../src/game/scouting.ts'
 import { preferredPositionRatings } from '../src/game/scout-rating.ts'
@@ -110,6 +126,10 @@ export type AgentOptions = {
   transferGame?: () => GameState
   /** 联机时用全服共享名册/自由市场解析球探目标；只读，不改账号存档。 */
   scoutGame?: () => GameState
+  /** 联机时领先竞拍占用的资金，用于校验董事会滑块下限与档位下调。 */
+  committedAuctions?: () => number
+  clubId?: () => string | undefined
+  teamsById?: () => Record<string, AITeam> | undefined
 }
 
 const asRecord = (value: unknown): Record<string, unknown> =>
@@ -579,6 +599,38 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
         .map((fixture) => fixtureView(game, fixture)),
     },
     economy: economyView(game),
+    board: (() => {
+      const board = ensureBoard(game)
+      syncBoardLockState(game)
+      if (game.season.finished && !board.offseasonPreview) {
+        refreshOffseasonBoardPreview(game, options.clubId?.(), options.teamsById?.())
+      }
+      const active = isBoardBudgetActive(game)
+      const economy = economyOf(game)
+      const committed = options.committedAuctions?.() ?? 0
+      const effectiveWageCap = boardEffectiveWageCap(game)
+      const commercialWageBonus = boardCommercialWageBonus(economy)
+      const currentWageBill = worldWageBill(game)
+      return {
+        confidence: board.confidence,
+        lastGrade: board.lastGrade ?? null,
+        active,
+        choiceMaxRound: BOARD_CHOICE_MAX_ROUND,
+        sliderRatio: BOARD_WAGE_SLIDER_ROUNDS,
+        canSwitchAmbition: canSwitchCurrentBoardAmbition(game),
+        pendingChoice: board.pendingChoice ?? null,
+        current: active && board.current ? {
+          ...board.current,
+          effectiveWageCap,
+          commercialWageBonus,
+          currentWageBill,
+          wageHeadroom: effectiveWageCap === null ? null : effectiveWageCap - currentWageBill,
+          sliderBounds: boardSliderBounds(game, committed),
+        } : null,
+        offseasonPreview: board.offseasonPreview ?? null,
+        history: board.history,
+      }
+    })(),
     market: {
       transferWindowOpen: transferWindowOpen(game),
       /** 和转会页“从 AI 球队买人”同一份列表；用 preview_signing / sign_club_player 谈判。 */
@@ -1035,6 +1087,27 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       if (!Object.hasOwn(FACILITIES, id)) return { ok: false, error: '无效的设施' }
       const result = upgradeFacility(game, id as FacilityId)
       return result.ok ? { ok: true, result } : result
+    }
+    case 'board_choose_ambition': {
+      const ambition = body.ambition
+      if (!isBoardAmbition(ambition)) return { ok: false, error: 'ambition 只能是 safe / expected / ambitious' }
+      const scope = body.scope === 'offseason' || body.scope === 'current' ? body.scope : undefined
+      if (body.scope !== undefined && !scope) return { ok: false, error: 'scope 只能是 offseason 或 current' }
+      if (body.lock !== undefined && typeof body.lock !== 'boolean') return { ok: false, error: 'lock 必须是布尔值' }
+      const result = chooseBoardAmbition(game, ambition, {
+        ...(scope ? { scope } : {}),
+        ...(body.lock === true ? { lock: true } : {}),
+        committedAuctions: options.committedAuctions?.() ?? 0,
+        clubId: options.clubId?.(),
+        teamsById: options.teamsById?.(),
+      })
+      return result.ok ? { ok: true, result: { ok: true, board: game.board } } : result
+    }
+    case 'board_adjust_budget': {
+      const delta = body.transferDelta
+      if (typeof delta !== 'number' || !Number.isSafeInteger(delta)) return { ok: false, error: 'transferDelta 必须是整数' }
+      const result = adjustBoardBudgetSlider(game, delta, options.committedAuctions?.() ?? 0)
+      return result.ok ? { ok: true, result: { ...result, current: game.board?.current ?? null } } : result
     }
     case 'pay_wage_arrears': {
       // 欠薪期间球员只发挥一半；余额够时一次补清（和总览的「补发欠薪」按钮一样）。

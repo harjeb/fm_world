@@ -7,7 +7,8 @@ import { AUCTION_DURATION_MS, AUCTION_EXTEND_MS, auctionRaiseFee, committedFunds
 import { traitEffectText } from '../../game/data/skill-effects.ts'
 import { traitNameOf } from '../../game/data/star-traits.ts'
 import { SQUAD_LIMIT, aiTransferOffers, bestMarketValue, freeAgentAsking, saleChance, sellerSquadError, suggestedPrice, transferWindowOpen } from '../../game/market.ts'
-import { worldTransferTeams } from '../../game/world.ts'
+import { worldTransferTeams, worldWageBill } from '../../game/world.ts'
+import { boardEffectiveWageCap, isBoardBudgetActive } from '../../game/board.ts'
 import { isLocalFreeAgentAvailable } from '../../game/free-market.ts'
 import { initialDisplayCA } from '../../game/rating.ts'
 import { caHeat, clubName, countryLabel, emptyState, icon, ownName, pageHead, panel, posBadge, primaryPosition, tag, traitLabel } from '../components.ts'
@@ -76,6 +77,7 @@ function auctionTab(): string {
   const me = onlineState.user?.id ?? ''
   const committed = committedFunds(marketState.auctions, me)
   const available = economy.balance - committed
+  const boardTransferAvailable = isBoardBudgetActive(game) ? game.board!.current!.transferBudget - committed : null
   const canTrade = transferWindowOpen(game) && (!game.activeMatch || !!game.activeMatch.context.isLeague)
   const running = marketState.auctions.filter((auction) => marketState.pool.some((player) => player.id === auction.playerId))
   const auctionRows = running.map((auction) => {
@@ -108,6 +110,8 @@ function auctionTab(): string {
       ? '球员估值无效'
       : !canTrade
         ? '比赛进行中不能出价'
+        : boardTransferAvailable !== null && boardTransferAvailable < opening
+          ? `转会预算不足（可用 ${Math.max(0, boardTransferAvailable).toLocaleString()}）`
         : available < opening
           ? (committed > 0 ? `可用余额不足（其他竞拍已占用 ${committed.toLocaleString()}）` : '余额不足')
           : ''
@@ -263,6 +267,22 @@ function offersTab(): string {
     ${history ? panel('最近处理的报价', `<ul class="auction-log">${history}</ul>`) : ''}`
 }
 
+function boardBudgetStrip(): string {
+  if (!isBoardBudgetActive(game)) return ''
+  const mandate = game.board!.current!
+  const committed = isOnlineMode() ? committedFunds(marketState.auctions, onlineState.user?.id ?? '') : 0
+  const transferAvail = Math.max(0, mandate.transferBudget - committed)
+  const cap = boardEffectiveWageCap(game) ?? mandate.wageCap
+  const wages = worldWageBill(game)
+  const headroom = cap - wages
+  return `<div class="board-budget-strip">
+    <span><small class="muted">可用转会预算</small><b class="num-text">${transferAvail.toLocaleString()}</b>${committed > 0 ? `<small class="muted">（竞拍占 ${committed.toLocaleString()}）</small>` : ''}</span>
+    <span><small class="muted">每轮工资 / 有效工资帽</small><b class="num-text ${headroom < 0 ? 'down' : ''}">${wages.toLocaleString()} / ${cap.toLocaleString()}</b><small class="${headroom < 0 ? 'down' : 'muted'}">（${headroom >= 0 ? `余 +${headroom.toLocaleString()}` : `超 ${(-headroom).toLocaleString()}`}）</small></span>
+    <span><small class="muted">卖人回流比例</small><b>${Math.round(mandate.retentionRate * 100)}%</b></span>
+    <button class="btn small ghost" data-action="go-club" data-tab="board">去董事会调滑块</button>
+  </div>`
+}
+
 export function renderTransfer(): string {
   const tab: TransferTab = ui.transferTab
   const body = tab === 'free' ? freeTab() : tab === 'ai' ? aiTab() : tab === 'offers' ? offersTab() : marketTab()
@@ -272,6 +292,7 @@ export function renderTransfer(): string {
     <div class="tabs" role="tablist">
       ${TABS.map((item) => `<button class="tab ${tab === item.id ? 'active' : ''}" role="tab" aria-selected="${tab === item.id}" data-transfer-tab="${item.id}">${item.id === 'free' && isOnlineMode() ? '全服竞拍' : item.label}${item.id === 'offers' && pendingCount ? ` <span class="badge">${pendingCount}</span>` : ''}</button>`).join('')}
     </div>
+    ${boardBudgetStrip()}
     ${body}
     ${renderScoutPanel()}
   `

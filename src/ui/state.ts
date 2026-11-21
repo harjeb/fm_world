@@ -25,7 +25,7 @@ import type { TrainingActionId } from '../game/training.ts'
 import type { TrainingActivityId } from '../game/training-calendar.ts'
 
 export type Screen = 'youth' | 'club' | 'shop' | 'transfer' | 'home' | 'academy' | 'inventory' | 'training' | 'lineup' | 'season' | 'cups' | 'world' | 'challenge' | 'review' | 'match'
-export type ClubTab = 'facilities' | 'contracts' | 'history'
+export type ClubTab = 'board' | 'facilities' | 'contracts' | 'history'
 export type TransferTab = 'market' | 'free' | 'ai' | 'offers'
 export type SquadSortKey = 'pos' | 'name' | 'age' | 'ca' | 'condition' | 'energy' | 'value' | `attr${number}`
 export type ChallengeMode = 'friendly' | 'legend' | 'cup' | 'peak'
@@ -35,6 +35,8 @@ export type UIState = {
   /** 每次打开页面都先问：登录进共享世界，还是离线玩本地存档。 */
   bootGate: boolean
   clubTab: ClubTab
+  /** 董事会转会预算↔工资帽滑块的未提交草稿值（正=工资帽转转会，负=转会转工资帽）。 */
+  boardSliderDraft: number
   transferTab: TransferTab
   clubSearch: string
   clubPage: number
@@ -175,6 +177,7 @@ export const ui: UIState = {
   screen: 'home',
   bootGate: true,
   clubTab: 'facilities',
+  boardSliderDraft: 0,
   transferTab: 'market',
   clubSearch: '',
   clubPage: 0,

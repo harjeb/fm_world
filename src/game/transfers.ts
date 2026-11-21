@@ -17,6 +17,7 @@ import { youthTransferBlocked } from './youth.ts'
 import { sanitizeAutoSubPlan, validateAutoSubPlan } from './match/management.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 import { economyOf } from './economy.ts'
+import { creditTransferSale } from './board.ts'
 import {
   HIGH_OFFER_RATIO,
   OFFER_RESPONSE_MS,
@@ -263,6 +264,7 @@ export function respondToOffer(game: GameState, offerId: string, accept: boolean
     game.autoSubs = sanitizeAutoSubPlan(game.roster, game.lineup, game.autoSubs)
   }
   economyOf(game).balance += offer.amount
+  creditTransferSale(game, offer.amount)
   joinAIClub(buyer, player, offer.amount, season)
   offer.status = 'accepted'
   offer.resolvedAt = now

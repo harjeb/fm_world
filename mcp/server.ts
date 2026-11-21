@@ -109,9 +109,19 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     playerId: z.string().describe('球员 ID，来自 get_state 的 roster'),
   }, (args) => action('get_player', args))
 
-  register('upgrade_facility', '升级设施', '使用俱乐部余额升级设施。', {
+  register('upgrade_facility', '升级设施', '使用俱乐部余额（第 2 赛季起同时消耗董事会本季「独立设施预算」）升级设施。', {
     facilityId: z.enum(['stadium', 'academy', 'medical', 'shop', 'sponsor', 'psychology', 'tactics']),
   }, (args) => action('upgrade_facility', args))
+
+  register('board_choose_ambition', '选择董事会赛季目标档位', '休赛期预选下赛季目标档位（safe 稳妥 / expected 基准 / ambitious 野心），或在开季第 1–3 轮切换/确认本赛季目标档位（按新旧档位差额调整转会预算、设施预算、工资帽与余额；第 4 轮起自动锁定）。', {
+    ambition: z.enum(['safe', 'expected', 'ambitious']),
+    scope: z.enum(['offseason', 'current']).optional().describe('可选：休赛期预选传 offseason，开季第 1–3 轮调整传 current；省略时按赛季是否结束自动判断'),
+    lock: z.boolean().optional().describe('开季第 1–3 轮时传 true 可提前锁定当前档位'),
+  }, (args) => action('board_choose_ambition', args))
+
+  register('board_adjust_budget', '调节转会预算与工资帽滑块', '在转会预算与每轮基础工资帽之间按 38:1（每赛季 38 轮）双向调拨额度；严禁触碰独立设施预算。transferDelta 为正表示把多余工资帽转为转会预算，为负表示把转会预算转为工资帽。', {
+    transferDelta: z.number().int().safe().describe('转会预算变动量（正=工资帽转转会，负=转会转工资帽），需为 38 的整数倍或至少 ±38'),
+  }, (args) => action('board_adjust_budget', args))
 
   register('pay_wage_arrears', '补发欠薪', '发薪时余额不够会欠薪（state.economy.wageArrears）；欠薪期间球员在比赛里所有属性减半（只发挥 50%），联机按开球前 30 分钟锁定时的状态算。余额够时一次补清全部欠薪；下次发薪时余额够也会先自动补发。', {}, () => action('pay_wage_arrears', {}))
 

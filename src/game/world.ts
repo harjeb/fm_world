@@ -986,42 +986,8 @@ export function d2ClubChoices(): { id: string; name: string; enName?: string; co
   return WORLD_CLUB_DEFS.filter((club) => club.tier === 'division2').map((club) => ({ id: club.id, name: club.name, enName: club.enName, conference: club.conference ?? 'north' }))
 }
 
-/**
- * 11 人制每队 25 人（7 人制时 18 人）：单人工资按 18 / 25 缩放，整队工资总额和 7 人制时相当，
- * 经济系统（收入、设施、AI 账本）不用跟着重调。
- */
-export const SQUAD_WAGE_SCALE = 18 / 25
-
-/** 单名球员每轮工资封顶（与身价封顶 2000 万对齐，覆盖原始 CA ~300 顶级巨星并杜绝指数爆炸）。 */
-export const WAGE_CAP = 25_000
-
-export function wageForPlayer(player: Player): number {
-  // 与身价（bestMarketValue）保持同一口径：只按原始属性（baseAttrs）计算，
-  // 避免 AI 持续培养或装备高阶球员卡后把 CA 拉到 450–600 触发指数级天价工资。
-  const attrs = player.baseAttrs ?? player.attrs
-  const positions = player.basePositions ?? player.positions
-  const ca = caOf(attrs, positions.GK > 0)
-  const raw = 800 * SQUAD_WAGE_SCALE * Math.pow(1.035, ca - 200)
-  return Math.min(WAGE_CAP, Math.max(500, Math.round(raw / 50) * 50))
-}
-
-/**
- * 存量合同修复：旧版 wageForPlayer 按培养后 attrs 且无封顶计算，导致接管 AI 球队或续约时
- * 将单人每轮工资算到数万～数亿。凡超过「原始属性正常工资 × 1.15」的异常合同统一校正回正常值，
- * 保留正常的签约（1.0×）、续约（1.1×）与青训工资（100）。
- */
-export function repairInflatedContractWages(roster: Player[]): boolean {
-  let changed = false
-  for (const player of roster) {
-    if (!player?.contract || player.contract.clubId !== 'player') continue
-    const expected = wageForPlayer(player)
-    if (player.contract.wage > Math.round(expected * 1.15)) {
-      player.contract.wage = expected
-      changed = true
-    }
-  }
-  return changed
-}
+export { SQUAD_WAGE_SCALE, WAGE_CAP, repairInflatedContractWages, wageForPlayer, worldWageBill } from './wages.ts'
+import { wageForPlayer, worldWageBill } from './wages.ts'
 
 export function syncPlayerDivision(game: GameState): void {
   if (!game.world) return
@@ -1040,6 +1006,8 @@ export function syncPlayerDivision(game: GameState): void {
   division.champion = game.season.champion
   division.playerFinish = game.season.playerFinish
   division.round = game.season.round
+  syncBoardLockState(game)
+  if (game.season.finished) refreshOffseasonBoardPreview(game)
 }
 
 export function simulateOtherDivisions(game: GameState, throughRound: number, seed = game.seed): void {
@@ -1471,12 +1439,9 @@ function payWorldWages(game: GameState, round: number): number {
   return payWageBill(economyOf(game), worldWageBill(game))
 }
 
-export function worldWageBill(game: GameState): number {
-  return game.roster.reduce((sum, player) => sum + (player.contract?.wage ?? 0), 0)
-}
-
 import { archivePastCups } from './pve-season.ts'
 import { ensurePve } from './pve.ts'
+import { evaluateAndRollBoardSeason, oldBoardContextFromSeason, oldBoardContextFromWorld, refreshOffseasonBoardPreview, syncBoardLockState } from './board.ts'
 
 /** 换季跳过休赛期游戏日时，按跳过的毫秒数推进伤病恢复（不改动默契时钟，避免跨赛季清零）。 */
 export function healInjuriesByMs(injuries: GameState['injuries'], deltaMs: number, now: number): void {
@@ -1495,6 +1460,7 @@ export function advanceWorldSeason(game: GameState, now = Date.now(), protectedC
   simulateOtherDivisions(game, 38)
   const allFinished = game.world.divisions.every((division) => division.fixtures.every((fixture) => fixture.played))
   if (!allFinished) return { ok: false, error: '其他联赛尚未结束' }
+  const oldBoardContext = oldBoardContextFromSeason(game.season, game.world)
   ;(game.seasonHistory ??= []).push(game.season)
   promoteAndRelegate(game, protectedClubs)
   retireAndRegen(game)
@@ -1536,6 +1502,7 @@ export function advanceWorldSeason(game: GameState, now = Date.now(), protectedC
   if (validateLineup(game.roster, repaired).valid) game.lineup = repaired
   game.economy = economyOf(game)
   game.economy.lastIncomeRound = 0
+  evaluateAndRollBoardSeason(game, oldBoardContext)
   if (game.market) { game.market.lastSettledRound = 0; for (const listing of game.market.listings) listing.listedRound = 1 }
   ensurePve(game)
   return { ok: true }
@@ -1562,6 +1529,7 @@ export function advanceSharedAccountSeason(game: GameState, oldWorld: WorldState
   game.aiTeams = (game.season.clubIds ?? []).filter((id) => id !== 'player').map((id) => structuredClone(teams[id]))
   game.economy = economyOf(game)
   game.economy.lastIncomeRound = 0
+  evaluateAndRollBoardSeason(game, oldBoardContextFromWorld(oldWorld, clubId), teams)
   if (game.market) { game.market.lastSettledRound = 0; for (const listing of game.market.listings) listing.listedRound = 1 }
   archivePastCups(game)
 }

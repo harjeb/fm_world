@@ -226,7 +226,13 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 `state.economy` 提供余额、球迷数、设施 `stage`（1–25）、`level`、`stageInLevel`、`growthChance`、`roundIncome` 及 `upgradeCost`（球场额外返回 `homeOnly: true` 与 `homeAtmosphereRating`）；`state.market.freeAgents` 和 `state.market.listings` 提供价格及经过可见字段过滤的球员信息。市场是**本地 NPC 市场，不是跨账号交易**；赛季结束后不能新挂牌。每轮收入 = 1500 + 联赛转播分成 + 球迷 × 2 + 各设施收入（按阶段比例并随球迷最多放大 4 倍；其中**球场门票仅联赛主场发放**），另有每球 500 和胜场奖金（1000 + 球迷数 35%）；友谊赛与 PvE 挑战赛不计常规轮次收入或涨粉。联赛与杯赛中，主队按球场阶段在 2D 引擎获得微弱主场氛围加成（LV1 约 +15 至 LV5 满级约 +45 主属性有效值）。
 
-- `upgrade_facility` — `facilityId`: `stadium`、`academy`、`medical`、`psychology`、`tactics`、`shop` 或 `sponsor`。
+- `upgrade_facility` — `facilityId`: `stadium`、`academy`、`medical`、`psychology`、`tactics`、`shop` 或 `sponsor`。第 2 赛季起同时消耗俱乐部余额与董事会本季独立发放的「设施预算」（设施预算不与转会预算/工资帽互通）。
+- `board_choose_ambition` — 选择或切换董事会赛季目标档位。`state.board` 包含 `confidence`（信任度 15–100）、`lastGrade`（上季评级 `S/A/B/C/D`）、`active`（第 2 赛季起激活）、`current`（当季目标、剩余转会/设施预算、有效工资帽、商业帽加成、滑块区间 `sliderBounds` 与 `canSwitchAmbition`）、`pendingChoice`、`offseasonPreview` 与历年 `history`。
+  - `ambition`: `"safe"`（稳妥档，预算 0.85× / 工资帽 0.90×）| `"expected"`（基准推荐档，1.00×）| `"ambitious"`（野心档，预算 1.25× / 工资帽 1.12×，奖金更高但失利扣更多信任度）
+  - `scope?`: `"offseason"`（休赛期预选下赛季）| `"current"`（开季第 1–3 轮切换本季档位，按差额补退预算与余额）
+  - `lock?`: 布尔值，开季第 1–3 轮传 `true` 可提前锁定本季目标
+- `board_adjust_budget` — 转会预算 ↔ 每轮基础工资帽双向滑块（严格按 38:1 换算，绝不触碰独立设施预算）：
+  - `transferDelta`: 安全整数；正值表示将富余工资帽转为转会预算（下限为初始工资帽 50% 及当前全队工资需求），负值表示将转会预算转为工资帽（不得动用领先竞拍占用资金）。
 - `pay_wage_arrears` — 无参数：补发全部欠薪。每轮结束发工资时先补以前的欠薪再发本轮的，余额不够的部分记在 `state.economy.wageArrears`。**欠薪期间球员在比赛里所有属性减半（只发挥 50%）**，联机按开球前 30 分钟锁定时的状态算。余额必须够一次还清；下次发薪时余额够也会先自动补发。
 - `bid_free_agent` — `playerId`、`amount`：竞拍自由球员。自由市场全服共用，`market.freeAgents[].price` 是这名球员现在至少要出的价。第一个出价开始 **1 小时**倒计时，全服可见；每次跟价至少加 5%；**最后 10 分钟内**有人跟价，倒计时重新回到 10 分钟（离结束还早时跟价不改倒计时）；时间到时最高价者得。跟价要交**手续费**：出价的 2%，至少 1,000，出价成功时立即从余额扣除，**不退还**（开拍的第一口不收）；余额必须够「出价 + 手续费」。领先的出价占用余额。`market.auctions` 列出正在进行的竞拍（当前价、领先球队、剩余秒数），`market.recentDeals` 是最近 8 条成交 / 流拍记录（`club` 为 `null` 表示流拍）。电脑球队也会参与竞拍：同位置明显更强、价格远低于阵容均价或人手不足时才会跟价，出价上限是估值乘所在级别系数，并且永远留着底钱，不会为了抬价乱加。
 - `list_player` — `playerId`、`price`：正的安全整数价格，且不得高于球员估值（买家只按估值折价收购；建议价 = 估值 × 0.9，按建议价挂牌必定成交）；挂牌还受阵容、训练和比赛规则限制。

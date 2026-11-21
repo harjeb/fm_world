@@ -5,7 +5,8 @@ import { PLAYER_TEAM_ID, inPostseason, nextSeasonCountdown, roundKickoffAt, shor
 import { validateLineup } from '../../game/squad.ts'
 import { SQUAD_LIMIT } from '../../game/market.ts'
 import { trainingActionsTotal } from '../../game/training.ts'
-import { worldDivisionLabel } from '../../game/world.ts'
+import { worldDivisionLabel, worldTierLabel } from '../../game/world.ts'
+import { BOARD_AMBITION_META, BOARD_CHOICE_MAX_ROUND, canSwitchCurrentBoardAmbition, ensureBoard, refreshOffseasonBoardPreview, syncBoardLockState } from '../../game/board.ts'
 import { legendCupMetaById } from '../../game/data/legend-cup-teams.ts'
 import { isOnlineMode, onlineKickoffPending, serverNow } from '../../online.ts'
 import { boardMarkings, boardSpot, caHeat, clubLook, crest, emptyState, formPills, humanMark, icon, injuryLabel, leagueTable, meter, ownName, pageHead, panel, recordResult, resultPill, tag, teamForm, tile } from '../components.ts'
@@ -301,6 +302,32 @@ function lineupPanel(): string {
     </div>`, { aside: `<button class="link" data-nav="lineup">调整 ${icon('right', 12)}</button>` })
 }
 
+/** 休赛期或开季前 3 轮的董事会目标提示条：直达「俱乐部 → 董事会」。 */
+function boardAlert(): string {
+  const board = ensureBoard(game)
+  syncBoardLockState(game)
+  if (game.season.finished) {
+    if (!board.offseasonPreview) refreshOffseasonBoardPreview(game)
+    const prev = board.offseasonPreview
+    if (!prev) return ''
+    const picked = board.pendingChoice ? BOARD_AMBITION_META[board.pendingChoice].label : '尚未选定（默认基准档）'
+    return `<section class="offer-alert board-alert" role="status">
+      <div class="offer-alert-head">${icon('flag', 18)}<b>董事会已发布第 ${prev.nextSeasonIndex} 赛季目标方案（${esc(worldTierLabel(prev.projectedTier))}）</b>
+        <span class="muted">当前预选：${esc(picked)} · 换季时将按档位独立发放转会预算与设施预算</span>
+        <button class="btn small primary" data-action="go-club" data-tab="board">前往选择目标 ${icon('right', 12)}</button></div>
+    </section>`
+  }
+  if (canSwitchCurrentBoardAmbition(game) && board.current) {
+    const m = board.current
+    return `<section class="offer-alert board-alert" role="status">
+      <div class="offer-alert-head">${icon('flag', 18)}<b>第 ${m.seasonIndex} 赛季董事会目标待确认（当前：${esc(BOARD_AMBITION_META[m.ambition].label)} · 联赛前 ${m.leagueTarget} 名）</b>
+        <span class="muted">第 ${BOARD_CHOICE_MAX_ROUND} 轮前可切换档位，并可用滑块调节转会预算与工资帽</span>
+        <button class="btn small primary" data-action="go-club" data-tab="board">查看董事会 ${icon('right', 12)}</button></div>
+    </section>`
+  }
+  return ''
+}
+
 export function renderHome(): string {
   const look = clubLook(PLAYER_TEAM_ID)
   return `
@@ -311,6 +338,7 @@ export function renderHome(): string {
     })}
     ${wageArrearsAlert()}
     ${offerAlert()}
+    ${boardAlert()}
     <div class="dash">
       ${nextMatchPanel()}
       ${clubStatusPanel()}

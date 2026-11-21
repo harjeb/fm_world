@@ -1,5 +1,6 @@
 import type { EconomyState, FacilityId, GameState, TierId } from './types.ts'
 import { opponentRankShare } from './club-rating.ts'
+import { checkFacilityBudget, spendFacilityBudget } from './board-budget.ts'
 import { observeYouthFacility } from './youth.ts'
 export type { EconomyState, FacilityId } from './types.ts'
 
@@ -244,8 +245,11 @@ export function upgradeFacility(game: GameState, id: FacilityId): { ok: boolean;
   if (!validEconomy(economy)) return { ok: false, error: '经济数据无效' }
   const cost = facilityUpgradeCost(id, economy[id])
   if (cost === null) return { ok: false, error: '设施已达到最高等级' }
+  const budget = checkFacilityBudget(game, cost)
+  if (!budget.ok) return budget
   if (economy.balance < cost) return { ok: false, error: '余额不足' }
   economy.balance -= cost
+  spendFacilityBudget(game, cost)
   economy[id]++
   if (id === 'academy') observeYouthFacility(game, Date.now())
   return { ok: true }

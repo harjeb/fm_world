@@ -35,7 +35,7 @@ import { legendCupTeamById } from '../src/game/data/legend-cup-teams.ts'
 import { LEGEND_STAR_BOOK_ID } from '../src/game/data/legend-cup-skill.ts'
 import type { AIClubState, AITeam, Player, WorldClub, WorldState } from '../src/game/types.ts'
 import { caOf } from '../src/game/ca.ts'
-import { refreshAILineup, refreshAILineups, repairLineup } from '../src/game/squad.ts'
+import { MIN_SQUAD, refreshAILineup, refreshAILineups, repairLineup } from '../src/game/squad.ts'
 import { displayCA, mainAttrsFor } from '../src/game/rating.ts'
 import { GAME_DAY_MS, kickoffAtForRound, postseasonStartAt, roundsKickedOff, seasonEndAt } from '../src/game/calendar.ts'
 import { isYouthTrainee, recordYouthMatch, settleYouth, observeYouthFacility } from '../src/game/youth.ts'
@@ -43,7 +43,8 @@ import { applyYouthAction } from '../src/game/youth-actions.ts'
 import { preserveYouthState } from '../src/game/youth-authority.ts'
 import { settleCondition } from '../src/game/condition.ts'
 import { splitSeed } from '../src/game/rng.ts'
-import { awardRoundIncome, awardSeasonPrize, economyOf, matchPerformanceOf, payWageBill } from '../src/game/economy.ts'
+import { FACILITIES, awardRoundIncome, awardSeasonPrize, economyOf, matchPerformanceOf, payWageBill, upgradeFacility, type FacilityId } from '../src/game/economy.ts'
+import { adjustBoardBudgetSlider, boardEffectiveWageCap, chooseBoardAmbition, isBoardAmbition, isBoardBudgetActive, refreshOffseasonBoardPreview, syncBoardLockState } from '../src/game/board.ts'
 import { advanceLeagueRealtime } from '../src/game/realtime.ts'
 import { DEFAULT_PRE_MATCH_STAMINA_BELOW, DEFAULT_STAMINA_BELOW, emptyAutoSubs, validateAutoSubPlan } from '../src/game/match/management.ts'
 import type { ActiveMatchSave, GameState, PlayerCard } from '../src/game/types.ts'
@@ -2079,10 +2080,14 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const seasonShopAwarded = account.game.season.finished && account.game.economy?.prizeSeason === account.game.season.index
         ? awardSeasonShopPoints(account.game) > 0
         : false
+      const boardLocked = syncBoardLockState(account.game)
+      const boardPreviewed = account.game.season.finished
+        ? refreshOffseasonBoardPreview(account.game, ownedClubId(account), sharedWorld.teams)
+        : false
       const youthChanged = settleYouth(account.game, now())
       // 体能每小时按比例恢复；PvE 迁移不覆盖 main 的体能和共享名册逻辑。
       const rested = settleAccountConditions(account)
-      let migrated = youthChanged || seasonShopAwarded || markedShared || elevenUpgraded || signaturesAdded || cardsAdded || pveAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || sharedTeamsChanged || sharedFixturesChanged || sharedWorldChanged || publishedMatches.changed || rested || absorbInto(account)
+      let migrated = youthChanged || seasonShopAwarded || boardLocked || boardPreviewed || markedShared || elevenUpgraded || signaturesAdded || cardsAdded || pveAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || sharedTeamsChanged || sharedFixturesChanged || sharedWorldChanged || publishedMatches.changed || rested || absorbInto(account)
       const economyAdded = account.game.economy == null || account.game.economy.fans === undefined
       economyOf(account.game)
       const progressingLeague = !!account.game.activeMatch?.context.isLeague
@@ -2735,7 +2740,14 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (pendingAccountCommits.has(agentAccount.id) && !await confirmAccountCommit(agentAccount)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
       touchAccountOnline(agentAccount)
       // 联机时有教练执教的球队不能从 AI 购买入口买人，和转会页一致。
-      const agentOptions: AgentOptions = { isManaged: (clubId) => !!sharedWorld.owners[clubId], transferGame: () => transferSnapshot(agentAccount), scoutGame: () => scoutingSnapshot(agentAccount) }
+      const agentOptions: AgentOptions = {
+        isManaged: (clubId) => !!sharedWorld.owners[clubId],
+        transferGame: () => transferSnapshot(agentAccount),
+        scoutGame: () => scoutingSnapshot(agentAccount),
+        committedAuctions: () => committedFunds(market.auctions, agentAccount.id),
+        clubId: () => ownedClubId(agentAccount),
+        teamsById: () => sharedWorld.teams,
+      }
       const agentState = () => withSharedMarket(agentView(agentAccount.game, now(), agentOptions), agentAccount)
       if (url.pathname === '/api/agent/state' && req.method === 'GET') {
         advanceAccount(agentAccount)
@@ -3107,7 +3119,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return
     }
 
-    if (['/api/cards/recycle', '/api/cards/lock', '/api/training/start', '/api/shop/buy'].includes(url.pathname) && req.method === 'POST') {
+    if (['/api/cards/recycle', '/api/cards/lock', '/api/training/start', '/api/shop/buy', '/api/board/choose', '/api/board/slider', '/api/club/upgrade'].includes(url.pathname) && req.method === 'POST') {
       const body = await readJsonBody(req)
       if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
       advanceAccount(account)
@@ -3130,6 +3142,24 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       } else if (url.pathname === '/api/shop/buy') {
         if (typeof body.skillId !== 'string' || !body.skillId) return json(res, 400, { error: '技能书 ID 无效' })
         outcome = buyShopBook(game, body.skillId)
+      } else if (url.pathname === '/api/board/choose') {
+        if (!isBoardAmbition(body.ambition)) return json(res, 400, { error: '目标档位无效（safe / expected / ambitious）' })
+        const scope = body.scope === 'offseason' || body.scope === 'current' ? body.scope : undefined
+        if (body.scope !== undefined && !scope) return json(res, 400, { error: 'scope 无效' })
+        outcome = chooseBoardAmbition(game, body.ambition, {
+          ...(scope ? { scope } : {}),
+          ...(body.lock === true ? { lock: true } : {}),
+          committedAuctions: committedFunds(market.auctions, account.id),
+          clubId: ownedClubId(account),
+          teamsById: sharedWorld.teams,
+        })
+      } else if (url.pathname === '/api/board/slider') {
+        if (typeof body.transferDelta !== 'number' || !Number.isSafeInteger(body.transferDelta)) return json(res, 400, { error: '预算调整额度必须是整数' })
+        outcome = adjustBoardBudgetSlider(game, body.transferDelta, committedFunds(market.auctions, account.id))
+      } else if (url.pathname === '/api/club/upgrade') {
+        const facilityId = typeof body.facilityId === 'string' ? body.facilityId : ''
+        if (!Object.hasOwn(FACILITIES, facilityId)) return json(res, 400, { error: '无效的设施' })
+        outcome = upgradeFacility(game, facilityId as FacilityId)
       } else {
         if (typeof body.playerId !== 'string' || !body.playerId || !Array.isArray(body.bookKeys) || !body.bookKeys.every(key => typeof key === 'string') || typeof body.points !== 'number') return json(res, 400, { error: '培养参数无效' })
         outcome = startTrainingWithSupport(game, body.playerId, undefined, body.bookKeys as string[], body.points as number, false)
@@ -3225,6 +3255,27 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       ;(body.game as GameState & { scoutReportSeq?: number }).scoutReportSeq = (account.game as GameState & { scoutReportSeq?: number }).scoutReportSeq
       body.game.trainingPoints = account.game.trainingPoints
       body.game.shop = structuredClone(account.game.shop)
+      body.game.board = structuredClone(account.game.board)
+      if (isBoardBudgetActive(account.game)) {
+        const incomingEco = body.game.economy
+        const serverEco = account.game.economy
+        if (incomingEco && serverEco) {
+          const facilityBumped = (Object.keys(FACILITIES) as FacilityId[]).some((id) => incomingEco[id] > serverEco[id])
+          if (facilityBumped) {
+            await sendJson(409, { error: '设施升级须通过官方升级接口提交以校验董事会设施预算，请刷新页面后重试', revision: account.revision, game: publicGame(account) }, true)
+            return
+          }
+        }
+        const effectiveCap = boardEffectiveWageCap(account.game)
+        if (effectiveCap !== null && body.game.roster.length >= MIN_SQUAD) {
+          const prevBill = worldWageBill(account.game)
+          const nextBill = worldWageBill(body.game)
+          if (nextBill > prevBill && nextBill > effectiveCap) {
+            await sendJson(409, { error: `工资变更超出董事会有效工资帽（${effectiveCap.toLocaleString()}/轮），请先在董事会调整预算滑块`, revision: account.revision, game: publicGame(account) }, true)
+            return
+          }
+        }
+      }
       body.game.cardSeq = Math.max(body.game.cardSeq ?? 0, account.game.cardSeq ?? 0)
       const oldCards = new Map((account.game.cards ?? []).map(card => [card.id, card]))
       for (const [id, session] of Object.entries(body.game.training)) {
