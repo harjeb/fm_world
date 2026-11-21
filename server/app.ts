@@ -3119,7 +3119,77 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return
     }
 
-    if (['/api/cards/recycle', '/api/cards/lock', '/api/training/start', '/api/shop/buy', '/api/board/choose', '/api/board/slider', '/api/club/upgrade'].includes(url.pathname) && req.method === 'POST') {
+    if (['/api/board/choose', '/api/board/slider', '/api/club/upgrade'].includes(url.pathname) && req.method === 'POST') {
+      const body = await readJsonBody(req)
+      if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
+      advanceAccount(account)
+      const slimReply = req.headers['x-fm-slim'] === '1'
+      // 董事会与设施升级只修改 board / economy（升级青训学院时附带 youth）：
+      // 1) 浅拷主体避免深拷 5MB+ 存档；2) 走异步 persistAccount，不阻塞等待全服 55 账号的批量 flush 队列；
+      // 3) 精简模式仅回传 ~600B 的 patch，彻底消除手机端 574KB 回包与超时。
+      const game: GameState = {
+        ...account.game,
+        board: structuredClone(account.game.board),
+        economy: structuredClone(account.game.economy),
+        ...(account.game.youth ? { youth: structuredClone(account.game.youth) } : {}),
+      }
+      let outcome: { ok: boolean; error?: string }
+      if (url.pathname === '/api/board/choose') {
+        if (!isBoardAmbition(body.ambition)) return json(res, 400, { error: '目标档位无效（safe / expected / ambitious）' })
+        const scope = body.scope === 'offseason' || body.scope === 'current' ? body.scope : undefined
+        if (body.scope !== undefined && !scope) return json(res, 400, { error: 'scope 无效' })
+        const tier = isBoardTier(body.tier) ? body.tier : undefined
+        if (body.tier !== undefined && !tier) return json(res, 400, { error: 'tier 无效（division2 / division1 / champions）' })
+        outcome = chooseBoardAmbition(game, body.ambition, {
+          ...(scope ? { scope } : {}),
+          ...(tier ? { tier } : {}),
+          ...(body.lock === true ? { lock: true } : {}),
+          committedAuctions: committedFunds(market.auctions, account.id),
+          clubId: ownedClubId(account),
+          teamsById: sharedWorld.teams,
+        })
+      } else if (url.pathname === '/api/board/slider') {
+        if (typeof body.transferDelta !== 'number' || !Number.isSafeInteger(body.transferDelta)) return json(res, 400, { error: '预算调整额度必须是整数' })
+        outcome = adjustBoardBudgetSlider(game, body.transferDelta, committedFunds(market.auctions, account.id))
+      } else {
+        const facilityId = typeof body.facilityId === 'string' ? body.facilityId : ''
+        if (!Object.hasOwn(FACILITIES, facilityId)) return json(res, 400, { error: '无效的设施' })
+        outcome = upgradeFacility(game, facilityId as FacilityId)
+      }
+      if (!outcome.ok) {
+        if (slimReply) {
+          json(res, 400, { error: outcome.error, revision: account.revision, patch: { board: account.game.board, economy: account.game.economy }, serverTime: now() })
+          return
+        }
+        await sendJson(400, { error: outcome.error, revision: account.revision, game: publicGame(account) }, true)
+        return
+      }
+      account.game.board = game.board
+      account.game.economy = game.economy
+      if (game.youth) account.game.youth = game.youth
+      account.revision++
+      account.lastUserRevision = account.revision
+      account.updatedAt = now()
+      persistAccount(account)
+      broadcast(account, String(req.headers['x-fm-client'] ?? '').slice(0, 128))
+      if (slimReply) {
+        json(res, 200, {
+          ...outcome,
+          revision: account.revision,
+          patch: {
+            board: account.game.board,
+            economy: account.game.economy,
+            ...(url.pathname === '/api/club/upgrade' && account.game.youth ? { youth: account.game.youth } : {}),
+          },
+          serverTime: now(),
+        })
+        return
+      }
+      await sendJson(200, { ...outcome, revision: account.revision, game: publicGame(account), serverTime: now() }, true)
+      return
+    }
+
+    if (['/api/cards/recycle', '/api/cards/lock', '/api/training/start', '/api/shop/buy'].includes(url.pathname) && req.method === 'POST') {
       const body = await readJsonBody(req)
       if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
       advanceAccount(account)
@@ -3142,27 +3212,6 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       } else if (url.pathname === '/api/shop/buy') {
         if (typeof body.skillId !== 'string' || !body.skillId) return json(res, 400, { error: '技能书 ID 无效' })
         outcome = buyShopBook(game, body.skillId)
-      } else if (url.pathname === '/api/board/choose') {
-        if (!isBoardAmbition(body.ambition)) return json(res, 400, { error: '目标档位无效（safe / expected / ambitious）' })
-        const scope = body.scope === 'offseason' || body.scope === 'current' ? body.scope : undefined
-        if (body.scope !== undefined && !scope) return json(res, 400, { error: 'scope 无效' })
-        const tier = isBoardTier(body.tier) ? body.tier : undefined
-        if (body.tier !== undefined && !tier) return json(res, 400, { error: 'tier 无效（division2 / division1 / champions）' })
-        outcome = chooseBoardAmbition(game, body.ambition, {
-          ...(scope ? { scope } : {}),
-          ...(tier ? { tier } : {}),
-          ...(body.lock === true ? { lock: true } : {}),
-          committedAuctions: committedFunds(market.auctions, account.id),
-          clubId: ownedClubId(account),
-          teamsById: sharedWorld.teams,
-        })
-      } else if (url.pathname === '/api/board/slider') {
-        if (typeof body.transferDelta !== 'number' || !Number.isSafeInteger(body.transferDelta)) return json(res, 400, { error: '预算调整额度必须是整数' })
-        outcome = adjustBoardBudgetSlider(game, body.transferDelta, committedFunds(market.auctions, account.id))
-      } else if (url.pathname === '/api/club/upgrade') {
-        const facilityId = typeof body.facilityId === 'string' ? body.facilityId : ''
-        if (!Object.hasOwn(FACILITIES, facilityId)) return json(res, 400, { error: '无效的设施' })
-        outcome = upgradeFacility(game, facilityId as FacilityId)
       } else {
         if (typeof body.playerId !== 'string' || !body.playerId || !Array.isArray(body.bookKeys) || !body.bookKeys.every(key => typeof key === 'string') || typeof body.points !== 'number') return json(res, 400, { error: '培养参数无效' })
         outcome = startTrainingWithSupport(game, body.playerId, undefined, body.bookKeys as string[], body.points as number, false)

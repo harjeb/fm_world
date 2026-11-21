@@ -704,7 +704,7 @@ describe('联机服务器董事会接口与权威防篡改', () => {
     })).json() as { token: string; game: GameState; revision: number }
     const headers = { Authorization: `Bearer ${reg.token}`, 'Content-Type': 'application/json' }
 
-    // 第 1 赛季 /api/club/upgrade 正常升级设施
+    // 第 1 赛季 /api/club/upgrade 正常升级设施（普通模式返回完整 game，精简模式 X-FM-Slim: 1 返回轻量 patch）
     const up = await fetch(`${base}/api/club/upgrade`, {
       method: 'POST',
       headers,
@@ -713,6 +713,19 @@ describe('联机服务器董事会接口与权威防篡改', () => {
     expect(up.status).toBe(200)
     const upBody = await up.json() as { game: GameState; revision: number }
     expect(upBody.game.economy!.medical).toBe(2)
+
+    const upSlim = await fetch(`${base}/api/club/upgrade`, {
+      method: 'POST',
+      headers: { ...headers, 'X-FM-Slim': '1' },
+      body: JSON.stringify({ facilityId: 'medical' }),
+    })
+    expect(upSlim.status).toBe(200)
+    const upSlimBody = await upSlim.json() as { ok: boolean; revision: number; patch?: { economy?: { medical: number } }; game?: unknown }
+    expect(upSlimBody.ok).toBe(true)
+    expect(upSlimBody.game).toBeUndefined()
+    expect(upSlimBody.patch?.economy?.medical).toBe(3)
+    upBody.revision = upSlimBody.revision
+    upBody.game.economy!.medical = 3
 
     // 第 1 赛季常规赛未结束时，/api/board/slider 与 /api/board/choose 应返回 400（而非崩溃）
     const sliderEarly = await fetch(`${base}/api/board/slider`, {

@@ -9,9 +9,9 @@ import { setRemoteSaver, saveGame, withoutDeferredCupPool } from './game/state.t
 import { dueRound } from './game/season.ts'
 
 const TOKEN_KEY = 'fm-online-token'
-const SAVE_TIMEOUT_MS = 12_000
-const ACTION_TIMEOUT_MS = 10_000
-const RECOVERY_TIMEOUT_MS = 5_000
+const SAVE_TIMEOUT_MS = 20_000
+const ACTION_TIMEOUT_MS = 25_000
+const RECOVERY_TIMEOUT_MS = 15_000
 
 type ClubCoaches = Record<string, 'human' | 'takeover'>
 type CoachSnapshot = { clubCoaches?: ClubCoaches }
@@ -1080,21 +1080,32 @@ async function onlineGameAction(endpoint: string, body: Record<string, unknown>)
 }
 
 async function submitGameAction(endpoint: string, body: Record<string, unknown> | (() => Record<string, unknown>), timeoutMs?: number): Promise<GameState> {
-  const result = await requestJson<{ revision: number; game: GameState }>(endpoint, {
+  const result = await requestJson<{ revision: number; game?: GameState; patch?: Partial<GameState> }>(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(typeof body === 'function' ? body() : body),
   }, timeoutMs)
-  if (!Number.isSafeInteger(result.revision) || !result.game) throw new Error('服务器返回的存档无效，请刷新检查。')
-  hydrateOnlineGame(result.game)
+  if (!Number.isSafeInteger(result.revision)) throw new Error('服务器返回的存档无效，请刷新检查。')
+  let nextGame: GameState | null = result.game ?? null
+  if (!nextGame && result.patch) {
+    if (syncedGame) {
+      nextGame = { ...syncedGame, ...result.patch }
+    } else {
+      const current = await requestJson<{ game: GameState; revision: number }>('/api/game', undefined, RECOVERY_TIMEOUT_MS)
+      nextGame = current.game
+      if (current.revision > result.revision) result.revision = current.revision
+    }
+  }
+  if (!nextGame) throw new Error('服务器返回的存档无效，请刷新检查。')
+  hydrateOnlineGame(nextGame)
   if (result.revision >= onlineState.revision) {
     onlineState.revision = result.revision
     onlineState.lastSync = Date.now()
-    syncedGame = result.game
-    remoteGameHandler?.(result.game)
+    syncedGame = nextGame
+    remoteGameHandler?.(nextGame)
     notify()
   }
-  return result.game
+  return nextGame
 }
 
 export async function initOnline(): Promise<GameState | null> {
