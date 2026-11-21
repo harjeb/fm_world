@@ -619,58 +619,15 @@ function paint(canvas: HTMLCanvasElement, sim: PesEngine, now: number): void {
     }
   }
 
-  // 球员：先画远端（y 小）再画近端，重叠时靠下的盖在上面；纯画面防重叠松弛把贴身圆点轻柔错开到肩并肩（不改物理状态）
+  // 球员：按真实物理坐标直接绘制（允许人物自然重叠），先画远端（y 小）再画近端，重叠时靠下的盖在上面
   const sign = flip ? -1 : 1
   const shotFlying = m.ball.meta?.type === 'shot' && !m.ball.frozen && m.ball.owner < 0
   const everyone = m.teams.flatMap((team) => team.players).sort((a, b) => (flip ? -a.pos.y : a.pos.y) - (flip ? -b.pos.y : b.pos.y))
-  const vis = new Map<number, { x: number; y: number }>()
-  for (const p of everyone) vis.set(p.pid, { x: p.pos.x, y: p.pos.y })
-  const minSep = Math.max(0.85, (20 * unit) / Math.max(1, s))
-  const maxShift = minSep * 0.55
-  for (let pass = 0; pass < 2; pass++) {
-    for (let i = 0; i < everyone.length; i++) {
-      const pa = everyone[i]
-      if (shotFlying && pa.role === 'GK') continue
-      const va = vis.get(pa.pid)!
-      for (let j = i + 1; j < everyone.length; j++) {
-        const pb = everyone[j]
-        if (shotFlying && pb.role === 'GK') continue
-        const vb = vis.get(pb.pid)!
-        let dx = va.x - vb.x
-        let dy = va.y - vb.y
-        let d = Math.hypot(dx, dy)
-        if (d >= minSep) continue
-        if (d < 1e-4) {
-          dx = pa.pid < pb.pid ? 1 : -1
-          dy = 0
-          d = 1
-        }
-        const push = (minSep - d) * 0.45
-        const nx = dx / d
-        const ny = dy / d
-        va.x += nx * push
-        va.y += ny * push
-        vb.x -= nx * push
-        vb.y -= ny * push
-      }
-    }
-    for (const p of everyone) {
-      const vp = vis.get(p.pid)!
-      const ox = vp.x - p.pos.x
-      const oy = vp.y - p.pos.y
-      const od = Math.hypot(ox, oy)
-      if (od > maxShift) {
-        vp.x = p.pos.x + (ox / od) * maxShift
-        vp.y = p.pos.y + (oy / od) * maxShift
-      }
-    }
-  }
   for (const p of everyone) {
-    const vp = vis.get(p.pid)!
     const gkDive = shotFlying && p.role === 'GK' && Math.hypot(p.vel.x, p.vel.y) > 2.2
       ? Math.atan2(sign * p.vel.y, sign * p.vel.x)
       : null
-    paintPlayer(ctx, p, m.ball.owner, X(vp.x), Y(vp.y), { x: sign * p.facing.x, y: sign * p.facing.y }, unit, showNames, gkDive)
+    paintPlayer(ctx, p, m.ball.owner, X(p.pos.x), Y(p.pos.y), { x: sign * p.facing.x, y: sign * p.facing.y }, unit, showNames, gkDive)
   }
 
   // 球：落地影子 + 离地高度；快球拖一段尾迹；带球时加轻微推球律动（仅视觉）
@@ -680,12 +637,11 @@ function paint(canvas: HTMLCanvasElement, sim: PesEngine, now: number): void {
   if (b.owner >= 0 && !b.frozen) {
     const carrier = m.players[b.owner]
     if (carrier) {
-      const vc = vis.get(carrier.pid) ?? carrier.pos
       const bob = Math.hypot(carrier.vel.x, carrier.vel.y) > 0.6
         ? 0.48 + 0.14 * Math.sin(carrier.distance * 3.2)
         : 0.5
-      bwx = vc.x + carrier.facing.x * bob
-      bwy = vc.y + carrier.facing.y * bob
+      bwx = carrier.pos.x + carrier.facing.x * bob
+      bwy = carrier.pos.y + carrier.facing.y * bob
     }
   }
   const bx = X(bwx)
