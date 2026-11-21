@@ -68,7 +68,13 @@ function accountValues(account: Account, gameJson: string): Values {
 
 function transaction(db: DatabaseSync, run: () => void): void {
   db.exec('BEGIN IMMEDIATE')
-  try { run(); db.exec('COMMIT') } catch (error) { db.exec('ROLLBACK'); throw error }
+  try {
+    run()
+    db.exec('COMMIT')
+  } catch (error) {
+    try { db.exec('ROLLBACK') } catch { /* SQLite may auto-rollback on FULL/IOERR */ }
+    throw error
+  }
 }
 
 /**

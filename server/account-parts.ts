@@ -29,7 +29,14 @@ export function packAccountGame(game: GameState, compact: boolean): { json: stri
     for (const [id, team] of Object.entries(cup.worldTeams)) {
       const cached = team && typeof team === 'object' ? frozenCupPartCache.get(team) : undefined
       if (cached) parts.push({ slot: `cup/${id}`, hash: cached.hash, json: cached.json })
-      else put(`cup/${id}`, team)
+      else {
+        const json = JSON.stringify(team)
+        const hash = createHash('sha256').update(json).digest('hex')
+        if (team && typeof team === 'object' && Object.isFrozen(team)) {
+          frozenCupPartCache.set(team, { hash, json })
+        }
+        parts.push({ slot: `cup/${id}`, hash, json })
+      }
     }
     reference.pve = { ...game.pve!, cupSeason: { ...cup, worldTeams: {} } }
   }

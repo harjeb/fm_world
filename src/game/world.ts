@@ -1508,25 +1508,82 @@ export function advanceWorldSeason(game: GameState, now = Date.now(), protectedC
   return { ok: true }
 }
 
+function divisionForClub(base: WorldState, clubId: string): SeasonState {
+  const source = base.divisions.find((item) => item.clubIds?.includes(clubId))
+  if (!source) throw new Error('找不到球队所在赛区')
+  const division = structuredClone(source)
+  division.clubIds = (division.clubIds ?? []).map((id) => id === clubId ? 'player' : id)
+  division.table = division.table.map((row) => row.teamId === clubId ? { ...row, teamId: 'player' } : row)
+  if (division.champion === clubId) division.champion = 'player'
+  for (const fixture of division.fixtures) {
+    if (fixture.homeId === clubId) fixture.homeId = 'player'
+    if (fixture.awayId === clubId) fixture.awayId = 'player'
+    fixture.isPlayer = fixture.homeId === 'player' || fixture.awayId === 'player'
+  }
+  return division
+}
+
 /* 同一轮全服结算后，只在服务器上给各教练结算个人阵容与合同；世界赛程直接引用全服快照。 */
-export function advanceSharedAccountSeason(game: GameState, oldWorld: WorldState, nextWorld: WorldState, clubId: string, teams: Record<string, AITeam>): void {
-  const previous = worldForClub(oldWorld, clubId)
-  game.world = previous
-  game.season = previous.divisions.find((division) => division.clubIds?.includes('player'))!
-  ;(game.seasonHistory ??= []).push(game.season)
-  const personal = { ...game, seed: splitSeed(game.seed, `club-${clubId}-retirement`), world: structuredClone(previous), roster: structuredClone(game.roster), lineup: structuredClone(game.lineup), aiTeams: [], freeStars: [], reserveStars: [] }
-  personal.world.starAges = Object.fromEntries(personal.roster.filter((player) => player.starKey).map((player) => [player.id, player.age ?? 24]))
+export function advanceSharedAccountSeason(
+  game: GameState,
+  oldWorld: WorldState,
+  nextWorld: WorldState,
+  clubId: string,
+  teams: Record<string, AITeam>,
+  options?: { deferWorldHydration?: boolean },
+): void {
+  const previousDivision = divisionForClub(oldWorld, clubId)
+  game.season = previousDivision
+  ;(game.seasonHistory ??= []).push(previousDivision)
+  const personalWorld: WorldState = {
+    ...oldWorld,
+    divisions: [],
+    clubs: oldWorld.clubs.map((club) => ({
+      ...club,
+      ...(club.id === clubId ? { id: 'player', squadKey: club.id, isPlayer: true } : {}),
+      starPlayerIds: [...club.starPlayerIds],
+    })),
+    starAges: Object.fromEntries(game.roster.filter((player) => player.starKey).map((player) => [player.id, player.age ?? 24])),
+  }
+  const personal: GameState = {
+    ...game,
+    seed: splitSeed(game.seed, `club-${clubId}-retirement`),
+    world: personalWorld,
+    roster: structuredClone(game.roster),
+    lineup: structuredClone(game.lineup),
+    aiTeams: [],
+    freeStars: [],
+    reserveStars: [],
+  }
   retireAndRegen(personal)
   game.roster = personal.roster
   game.lineup = personal.lineup
   game.freeStars.push(...personal.freeStars)
+  game.world = personalWorld
   expireContracts(game)
   const previousCalendarStart = oldWorld.calendarStartAt ?? oldWorld.seasonStartedAt
   const nextCalendarStart = nextWorld.calendarStartAt ?? nextWorld.seasonStartedAt
   healInjuriesByMs(game.injuries, Math.max(0, previousCalendarStart - nextCalendarStart), nextWorld.seasonStartedAt)
-  game.world = worldForClub(nextWorld, clubId)
-  game.season = game.world.divisions.find((division) => division.clubIds?.includes('player'))!
-  game.aiTeams = (game.season.clubIds ?? []).filter((id) => id !== 'player').map((id) => structuredClone(teams[id]))
+  if (options?.deferWorldHydration) {
+    const nextDivision = nextWorld.divisions.find((division) => division.clubIds?.includes(clubId))
+    if (!nextDivision) throw new Error('找不到球队所在赛区')
+    // 仅提供 evaluateAndRollBoardSeason / archivePastCups 所需的轻量只读视图；完整 world/aiTeams 由全服提交阶段逐账号生成。
+    game.world = {
+      ...nextWorld,
+      clubs: nextWorld.clubs.map((club) => club.id === clubId ? { ...club, id: 'player', squadKey: club.id, isPlayer: true } : club),
+    }
+    game.season = {
+      ...nextDivision,
+      clubIds: (nextDivision.clubIds ?? []).map((id) => id === clubId ? 'player' : id),
+      table: [],
+      fixtures: [],
+    }
+    game.aiTeams = []
+  } else {
+    game.world = worldForClub(nextWorld, clubId)
+    game.season = game.world.divisions.find((division) => division.clubIds?.includes('player'))!
+    game.aiTeams = (game.season.clubIds ?? []).filter((id) => id !== 'player').map((id) => structuredClone(teams[id]))
+  }
   game.economy = economyOf(game)
   game.economy.lastIncomeRound = 0
   evaluateAndRollBoardSeason(game, oldBoardContextFromWorld(oldWorld, clubId), teams)

@@ -242,7 +242,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     sharedWorld.owners[club_id] = holder
     club.name = account.game.clubName
     if (sharedWorld.teams?.[club_id]) sharedWorld.teams[club_id].name = club.name
-    if (isVacantSeat(holder) && sharedWorld.cupOpening?.teams[club_id]) sharedWorld.cupOpening.teams[club_id].name = club.name
+    if (isVacantSeat(holder) && sharedWorld.cupOpening?.teams[club_id]) {
+      sharedWorld.cupOpening.teams[club_id] = Object.freeze({ ...sharedWorld.cupOpening.teams[club_id], name: club.name })
+    }
   }
   upgradeSharedWorldNames(sharedWorld)
   if (!sharedWorld.aiClubs) sharedWorld.aiClubs = seedAIClubs(sharedWorld.world, sharedWorld.seed)
@@ -582,16 +584,24 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
   }
   let cachedCupOpening: { seasonIndex: number; teams: Record<string, AITeam>; list: AITeam[] } | null = null
+  function freezeCupOpeningTeams(teams: Record<string, AITeam>): AITeam[] {
+    const list = Object.values(teams)
+    for (const team of list) {
+      if (!Object.isFrozen(team)) Object.freeze(team)
+    }
+    return list
+  }
   function cupOpeningTeams(): AITeam[] {
     if (sharedWorld.cupOpening?.seasonIndex !== sharedWorld.world.seasonIndex) {
       sharedWorld.cupOpening = { seasonIndex: sharedWorld.world.seasonIndex, teams: structuredClone(sharedWorld.teams ?? {}) }
+      freezeCupOpeningTeams(sharedWorld.cupOpening.teams)
       persistWorld({ world: false, teams: false, matchBook: false })
     }
     if (!cachedCupOpening || cachedCupOpening.seasonIndex !== sharedWorld.cupOpening.seasonIndex || cachedCupOpening.teams !== sharedWorld.cupOpening.teams) {
       cachedCupOpening = {
         seasonIndex: sharedWorld.cupOpening.seasonIndex,
         teams: sharedWorld.cupOpening.teams,
-        list: Object.values(sharedWorld.cupOpening.teams),
+        list: freezeCupOpeningTeams(sharedWorld.cupOpening.teams),
       }
     }
     return cachedCupOpening.list
@@ -2192,8 +2202,76 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     club.name = name
     sharedWorld.teams![clubId].name = name
     const openingTeam = sharedWorld.cupOpening?.teams[clubId]
-    if (openingTeam) openingTeam.name = name
+    if (openingTeam) {
+      sharedWorld.cupOpening!.teams[clubId] = Object.freeze({ ...openingTeam, name })
+      cachedCupOpening = null
+    }
     return true
+  }
+
+  /** 仅复制换季代表账号所需的最小可变切片，避免把历史战报/球员卡/PvE 冻结池整份深拷贝。 */
+  function cloneRepresentativeForSeasonRoll(source: GameState): GameState {
+    return {
+      ...source,
+      roster: structuredClone(source.roster),
+      lineup: structuredClone(source.lineup),
+      economy: source.economy ? structuredClone(source.economy) : undefined,
+      board: source.board ? structuredClone(source.board) : undefined,
+      shop: source.shop ? structuredClone(source.shop) : undefined,
+      injuries: source.injuries ? { ...source.injuries } : undefined,
+      market: source.market ? structuredClone(source.market) : undefined,
+      freeStars: [],
+      reserveStars: [],
+      aiTeams: [],
+      aiClubs: undefined,
+      seasonHistory: [],
+      matchHistory: [],
+      challengeHistory: [],
+      cards: [],
+      training: {},
+      candidates: {},
+      pve: undefined,
+      scoutReports: undefined,
+      transferOffers: undefined,
+      chemistry: undefined,
+      youth: undefined,
+      appearances: undefined,
+      autoSubs: undefined,
+      activeMatch: undefined,
+    }
+  }
+
+  function clonePveForSeasonRoll(pve: GameState['pve']): GameState['pve'] {
+    if (!pve) return undefined
+    const { cupSeason, ...rest } = pve
+    const cloned: NonNullable<GameState['pve']> = structuredClone(rest)
+    if (cupSeason) {
+      // 保留冻结杯赛球队的共享只读引用，绝不拆散 sharedCupPool 为 57×28 份重复副本。
+      cloned.cupSeason = {
+        ...cupSeason,
+        fields: structuredClone(cupSeason.fields),
+        worldTeams: { ...cupSeason.worldTeams },
+      }
+    }
+    return cloned
+  }
+
+  /** 换季草稿仅深拷贝会被换季修改的字段；战报、球员卡、训练与只读杯赛池继续复用原引用，失败仍完全可回滚。 */
+  function cloneGameForSeasonRoll(source: GameState): GameState {
+    return {
+      ...source,
+      roster: structuredClone(source.roster),
+      lineup: structuredClone(source.lineup),
+      freeStars: structuredClone(source.freeStars),
+      seasonHistory: source.seasonHistory ? [...source.seasonHistory] : undefined,
+      economy: source.economy ? structuredClone(source.economy) : undefined,
+      board: source.board ? structuredClone(source.board) : undefined,
+      shop: source.shop ? structuredClone(source.shop) : undefined,
+      injuries: source.injuries ? { ...source.injuries } : undefined,
+      market: source.market ? structuredClone(source.market) : undefined,
+      legendBooks: source.legendBooks ? structuredClone(source.legendBooks) : undefined,
+      pve: clonePveForSeasonRoll(source.pve),
+    }
   }
 
   /** 全服赛季一次性结算：先在副本中算完升降级和所有教练的阵容，再一起发布。 */
@@ -2217,8 +2295,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       }
       const sample = managed.find(({ account }) => account.game.season.index === old.seasonIndex)
       const representativeId = sample?.clubId ?? old.clubs.find((club) => club.tier === 'division2')!.id
-      const representative = sample
-        ? structuredClone(sample.account.game)
+      let representative: GameState | null = sample
+        ? cloneRepresentativeForSeasonRoll(sample.account.game)
         : createWorldGameFromWorld(old, representativeId, sharedWorld.seed, old.seasonStartedAt, [], [])
       representative.world = worldForClub(old, representativeId)
       representative.season = representative.world.divisions.find((division) => division.clubIds?.includes('player'))!
@@ -2232,10 +2310,13 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const result = advanceWorldSeason(representative, now(), protectedClubs, false)
       if (!result.ok) return result
       const next = ownerlessWorldFromClub(representative.world!, representativeId)
+      const nextReserveStars = representative.reserveStars ?? []
+      const nextFreeStars = representative.freeStars
+      representative = null
       const teamSeed = splitSeed(sharedWorld.seed, `world-teams-${next.seasonIndex}`)
-      const provisional = buildOwnerlessTeams(next, teamSeed, sharedWorld.aiClubs)
+      let provisional: Record<string, AITeam> | null = buildOwnerlessTeams(next, teamSeed, sharedWorld.aiClubs)
       const drafts = managed.map(({ account, clubId }) => {
-        const game = structuredClone(account.game)
+        const game = cloneGameForSeasonRoll(account.game)
         if (game.season.index === old.seasonIndex) {
           const oldDiv = old.divisions.find((division) => division.clubIds?.includes(clubId))
           const coachedInOld = oldDiv?.fixtures.some((fixture) => (fixture.homeId === clubId || fixture.awayId === clubId) && fixture.played && (fixture.kickoffAt ?? 0) > account.createdAt)
@@ -2243,14 +2324,14 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
             const finish = oldDiv.table.findIndex((row) => row.teamId === clubId) + 1
             if (finish > 0) awardSeasonShopPoints(game, { index: old.seasonIndex, tier: oldDiv.tier, finished: true, playerFinish: finish })
           }
-          advanceSharedAccountSeason(game, old, next, clubId, provisional)
+          advanceSharedAccountSeason(game, old, next, clubId, provisional!, { deferWorldHydration: true })
         } else {
-          // 兼容此前由个人存档提前进入下一赛季的账号，不能再给球员老化一次。
-          game.world = worldForClub(next, clubId)
-          game.season = game.world.divisions.find((division) => division.clubIds?.includes('player'))!
+          // 兼容此前由个人存档提前进入下一赛季的账号，不能再给球员老化一次；先校验赛区存在性。
+          if (!next.divisions.some((division) => division.clubIds?.includes(clubId))) throw new Error('找不到球队所在赛区')
         }
         return { account, clubId, game }
       })
+      provisional = null
       // 真实教练名单覆盖预生成的 AI 名册，球星归属也以实际签约名单为准。
       for (const { clubId, game } of drafts) {
         const club = next.clubs.find((item) => item.id === clubId)!
@@ -2264,17 +2345,18 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         teams[clubId] = { ...teams[clubId], players: structuredClone(game.roster), lineup: structuredClone(game.lineup) }
       }
       syncAllClubLiveTactics(next, teams)
-      for (const { clubId, game } of drafts) {
-        game.world = worldForClub(next, clubId)
-        game.season = game.world.divisions.find((division) => division.clubIds?.includes('player'))!
-        game.aiTeams = (game.season.clubIds ?? []).filter((id) => id !== 'player').map((id) => structuredClone(teams[id]))
-      }
       sharedWorld.world = next
       sharedWorld.teams = teams
       sharedWorld.cupOpening = { seasonIndex: next.seasonIndex, teams: structuredClone(teams) }
-      sharedWorld.reserveStars = representative.reserveStars ?? []
-      for (const { account, game } of drafts) {
-        ensurePve(game, cupOpeningTeams())
+      cachedCupOpening = null
+      sharedWorld.reserveStars = nextReserveStars
+      const openingTeams = cupOpeningTeams()
+      // 逐账号生成新赛季世界视图并立刻覆盖旧账号引用，避免新旧 57 份 world/aiTeams 同时驻留堆内存。
+      for (const { account, clubId, game } of drafts) {
+        game.world = worldForClub(next, clubId)
+        game.season = game.world.divisions.find((division) => division.clubIds?.includes('player'))!
+        game.aiTeams = (game.season.clubIds ?? []).filter((id) => id !== 'player').map((id) => structuredClone(teams[id]))
+        ensurePve(game, openingTeams)
         account.game = game
         accountSync.delete(account)
         account.appliedMatchIds = []
@@ -2285,7 +2367,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       }
       const occupied = new Set([...Object.values(teams).flatMap((team) => team.players.map((player) => player.id)), ...market.pool.map((player) => player.id)])
       const ownedStarKeys = new Set(drafts.flatMap(({ game }) => game.roster.filter((player) => player.starKey).map((player) => player.starKey!)))
-      const released = representative.freeStars.filter((player) => !occupied.has(player.id) && !(player.id.startsWith('regen-') && player.starKey && ownedStarKeys.has(player.starKey)))
+      const released = nextFreeStars.filter((player) => !occupied.has(player.id) && !(player.id.startsWith('regen-') && player.starKey && ownedStarKeys.has(player.starKey)))
       if (released.length) {
         market.pool.push(...released)
         market.version++

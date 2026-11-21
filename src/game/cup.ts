@@ -167,7 +167,7 @@ function createCupSeason(game: GameState, seasonIndex: number, canonical?: reado
   const state: CupSeasonState = { version: 1, seasonIndex, fields: {} as CupSeasonState['fields'], worldTeams: {} }
   for (const def of CUP_DEFS) {
     const world = cupWorldTeams(game, def.id, seasonIndex, def.worldCount, canonical)
-    for (const entry of world) state.worldTeams[entry.id] ??= structuredClone(entry.team)
+    for (const entry of world) state.worldTeams[entry.id] ??= Object.isFrozen(entry.team) ? entry.team : structuredClone(entry.team)
     state.fields[def.id] = {
       worldIds: world.map(entry => entry.id),
       randomDefs: randomDefinitions(def.id, seasonIndex, def.size - 1 - world.length),
