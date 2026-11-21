@@ -538,6 +538,110 @@ export function buildOwnerlessTeams(world: WorldState, seed: number, aiClubs?: R
   return Object.fromEntries(world.clubs.map((club) => [club.id, teamFromClub(world, club, seed, undefined, book, aiClubs)]))
 }
 
+/**
+ * 换季重建全服无主 AI 球队：
+ * - 保留上赛季未退役、未被真人签走、未在自由市场的原班主力（含已练过卡的随机球员与上季签入的球员）；
+ * - 按新赛季 `club.starPlayerIds` 同步升降级/退役/补强后的真实球星，并用新生成替补补齐至 25 人（至少 2 门将）；
+ * - 通过 owner 优先匹配重新装备 `aiClubs[id].cards`，避免换季重置掉 AI 一整个赛季的培养成果。
+ */
+export function rolloverOwnerlessTeams(
+  nextWorld: WorldState,
+  seed: number,
+  previousTeams: Record<string, AITeam>,
+  aiClubs?: Record<string, AIClubState>,
+  excludedPlayerIds: ReadonlySet<string> = new Set(),
+  skipClubIds: ReadonlySet<string> = new Set(),
+): Record<string, AITeam> {
+  const freshTeams = buildOwnerlessTeams(nextWorld, seed)
+  const out: Record<string, AITeam> = {}
+  const claimedIds = new Set<string>(excludedPlayerIds)
+  const buildAITeam = (club: WorldClub, players: Player[]): AITeam => {
+    const ai = aiClubs?.[club.squadKey ?? club.id]
+    const squad = ai ? mergeSignings(ai, players) : players
+    if (ai) equipAICards(ai, squad)
+    const lineup = autoFillLineup(squad, club.formationId, club.tactics)
+    applyAITacticsToLineup(lineup, {
+      players: squad,
+      clubStyle: club.style,
+      seedTactics: club.tactics,
+      strength: club.strength,
+      tier: club.tier,
+    })
+    const check = validateLineup(squad, lineup)
+    if (!check.valid) throw new Error(`球队 ${club.name} 阵容不合法：${check.errors.join('；')}`)
+    const starNames = club.starPlayerIds.map((id) => seedById(id)?.name).filter((name): name is string => !!name)
+    return { ...club, players: squad, lineup, playerNames: starNames }
+  }
+
+  for (const club of nextWorld.clubs) {
+    const fresh = freshTeams[club.id]
+    if (skipClubIds.has(club.id)) {
+      out[club.id] = fresh
+      continue
+    }
+    const prev = previousTeams[club.id]
+    if (!prev?.players?.length) {
+      const available = fresh.players.filter((p) => !claimedIds.has(p.id))
+      out[club.id] = buildAITeam(club, available.length >= MIN_SQUAD ? available : fresh.players)
+      for (const p of out[club.id].players) claimedIds.add(p.id)
+      continue
+    }
+    const targetStars = new Set(club.starPlayerIds)
+    const kept: Player[] = []
+    const keptIds = new Set<string>()
+    const keptNames = new Set<string>()
+    const addPlayer = (player: Player) => {
+      if (keptIds.has(player.id) || claimedIds.has(player.id)) return
+      const copy = structuredClone(player)
+      copy.condition = 100
+      copy.energy = 100
+      delete copy.recoveryAt
+      delete copy.energyAt
+      delete copy.unhappy
+      if (copy.starKey && nextWorld.starAges[copy.id] !== undefined) copy.age = nextWorld.starAges[copy.id]
+      kept.push(copy)
+      keptIds.add(copy.id)
+      keptNames.add(copy.enName)
+      claimedIds.add(copy.id)
+    }
+
+    for (const player of prev.players) {
+      if (claimedIds.has(player.id)) continue
+      const isStar = Boolean(player.starKey || player.era !== 'random')
+      if (isStar && !targetStars.has(player.id)) continue
+      addPlayer(player)
+    }
+    for (const starId of club.starPlayerIds) {
+      if (keptIds.has(starId) || claimedIds.has(starId)) continue
+      const star = starPlayer(starId, nextWorld)
+      if (star) addPlayer(star)
+    }
+
+    const freshRandoms = fresh.players.filter((p) => p.era === 'random' && !p.starKey && !keptIds.has(p.id) && !claimedIds.has(p.id) && !keptNames.has(p.enName))
+    const gkCount = () => kept.filter((p) => p.positions.GK > 0).length
+    for (const filler of freshRandoms) {
+      if (gkCount() >= 2) break
+      if (filler.positions.GK > 0) addPlayer(filler)
+    }
+    for (const filler of freshRandoms) {
+      if (kept.length >= FULL_SQUAD) break
+      addPlayer(filler)
+    }
+    while (kept.length > 29) {
+      const dropIndex = kept.reduce((worst, candidate, index) => {
+        if (candidate.starKey || candidate.era !== 'random') return worst
+        if (candidate.positions.GK > 0 && gkCount() <= 2) return worst
+        if (worst < 0) return index
+        return caOf(candidate.attrs, candidate.positions.GK > 0) < caOf(kept[worst].attrs, kept[worst].positions.GK > 0) ? index : worst
+      }, -1)
+      if (dropIndex < 0) break
+      kept.splice(dropIndex, 1)
+    }
+    out[club.id] = buildAITeam(club, kept)
+  }
+  return out
+}
+
 /** 用于服务器共享世界的无主世界：保留 80 支原始球队，不替换玩家球队。 */
 export function createOwnerlessWorld(seed: number, startedAt = Date.now()): { world: WorldState; freeStars: Player[]; reserveStars: Player[] } {
   const setup = createWorld(seed, undefined, startedAt)
@@ -1434,8 +1538,8 @@ function ensurePlayerSquad(game: GameState, rng: ReturnType<typeof derivedRng>):
     game.roster.push(player)
     slot++
   }
-  const repaired = autoFillLineup(game.roster, game.lineup.formationId, game.lineup.tactics)
-  if (validateLineup(game.roster, repaired).valid) game.lineup = repaired
+  const repaired = repairLineup(game.roster, game.lineup)
+  if (repaired.changed && validateLineup(game.roster, repaired.lineup).valid) game.lineup = repaired.lineup
 }
 
 function refillClubStars(world: WorldState, game: GameState, protectedClubs: ReadonlySet<string> = new Set()): void {
@@ -1540,8 +1644,8 @@ export function advanceWorldSeason(game: GameState, now = Date.now(), protectedC
   // 签入的人已经并进新赛季名单，账本不再重复合并。
   for (const state of Object.values(game.aiClubs ?? {})) state.signings = []
   game.clubName = teams.playerTeam.name
-  const repaired = autoFillLineup(game.roster, game.lineup.formationId, game.lineup.tactics)
-  if (validateLineup(game.roster, repaired).valid) game.lineup = repaired
+  const repaired = repairLineup(game.roster, game.lineup)
+  if (repaired.changed && validateLineup(game.roster, repaired.lineup).valid) game.lineup = repaired.lineup
   game.economy = economyOf(game)
   game.economy.lastIncomeRound = 0
   evaluateAndRollBoardSeason(game, oldBoardContext)

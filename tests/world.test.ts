@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ELEVEN_SQUAD_SIZE } from '../src/game/eleven.ts'
-import { createWorldGame, payWorldWages, d2ClubChoices, createOwnerlessWorld, createWorldGameFromWorld, advanceOwnerlessWorld, worldTransferTeams } from '../src/game/world.ts'
+import { createWorldGame, payWorldWages, d2ClubChoices, createOwnerlessWorld, createWorldGameFromWorld, advanceOwnerlessWorld, buildOwnerlessTeams, rolloverOwnerlessTeams, worldTransferTeams } from '../src/game/world.ts'
+import { seedAIClubs, equipAICards, playerCa } from '../src/game/ai-club.ts'
 import { createSeason, startLeagueMatch, startNextSeason, updateSeasonTable } from '../src/game/season.ts'
 import { seasonEndAt, seasonStartForRound } from '../src/game/calendar.ts'
 import { aiTransferOffers, buyFreeAgent, joinRoster, releasePlayer, renewContract, sellerSquadError, signWorldClubPlayer, transferWindowOpen, playerMarketValue } from '../src/game/market.ts'
@@ -221,5 +222,67 @@ describe('三级共享世界', () => {
     }
     const single = createSeason(42, game.aiTeams, game.clubName)
     assertBalanced(['player', ...game.aiTeams.map((t) => t.id)], single.fixtures)
+  })
+
+  it('换季时保留合法的玩家自定义首发、战术风格/比赛计划/预设，以及 AI 原班主力与培养卡', () => {
+    const game = createWorldGame(77)
+    // 让所有球员年轻且合同未到期，保证换季后原首发全部仍在队。
+    for (const player of game.roster) {
+      player.age = 22
+      player.contract = { clubId: 'player', wage: player.contract?.wage ?? 1000, expiresSeason: 5 }
+    }
+    // 人为把一名替补前锋/外场换上首发，模拟玩家自定义的首发与战术预设。
+    const benchOutfield = game.lineup.bench.find((id) => {
+      const p = game.roster.find((item) => item.id === id)
+      return p && p.positions.GK <= 0
+    })!
+    const swapSlot = game.lineup.starters.findIndex((s) => s.slotId !== 'gk')
+    const oldStarterId = game.lineup.starters[swapSlot].playerId
+    game.lineup.starters[swapSlot] = { ...game.lineup.starters[swapSlot], playerId: benchOutfield }
+    game.lineup.bench = game.lineup.bench.map((id) => id === benchOutfield ? oldStarterId : id)
+    game.lineup.tacticalStyle = 'control'
+    game.lineup.matchPlan = 'protectLead'
+    game.lineup.presets = [{ id: 'p1', name: '稳守反击', createdAt: 1, lineup: { formationId: game.lineup.formationId, starters: structuredClone(game.lineup.starters), bench: [...game.lineup.bench], tactics: { ...game.lineup.tactics } } }]
+    const savedLineup = structuredClone(game.lineup)
+
+    finishSeason(game)
+    const rolled = startNextSeason(game, seasonEndAt(game.world!.seasonStartedAt) + 1)
+    expect(rolled.ok).toBe(true)
+    expect(game.lineup.starters).toEqual(savedLineup.starters)
+    expect(game.lineup.bench).toEqual(savedLineup.bench)
+    expect(game.lineup.tacticalStyle).toBe('control')
+    expect(game.lineup.matchPlan).toBe('protectLead')
+    expect(game.lineup.presets).toEqual(savedLineup.presets)
+
+    // 验证 rolloverOwnerlessTeams 保留 AI 原班主力（含随机球员与球星）及其培养卡，不重置回初始 CA。
+    const ownerless = createOwnerlessWorld(88)
+    const aiClubs = seedAIClubs(ownerless.world, 88)
+    const s1Teams = buildOwnerlessTeams(ownerless.world, 88, aiClubs)
+    const targetClub = ownerless.world.clubs.find((c) => c.tier === 'champions')!
+    const s1Team = s1Teams[targetClub.id]
+    const randomIdx = s1Team.players.findIndex((p) => p.era === 'random')
+    const starIdx = s1Team.players.findIndex((p) => p.starKey)
+    expect(randomIdx).toBeGreaterThanOrEqual(0)
+    expect(starIdx).toBeGreaterThanOrEqual(0)
+    for (const idx of [randomIdx, starIdx]) {
+      const p = s1Team.players[idx]
+      for (const key of Object.keys(p.attrs) as (keyof typeof p.attrs)[]) p.attrs[key] = Math.min(99, p.attrs[key] + 25)
+    }
+    equipAICards(aiClubs[targetClub.id], s1Team.players)
+    const randomId = s1Team.players[randomIdx].id
+    const randomCaBefore = playerCa(s1Team.players[randomIdx])
+    const starId = s1Team.players[starIdx].id
+    const starCaBefore = playerCa(s1Team.players[starIdx])
+
+    const nextWorld = structuredClone(ownerless.world)
+    nextWorld.seasonIndex = 2
+    const s2Teams = rolloverOwnerlessTeams(nextWorld, 99999, s1Teams, aiClubs)
+    const s2Team = s2Teams[targetClub.id]
+    const keptRandom = s2Team.players.find((p) => p.id === randomId)
+    const keptStar = s2Team.players.find((p) => p.id === starId)
+    expect(keptRandom).toBeDefined()
+    expect(keptStar).toBeDefined()
+    expect(playerCa(keptRandom!)).toBeGreaterThanOrEqual(randomCaBefore - 1)
+    expect(playerCa(keptStar!)).toBeGreaterThanOrEqual(starCaBefore - 1)
   })
 })

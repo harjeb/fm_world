@@ -170,6 +170,15 @@ describe('电脑球队的经营节奏', () => {
     ai.cards['3'] = { rating: playerCa(strong), attrs: { ...strong.attrs }, owner }
     expect(equipAICards(ai, team.players)).toBe(true)
     expect(playerCa(player)).toBeGreaterThan(playerCa(strong) - 1)
+    // 槽位顺移后（例如换季/转会导致下标变化）：仍按 owner 精确找回自己的强卡，不会清零。
+    const moved = structuredClone(team.players)
+    const freshPlayer = structuredClone(team.players[3])
+    freshPlayer.attrs = structuredClone(before)
+    moved[3] = moved[5]
+    moved[5] = freshPlayer
+    expect(equipAICards(ai, moved)).toBe(true)
+    expect(playerCa(moved[5])).toBeGreaterThan(playerCa(strong) - 1)
+    expect(ai.cards['5'].owner).toBe(owner)
   })
 
   it('AI 一次培养真实跑完 30 个时段，和玩家自动一轮同量级', () => {

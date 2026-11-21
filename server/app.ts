@@ -26,7 +26,7 @@ import { addTrainedCard, ensureCards, equipCard, playerCards, recyclePlayerCards
 import { ensurePve } from '../src/game/pve.ts'
 import { loadPveContent } from '../src/game/pve-content.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION, upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
-import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, migrateLegacyExpandedTactics, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, repairInflatedContractWages, syncAllClubLiveTactics, syncClubLiveTactics, wageForPlayer, worldForClub, worldSlots, worldWageBill, type WorldForClubReadOnlyCache } from '../src/game/world.ts'
+import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, migrateLegacyExpandedTactics, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, repairInflatedContractWages, rolloverOwnerlessTeams, syncAllClubLiveTactics, syncClubLiveTactics, wageForPlayer, worldForClub, worldSlots, worldWageBill, type WorldForClubReadOnlyCache } from '../src/game/world.ts'
 import { WORLD_CLUB_DEFS, pickExpandedZoneClubs } from '../src/game/data/world-clubs.ts'
 import { rescaleLegacyRandomPlayer } from '../src/game/data/players.ts'
 import { lineupLockState } from '../src/game/season.ts'
@@ -2411,9 +2411,27 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const next = ownerlessWorldFromClub(representative.world!, representativeId)
       const nextReserveStars = representative.reserveStars ?? []
       const nextFreeStars = representative.freeStars
+      // 保留经 retireAndRegen 老化/退役后的原班 AI 名单（避免换季推倒重建导致 AI 培养卡与随机主力归零）。
+      const survivedAITeams: Record<string, AITeam> = Object.fromEntries(
+        (representative.aiTeams ?? []).map((team) => [team.id, team]),
+      )
+      if (!sample && sharedWorld.teams?.[representativeId]) {
+        survivedAITeams[representativeId] = {
+          ...sharedWorld.teams[representativeId],
+          players: representative.roster,
+          lineup: representative.lineup,
+        }
+      }
       representative = null
       const teamSeed = splitSeed(sharedWorld.seed, `world-teams-${next.seasonIndex}`)
-      let provisional: Record<string, AITeam> | null = buildOwnerlessTeams(next, teamSeed, sharedWorld.aiClubs)
+      const marketPoolIds = new Set(market.pool.map((player) => player.id))
+      let provisional: Record<string, AITeam> | null = rolloverOwnerlessTeams(
+        next,
+        teamSeed,
+        survivedAITeams,
+        sharedWorld.aiClubs ? structuredClone(sharedWorld.aiClubs) : undefined,
+        marketPoolIds,
+      )
       const drafts = managed.map(({ account, clubId }) => {
         const game = cloneGameForSeasonRoll(account.game)
         if (game.season.index === old.seasonIndex) {
@@ -2439,7 +2457,12 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         for (const id of previousStars) if (!club.starPlayerIds.includes(id)) delete next.starAges[id]
         for (const player of game.roster) if (player.starKey) next.starAges[player.id] = player.age ?? 24
       }
-      const teams = buildOwnerlessTeams(next, teamSeed, sharedWorld.aiClubs)
+      const excludedForAI = new Set<string>([
+        ...marketPoolIds,
+        ...drafts.flatMap(({ game }) => game.roster.map((player) => player.id)),
+      ])
+      const managedClubIds = new Set(drafts.map(({ clubId }) => clubId))
+      const teams = rolloverOwnerlessTeams(next, teamSeed, survivedAITeams, sharedWorld.aiClubs, excludedForAI, managedClubIds)
       for (const { clubId, game } of drafts) {
         teams[clubId] = { ...teams[clubId], players: structuredClone(game.roster), lineup: structuredClone(game.lineup) }
       }

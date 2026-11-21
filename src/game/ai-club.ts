@@ -172,12 +172,55 @@ function clampAttrs(attrs: Attributes, gk: boolean, clubBonus = 0): void {
 }
 
 /**
- * 自动装备评分更高的卡：只有这名球员自己的、评分比他现在高的卡才会装上；
- * 评分不高于现在的不装，球员比卡强时反过来更新卡。别人的卡（槽位上换了人）一律不套。
+ * 自动装备评分更高的卡：优先按球员身份（owner）跨槽位找回他自己练出的最强卡，
+ * 避免换季或买卖球员导致槽位顺移时把球星/主力的培养卡清零；
+ * 评分不高于现在的不装，球员比卡强时反过来更新卡；别人的卡一律不套给新人。
  */
 export function equipAICards(state: AIClubState, players: Player[]): boolean {
+  const byOwner = new Map<string, AICard>()
+  const legacyBySlot = new Map<string, AICard>()
+  for (const [key, card] of Object.entries(state.cards)) {
+    if (!card) continue
+    if (card.owner === undefined) {
+      legacyBySlot.set(key, card)
+      continue
+    }
+    const prev = byOwner.get(card.owner)
+    if (!prev || card.rating > prev.rating) byOwner.set(card.owner, card)
+  }
+  const clubBonus = cupCeilingBonusFromClaims(state.cupCeilingClaims)
+  const nextCards: Record<string, AICard> = {}
   let changed = false
-  for (let slot = 0; slot < players.length; slot++) if (equipSlot(state, players, slot)) changed = true
+  for (let slot = 0; slot < players.length; slot++) {
+    const player = players[slot]
+    if (!player) continue
+    const key = String(slot)
+    const owner = ownerOf(player)
+    let card = byOwner.get(owner)
+    if (!card) {
+      const legacy = legacyBySlot.get(key)
+      if (legacy) {
+        legacy.owner = owner
+        card = legacy
+      }
+    }
+    const current = playerCa(player)
+    if (!card) {
+      nextCards[key] = { rating: current, attrs: { ...player.attrs }, owner }
+      continue
+    }
+    if (card.rating > current + 0.5) {
+      for (const attr of ALL_ATTRIBUTES) player.attrs[attr] = card.attrs[attr] ?? player.attrs[attr]
+      clampAttrs(player.attrs, player.positions.GK > 0, clubBonus)
+      nextCards[key] = card
+      changed = true
+    } else if (current > card.rating + 0.5) {
+      nextCards[key] = { rating: current, attrs: { ...player.attrs }, owner }
+    } else {
+      nextCards[key] = card
+    }
+  }
+  state.cards = nextCards
   return changed
 }
 

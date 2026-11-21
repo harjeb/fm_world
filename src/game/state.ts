@@ -265,7 +265,7 @@ function scaleAttrs(attrs: Attributes, gk: boolean): Attributes {
 function repairLoadedLineup(game: GameState): boolean {
   if (validateLineup(game.roster, game.lineup).valid) return false
   const formation = elevenFormationFor(game.lineup.formationId)
-  game.lineup = autoFillLineup(game.roster, formation, game.lineup.tactics)
+  game.lineup = autoFillLineup(game.roster, formation, game.lineup.tactics, game.lineup)
   if (game.autoSubs && validateAutoSubPlan(game.roster, game.lineup, game.autoSubs).length) {
     game.autoSubs = sanitizeAutoSubPlan(game.roster, game.lineup, game.autoSubs)
   }
