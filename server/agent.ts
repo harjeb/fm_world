@@ -66,6 +66,13 @@ import {
   type TacticalInstructionsV2,
 } from '../src/game/pes/tactics.ts'
 import { MATCH_PLAN_LIST, isMatchPlanId, matchPlanPhaseName, type MatchPlanId } from '../src/game/pes/match-plan.ts'
+import {
+  BACKUP_TACTIC_TEMPLATES,
+  validateBackupTactics,
+  validateMatchPlanRules,
+  type BackupTactic,
+  type MatchPlanRule,
+} from '../src/game/pes/tactical-plan.ts'
 import { emptyAutoSubs, validateAutoSubPlan } from '../src/game/match/management.ts'
 import { positionMultiplier } from '../src/game/ca.ts'
 import { displayClock } from '../src/game/match/time.ts'
@@ -358,10 +365,12 @@ function matchView(game: GameState) {
       opponent: state.stats[opponentIndex === 0 ? 'home' : 'away'],
     },
     tactics: { ...playerTeam.tactics },
+    formationId: playerTeam.formationId,
     mentality: playerTeam.mentality ?? null,
     matchPlan: playerTeam.matchPlan ?? 'standard',
     activePlanPhase: playerTeam.activePlanPhase ?? null,
-    activePlanPhaseLabel: matchPlanPhaseName(playerTeam.activePlanPhase) || null,
+    activePlanPhaseLabel: playerTeam.activeRuleName ?? (matchPlanPhaseName(playerTeam.activePlanPhase) || null),
+    planConditionFactor: playerTeam.planConditionFactor ?? null,
     autoSubs: playerTeam.autoSubs ?? emptyAutoSubs(),
     onPitch: playerTeam.players.filter((player) => player.onPitch).map(matchPlayerView),
     bench: playerTeam.bench.map(matchPlayerView),
@@ -687,6 +696,12 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
       instructions: style.instructions,
     })),
     matchPlans: MATCH_PLAN_LIST,
+    backupTacticTemplates: BACKUP_TACTIC_TEMPLATES.map((tpl) => ({
+      id: tpl.id,
+      label: tpl.label,
+      desc: tpl.desc,
+      sample: tpl.build(`slot-${tpl.id}`),
+    })),
     roles: ROLES_BY_POSITION,
     trainingSessions: sessionView,
     shop: {
@@ -874,6 +889,38 @@ function parseLineup(game: GameState, value: unknown): { lineup?: Lineup; error?
     }
   }
 
+  let backupTactics: BackupTactic[] | undefined = game.lineup.backupTactics?.length
+    ? structuredClone(game.lineup.backupTactics)
+    : undefined
+  let matchPlanRules: MatchPlanRule[] | undefined = game.lineup.matchPlanRules?.length
+    ? structuredClone(game.lineup.matchPlanRules)
+    : undefined
+
+  if (raw.backupTactics !== undefined) {
+    if (raw.backupTactics === null) {
+      backupTactics = undefined
+    } else {
+      const errors = validateBackupTactics(raw.backupTactics)
+      if (errors.length) return { error: `备选战术槽无效：${errors.join('；')}` }
+      backupTactics = structuredClone(raw.backupTactics as BackupTactic[])
+      if (!backupTactics.length) backupTactics = undefined
+    }
+  }
+
+  if (raw.matchPlanRules !== undefined) {
+    if (raw.matchPlanRules === null) {
+      matchPlanRules = undefined
+    } else {
+      const errors = validateMatchPlanRules(raw.matchPlanRules, backupTactics)
+      if (errors.length) return { error: `自定义比赛计划无效：${errors.join('；')}` }
+      matchPlanRules = structuredClone(raw.matchPlanRules as MatchPlanRule[])
+      if (!matchPlanRules.length) matchPlanRules = undefined
+    }
+  } else if (matchPlanRules?.length) {
+    const errors = validateMatchPlanRules(matchPlanRules, backupTactics)
+    if (errors.length) return { error: `自定义比赛计划与新备选战术槽不兼容：${errors.join('；')}` }
+  }
+
   const next: Lineup = {
     formationId,
     starters,
@@ -882,6 +929,8 @@ function parseLineup(game: GameState, value: unknown): { lineup?: Lineup; error?
     ...(tacticalStyle ? { tacticalStyle } : {}),
     ...(tacticalInstructions ? { tacticalInstructions } : {}),
     ...(matchPlan ? { matchPlan } : {}),
+    ...(backupTactics?.length ? { backupTactics } : {}),
+    ...(matchPlanRules?.length ? { matchPlanRules } : {}),
   }
   if (raw.customPositions !== undefined) {
     if (raw.customPositions !== null) {

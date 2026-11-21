@@ -46,9 +46,10 @@ export function teamInputFromLineup(
     return player
   })
   const activePlan = lineup.matchPlan && lineup.matchPlan !== 'standard' ? lineup.matchPlan : undefined
+  const hasCustomRules = !!(lineup.matchPlanRules?.some((r) => r.enabled))
   const instructions = lineup.tacticalInstructions
     ? cloneInstructions(lineup.tacticalInstructions)
-    : activePlan
+    : activePlan || hasCustomRules
       ? instructionsFromLegacyTactics(lineup.tactics)
       : undefined
   const tactics = instructions ? legacyTacticsFromInstructions(instructions) : { ...lineup.tactics }
@@ -57,6 +58,16 @@ export function teamInputFromLineup(
     formationId: lineup.formationId,
     tactics,
     ...(activePlan ? { matchPlan: activePlan } : {}),
+    ...(hasCustomRules
+      ? {
+          ...(lineup.backupTactics?.length ? { backupTactics: structuredClone(lineup.backupTactics) } : {}),
+          matchPlanRules: structuredClone(lineup.matchPlanRules!),
+          ...(lineup.customPositions && Object.keys(lineup.customPositions).length
+            ? { baseCustomPositions: structuredClone(lineup.customPositions) }
+            : {}),
+          tacticsStage: options?.tacticsStage ?? 1,
+        }
+      : {}),
     ...(instructions
       ? {
           ...(lineup.tacticalStyle ? { tacticalStyle: lineup.tacticalStyle } : {}),
@@ -82,7 +93,7 @@ export function aiMatchLineup(ai: AITeam, suspended?: Set<string>, rotate = fals
   if (rotate && (!intact || aiNeedsRotation(players, ai.lineup, injured))) {
     return aiRotatedLineup(players, ai.lineup?.formationId ?? ai.formationId, tactics, ai.lineup, injured)
   }
-  return intact ? ai.lineup : autoFillLineup(players, ai.formationId, ai.tactics)
+  return intact ? ai.lineup : autoFillLineup(players, ai.formationId, ai.tactics, ai.lineup)
 }
 
 /** 电脑球队（或锁定比赛阵容）的比赛输入（见 aiMatchLineup）。 */

@@ -7,7 +7,7 @@
  * - 玩家也可随时通过顶栏版本号按钮重新打开查看。
  */
 
-export const APP_VERSION = 'v0.4.26'
+export const APP_VERSION = 'v0.4.27'
 export const CHANGELOG_STORAGE_KEY = 'fm-world-changelog-seen'
 
 export type ChangelogItem = {
@@ -26,6 +26,18 @@ export type ChangelogRelease = {
 }
 
 export const CHANGELOG_RELEASES: readonly ChangelogRelease[] = [
+  {
+    version: 'v0.4.27',
+    date: '2026-11-21',
+    headline: '上线 FM 式「多战术槽 + 自定义比赛计划（Match Plans）」：支持赛中实时变阵、红牌应对与变阵联动换人',
+    summary: '战术页新增主战术 + 最多 3 套人阵解耦备选战术槽与最多 8 条可视化条件比赛计划规则。触发条件覆盖比赛时间窗、比分/两回合总比分、红牌人数差与场上平均体能，赛中可直接实时变阵（匈牙利算法最优排位 + 少打一人自动收缩 4-4-1/5-3-1）、切换心态与十二项指令并执行变阵联动换人；联机服务器后台预模拟与 2D 直播回放完全同步执行。',
+    items: [
+      { badge: 'FM 战术槽', tone: 'gold', title: '主战术 + 最多 3 套人阵解耦备选战术槽，预设新增「仅战术」模式', desc: '备选槽独立保存阵型、自由摆位、职责、十二项指令与心态，支持一键从当前战术板覆写、载入到战术板可视化编辑或从模板/预设库导入；即便转会卖人也永不失效。原有战术预设同步新增「仅战术」按钮，卖人后仍可一键套用阵型和指令。' },
+      { badge: '比赛计划', tone: 'good', title: '最多 8 条自定义条件规则 + 一键 FM 经典方案 + 14 套官方预案展开', desc: '按优先级从上到下匹配：支持比赛分钟、10 档比分/两回合总比分、我方/对方红牌人数差与全队平均体能组合条件；支持持续自动回切或单场仅一次锁定、3 分钟常规防抖（进球/丢球/红牌立即响应），并可将原有 14 套官方预案一键展开为可自由编辑规则。' },
+      { badge: '赛中变阵', tone: 'good', title: '服务器后台与 2D 引擎同步实时变阵、最优排位与联动换人', desc: '触发规则时优先执行变阵联动换人（先换人再排新阵，与自动换人共享 5 次名额），随后由匈牙利最优匹配算法重排场上球员的新阵型站位锚点、线位与职责（少打一人自动撤锋居中成 4-4-1/5-3-1），实时刷新战术执行度与 2D 跑位，并按各阶段实际踢的强度时长加权计算联赛赛后体能消耗。' },
+      { badge: 'Agent / MCP', tone: '', title: '同步开放 Agent API 与 MCP 读写支持，旧战报回放 100% 兼容', desc: 'set_lineup 与 MCP 工具现支持完整配置 backupTactics 与 matchPlanRules，state.backupTacticTemplates 提供即用模板；未启用自定义规则的球队与所有历史 2D 回放零影响。' },
+    ],
+  },
   {
     version: 'v0.4.26',
     date: '2026-11-21',

@@ -21,6 +21,14 @@ import { MotionRatings } from './ability.ts'
 import { formationRows } from './formation.ts'
 import { PesSettlement, type PesSettlementJSON } from './settle.ts'
 import { evaluateMatchPlan } from './match-plan.ts'
+import {
+  computeFormationReassignment,
+  computeLiveBaseFamiliarity,
+  derivePlanIntensity,
+  evaluateCustomMatchPlanRules,
+  pickLinkedSubPair,
+  resolveCustomRuleAction,
+} from './tactical-plan.ts'
 import { DEFAULT_PARAMS, applyMentalityOverlay, cloneInstructions, instructionsFromLegacyTactics, legacyTacticsFromInstructions } from './tactics.ts'
 import type { TacticalInstructionsV2, TacticsParams } from './tactics.ts'
 import { PesMatch, type PesTeamInit } from './sim.ts'
@@ -447,6 +455,129 @@ export class PesGame {
       const myScore = team.side === 'home' ? g.score.home : g.score.away
       const oppScore = team.side === 'home' ? g.score.away : g.score.home
       const scoreDiff = myScore - oppScore
+      const hasCustomRules = !!(team.matchPlanRules?.some((r) => r.enabled))
+      if (hasCustomRules) {
+        const physTeam = this.match.teams[idx]
+        const oppPhysTeam = this.match.teams[1 - idx]
+        const offsetDiff = g.shootoutOffset
+          ? (team.side === 'home' ? g.shootoutOffset.home - g.shootoutOffset.away : g.shootoutOffset.away - g.shootoutOffset.home)
+          : 0
+        const onPitch = team.players.filter((p) => p.onPitch && !p.sentOff)
+        const avgStaminaPct = onPitch.length
+          ? onPitch.reduce((sum, p) => sum + (p.stamina / Math.max(1, p.maxStamina)) * 100, 0) / onPitch.length
+          : 100
+        const evalRes = evaluateCustomMatchPlanRules(
+          team.matchPlanRules!,
+          {
+            minute,
+            scoreDiff,
+            effectiveDiff: scoreDiff + offsetDiff,
+            ownOnPitch: physTeam.players.length,
+            oppOnPitch: oppPhysTeam.players.length,
+            avgStaminaPct,
+            isKickoff,
+          },
+          team.planRuleState,
+        )
+        team.planRuleState = evalRes.nextState
+        if (evalRes.changed) {
+          const rule = evalRes.rule
+          const prevFormation = team.formationId
+          const resolved = resolveCustomRuleAction(team, rule)
+          // 1. 先执行变阵联动换人（共享 5 次换人名额，每条规则整场最多触发 1 次），让替补上场后再统一重排新阵型槽位
+          if (
+            rule?.action.linkedSub
+            && !team.planRuleState.linkedSubRuleIds.includes(rule.id)
+            && team.subsUsed < MAX_SUBS
+          ) {
+            const pair = pickLinkedSubPair(team, rule.action.linkedSub, resolved.targetFormation?.formationId)
+            if (pair) {
+              const subRes = this.substitute(pair.out.id, pair.incoming.id, team.side, 'tactical')
+              if (subRes.ok) {
+                team.planRuleState.linkedSubRuleIds.push(rule.id)
+              }
+            }
+          }
+          // 2. 如规则指定了目标战术槽（或恢复主战术），动态重排场上所有球员的阵型、站位与职责
+          let formationNote = ''
+          if (resolved.targetFormation) {
+            const currentOnPitch = team.players.filter((p) => p.onPitch && !p.sentOff)
+            const { assignments, shapeLabel } = computeFormationReassignment(
+              currentOnPitch,
+              resolved.targetFormation.formationId,
+              resolved.targetFormation.customPositions,
+              resolved.targetFormation.slotRoles,
+              resolved.targetFormation.preferredPlayers,
+            )
+            const byId = new Map(currentOnPitch.map((p) => [p.id, p]))
+            const physUpdates: { pid: number; role: string; nx: number; ny: number; line: number }[] = []
+            for (const a of assignments) {
+              const mp = byId.get(a.playerId)
+              if (!mp) continue
+              mp.slotId = a.slotId
+              mp.position = a.position
+              mp.detailedPosition = a.detailedPosition
+              mp.role = a.role
+              const pid = this.settlement.pidFor(mp.id)
+              if (pid >= 0) {
+                physUpdates.push({ pid, role: a.pesRole, nx: a.nx, ny: a.ny, line: a.line })
+              }
+            }
+            team.formationId = resolved.targetFormation.formationId
+            if (physUpdates.length) this.match.reconfigureFormation(idx as 0 | 1, physUpdates)
+            team.baseFamiliarity = computeLiveBaseFamiliarity(
+              currentOnPitch,
+              team.formationId,
+              resolved.instructions,
+              team.tacticsStage ?? 1,
+            )
+            team.familiarity = team.baseFamiliarity
+            if (team.formationId !== prevFormation || physTeam.players.length < 11) {
+              formationNote = `，阵型调整为 ${shapeLabel}`
+            }
+          }
+          // 3. 应用心态、十二项指令与物理层战术参数
+          team.mentality = resolved.mentality
+          team.instructions = resolved.instructions
+          team.tactics = { ...resolved.tactics }
+          team.activePlanPhase = evalRes.targetKey
+          team.activeRuleName = rule ? rule.name : undefined
+          this.match.teams[idx].tactics = tacticsOf(team.tactics, team.instructions, {
+            aggression: resolved.aggression,
+            staminaMul: resolved.staminaMul,
+          })
+          changed = true
+          if (!isKickoff || rule !== null) {
+            g.instructions.push({
+              step: g.step,
+              kind: 'tactic',
+              autoReason: 'plan',
+              side: team.side,
+              mentality: team.mentality,
+              tactics: { ...team.tactics },
+              formationId: team.formationId,
+              ...(rule ? { planRuleName: rule.name } : {}),
+            })
+            const mentalityLabel = MATCH_MENTALITY_LABELS[resolved.mentality]
+            const text = rule
+              ? `触发赛前预案「${rule.name}」${formationNote}，心态转为${mentalityLabel}。`
+              : `局势变化，恢复主战术${formationNote}（${mentalityLabel}）。`
+            this.settlement.note('tactic', team.side, text, {}, this.match.time)
+          }
+        }
+        // 按每个模拟秒累计实际体能强度，供赛后精准加权折算联赛体能消耗
+        if (!isKickoff) {
+          const curMul = this.match.teams[idx].tactics.staminaMul
+            ?? derivePlanIntensity(
+              team.mentality ?? 'balanced',
+              team.instructions ?? instructionsFromLegacyTactics(team.tactics),
+            ).staminaMul
+          team.planLoadSum = (team.planLoadSum ?? 0) + curMul
+          team.planLoadTicks = (team.planLoadTicks ?? 0) + 1
+          team.planConditionFactor = Math.round(Math.min(1.18, Math.max(0.84, team.planLoadSum / team.planLoadTicks)) * 1000) / 1000
+        }
+        continue
+      }
       if (team.matchPlan && team.matchPlan !== 'standard') {
         const offsetDiff = g.shootoutOffset
           ? (team.side === 'home' ? g.shootoutOffset.home - g.shootoutOffset.away : g.shootoutOffset.away - g.shootoutOffset.home)

@@ -55,6 +55,8 @@ const lineupInputSchema = z.object({
   tacticalStyle: z.string().nullable().optional().describe('可选战术风格模板 ID，见 state.tacticalStyles；null 清空'),
   tacticalInstructions: z.record(z.string(), z.unknown()).nullable().optional().describe('可选十二项战术指令对象；null 清空'),
   matchPlan: z.string().nullable().optional().describe('可选下场比赛计划 ID，见 state.matchPlans；standard 或 null 恢复常规'),
+  backupTactics: z.array(z.record(z.string(), z.unknown())).max(3).nullable().optional().describe('可选 FM 备选战术槽数组（最多 3 套：{id,name,formationId,mentality,tacticalStyle?,tacticalInstructions,slotRoles?,customPositions?,preferredPlayers?}）；null 清空'),
+  matchPlanRules: z.array(z.record(z.string(), z.unknown())).max(8).nullable().optional().describe('可选 FM 自定义条件比赛计划规则数组（最多 8 条：{id,name,enabled,once?,condition:{minMinute?,maxMinute?,score?,redCard?,avgStaminaBelow?},action:{tacticSlotId?,mentality?,tacticalStyle?,instructionPatch?,linkedSub?}}）；null 清空'),
   customPositions: z.record(z.string(), z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).nullable().optional().describe('可选槽位自定义坐标映射；null 清空'),
 })
 

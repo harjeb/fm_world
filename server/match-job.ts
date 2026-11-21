@@ -8,7 +8,7 @@ import { prepareMatchInjuries } from '../src/game/injury.ts'
 import { facilityLevel } from '../src/game/economy.ts'
 import { LOGIC_MATCH_SECONDS, matchRealSeconds } from '../src/game/match/time.ts'
 import { matchConditionLoss } from '../src/game/condition.ts'
-import { matchPlanConditionFactor } from '../src/game/pes/match-plan.ts'
+import { effectiveMatchConditionFactor } from '../src/game/pes/tactical-plan.ts'
 import type { SeasonCupId, SeasonCupStage } from '../src/game/season-cups.ts'
 
 export type MatchBook = {
@@ -141,8 +141,8 @@ export function computeMatchJob(job: MatchJob): MatchJobResult {
   record.autoSimulated = true
   const conditionLoss: Record<string, number> = {}
   const appearances: Record<string, number> = Object.fromEntries([...job.home.team.players, ...job.away.team.players].map((player) => [player.id, 0]))
-  const homeFactor = matchPlanConditionFactor(state.teams[0].matchPlan)
-  const awayFactor = matchPlanConditionFactor(state.teams[1].matchPlan)
+  const homeFactor = effectiveMatchConditionFactor(state.teams[0])
+  const awayFactor = effectiveMatchConditionFactor(state.teams[1])
   for (const stat of record.playerStats) {
     const id = stat.sourceId ?? stat.playerId.split(':').slice(1).join(':')
     // 踢满 90 分钟掉 70 点（见 condition.ts），叠加比赛计划倍率，和单机结算同一个算法。

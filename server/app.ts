@@ -77,6 +77,7 @@ import { awardSeasonShopPoints, buyShopBook } from '../src/game/shop.ts'
 import { chemistryForPlayers, mergeChemistryTraining } from '../src/game/chemistry.ts'
 import { isStyleId, tryValidateInstructions } from '../src/game/pes/tactics.ts'
 import { isMatchPlanId, matchPlanConditionFactor } from '../src/game/pes/match-plan.ts'
+import { validateBackupTactics, validateMatchPlanRules } from '../src/game/pes/tactical-plan.ts'
 import { simulateAITrainingSession } from '../src/game/ai-training.ts'
 import { settleSquadEnergy } from '../src/game/energy.ts'
 import { TRAINING_ENERGY_COST } from '../src/game/training.ts'
@@ -848,8 +849,12 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return shared ? { ...player, condition: shared.condition, recoveryAt: shared.recoveryAt } : { ...player }
     }
     const lockedLineup = game
-      ? aiTakeover && game.lineup.matchPlan && matchPlanConditionFactor(game.lineup.matchPlan) > 1.05
-        ? { ...game.lineup, matchPlan: 'standard' as const }
+      ? aiTakeover
+        ? {
+            ...game.lineup,
+            ...(game.lineup.matchPlan && matchPlanConditionFactor(game.lineup.matchPlan) > 1.05 ? { matchPlan: 'standard' as const } : {}),
+            matchPlanRules: undefined,
+          }
         : game.lineup
       : team.lineup
     return {
@@ -3368,6 +3373,14 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (body.game.lineup.matchPlan !== undefined && !isMatchPlanId(body.game.lineup.matchPlan)) {
         return json(res, 400, { error: `未知比赛计划：${String(body.game.lineup.matchPlan)}` })
       }
+      if (body.game.lineup.backupTactics !== undefined) {
+        const errors = validateBackupTactics(body.game.lineup.backupTactics)
+        if (errors.length) return json(res, 400, { error: `备选战术槽无效：${errors.join('；')}` })
+      }
+      if (body.game.lineup.matchPlanRules !== undefined) {
+        const errors = validateMatchPlanRules(body.game.lineup.matchPlanRules, body.game.lineup.backupTactics)
+        if (errors.length) return json(res, 400, { error: `自定义比赛计划无效：${errors.join('；')}` })
+      }
       for (const preset of body.game.lineup.presets ?? []) {
         if (preset?.lineup?.tacticalStyle !== undefined && !isStyleId(preset.lineup.tacticalStyle)) {
           return json(res, 400, { error: `预设“${preset.name}”战术风格无效` })
@@ -3378,6 +3391,14 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         }
         if (preset?.lineup?.matchPlan !== undefined && !isMatchPlanId(preset.lineup.matchPlan)) {
           return json(res, 400, { error: `预设“${preset.name}”比赛计划无效` })
+        }
+        if (preset?.lineup?.backupTactics !== undefined) {
+          const errors = validateBackupTactics(preset.lineup.backupTactics)
+          if (errors.length) return json(res, 400, { error: `预设“${preset.name}”备选战术槽无效：${errors.join('；')}` })
+        }
+        if (preset?.lineup?.matchPlanRules !== undefined) {
+          const errors = validateMatchPlanRules(preset.lineup.matchPlanRules, preset.lineup.backupTactics)
+          if (errors.length) return json(res, 400, { error: `预设“${preset.name}”自定义比赛计划无效：${errors.join('；')}` })
         }
       }
       if (account.game.activeMatch?.context.isLeague) {

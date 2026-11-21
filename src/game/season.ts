@@ -7,7 +7,8 @@ import { RECENT_MATCHES } from './transfer-rules.ts'
 import { settleSquadEnergy, shiftEnergyClock } from './energy.ts'
 import { applyConditionLoss, settleConditions, shiftConditionClock } from './condition.ts'
 import { settleYouth, recordYouthMatch, shiftYouthClock } from './youth.ts'
-import { matchPlanConditionFactor, type MatchPlanId } from './pes/match-plan.ts'
+import { type MatchPlanId } from './pes/match-plan.ts'
+import { effectiveMatchConditionFactor } from './pes/tactical-plan.ts'
 import { expireOffers, runLocalTransfers } from './transfers.ts'
 import { refreshLocalFreeMarket } from './free-market.ts'
 import { awardSeasonPrize } from './economy.ts'
@@ -415,13 +416,13 @@ function recordAppearances(game: GameState, homeId: string, awayId: string, stat
 function applyMatchConditions(
   game: GameState,
   stats: MatchRecord['playerStats'],
-  teams?: readonly [{ matchPlan?: MatchPlanId }, { matchPlan?: MatchPlanId }],
+  teams?: readonly [{ matchPlan?: MatchPlanId; planConditionFactor?: number }, { matchPlan?: MatchPlanId; planConditionFactor?: number }],
 ): void {
   const all = new Map<string, { condition: number }>()
   for (const player of game.roster) all.set(player.id, player)
   for (const team of game.aiTeams) for (const player of team.players) all.set(player.id, player)
-  const homeFactor = matchPlanConditionFactor(teams?.[0]?.matchPlan)
-  const awayFactor = matchPlanConditionFactor(teams?.[1]?.matchPlan)
+  const homeFactor = effectiveMatchConditionFactor(teams?.[0])
+  const awayFactor = effectiveMatchConditionFactor(teams?.[1])
   for (const stat of stats) {
     const id = stat.sourceId ?? stat.playerId.split(':').slice(1).join(':')
     const player = all.get(id)

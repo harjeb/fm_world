@@ -144,9 +144,11 @@ export function renderMatch(): string {
       </div>
       <div class="match-controls">
         <div class="seg" role="group" aria-label="球场视图"><button class="${ui.pitchView === 'match' ? 'active' : ''}" data-pitch-view="match">比赛</button><button class="${ui.pitchView === 'tracking' ? 'active' : ''}" data-pitch-view="tracking">战术轨迹</button></div>
-        ${mine.matchPlan && mine.matchPlan !== 'standard'
-          ? `<span class="tag gold">计划：${esc(matchPlanLabel(mine.matchPlan))}${matchPlanPhaseName(mine.activePlanPhase) ? ` · ${esc(matchPlanPhaseName(mine.activePlanPhase))}` : ''}</span>`
-          : ''}
+        ${mine.matchPlanRules?.some((r) => r.enabled)
+          ? `<span class="tag gold">FM预案：${esc(mine.activeRuleName ? `${mine.activeRuleName} · ${mine.formationId}` : `主战术 · ${mine.formationId}`)}</span>`
+          : mine.matchPlan && mine.matchPlan !== 'standard'
+            ? `<span class="tag gold">计划：${esc(matchPlanLabel(mine.matchPlan))}${matchPlanPhaseName(mine.activePlanPhase) ? ` · ${esc(matchPlanPhaseName(mine.activePlanPhase))}` : ''}</span>`
+            : ''}
         ${active.preplayed
           ? `<span class="muted small">${active.context.mode === 'cup' ? '杯赛' : '联赛'}直播：阵容已在开赛前 30 分钟锁定，按现实时间回放整场（约 10 分钟），不可暂停、加速或跳过；结束后才公布比分和战报。</span>`
           : active.context.isLeague

@@ -15,6 +15,8 @@ import { youthBadge } from '../components.ts'
 import {
   BENCH_SIZE,
   MAX_SUBS,
+  applyBackupTacticToLineup,
+  applyTacticOnlyFromPreset,
   applyTacticPreset,
   bestRoleForPlayer,
   clearSlotPositions,
@@ -46,6 +48,7 @@ import { RATING_STOPS, boardMarkings, boardSpot, boardSpotFromPercent, caHeat, c
 import { esc, lineupStyleLabel, pct, playerCA, positionClass, positionLabel, shortName } from '../format.ts'
 import { morph } from '../morph.ts'
 import { renderAutoSubEditor } from '../auto-sub-editor.ts'
+import { bindFmTacticalPlanHandlers, renderFmTacticalPlanPanel } from '../tactical-plan-editor.ts'
 import { game, ui } from '../state.ts'
 import { chemistryKey } from '../../game/chemistry.ts'
 import { selectChemistryLinks } from '../chemistry-links.ts'
@@ -230,6 +233,7 @@ function tacticalStyleBar(draft: Lineup, disabled: boolean): string {
 }
 
 function matchPlanBar(draft: Lineup, disabled: boolean): string {
+  const enabledCustom = (draft.matchPlanRules ?? []).filter((r) => r.enabled).length
   const planId: MatchPlanId = draft.matchPlan && isMatchPlanId(draft.matchPlan) ? draft.matchPlan : 'standard'
   const plan = MATCH_PLANS[planId]
   const categoryTone = plan.category === '进攻'
@@ -250,19 +254,23 @@ function matchPlanBar(draft: Lineup, disabled: boolean): string {
     ? `<button class="btn small ghost" data-action="lineup-plan-reset" ${disabled ? 'disabled' : ''}>恢复常规</button>`
     : ''
   const tipBody = `定位：${plan.tagline} 触发机制：${plan.triggerSummary} 赛季影响：${plan.seasonEffect} 挑战影响：${plan.challengeEffect} 优势：${plan.pros} 风险：${plan.cons}`
+  const customNote = enabledCustom > 0
+    ? `<span class="tag good">FM 自定义计划生效 · ${enabledCustom} 条规则</span>`
+    : ''
   return `<div class="tac-style-bar tac-plan-bar">
     <div class="tac-style-pick">
       <label class="tac-style-label" for="lineup-match-plan">下场计划</label>
       <select id="lineup-match-plan" class="compact tac-style-select" data-match-plan aria-label="下场比赛计划" ${disabled ? 'disabled' : ''}>
         ${MATCH_PLAN_GROUPS.map((group) => `<optgroup label="${esc(group.category)}">${group.plans.map((item) => `<option value="${item.id}" ${planId === item.id ? 'selected' : ''}>${esc(item.name)}</option>`).join('')}</optgroup>`).join('')}
       </select>
-      ${categoryBadge}
-      ${staminaBadge}
+      ${customNote || `${categoryBadge}${staminaBadge}`}
       ${resetBtn}
     </div>
     <div class="tac-style-meta" ${tipAttrs(`比赛计划 · ${plan.name}`, tipBody)}>
-      <span class="tac-style-tagline">${esc(plan.tagline)} <span class="muted">（${esc(plan.triggerSummary)}）</span></span>
-      <span class="tac-style-tradeoff"><b class="good-text">赛季</b> ${esc(plan.seasonEffect)} · <b class="plan-chal-text">挑战</b> ${esc(plan.challengeEffect)} · <b class="good-text">优</b> ${esc(plan.pros)} · <b class="warn-text">忌</b> ${esc(plan.cons)}</span>
+      ${enabledCustom > 0
+        ? `<span class="tac-style-tagline">已启用下方 <b>FM 自定义比赛计划（${enabledCustom} 条规则${draft.backupTactics?.length ? ` · ${draft.backupTactics.length} 套备选变阵` : ''}）</b>，赛中将优先按你的规则执行（含服务器后台预模拟与 2D 直播），联赛体能按实际踢的强度时长加权结算。</span>`
+        : `<span class="tac-style-tagline">${esc(plan.tagline)} <span class="muted">（${esc(plan.triggerSummary)}）</span></span>
+           <span class="tac-style-tradeoff"><b class="good-text">赛季</b> ${esc(plan.seasonEffect)} · <b class="plan-chal-text">挑战</b> ${esc(plan.challengeEffect)} · <b class="good-text">优</b> ${esc(plan.pros)} · <b class="warn-text">忌</b> ${esc(plan.cons)}</span>`}
     </div>
   </div>`
 }
@@ -299,6 +307,7 @@ function coachCheck(draft: Lineup): string {
     return matches > 0 ? [{ name: player.name, matches }] : []
   })
   const ageTips = lineupAgeAnalysis(game.roster, draft).tips
+  const enabledCustomRules = (draft.matchPlanRules ?? []).filter((r) => r.enabled).length
   const planId = draft.matchPlan && isMatchPlanId(draft.matchPlan) ? draft.matchPlan : 'standard'
   const plan = MATCH_PLANS[planId]
   const starterConds = draft.starters.flatMap((s) => {
@@ -306,11 +315,13 @@ function coachCheck(draft: Lineup): string {
     return p ? [p.condition ?? 100] : []
   })
   const avgCond = starterConds.length ? starterConds.reduce((sum, v) => sum + v, 0) / starterConds.length : 100
-  const planLine = planId === 'standard'
-    ? ''
-    : plan.conditionFactor >= 1.12 && avgCond < 78
-      ? `<li class="check-line warn">${icon('alert', 14)}<span>下场计划「${esc(plan.name)}」高耗能，当前首发平均体能 ${Math.round(avgCond)}%，联赛出战需提防末段崩盘（挑战赛满体能不受影响）。</span></li>`
-      : `<li class="check-line good">${icon('check', 14)}<span>下场计划「${esc(plan.name)}」已部署：将同步作用于赛季联赛与挑战赛。</span></li>`
+  const planLine = enabledCustomRules > 0
+    ? `<li class="check-line good">${icon('check', 14)}<span>FM 自定义比赛计划已部署（${enabledCustomRules} 条生效规则${draft.backupTactics?.length ? ` · ${draft.backupTactics.length} 套备选变阵` : ''}）：后台模拟与 2D 直播同步生效。</span></li>`
+    : planId === 'standard'
+      ? ''
+      : plan.conditionFactor >= 1.12 && avgCond < 78
+        ? `<li class="check-line warn">${icon('alert', 14)}<span>下场计划「${esc(plan.name)}」高耗能，当前首发平均体能 ${Math.round(avgCond)}%，联赛出战需提防末段崩盘（挑战赛满体能不受影响）。</span></li>`
+        : `<li class="check-line good">${icon('check', 14)}<span>下场计划「${esc(plan.name)}」已部署：将同步作用于赛季联赛与挑战赛。</span></li>`
   const line = (tone: string, iconName: 'alert' | 'check' | 'cross' | 'flag', text: string) => `<li class="check-line ${tone}">${icon(iconName, 14)}<span>${esc(text)}</span></li>`
   return `<ul class="check-list">
     ${check.valid ? line('good', 'check', '阵容合法，可以开始比赛。') : check.errors.map((error) => line('bad', 'alert', error)).join('')}
@@ -521,7 +532,8 @@ function presetItem(preset: NonNullable<Lineup['presets']>[number]): string {
   return `<li class="preset-item" data-key="${esc(preset.id)}">
     <div class="preset-info"><b>${esc(preset.name)}</b><small>${esc(detail)}</small></div>
     <div class="preset-actions">
-      <button class="btn small primary" data-preset-apply="${esc(preset.id)}">应用</button>
+      <button class="btn small primary" data-preset-apply="${esc(preset.id)}" title="整套恢复首发、替补、阵型与战术">应用</button>
+      <button class="btn small ghost" data-preset-tactic-only="${esc(preset.id)}" title="仅套用阵型、摆位、职责和十二项指令，自动适配当前名单（卖人后也能用）">仅战术</button>
       <button class="btn small ghost" data-preset-rename="${esc(preset.id)}">重命名</button>
       <button class="btn small ghost danger" data-preset-delete="${esc(preset.id)}">删除</button>
     </div>
@@ -668,13 +680,32 @@ function applyPresetById(id: string): void {
     clearedSubs = result.ok
   }
   if (!result.ok) {
-    announceLineup(`无法应用“${preset.name}”：${result.errors[0]}（可能有球员已经离队）`)
+    announceLineup(`无法整套应用“${preset.name}”：${result.errors[0]}（可能有球员离队，可点击「仅战术」按当前名单套用阵型和指令）`)
     return
   }
   ui.lineupDraft = structuredClone(game.lineup)
   ui.autoSubsDraft = structuredClone(game.autoSubs ?? emptyAutoSubs())
   ui.lineupSlot = null
   announceLineup(clearedSubs ? `已应用战术“${preset.name}”，原自动换人规则与新阵容冲突，已清空。` : `已应用战术“${preset.name}”。`)
+}
+
+/** 仅套用预设里的阵型、自定义摆位、职责与十二项指令，不要求原首发全员仍在队。 */
+function applyTacticOnlyById(id: string): void {
+  const draft = ui.lineupDraft ?? structuredClone(game.lineup)
+  const preset = findTacticPreset(draft, id) ?? findTacticPreset(game.lineup, id)
+  if (!preset) {
+    announceLineup('找不到这个战术预设')
+    return
+  }
+  const source = findTacticPreset(draft, id) ? draft : game.lineup
+  const next = applyTacticOnlyFromPreset(game.roster, source, id)
+  if (!next) {
+    announceLineup('无法套用该战术预设')
+    return
+  }
+  ui.lineupDraft = next
+  ui.lineupSlot = null
+  announceLineup(`已将“${preset.name}”的阵型与战术套用到当前阵容，点击顶部「保存阵容」生效。`)
 }
 
 function renamePresetById(id: string): void {
@@ -795,7 +826,7 @@ document.addEventListener('click', (event) => {
   if (ui.screen !== 'lineup') return
   const target = event.target as HTMLElement
   const locked = isOnlineMode() && lineupLockState(game).locked
-  if (locked && (target.closest('[data-preset-save]') || target.closest('[data-preset-apply]'))) {
+  if (locked && (target.closest('[data-preset-save]') || target.closest('[data-preset-apply]') || target.closest('[data-preset-tactic-only]'))) {
     announceLineup('阵容已锁定：开赛前 30 分钟内不能修改，比赛由服务器自动结算。')
     return
   }
@@ -806,6 +837,11 @@ document.addEventListener('click', (event) => {
   const apply = target.closest<HTMLElement>('[data-preset-apply]')
   if (apply?.dataset.presetApply) {
     applyPresetById(apply.dataset.presetApply)
+    return
+  }
+  const tacticOnly = target.closest<HTMLElement>('[data-preset-tactic-only]')
+  if (tacticOnly?.dataset.presetTacticOnly) {
+    applyTacticOnlyById(tacticOnly.dataset.presetTacticOnly)
     return
   }
   const rename = target.closest<HTMLElement>('[data-preset-rename]')
@@ -879,10 +915,32 @@ function lineupFingerprint(lineup: Lineup): string {
     lineup.tacticalStyle ?? null,
     lineup.tacticalInstructions ?? null,
     lineup.matchPlan && lineup.matchPlan !== 'standard' ? lineup.matchPlan : null,
+    lineup.backupTactics ?? null,
+    lineup.matchPlanRules ?? null,
     Object.entries(lineup.customPositions ?? {}).sort(([a], [b]) => a.localeCompare(b)),
     (lineup.presets ?? []).map((preset) => [preset.id, preset.name, preset.createdAt, lineupFingerprint({ ...preset.lineup })]),
   ])
 }
+
+bindFmTacticalPlanHandlers({
+  isActiveScreen: () => ui.screen === 'lineup',
+  isLocked: () => isOnlineMode() && lineupLockState(game).locked,
+  getDraft: () => ui.lineupDraft ?? structuredClone(game.lineup),
+  updateDraft: (mutator) => {
+    const draft = ui.lineupDraft ?? structuredClone(game.lineup)
+    mutator(draft)
+    ui.lineupDraft = draft
+    refreshLineup()
+  },
+  loadBackupToBoard: (backup) => {
+    const draft = ui.lineupDraft ?? structuredClone(game.lineup)
+    const next = applyBackupTacticToLineup(game.roster, draft, backup)
+    ui.lineupDraft = next
+    ui.lineupSlot = null
+    announceLineup(`已将备选槽「${backup.name}（${backup.formationId}）」载入上方战术板，调整完可点该槽「从战术板覆写」存回，或直接保存为主战术。`)
+  },
+  announce: announceLineup,
+})
 
 function customSpotCount(lineup: Lineup): number {
   return Object.keys(lineup.customPositions ?? {}).length
@@ -933,29 +991,32 @@ export function renderLineup(): string {
     })}
     ${lockBanner}
     <div class="tactics">
-      <section class="panel">
-        ${tacticsBar(draft, formation)}
-        ${tacticalStyleBar(draft, onlineLock)}
-        ${matchPlanBar(draft, onlineLock)}
-        <div class="tac-body">
-          <aside class="tac-plan">${planColumn(draft, formation, onlineLock)}</aside>
-          <div class="tac-pitch">
-            <div class="board">${boardMarkings()}${chemistryLines(draft, formation)}${formation.slots.map((slot) => slotCard(slot, draft, formation, selectedId, look.color)).join('')}</div>
-            <p class="hint flat">圆内是有效评分；橙圈表示熟练度低、受伤或停赛。任何人都能踢任何位置，熟练度越低属性折损越多，最多折损 40%。</p>
-            <p class="hint flat">虚线表示主要默契搭档，每人最多显示一条；悬停、聚焦或点按连线查看详情。</p>
-            <div class="pos-bar">
-              <span class="hint flat">拖圆点自由摆位，松手即保存；圆点获得焦点后方向键微调（Shift 更细），Home 回默认。点圆点仍是选人换人，把球员表里的把手拖到位置也能换位。</span>
-              ${customSpotCount(draft) ? `<button class="btn small ghost" data-pos-reset>还原默认位置（${customSpotCount(draft)}）</button>` : ''}
+      <div class="tac-main">
+        <section class="panel">
+          ${tacticsBar(draft, formation)}
+          ${tacticalStyleBar(draft, onlineLock)}
+          ${matchPlanBar(draft, onlineLock)}
+          <div class="tac-body">
+            <aside class="tac-plan">${planColumn(draft, formation, onlineLock)}</aside>
+            <div class="tac-pitch">
+              <div class="board">${boardMarkings()}${chemistryLines(draft, formation)}${formation.slots.map((slot) => slotCard(slot, draft, formation, selectedId, look.color)).join('')}</div>
+              <p class="hint flat">圆内是有效评分；橙圈表示熟练度低、受伤或停赛。任何人都能踢任何位置，熟练度越低属性折损越多，最多折损 40%。</p>
+              <p class="hint flat">虚线表示主要默契搭档，每人最多显示一条；悬停、聚焦或点按连线查看详情。</p>
+              <div class="pos-bar">
+                <span class="hint flat">拖圆点自由摆位，松手即保存；圆点获得焦点后方向键微调（Shift 更细），Home 回默认。点圆点仍是选人换人，把球员表里的把手拖到位置也能换位。</span>
+                ${customSpotCount(draft) ? `<button class="btn small ghost" data-pos-reset>还原默认位置（${customSpotCount(draft)}）</button>` : ''}
+              </div>
             </div>
+            <aside class="tac-bench">
+              <h3>替补 <small>${draft.bench.length} / ${BENCH_SLOTS}</small></h3>
+              ${Array.from({ length: BENCH_SLOTS }, (_, index) => benchCard(index, draft, formation, selectedId, look.color)).join('')}
+              <p class="hint flat">比赛中最多换 ${MAX_SUBS} 次。</p>
+            </aside>
           </div>
-          <aside class="tac-bench">
-            <h3>替补 <small>${draft.bench.length} / ${BENCH_SLOTS}</small></h3>
-            ${Array.from({ length: BENCH_SLOTS }, (_, index) => benchCard(index, draft, formation, selectedId, look.color)).join('')}
-            <p class="hint flat">比赛中最多换 ${MAX_SUBS} 次。</p>
-          </aside>
-        </div>
-        ${notesSection(draft)}
-      </section>
+          ${notesSection(draft)}
+        </section>
+        ${renderFmTacticalPlanPanel({ draft, roster: game.roster, disabled: onlineLock })}
+      </div>
       <div class="tac-side">
         ${presetsPanel(draft)}
         ${panel('球员', `${pickingBanner(selectedId, formation)}${squadTable(draft, formation, selectedId)}`, { flush: true, aside: heatLegend('表现分', RATING_STOPS) })}

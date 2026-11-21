@@ -152,6 +152,7 @@ export function lineupStyleLabel(source: {
   tacticalStyle?: StyleId
   tacticalInstructions?: TacticalInstructionsV2
   matchPlan?: MatchPlanId
+  matchPlanRules?: { enabled: boolean }[]
 }): string {
   const baseLabel = !source.tacticalInstructions
     ? '基础战术'
@@ -159,30 +160,38 @@ export function lineupStyleLabel(source: {
         const info = inferStyleForInstructions(source.tacticalInstructions, source.tacticalStyle)
         return `${STYLES_REV3[info.styleId].name}${info.adjusted ? '·已调整' : ''}`
       })()
+  const customCount = (source.matchPlanRules ?? []).filter((r) => r.enabled).length
+  if (customCount > 0) return `${baseLabel} · FM规则(${customCount})`
   if (source.matchPlan && source.matchPlan !== 'standard') {
     return `${baseLabel} · 计划:${matchPlanLabel(source.matchPlan)}`
   }
   return baseLabel
 }
 
-/** 赛中教练面板显示的当前战术摘要（兼容新十二项指令、比赛计划与旧五项）。 */
+/** 赛中教练面板显示的当前战术摘要（兼容新十二项指令、自定义 FM 比赛计划、官方计划与旧五项）。 */
 export function teamTacticSummary(team: {
+  formationId?: FormationId
   tactics: Tactics
   tacticalStyle?: StyleId
   matchPlan?: MatchPlanId
   activePlanPhase?: string
+  activeRuleName?: string
+  matchPlanRules?: { enabled: boolean }[]
   baseInstructions?: TacticalInstructionsV2
   instructions?: TacticalInstructionsV2
 }): string {
-  const planPart = team.matchPlan && team.matchPlan !== 'standard'
-    ? (() => {
-        const phase = matchPlanPhaseName(team.activePlanPhase)
-        return ` · 计划:${matchPlanLabel(team.matchPlan)}${phase ? `(${phase})` : ''}`
-      })()
-    : ''
+  const hasCustom = !!(team.matchPlanRules?.some((r) => r.enabled))
+  const planPart = hasCustom
+    ? ` · FM预案:${team.activeRuleName ?? '主战术'}${team.formationId ? `(${team.formationId})` : ''}`
+    : team.matchPlan && team.matchPlan !== 'standard'
+      ? (() => {
+          const phase = matchPlanPhaseName(team.activePlanPhase)
+          return ` · 计划:${matchPlanLabel(team.matchPlan)}${phase ? `(${phase})` : ''}`
+        })()
+      : ''
   if (!team.instructions) return `${tacticText(team.tactics)}${planPart}`
-  const base = team.baseInstructions ?? team.instructions
-  const info = inferStyleForInstructions(base, team.tacticalStyle)
+  const base = hasCustom && team.activeRuleName ? team.instructions : (team.baseInstructions ?? team.instructions)
+  const info = inferStyleForInstructions(base, hasCustom && team.activeRuleName ? undefined : team.tacticalStyle)
   const styleLabel = `${STYLES_REV3[info.styleId].name}${info.adjusted ? '·已调整' : ''}`
   return `${styleLabel}${planPart}（${tacticText(team.tactics)}）`
 }
@@ -193,11 +202,12 @@ export function teamStatusTacticBadge(team: {
   tactics: Tactics
   mentality?: MatchMentality
   tacticalStyle?: StyleId
+  activeRuleName?: string
   baseInstructions?: TacticalInstructionsV2
   instructions?: TacticalInstructionsV2
 }): string {
   const stylePart = team.instructions
-    ? STYLES_REV3[inferStyleForInstructions(team.baseInstructions ?? team.instructions, team.tacticalStyle).styleId].name
+    ? STYLES_REV3[inferStyleForInstructions(team.activeRuleName ? team.instructions : (team.baseInstructions ?? team.instructions), team.activeRuleName ? undefined : team.tacticalStyle).styleId].name
     : tacticText(team.tactics)
   const mentalityPart =
     team.mentality === 'attack'
@@ -205,7 +215,8 @@ export function teamStatusTacticBadge(team: {
       : team.mentality === 'defend'
         ? ' · 全体防守'
         : ''
-  return `${team.formationId} · ${stylePart}${mentalityPart}`
+  const rulePart = team.activeRuleName ? ` · [${team.activeRuleName}]` : ''
+  return `${team.formationId} · ${stylePart}${mentalityPart}${rulePart}`
 }
 
 /** 挑战/世界列表里展示 AI 球队的战术风格与五项倾向（兼容冻结 PvE 球队实时推导与跨赛区实时摘要）。 */

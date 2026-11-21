@@ -108,7 +108,14 @@ export function buildMatchTeam(input: MatchTeamInput, side: MatchSide): MatchTea
     return mp
   })
   const activePlan = input.matchPlan && input.matchPlan !== 'standard' ? input.matchPlan : undefined
-  const effectiveInstructions = input.instructions ?? (activePlan ? instructionsFromLegacyTactics(input.tactics) : undefined)
+  const hasCustomRules = !!(input.matchPlanRules?.some((r) => r.enabled))
+  const effectiveInstructions = input.instructions ?? (activePlan || hasCustomRules ? instructionsFromLegacyTactics(input.tactics) : undefined)
+  const baseSlotRoles = hasCustomRules
+    ? Object.fromEntries(input.starters.map((s) => [s.slotId, s.role]))
+    : undefined
+  const basePreferredPlayers = hasCustomRules
+    ? Object.fromEntries(input.starters.map((s) => [s.slotId, s.player.id]))
+    : undefined
   return {
     side,
     id: input.id,
@@ -117,8 +124,22 @@ export function buildMatchTeam(input: MatchTeamInput, side: MatchSide): MatchTea
     accent: input.accent,
     formationId: input.formationId,
     tactics: { ...input.tactics },
-    ...(activePlan || input.aiCoach ? { baseTactics: { ...input.tactics } } : {}),
+    ...(activePlan || hasCustomRules || input.aiCoach ? { baseTactics: { ...input.tactics } } : {}),
     ...(activePlan ? { matchPlan: activePlan } : {}),
+    ...(hasCustomRules
+      ? {
+          baseFormationId: input.formationId,
+          ...(input.baseCustomPositions && Object.keys(input.baseCustomPositions).length
+            ? { baseCustomPositions: structuredClone(input.baseCustomPositions) }
+            : {}),
+          ...(baseSlotRoles ? { baseSlotRoles } : {}),
+          ...(basePreferredPlayers ? { basePreferredPlayers } : {}),
+          baseMentality: 'balanced' as const,
+          ...(input.tacticsStage !== undefined ? { tacticsStage: input.tacticsStage } : {}),
+          ...(input.backupTactics?.length ? { backupTactics: structuredClone(input.backupTactics) } : {}),
+          matchPlanRules: structuredClone(input.matchPlanRules!),
+        }
+      : {}),
     ...(input.aiCoach ? { aiCoach: true } : {}),
     players,
     bench,

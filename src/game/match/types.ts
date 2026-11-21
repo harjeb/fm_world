@@ -84,6 +84,26 @@ export type MatchTeamState = {
   matchPlan?: import('../pes/match-plan.ts').MatchPlanId
   /** 当前已触发的比赛计划阶段 ID。 */
   activePlanPhase?: string
+  /** 当前已触发的自定义比赛计划规则名称（供实时界面与战报展示）。 */
+  activeRuleName?: string
+  /** FM 式赛前备选战术槽快照（仅在启用自定义比赛计划规则时写入）。 */
+  backupTactics?: import('../pes/tactical-plan.ts').BackupTactic[]
+  /** FM 式自定义条件比赛计划规则（仅在启用时写入，随回放 initialState 完整序列化）。 */
+  matchPlanRules?: import('../pes/tactical-plan.ts').MatchPlanRule[]
+  /** 赛前主战术基线（供规则解除时完整恢复阵型、自由摆位、职责与偏好球员）。 */
+  baseFormationId?: FormationId
+  baseCustomPositions?: Record<string, { x: number; y: number }>
+  baseSlotRoles?: Record<string, RoleId>
+  basePreferredPlayers?: Record<string, string>
+  baseMentality?: MatchMentality
+  /** 俱乐部战术研究室阶段（1–25），供赛中变阵后实时重算战术执行熟练度。 */
+  tacticsStage?: number
+  /** 自定义比赛计划运行时状态（冷却、一次性锁定、已执行的联动换人）。 */
+  planRuleState?: import('../pes/tactical-plan.ts').MatchPlanRuleRuntimeState
+  /** 自定义比赛计划按秒累计的实际体能强度和、采样秒数与加权倍率。 */
+  planLoadSum?: number
+  planLoadTicks?: number
+  planConditionFactor?: number
   /** 是否启用 AI 主教练临场战术调度与智能换人。 */
   aiCoach?: boolean
   /** AI 主教练当前生效的临场战术阶段 ID。 */
@@ -299,6 +319,12 @@ export type MatchTeamInput = {
   tacticalStyle?: import('../pes/tactics.ts').StyleId
   /** 下场比赛计划（给了且非 standard 时随比赛时间和比分自动触发战术阶段）。 */
   matchPlan?: import('../pes/match-plan.ts').MatchPlanId
+  /** FM 式备选战术槽与自定义条件比赛计划规则（仅启用时传入）。 */
+  backupTactics?: import('../pes/tactical-plan.ts').BackupTactic[]
+  matchPlanRules?: import('../pes/tactical-plan.ts').MatchPlanRule[]
+  /** 赛前主战术自定义摆位与战术室阶段（供赛中变阵回切与熟练度实时重算）。 */
+  baseCustomPositions?: Record<string, { x: number; y: number }>
+  tacticsStage?: number
   /** 十二项战术指令（docs/fm-tactical-styles-and-instructions.md）：给了才走新战术引擎分支。 */
   instructions?: import('../pes/tactics.ts').TacticalInstructionsV2
   /** 全队战术熟练度 0–1（缺省 1）。只在新指令下生效。 */

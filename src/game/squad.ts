@@ -15,6 +15,7 @@ import {
   tryValidateInstructions,
 } from './pes/tactics.ts'
 import { isMatchPlanId } from './pes/match-plan.ts'
+import { validateBackupTactics, validateMatchPlanRules, type BackupTactic } from './pes/tactical-plan.ts'
 
 /** 11 人制：首发人数（每个阵型都是 11 个槽位）。 */
 export const STARTERS = 11
@@ -299,9 +300,9 @@ function rotateTiredStarters(
 function preservedExtras(
   previous: LineupLike | undefined,
   formationId: FormationId,
-): Pick<Lineup, 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions' | 'matchPlan'> {
+): Pick<Lineup, 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions' | 'matchPlan' | 'backupTactics' | 'matchPlanRules'> {
   if (!previous) return {}
-  const extras: Pick<Lineup, 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions' | 'matchPlan'> = {}
+  const extras: Pick<Lineup, 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions' | 'matchPlan' | 'backupTactics' | 'matchPlanRules'> = {}
   if (previous.customPositions && previous.formationId === formationId) {
     const spots = Object.fromEntries(Object.entries(previous.customPositions).map(([slotId, spot]) => [slotId, { ...spot }]))
     if (Object.keys(spots).length) extras.customPositions = spots
@@ -309,12 +310,14 @@ function preservedExtras(
   if (previous.tacticalStyle) extras.tacticalStyle = previous.tacticalStyle
   if (previous.tacticalInstructions) extras.tacticalInstructions = cloneInstructions(previous.tacticalInstructions)
   if (previous.matchPlan) extras.matchPlan = previous.matchPlan
+  if (previous.backupTactics?.length) extras.backupTactics = structuredClone(previous.backupTactics)
+  if (previous.matchPlanRules?.length) extras.matchPlanRules = structuredClone(previous.matchPlanRules)
   if (previous.presets?.length) extras.presets = structuredClone(previous.presets)
   return extras
 }
 
 /** preservedExtras 只需要这几项，所以完整阵容和“记下的快照”都能传进来。 */
-type LineupLike = Pick<Lineup, 'formationId' | 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions' | 'matchPlan'>
+type LineupLike = Pick<Lineup, 'formationId' | 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions' | 'matchPlan' | 'backupTactics' | 'matchPlanRules'>
 
 /**
  * 最近一次被校验过的阵容里的“额外东西”（自定义摆位、预设、战术风格与指令、比赛计划）。
@@ -355,7 +358,7 @@ export function rememberLineupPositions(roster: Player[], lineup: Lineup): void 
     if (spot && Number.isFinite(spot.x) && Number.isFinite(spot.y)) customSpotByPlayer.set(player, { x: spot.x, y: spot.y })
     else customSpotByPlayer.delete(player)
   }
-  if (lineup.customPositions || lineup.presets?.length || lineup.tacticalStyle || lineup.tacticalInstructions || lineup.matchPlan) {
+  if (lineup.customPositions || lineup.presets?.length || lineup.tacticalStyle || lineup.tacticalInstructions || lineup.matchPlan || lineup.backupTactics?.length || lineup.matchPlanRules?.length) {
     const players = lineup.starters.flatMap((starter) => playerById(roster, starter.playerId) ?? [])
     const entry: LineupLike & { players: Player[] } = {
       players,
@@ -364,6 +367,8 @@ export function rememberLineupPositions(roster: Player[], lineup: Lineup): void 
       tacticalStyle: lineup.tacticalStyle,
       tacticalInstructions: lineup.tacticalInstructions ? cloneInstructions(lineup.tacticalInstructions) : undefined,
       matchPlan: lineup.matchPlan,
+      backupTactics: lineup.backupTactics ? structuredClone(lineup.backupTactics) : undefined,
+      matchPlanRules: lineup.matchPlanRules ? structuredClone(lineup.matchPlanRules) : undefined,
       presets: lineup.presets ? structuredClone(lineup.presets) : undefined,
     }
     for (const player of players) rememberedByStarter.set(player, entry)
@@ -512,7 +517,144 @@ export function applyTacticPreset(lineup: Lineup, id: string): Lineup | null {
   if (!preset) return null
   const next: Lineup = { ...structuredClone(preset.lineup) }
   if (lineup.presets?.length) next.presets = structuredClone(lineup.presets)
+  if (!next.backupTactics?.length && lineup.backupTactics?.length) next.backupTactics = structuredClone(lineup.backupTactics)
+  if (!next.matchPlanRules?.length && lineup.matchPlanRules?.length) next.matchPlanRules = structuredClone(lineup.matchPlanRules)
   return next
+}
+
+/**
+ * 仅套用预设/备选槽的“纯战术结构”（阵型 + 自定义摆位 + 槽位职责 + 战术风格与十二项指令），
+ * 自动把当前阵容名单排入新阵型（优先保留预设里仍在队的偏好球员），彻底解决卖人后预设无法应用的问题。
+ */
+export function applyTacticStructureToRoster(
+  roster: Player[],
+  currentLineup: Lineup,
+  source: {
+    formationId: FormationId
+    tacticalStyle?: Lineup['tacticalStyle']
+    tacticalInstructions?: Lineup['tacticalInstructions']
+    tactics?: Tactics
+    customPositions?: Record<string, { x: number; y: number }>
+    slotRoles?: Record<string, RoleId>
+    preferredPlayers?: Record<string, string>
+  },
+): Lineup {
+  const formation = FORMATIONS[source.formationId]
+  const currentStarterIds = new Set(currentLineup.starters.map((s) => s.playerId))
+  const byId = new Map(roster.map((p) => [p.id, p]))
+  const used = new Set<string>()
+  const starters: Lineup['starters'] = []
+  const orderedSlots = [...formation.slots].sort((a, b) => (a.position === 'GK' ? -1 : b.position === 'GK' ? 1 : 0))
+
+  // 第一步：仍在队中的偏好球员优先放进对应槽位
+  if (source.preferredPlayers) {
+    for (const slot of orderedSlots) {
+      const pid = source.preferredPlayers[slot.id]
+      if (!pid || used.has(pid)) continue
+      const player = byId.get(pid)
+      if (!player) continue
+      const role = source.slotRoles?.[slot.id] && ROLES[source.slotRoles[slot.id]]?.position === slot.position
+        ? source.slotRoles[slot.id]
+        : bestRoleForPlayer(player, slot.position, slot).role
+      used.add(pid)
+      starters.push({ slotId: slot.id, playerId: pid, role })
+    }
+  }
+
+  // 第二步：其余空槽优先从当前首发里按最优适配填充，不足再从全队补足
+  const currentStarterPlayers = roster.filter((p) => currentStarterIds.has(p.id))
+  for (const slot of orderedSlots) {
+    if (starters.some((s) => s.slotId === slot.id)) continue
+    const freeStarters = currentStarterPlayers.filter((p) => !used.has(p.id))
+    const freeAll = roster.filter((p) => !used.has(p.id))
+    const pool = freeStarters.length ? freeStarters : freeAll
+    const learned = pool.filter((p) => slotPositionValue(p, slot) >= PLAYABLE_PROFICIENCY)
+    const cands = learned.length ? learned : (pool === freeStarters && freeAll.some((p) => slotPositionValue(p, slot) >= PLAYABLE_PROFICIENCY)
+      ? freeAll.filter((p) => slotPositionValue(p, slot) >= PLAYABLE_PROFICIENCY)
+      : pool)
+    let bestPlayer: Player | null = null
+    let bestRole: RoleId = source.slotRoles?.[slot.id] && ROLES[source.slotRoles[slot.id]]?.position === slot.position
+      ? source.slotRoles[slot.id]
+      : slot.defaultRole
+    let bestScore = -Infinity
+    for (const player of cands) {
+      const mult = positionMultiplier(slotPositionValue(player, slot))
+      const role = source.slotRoles?.[slot.id] && ROLES[source.slotRoles[slot.id]]?.position === slot.position
+        ? source.slotRoles[slot.id]
+        : bestRoleForPlayer(player, slot.position, slot).role
+      const score = roleFit(player.attrs, role, player.positions.GK > 0) * mult
+      if (score > bestScore) {
+        bestScore = score
+        bestPlayer = player
+        bestRole = role
+      }
+    }
+    if (bestPlayer) {
+      used.add(bestPlayer.id)
+      starters.push({ slotId: slot.id, playerId: bestPlayer.id, role: bestRole })
+    }
+  }
+
+  const remaining = roster.filter((p) => !used.has(p.id))
+  // 尽量保留原有替补顺序
+  const keptBench = currentLineup.bench.filter((id) => !used.has(id) && byId.has(id)).slice(0, BENCH_SIZE)
+  const bench = keptBench.length >= BENCH_SIZE
+    ? keptBench
+    : [...keptBench, ...buildBench(remaining.filter((p) => !keptBench.includes(p.id)))].slice(0, BENCH_SIZE)
+
+  const instructions = source.tacticalInstructions ? cloneInstructions(source.tacticalInstructions) : undefined
+  const tactics = instructions
+    ? legacyTacticsFromInstructions(instructions)
+    : source.tactics
+      ? { ...source.tactics }
+      : { ...formation.defaultTactics }
+
+  const next: Lineup = {
+    formationId: source.formationId,
+    starters,
+    bench,
+    tactics,
+    ...(source.tacticalStyle ? { tacticalStyle: source.tacticalStyle } : {}),
+    ...(instructions ? { tacticalInstructions: instructions } : {}),
+    ...(source.customPositions && Object.keys(source.customPositions).length ? { customPositions: structuredClone(source.customPositions) } : {}),
+    ...(currentLineup.matchPlan ? { matchPlan: currentLineup.matchPlan } : {}),
+    ...(currentLineup.backupTactics?.length ? { backupTactics: structuredClone(currentLineup.backupTactics) } : {}),
+    ...(currentLineup.matchPlanRules?.length ? { matchPlanRules: structuredClone(currentLineup.matchPlanRules) } : {}),
+    ...(currentLineup.presets?.length ? { presets: structuredClone(currentLineup.presets) } : {}),
+  }
+  return next
+}
+
+export function applyTacticOnlyFromPreset(roster: Player[], currentLineup: Lineup, presetId: string): Lineup | null {
+  const preset = findTacticPreset(currentLineup, presetId)
+  if (!preset) return null
+  const p = preset.lineup
+  const slotRoles: Record<string, RoleId> = {}
+  const preferredPlayers: Record<string, string> = {}
+  for (const s of p.starters) {
+    slotRoles[s.slotId] = s.role
+    preferredPlayers[s.slotId] = s.playerId
+  }
+  return applyTacticStructureToRoster(roster, currentLineup, {
+    formationId: p.formationId,
+    tacticalStyle: p.tacticalStyle,
+    tacticalInstructions: p.tacticalInstructions,
+    tactics: p.tactics,
+    customPositions: p.customPositions,
+    slotRoles,
+    preferredPlayers,
+  })
+}
+
+export function applyBackupTacticToLineup(roster: Player[], currentLineup: Lineup, backup: BackupTactic): Lineup {
+  return applyTacticStructureToRoster(roster, currentLineup, {
+    formationId: backup.formationId,
+    tacticalStyle: backup.tacticalStyle,
+    tacticalInstructions: backup.tacticalInstructions,
+    customPositions: backup.customPositions,
+    slotRoles: backup.slotRoles,
+    preferredPlayers: backup.preferredPlayers,
+  })
 }
 
 export type LineupValidation = {
@@ -578,6 +720,12 @@ export function validateLineup(roster: Player[], lineup: Lineup): LineupValidati
   if (lineup.matchPlan !== undefined && !isMatchPlanId(lineup.matchPlan)) {
     errors.push(`未知比赛计划：${String(lineup.matchPlan)}`)
   }
+  if (lineup.backupTactics !== undefined) {
+    errors.push(...validateBackupTactics(lineup.backupTactics))
+  }
+  if (lineup.matchPlanRules !== undefined) {
+    errors.push(...validateMatchPlanRules(lineup.matchPlanRules, lineup.backupTactics))
+  }
   if (lineup.bench.length < BENCH_SIZE) warnings.push(`替补不足 ${BENCH_SIZE} 人，比赛中换人选择会受限`)
   return { valid: errors.length === 0, errors, warnings }
 }
@@ -590,7 +738,7 @@ export function validateLineup(roster: Player[], lineup: Lineup): LineupValidati
 /** 不含年龄修正的球队基础战术熟练度 0.50–1.00。 */
 export function computeBaseLineupFamiliarity(roster: Player[], lineup: Lineup, tacticsStage = 1): number {
   const neutralInst = !lineup.tacticalInstructions || sameInstructions(lineup.tacticalInstructions, NEUTRAL_INSTRUCTIONS)
-  const neutralPlan = !lineup.matchPlan || lineup.matchPlan === 'standard'
+  const neutralPlan = (!lineup.matchPlan || lineup.matchPlan === 'standard') && !lineup.matchPlanRules?.some((r) => r.enabled)
   if (neutralInst && neutralPlan) return 1
   const formation = FORMATIONS[lineup.formationId]
   if (!formation) return 0.75
@@ -617,7 +765,7 @@ export function computeBaseLineupFamiliarity(roster: Player[], lineup: Lineup, t
 
 export function computeLineupFamiliarity(roster: Player[], lineup: Lineup, tacticsStage = 1): number {
   const neutralInst = !lineup.tacticalInstructions || sameInstructions(lineup.tacticalInstructions, NEUTRAL_INSTRUCTIONS)
-  const neutralPlan = !lineup.matchPlan || lineup.matchPlan === 'standard'
+  const neutralPlan = (!lineup.matchPlan || lineup.matchPlan === 'standard') && !lineup.matchPlanRules?.some((r) => r.enabled)
   if (neutralInst && neutralPlan) return 1
   const base = computeBaseLineupFamiliarity(roster, lineup, tacticsStage)
   const formation = FORMATIONS[lineup.formationId]

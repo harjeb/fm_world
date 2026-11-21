@@ -540,6 +540,10 @@ export type Lineup = {
   tacticalInstructions?: import('./pes/tactics.ts').TacticalInstructionsV2
   /** 下场比赛计划（如全力争胜、龟缩防守等）；缺省或 standard 为常规部署。 */
   matchPlan?: import('./pes/match-plan.ts').MatchPlanId
+  /** FM 式备选战术槽（最多 3 套：阵型 + 自由摆位 + 职责 + 十二项指令 + 心态，人阵解耦）。 */
+  backupTactics?: import('./pes/tactical-plan.ts').BackupTactic[]
+  /** FM 式自定义条件比赛计划规则（最多 8 条，按优先级从上到下触发；启用时优先于 matchPlan）。 */
+  matchPlanRules?: import('./pes/tactical-plan.ts').MatchPlanRule[]
   /** 玩家自己摆的位置（0–1 归一化坐标），key 是 starter.slotId。没摆过的位置用阵型默认值。 */
   customPositions?: Record<string, { x: number; y: number }>
   /** 玩家命名保存的战术配置。 */
@@ -952,6 +956,8 @@ export type MatchInstruction = {
   role?: RoleId
   tactics?: Tactics
   mentality?: MatchMentality
+  formationId?: FormationId
+  planRuleName?: string
 }
 
 export type Fixture = {

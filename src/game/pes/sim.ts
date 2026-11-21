@@ -45,6 +45,7 @@ import {
   type PesPhase,
   type PesPlayer,
   type PesRestart,
+  type PesRole,
   type PesRules,
   type PesSetPiece,
   type PesTactics,
@@ -576,6 +577,41 @@ export class PesMatch {
     if (hadInstructionTask) this.refreshInstructionMovement(inc)
     this.event('sub', out.ti, [inc.pid, out.pid])
     return inc
+  }
+
+  /**
+   * 赛中即时变阵：原地更新场上球员的站位锚点 `hn`、线位 `line` 与角色 `role`（保留 `slot` 序号与门将不变），
+   * 并重置双方盯人与上抢缓存，使新阵型在下一物理帧立即生效且保持 2D 跑位连续平滑。
+   */
+  reconfigureFormation(
+    ti: TeamIndex,
+    updates: readonly { pid: number; role: PesRole; nx: number; ny: number; line: number; familiarity?: number }[],
+  ): void {
+    const t = this.teams[ti]
+    if (!t || !updates.length) return
+    const byPid = new Map(t.players.map((p) => [p.pid, p]))
+    for (const u of updates) {
+      const p = byPid.get(u.pid)
+      if (!p) continue
+      const prevLine = p.line
+      p.role = u.role
+      p.hn = { x: u.nx, y: u.ny }
+      p.line = u.line
+      if (u.familiarity !== undefined) p.familiarity = u.familiarity
+      // 线位发生明显调整（如前锋回撤或中场前提）时终止旧的前插冲刺目标，立即向新站位靠拢
+      if (Math.abs(u.line - prevLine) > 0.18 && p.mode === 'run') {
+        p.runTarget = null
+        p.runUntil = 0
+        p.mode = 'idle'
+      }
+    }
+    for (const team of this.teams) {
+      delete team.markEvalAt
+      delete team.legacyPressEvalAt
+      delete team.legacyPressOwnerPid
+      delete team.pressEvalAt
+      delete team.pressOwnerPid
+    }
   }
 
   /**

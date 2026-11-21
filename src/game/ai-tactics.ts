@@ -555,6 +555,7 @@ export function evaluateAICoachTactics(
   isKickoff = false,
 ): AICoachPhaseDecision | null {
   if (!team.aiCoach) return null
+  if (team.matchPlanRules?.some((r) => r.enabled)) return null
   if (team.matchPlan && team.matchPlan !== 'standard') return null
 
   const base = team.baseInstructions ?? team.instructions ?? instructionsFromLegacyTactics(team.baseTactics ?? team.tactics)
