@@ -192,6 +192,7 @@ function boardOptionCard(
   selected: boolean,
   scope: 'offseason' | 'current',
   disabled: boolean,
+  tier?: TierId,
 ): string {
   const meta = BOARD_AMBITION_META[option.ambition]
   const cupName = BOARD_CUP_LABELS[option.cupId]
@@ -217,7 +218,7 @@ function boardOptionCard(
       <div><dt>基础工资帽 / 轮</dt><dd class="num-text"><b>${option.wageCap.toLocaleString()}</b></dd></div>
       <div><dt>达标 / 超额奖金</dt><dd class="num-text">${option.meetBonus.toLocaleString()} / ${option.exceedBonus.toLocaleString()}</dd></div>
     </dl>
-    <button class="btn small ${selected ? 'ghost' : 'primary'}" data-action="board-choose" data-ambition="${option.ambition}" data-scope="${scope}" ${disabled || selected ? 'disabled' : ''}>${btnText}</button>
+    <button class="btn small ${selected ? 'ghost' : 'primary'}" data-action="board-choose" data-ambition="${option.ambition}" data-scope="${scope}" ${tier ? `data-tier="${tier}"` : ''} ${disabled || selected ? 'disabled' : ''}>${btnText}</button>
   </div>`
 }
 
@@ -382,16 +383,35 @@ function boardTab(): string {
   let offseasonSection = ''
   if (game.season.finished && board.offseasonPreview) {
     const prev = board.offseasonPreview
-    const picked: BoardAmbition = board.pendingChoice ?? 'expected'
-    offseasonSection = panel(`休赛期通知 · 第 ${prev.nextSeasonIndex} 赛季董事会目标与预算预选`, `
-      <div class="banner ${prev.confirmed ? 'good' : 'gold'}">
-        ${icon(prev.confirmed ? 'star' : 'clock', 16)}
-        <b>下赛季预计级别：${esc(worldTierLabel(prev.projectedTier))}${prev.confirmed ? '（已确认）' : '（升级杯进行中，完赛后自动更新）'}</b>
-        <span>战力预估第 ${prev.powerRank}/${prev.totalClubs} · 预算系数 ${Math.round(prev.budgetMultiplier * 100)}% · 工资帽系数 ${Math.round(prev.wageMultiplier * 100)}% · 当前预选：<b>${esc(BOARD_AMBITION_META[picked].label)}</b></span>
-      </div>
-      <p class="hint">休赛期可随时更改预选档位，换季开启第 ${prev.nextSeasonIndex} 赛季时自动按所选档位发放独立转会预算与设施预算（未选默认「基准档」）；开季前 ${BOARD_CHOICE_MAX_ROUND} 轮内仍可最后调整一次。</p>
-      <div class="board-options">${prev.options.map((opt) => boardOptionCard(opt, opt.ambition === picked, 'offseason', false)).join('')}</div>
-    `)
+    if (!prev.confirmed) {
+      const pickedD1: BoardAmbition = board.pendingChoicesByTier?.division1 ?? 'expected'
+      const pickedD2: BoardAmbition = board.pendingChoicesByTier?.division2 ?? 'expected'
+      const hasD1Picked = !!board.pendingChoicesByTier?.division1
+      const hasD2Picked = !!board.pendingChoicesByTier?.division2
+      offseasonSection = panel(`休赛期通知 · 升级杯激战中，请分别为「升级 / 留级」各预选一套第 ${prev.nextSeasonIndex} 赛季方案`, `
+        <div class="banner gold">
+          ${icon('clock', 16)}
+          <b>正在争夺升级席位 · 支持双情景提前预选（换季自动匹配真实级别）</b>
+          <span>升一级预选：<b>${esc(BOARD_AMBITION_META[pickedD1].label)}</b>${hasD1Picked ? '' : '（默认）'} · 留二级预选：<b>${esc(BOARD_AMBITION_META[pickedD2].label)}</b>${hasD2Picked ? '' : '（默认）'}</span>
+        </div>
+        <p class="hint">预算系数 ${Math.round(prev.budgetMultiplier * 100)}% · 工资帽系数 ${Math.round(prev.wageMultiplier * 100)}%。现在就能把「升入一级」和「留在二级」两套意向都选好，换季时系统自动按升级杯最终结果生效对应那一套；开季前 ${BOARD_CHOICE_MAX_ROUND} 轮内仍可调整。</p>
+        ${prev.promotionOptions?.length ? `<h4 class="board-scenario-title">${tag('情景一', 'good')} 若升级杯成功升入「一级联赛」· 当前预选：<b>${esc(BOARD_AMBITION_META[pickedD1].label)}</b>${hasD1Picked ? '' : '<small class="muted">（默认）</small>'}</h4>
+        <div class="board-options">${prev.promotionOptions.map((opt) => boardOptionCard(opt, opt.ambition === pickedD1, 'offseason', false, 'division1')).join('')}</div>` : ''}
+        <h4 class="board-scenario-title">${tag('情景二', 'info')} 若升级杯未出线留在「二级联赛」（战力预估第 ${prev.powerRank}/${prev.totalClubs}）· 当前预选：<b>${esc(BOARD_AMBITION_META[pickedD2].label)}</b>${hasD2Picked ? '' : '<small class="muted">（默认）</small>'}</h4>
+        <div class="board-options">${prev.options.map((opt) => boardOptionCard(opt, opt.ambition === pickedD2, 'offseason', false, 'division2')).join('')}</div>
+      `)
+    } else {
+      const picked: BoardAmbition = board.pendingChoicesByTier?.[prev.projectedTier] ?? board.pendingChoice ?? 'expected'
+      offseasonSection = panel(`休赛期通知 · 第 ${prev.nextSeasonIndex} 赛季董事会目标与预算预选`, `
+        <div class="banner good">
+          ${icon('star', 16)}
+          <b>下赛季级别已确认：${esc(worldTierLabel(prev.projectedTier))}</b>
+          <span>战力预估第 ${prev.powerRank}/${prev.totalClubs} · 预算系数 ${Math.round(prev.budgetMultiplier * 100)}% · 工资帽系数 ${Math.round(prev.wageMultiplier * 100)}% · 当前预选：<b>${esc(BOARD_AMBITION_META[picked].label)}</b></span>
+        </div>
+        <p class="hint">休赛期可随时更改预选档位，换季开启第 ${prev.nextSeasonIndex} 赛季时自动按所选档位发放独立转会预算与设施预算（未选默认「基准档」）；开季前 ${BOARD_CHOICE_MAX_ROUND} 轮内仍可最后调整一次。</p>
+        <div class="board-options">${prev.options.map((opt) => boardOptionCard(opt, opt.ambition === picked, 'offseason', false, prev.projectedTier)).join('')}</div>
+      `)
+    }
   }
 
   const historyRows = board.history.map((entry) => {

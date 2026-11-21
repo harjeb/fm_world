@@ -44,7 +44,7 @@ import { preserveYouthState } from '../src/game/youth-authority.ts'
 import { settleCondition } from '../src/game/condition.ts'
 import { splitSeed } from '../src/game/rng.ts'
 import { FACILITIES, awardRoundIncome, awardSeasonPrize, economyOf, matchPerformanceOf, payWageBill, upgradeFacility, type FacilityId } from '../src/game/economy.ts'
-import { adjustBoardBudgetSlider, boardEffectiveWageCap, chooseBoardAmbition, isBoardAmbition, isBoardBudgetActive, refreshOffseasonBoardPreview, syncBoardLockState } from '../src/game/board.ts'
+import { adjustBoardBudgetSlider, boardEffectiveWageCap, chooseBoardAmbition, isBoardAmbition, isBoardBudgetActive, isBoardTier, refreshOffseasonBoardPreview, syncBoardLockState } from '../src/game/board.ts'
 import { advanceLeagueRealtime } from '../src/game/realtime.ts'
 import { DEFAULT_PRE_MATCH_STAMINA_BELOW, DEFAULT_STAMINA_BELOW, emptyAutoSubs, validateAutoSubPlan } from '../src/game/match/management.ts'
 import type { ActiveMatchSave, GameState, PlayerCard } from '../src/game/types.ts'
@@ -3146,8 +3146,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         if (!isBoardAmbition(body.ambition)) return json(res, 400, { error: '目标档位无效（safe / expected / ambitious）' })
         const scope = body.scope === 'offseason' || body.scope === 'current' ? body.scope : undefined
         if (body.scope !== undefined && !scope) return json(res, 400, { error: 'scope 无效' })
+        const tier = isBoardTier(body.tier) ? body.tier : undefined
+        if (body.tier !== undefined && !tier) return json(res, 400, { error: 'tier 无效（division2 / division1 / champions）' })
         outcome = chooseBoardAmbition(game, body.ambition, {
           ...(scope ? { scope } : {}),
+          ...(tier ? { tier } : {}),
           ...(body.lock === true ? { lock: true } : {}),
           committedAuctions: committedFunds(market.auctions, account.id),
           clubId: ownedClubId(account),

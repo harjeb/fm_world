@@ -72,7 +72,7 @@ import { displayClock } from '../game/match/time.ts'
 import { hasSeenLatestChangelog, markChangelogSeen } from '../game/changelog.ts'
 import { emptyAutoSubs } from '../game/match/management.ts'
 import { payWageArrears, upgradeFacility, type FacilityId } from '../game/economy.ts'
-import { BOARD_AMBITION_META, BOARD_WAGE_SLIDER_ROUNDS, adjustBoardBudgetSlider, chooseBoardAmbition, isBoardAmbition } from '../game/board.ts'
+import { BOARD_AMBITION_META, BOARD_WAGE_SLIDER_ROUNDS, adjustBoardBudgetSlider, chooseBoardAmbition, isBoardAmbition, isBoardTier } from '../game/board.ts'
 import { leadingBid, type Auction, type AuctionResult } from '../game/auction.ts'
 import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPlayer, refreshClubMarket, releasePlayer, renewContract, signWorldClubPlayer, signFreeAgent } from '../game/market.ts'
 import { minimumBid } from '../game/auction.ts'
@@ -1507,19 +1507,22 @@ document.addEventListener('click', async (event) => {
     case 'board-choose': {
       const ambition = actionEl.dataset.ambition
       if (!isBoardAmbition(ambition)) break
-      const scope = actionEl.dataset.scope === 'offseason' || actionEl.dataset.scope === 'current'
+      const scope: 'offseason' | 'current' | undefined = actionEl.dataset.scope === 'offseason' || actionEl.dataset.scope === 'current'
         ? actionEl.dataset.scope
         : undefined
+      const tier = isBoardTier(actionEl.dataset.tier) ? actionEl.dataset.tier : undefined
       const lock = actionEl.dataset.lock === '1'
       const label = BOARD_AMBITION_META[ambition].label
+      const tierPrefix = tier === 'division1' ? '（若升入一级）' : tier === 'division2' ? '（若留在二级）' : ''
       const successText = scope === 'offseason'
-        ? `已预选下赛季目标：${label}（换季时生效）。`
+        ? `已预选下赛季目标${tierPrefix}：${label}（换季按实际级别生效）。`
         : lock
           ? `已确认并锁定本赛季目标：${label}。`
           : `已切换本赛季目标为「${label}」，预算与余额已同步更新。`
+      const chooseOpts = { ...(scope ? { scope } : {}), ...(tier ? { tier } : {}), ...(lock ? { lock: true } : {}) }
       if (isOnlineMode()) {
         try {
-          const next = await chooseBoardAmbitionOnline(ambition, { ...(scope ? { scope } : {}), ...(lock ? { lock: true } : {}) })
+          const next = await chooseBoardAmbitionOnline(ambition, chooseOpts)
           ui.boardSliderDraft = 0
           applyOnlineGame(next, successText)
         } catch (failure) {
@@ -1527,7 +1530,7 @@ document.addEventListener('click', async (event) => {
         }
         break
       }
-      const result = chooseBoardAmbition(game, ambition, { ...(scope ? { scope } : {}), ...(lock ? { lock: true } : {}) })
+      const result = chooseBoardAmbition(game, ambition, chooseOpts)
       if (result.ok) {
         ui.boardSliderDraft = 0
         persist()

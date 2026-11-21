@@ -310,6 +310,15 @@ function boardAlert(): string {
     if (!board.offseasonPreview) refreshOffseasonBoardPreview(game)
     const prev = board.offseasonPreview
     if (!prev) return ''
+    if (!prev.confirmed) {
+      const d1Text = board.pendingChoicesByTier?.division1 ? BOARD_AMBITION_META[board.pendingChoicesByTier.division1].label : '默认基准档'
+      const d2Text = board.pendingChoicesByTier?.division2 ? BOARD_AMBITION_META[board.pendingChoicesByTier.division2].label : '默认基准档'
+      return `<section class="offer-alert board-alert" role="status">
+        <div class="offer-alert-head">${icon('flag', 18)}<b>升级杯激战中 · 可提前为「升一级 / 留二级」分别预选第 ${prev.nextSeasonIndex} 赛季目标</b>
+          <span class="muted">若升一级：${esc(d1Text)} · 若留二级：${esc(d2Text)}（换季按最终结果自动生效）</span>
+          <button class="btn small primary" data-action="go-club" data-tab="board">预选两套方案 ${icon('right', 12)}</button></div>
+      </section>`
+    }
     const picked = board.pendingChoice ? BOARD_AMBITION_META[board.pendingChoice].label : '尚未选定（默认基准档）'
     return `<section class="offer-alert board-alert" role="status">
       <div class="offer-alert-head">${icon('flag', 18)}<b>董事会已发布第 ${prev.nextSeasonIndex} 赛季目标方案（${esc(worldTierLabel(prev.projectedTier))}）</b>

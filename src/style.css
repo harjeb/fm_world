@@ -2173,6 +2173,7 @@ circle.pm-5 { fill: var(--h6); }
 .board-slider-preview b { font-size: 16px; }
 .board-slider-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .board-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 10px; }
+.board-scenario-title { display: flex; align-items: center; gap: 8px; margin: 16px 0 4px; font-size: 13px; color: var(--text); font-weight: 600; }
 .board-opt { background: rgba(255,255,255,.025); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; transition: border-color .15s, background .15s; }
 .board-opt.selected { border-color: var(--accent); background: rgba(205,243,63,.06); }
 .board-opt-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 15px; }

@@ -510,6 +510,24 @@ export function projectNextSeasonTier(
     if (promoCup.championId) {
       return { tier: 'division2', confirmed: true }
     }
+    // 升级杯仍在进行时，检查本队是否已经提前淘汰（资格赛落败或小组赛出局）
+    const entered = promoCup.entrants.some((id) => ids.has(id))
+    if (!entered) return { tier: 'division2', confirmed: true }
+    if (promoCup.groups?.length) {
+      const inGroup = promoCup.groups.some((group) => group.teamIds.some((id) => ids.has(id)))
+      if (!inGroup) return { tier: 'division2', confirmed: true }
+      const playoffFinal = promoCup.rounds.find((round) => round.round > 1 && round.stage === 'knockout')
+      if (playoffFinal) {
+        const inFinal = playoffFinal.fixtures.some((fixture) => ids.has(fixture.homeId) || ids.has(fixture.awayId))
+        if (!inFinal) return { tier: 'division2', confirmed: true }
+      }
+    } else {
+      const r1 = promoCup.rounds[0]
+      const lostQualifier = r1?.fixtures.some(
+        (fixture) => (ids.has(fixture.homeId) || ids.has(fixture.awayId)) && fixture.played && !!fixture.winnerId && !ids.has(fixture.winnerId),
+      )
+      if (lostQualifier) return { tier: 'division2', confirmed: true }
+    }
     return { tier: 'division2', confirmed: false }
   }
 
@@ -587,6 +605,28 @@ export function refreshOffseasonBoardPreview(
   const wageMultiplier = confidenceWageCapMultiplier(previewConfidence, previewGrade)
   const retentionRate = transferRetentionRate(previewConfidence)
   const options = buildBoardGoalOptions(projection.tier, powerRank, totalClubs, previewConfidence, previewGrade)
+  let promotionOptions: BoardGoalOption[] | undefined
+  if (!projection.confirmed && projection.tier === 'division2') {
+    const d1Rank = estimateDivisionPowerRank(game, 'division1', teamsById)
+    promotionOptions = buildBoardGoalOptions('division1', d1Rank.powerRank, d1Rank.totalClubs, previewConfidence, previewGrade)
+  }
+
+  let syncedChoice = false
+  if (projection.confirmed) {
+    const tierPicked = board.pendingChoicesByTier?.[projection.tier]
+    if (tierPicked && board.pendingChoice !== tierPicked) {
+      board.pendingChoice = tierPicked
+      syncedChoice = true
+    } else if (!tierPicked && board.pendingChoice && board.pendingChoicesByTier && Object.keys(board.pendingChoicesByTier).length > 0) {
+      // 曾只选了另一级别、未选当前已确认级别时，不跨级误套用
+      delete board.pendingChoice
+      syncedChoice = true
+    }
+  } else if (board.pendingChoice) {
+    // 升级杯仍在进行：历史旧字段不再作为单一盲选，清空后交由 pendingChoicesByTier 按级别分别保存
+    delete board.pendingChoice
+    syncedChoice = true
+  }
 
   const nextPreview: BoardOffseasonPreview = {
     nextSeasonIndex,
@@ -598,9 +638,11 @@ export function refreshOffseasonBoardPreview(
     wageMultiplier,
     retentionRate,
     options,
+    ...(promotionOptions ? { promotionOptions } : {}),
   }
   const prev = board.offseasonPreview
-  const unchanged = !!prev
+  const unchanged = !syncedChoice
+    && !!prev
     && prev.nextSeasonIndex === nextPreview.nextSeasonIndex
     && prev.projectedTier === nextPreview.projectedTier
     && prev.confirmed === nextPreview.confirmed
@@ -610,6 +652,7 @@ export function refreshOffseasonBoardPreview(
     && prev.wageMultiplier === nextPreview.wageMultiplier
     && prev.retentionRate === nextPreview.retentionRate
     && JSON.stringify(prev.options) === JSON.stringify(nextPreview.options)
+    && JSON.stringify(prev.promotionOptions ?? null) === JSON.stringify(nextPreview.promotionOptions ?? null)
   if (unchanged) return false
   board.offseasonPreview = nextPreview
   return true
@@ -624,10 +667,14 @@ export type BoardActionOutcome = { ok: boolean; error?: string }
  * - 休赛期（`season.finished` 或 `scope === 'offseason'`）：写入 `board.pendingChoice`，下赛季开赛生效；
  * - 开季第 1–3 轮（`scope === 'current'` 或当前赛季激活且未锁定）：按新旧档位差额精确调整余额与三项预算。
  */
+export function isBoardTier(value: unknown): value is TierId {
+  return value === 'division2' || value === 'division1' || value === 'champions'
+}
+
 export function chooseBoardAmbition(
   game: GameState,
   ambition: BoardAmbition,
-  options: { scope?: 'offseason' | 'current'; lock?: boolean; committedAuctions?: number; clubId?: string; teamsById?: Record<string, AITeam> } = {},
+  options: { scope?: 'offseason' | 'current'; tier?: TierId; lock?: boolean; committedAuctions?: number; clubId?: string; teamsById?: Record<string, AITeam> } = {},
 ): BoardActionOutcome {
   if (!isBoardAmbition(ambition)) return { ok: false, error: '无效的目标档位，请选择 safe / expected / ambitious' }
   const board = ensureBoard(game)
@@ -637,7 +684,22 @@ export function chooseBoardAmbition(
   if (useOffseason) {
     if (!game.season?.finished) return { ok: false, error: '当前尚未进入休赛期，无法预选下赛季目标' }
     refreshOffseasonBoardPreview(game, options.clubId, options.teamsById)
+    const preview = board.offseasonPreview
+    if (!preview) return { ok: false, error: '暂未生成休赛期目标方案' }
+    if (!preview.confirmed) {
+      const targetTier: TierId = options.tier ?? preview.projectedTier
+      const allowed = new Set<TierId>([preview.projectedTier, ...(preview.promotionOptions?.length ? ['division1' as TierId] : [])])
+      if (!allowed.has(targetTier)) {
+        return { ok: false, error: '无效的休赛期预选级别，请分别为一级联赛或二级联赛方案选择' }
+      }
+      ;(board.pendingChoicesByTier ??= {})[targetTier] = ambition
+      return { ok: true }
+    }
+    if (options.tier && options.tier !== preview.projectedTier) {
+      return { ok: false, error: '下赛季联赛级别已确定，请选择对应级别的目标档位' }
+    }
     board.pendingChoice = ambition
+    ;(board.pendingChoicesByTier ??= {})[preview.projectedTier] = ambition
     return { ok: true }
   }
 
@@ -973,13 +1035,19 @@ export function evaluateAndRollBoardSeason(
   if (nextSeasonIndex < 2) {
     delete board.current
     delete board.pendingChoice
+    delete board.pendingChoicesByTier
     return { evaluation }
   }
 
   const nextTier: TierId = game.season?.tier ?? 'division2'
   const { powerRank, totalClubs } = estimateDivisionPowerRank(game, nextTier, nextTeamsById)
   const options = buildBoardGoalOptions(nextTier, powerRank, totalClubs, board.confidence, board.lastGrade)
-  const chosenAmbition: BoardAmbition = isBoardAmbition(board.pendingChoice) ? board.pendingChoice : 'expected'
+  const tierSpecific = board.pendingChoicesByTier?.[nextTier]
+  const chosenAmbition: BoardAmbition = isBoardAmbition(tierSpecific)
+    ? tierSpecific
+    : isBoardAmbition(board.pendingChoice)
+      ? board.pendingChoice
+      : 'expected'
   const picked = options.find((item) => item.ambition === chosenAmbition) ?? options[1] ?? options[0]
   const retentionRate = transferRetentionRate(board.confidence)
 
@@ -1013,6 +1081,7 @@ export function evaluateAndRollBoardSeason(
   }
   board.current = mandate
   delete board.pendingChoice
+  delete board.pendingChoicesByTier
   return { evaluation, mandate }
 }
 

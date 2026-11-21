@@ -33,7 +33,7 @@ import { buyFreeAgent, listPlayer, renewContract, settleMarket } from '../src/ga
 import { minimumBid, placeBid, settleAuctions, type FreeMarket } from '../src/game/auction.ts'
 import { respondToOffer, type MarketClub } from '../src/game/transfers.ts'
 import { MIN_SQUAD } from '../src/game/squad.ts'
-import { advanceWorldSeason, createWorldGame, simulateOtherDivisions, syncPlayerDivision, wageForPlayer, worldWageBill } from '../src/game/world.ts'
+import { advanceWorldSeason, createWorldGame, ensurePromotionPlayoff, simulateOtherDivisions, syncPlayerDivision, wageForPlayer, worldWageBill } from '../src/game/world.ts'
 import { createAIClub } from '../src/game/ai-club.ts'
 import type { SeasonCups } from '../src/game/season-cups.ts'
 import type { GameState, Player, TierId } from '../src/game/types.ts'
@@ -204,8 +204,11 @@ describe('第 1 赛季兼容、休赛期预选与换季激活', () => {
     }
     syncPlayerDivision(game)
     simulateOtherDivisions(game, 38)
+    ensurePromotionPlayoff(game)
+    refreshOffseasonBoardPreview(game)
     expect(game.season.finished).toBe(true)
     expect(game.board?.offseasonPreview?.nextSeasonIndex).toBe(2)
+    expect(game.board?.offseasonPreview?.confirmed).toBe(true)
 
     // 休赛期预选野心档
     const pick = chooseBoardAmbition(game, 'ambitious', { scope: 'offseason' })
@@ -223,11 +226,102 @@ describe('第 1 赛季兼容、休赛期预选与换季激活', () => {
     expect(mandate.ambition).toBe('ambitious')
     expect(mandate.transferBudget).toBe(mandate.initialTransferBudget)
     expect(mandate.facilityBudget).toBe(mandate.initialFacilityBudget)
-    expect(mandate.initialTransferBudget).toBeGreaterThan(BOARD_TIER_BASE.division2.transferGrant)
+    expect(mandate.initialTransferBudget).toBeGreaterThan(BOARD_TIER_BASE[mandate.tier].transferGrant)
     // 独立转会预算 + 独立设施预算已直接注入俱乐部余额
     expect(economyOf(game).balance).toBe(balanceBeforeRoll + mandate.initialTransferBudget + mandate.initialFacilityBudget)
     expect(game.board?.pendingChoice).toBeUndefined()
     expect(game.board?.offseasonPreview).toBeUndefined()
+  })
+
+  it('正在参加实时升级杯且未分胜负时支持分别为一级/二级各预选一套方案，换季按最终真实级别自动生效', () => {
+    const game = createWorldGame(202609)
+    game.season.finished = true
+    game.season.playerFinish = 1
+    game.season.tier = 'division2'
+    const clubId = 'd2n_05'
+    const playerClub = game.world!.clubs.find((c) => c.id === 'player')!
+    playerClub.squadKey = clubId
+    game.world!.seasonCups = {
+      version: 1,
+      seasonIndex: 1,
+      qualificationRound: 6,
+      createdAt: 1000,
+      delayedLeagueRounds: [],
+      cups: [{
+        id: 'promotion',
+        name: '升级杯',
+        entrants: [clubId, 'c2', 'c3', 'c4', 'c5', 'c6'],
+        dates: [1000, 2000, 3000, 4000, 5000],
+        rounds: [
+          { round: 1, kickoffAt: 1000, byes: [clubId], fixtures: [{ id: 'q1', cupId: 'promotion', round: 1, homeId: 'c2', awayId: 'c3', kickoffAt: 1000, played: true, score: { home: 2, away: 0 }, winnerId: 'c2' }] },
+          { round: 2, kickoffAt: 2000, stage: 'group', byes: [], fixtures: [{ id: 'g1', cupId: 'promotion', round: 2, stage: 'group', groupIndex: 0, homeId: clubId, awayId: 'c2', kickoffAt: 2000, played: false }] },
+        ],
+        groups: [
+          { index: 0, name: 'A 组', teamIds: [clubId, 'c2', 'c4'], table: [] },
+          { index: 1, name: 'B 组', teamIds: ['c5', 'c6', 'c7'], table: [] },
+        ],
+        promotedIds: [],
+      }],
+    }
+
+    // 1. 升级杯小组赛进行中：级别待定，同时展示一级与二级方案且两套均可分别预选
+    refreshOffseasonBoardPreview(game, clubId)
+    expect(game.board?.offseasonPreview?.confirmed).toBe(false)
+    expect(game.board?.offseasonPreview?.promotionOptions?.length).toBe(3)
+    expect(game.board?.offseasonPreview?.promotionOptions?.[1].transferGrant).toBe(BOARD_TIER_BASE.division1.transferGrant)
+
+    expect(chooseBoardAmbition(game, 'safe', { scope: 'offseason', tier: 'division1', clubId }).ok).toBe(true)
+    expect(chooseBoardAmbition(game, 'ambitious', { scope: 'offseason', tier: 'division2', clubId }).ok).toBe(true)
+    expect(game.board?.pendingChoicesByTier).toEqual({ division1: 'safe', division2: 'ambitious' })
+
+    // 禁止选择不存在的冠联情景
+    expect(chooseBoardAmbition(game, 'safe', { scope: 'offseason', tier: 'champions', clubId }).ok).toBe(false)
+
+    // 前端 UI 应同时展示两套可交互选档卡片
+    setGame(game)
+    ui.clubTab = 'board'
+    const pendingHtml = renderClub()
+    expect(pendingHtml).toContain('支持双情景提前预选')
+    expect(pendingHtml).toContain('data-tier="division1"')
+    expect(pendingHtml).toContain('data-tier="division2"')
+
+    // 2. 换季若真正升入一级联赛：自动生效 division1 的预选（safe），绝不误用 division2 的 ambitious
+    const promotedClone = structuredClone(game)
+    promotedClone.season.index = 2
+    promotedClone.season.tier = 'division1'
+    promotedClone.season.finished = false
+    const rolledD1 = evaluateAndRollBoardSeason(promotedClone, {
+      seasonIndex: 1, tier: 'division2', finish: 1, totalTeams: 20, clubIds: [clubId, 'player'],
+    })
+    expect(rolledD1.mandate?.tier).toBe('division1')
+    expect(rolledD1.mandate?.ambition).toBe('safe')
+    expect(promotedClone.board?.pendingChoicesByTier).toBeUndefined()
+
+    // 3. 换季若最终留在二级联赛：自动生效 division2 的预选（ambitious）
+    const stayedClone = structuredClone(game)
+    stayedClone.season.index = 2
+    stayedClone.season.tier = 'division2'
+    stayedClone.season.finished = false
+    const rolledD2 = evaluateAndRollBoardSeason(stayedClone, {
+      seasonIndex: 1, tier: 'division2', finish: 1, totalTeams: 20, clubIds: [clubId, 'player'],
+    })
+    expect(rolledD2.mandate?.tier).toBe('division2')
+    expect(rolledD2.mandate?.ambition).toBe('ambitious')
+
+    // 4. 小组赛结束本队提前锁定升级（进入 promotedIds）：立刻确认一级并沿用之前为一级预选的 safe
+    game.world!.seasonCups.cups[0].promotedIds = [clubId]
+    refreshOffseasonBoardPreview(game, clubId)
+    expect(game.board?.offseasonPreview?.confirmed).toBe(true)
+    expect(game.board?.offseasonPreview?.projectedTier).toBe('division1')
+    expect(game.board?.pendingChoice).toBe('safe')
+
+    // 5. 若在资格赛已淘汰（不在 groups 中）：立刻确认留级二级并沿用之前为二级预选的 ambitious
+    game.world!.seasonCups.cups[0].promotedIds = []
+    game.world!.seasonCups.cups[0].groups![0].teamIds = ['c2', 'c4', 'c8']
+    refreshOffseasonBoardPreview(game, clubId)
+    expect(game.board?.offseasonPreview?.confirmed).toBe(true)
+    expect(game.board?.offseasonPreview?.projectedTier).toBe('division2')
+    expect(game.board?.pendingChoice).toBe('ambitious')
   })
 })
 

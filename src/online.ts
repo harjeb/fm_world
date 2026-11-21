@@ -1045,11 +1045,12 @@ export async function buyShopBookOnline(skillId: string): Promise<GameState> {
 
 export async function chooseBoardAmbitionOnline(
   ambition: import('./game/types.ts').BoardAmbition,
-  options: { scope?: 'offseason' | 'current'; lock?: boolean } = {},
+  options: { scope?: 'offseason' | 'current'; tier?: import('./game/types.ts').TierId; lock?: boolean } = {},
 ): Promise<GameState> {
   return protectedGameAction('/api/board/choose', {
     ambition,
     ...(options.scope ? { scope: options.scope } : {}),
+    ...(options.tier ? { tier: options.tier } : {}),
     ...(options.lock ? { lock: true } : {}),
   })
 }

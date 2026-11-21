@@ -1293,6 +1293,8 @@ export type BoardOffseasonPreview = {
   wageMultiplier: number
   retentionRate: number
   options: BoardGoalOption[]
+  /** 升级杯尚未决出结果时附带的「若升入一级联赛」三档只读参考方案。 */
+  promotionOptions?: BoardGoalOption[]
 }
 
 export type BoardEvaluation = {
@@ -1320,8 +1322,10 @@ export type BoardState = {
   lastGrade?: BoardGrade
   /** 当前赛季激活的董事会目标与独立预算（第 2 赛季起生效）。 */
   current?: BoardSeasonMandate
-  /** 休赛期预选的下赛季目标档位（换季时自动生效，未选默认 expected）。 */
+  /** 休赛期预选的下赛季目标档位（级别已确定时使用；换季时自动生效，未选默认 expected）。 */
   pendingChoice?: BoardAmbition
+  /** 休赛期按级别分别预选的目标档位（升级杯未决时可同时为一级/二级各选一套，换季按实际级别生效）。 */
+  pendingChoicesByTier?: Partial<Record<TierId, BoardAmbition>>
   /** 休赛期生成的下赛季目标与预算预览。 */
   offseasonPreview?: BoardOffseasonPreview
   /** 历年董事会考核记录（最新在前，最多保留 20 条）。 */

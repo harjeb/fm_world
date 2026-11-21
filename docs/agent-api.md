@@ -230,6 +230,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 - `board_choose_ambition` — 选择或切换董事会赛季目标档位。`state.board` 包含 `confidence`（信任度 15–100）、`lastGrade`（上季评级 `S/A/B/C/D`）、`active`（第 2 赛季起激活）、`current`（当季目标、剩余转会/设施预算、有效工资帽、商业帽加成、滑块区间 `sliderBounds` 与 `canSwitchAmbition`）、`pendingChoice`、`offseasonPreview` 与历年 `history`。
   - `ambition`: `"safe"`（稳妥档，预算 0.85× / 工资帽 0.90×）| `"expected"`（基准推荐档，1.00×）| `"ambitious"`（野心档，预算 1.25× / 工资帽 1.12×，奖金更高但失利扣更多信任度）
   - `scope?`: `"offseason"`（休赛期预选下赛季）| `"current"`（开季第 1–3 轮切换本季档位，按差额补退预算与余额）
+  - `tier?`: `"division1"` | `"division2"` | `"champions"`，升级杯未决（`offseasonPreview.confirmed === false`）时可分别为 `division1`（若升级）和 `division2`（若留级）各预选一套，换季自动按实际级别生效
   - `lock?`: 布尔值，开季第 1–3 轮传 `true` 可提前锁定本季目标
 - `board_adjust_budget` — 转会预算 ↔ 每轮基础工资帽双向滑块（严格按 38:1 换算，绝不触碰独立设施预算）：
   - `transferDelta`: 安全整数；正值表示将富余工资帽转为转会预算（下限为初始工资帽 50% 及当前全队工资需求），负值表示将转会预算转为工资帽（不得动用领先竞拍占用资金）。

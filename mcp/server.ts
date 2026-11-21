@@ -113,9 +113,10 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     facilityId: z.enum(['stadium', 'academy', 'medical', 'shop', 'sponsor', 'psychology', 'tactics']),
   }, (args) => action('upgrade_facility', args))
 
-  register('board_choose_ambition', '选择董事会赛季目标档位', '休赛期预选下赛季目标档位（safe 稳妥 / expected 基准 / ambitious 野心），或在开季第 1–3 轮切换/确认本赛季目标档位（按新旧档位差额调整转会预算、设施预算、工资帽与余额；第 4 轮起自动锁定）。', {
+  register('board_choose_ambition', '选择董事会赛季目标档位', '休赛期预选下赛季目标档位（safe 稳妥 / expected 基准 / ambitious 野心；升级杯未决时可传 tier 分别为 division1 与 division2 各预选一套），或在开季第 1–3 轮切换/确认本赛季目标档位（按新旧档位差额调整转会预算、设施预算、工资帽与余额；第 4 轮起自动锁定）。', {
     ambition: z.enum(['safe', 'expected', 'ambitious']),
     scope: z.enum(['offseason', 'current']).optional().describe('可选：休赛期预选传 offseason，开季第 1–3 轮调整传 current；省略时按赛季是否结束自动判断'),
+    tier: z.enum(['division2', 'division1', 'champions']).optional().describe('可选：升级杯进行中级别未确定时，指定为 division1（若升级）或 division2（若留级）分别预选'),
     lock: z.boolean().optional().describe('开季第 1–3 轮时传 true 可提前锁定当前档位'),
   }, (args) => action('board_choose_ambition', args))
 

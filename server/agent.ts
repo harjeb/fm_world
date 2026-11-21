@@ -11,6 +11,7 @@ import {
   ensureBoard,
   isBoardAmbition,
   isBoardBudgetActive,
+  isBoardTier,
   refreshOffseasonBoardPreview,
   syncBoardLockState,
 } from '../src/game/board.ts'
@@ -619,6 +620,7 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
         sliderRatio: BOARD_WAGE_SLIDER_ROUNDS,
         canSwitchAmbition: canSwitchCurrentBoardAmbition(game),
         pendingChoice: board.pendingChoice ?? null,
+        pendingChoicesByTier: board.pendingChoicesByTier ?? null,
         current: active && board.current ? {
           ...board.current,
           effectiveWageCap,
@@ -1093,9 +1095,12 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       if (!isBoardAmbition(ambition)) return { ok: false, error: 'ambition 只能是 safe / expected / ambitious' }
       const scope = body.scope === 'offseason' || body.scope === 'current' ? body.scope : undefined
       if (body.scope !== undefined && !scope) return { ok: false, error: 'scope 只能是 offseason 或 current' }
+      const tier = isBoardTier(body.tier) ? body.tier : undefined
+      if (body.tier !== undefined && !tier) return { ok: false, error: 'tier 只能是 division2 / division1 / champions' }
       if (body.lock !== undefined && typeof body.lock !== 'boolean') return { ok: false, error: 'lock 必须是布尔值' }
       const result = chooseBoardAmbition(game, ambition, {
         ...(scope ? { scope } : {}),
+        ...(tier ? { tier } : {}),
         ...(body.lock === true ? { lock: true } : {}),
         committedAuctions: options.committedAuctions?.() ?? 0,
         clubId: options.clubId?.(),
