@@ -29,6 +29,7 @@ describe('杯赛冠军俱乐部上限奖励', () => {
     expect(applyCupCeilingReward(game, 'cross')).toBe(250)
     expect(cupCeilingBonus(game)).toBe(250)
     expect(applyCupCeilingReward(game, 'legend')).toBe(0)
+    expect(applyCupCeilingReward(game, 'promotion')).toBe(0)
     expect(cupCeilingBonus(game)).toBe(250)
     const after = mainCeilings(game)
     for (let p = 0; p < after.length; p++) {
@@ -36,7 +37,7 @@ describe('杯赛冠军俱乐部上限奖励', () => {
         expect(after[p][a] - before[p][a]).toBeCloseTo(250, 5)
       }
     }
-    expect(CUP_CEILING_BONUS).toEqual({ community: 100, league: 150, champions: 200, cross: 250, legend: 0 })
+    expect(CUP_CEILING_BONUS).toEqual({ community: 100, league: 150, champions: 200, cross: 250, legend: 0, promotion: 0 })
 
     // 先拿星联杯 (+250) 再拿社区杯 (+100)：社区杯返回 0 且总上限保持 250
     const rev = createInitialGame(711)

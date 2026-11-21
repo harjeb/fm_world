@@ -18,4 +18,5 @@ export const SEASON_CUP_REWARDS: Record<SeasonCupId, SeasonCupRewardDef> = {
   champions: { appearance: 200_000, champion: 1_000_000, ceiling: 200 },
   cross: { appearance: 100_000, champion: 1_500_000, ceiling: 250 },
   legend: { appearance: 300_000, champion: 3_000_000, ceiling: 0, book: LEGEND_CUP_REWARD_BOOK },
+  promotion: { appearance: 0, champion: 0, ceiling: 0 },
 }

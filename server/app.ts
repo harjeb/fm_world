@@ -589,7 +589,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (rewardBackfill && paysSeasonCupAppearanceGold(fixture)) for (const locked of [input.home, input.away]) {
         const ai = !locked.coachId ? sharedWorld.aiClubs?.[locked.team.id] : undefined
         if (!ai) continue
-        const champion = cup.championId === locked.team.id && round.round === cup.rounds.at(-1)?.round && round.fixtures.length === 1 && fixture.winnerId === locked.team.id
+        const champion = cup.id !== 'promotion' && cup.championId === locked.team.id && round.round === cup.rounds.at(-1)?.round && round.fixtures.length === 1 && fixture.winnerId === locked.team.id
         awardAISeasonCup(ai, cup.id, fixture.matchId, input.season, champion)
         changed = true
       }
@@ -930,7 +930,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         recordYouthMatch(game, record)
         if (!game.challengeHistory.some(item => item.id === fixture.matchId)) { game.challengeHistory.unshift(record); changed = true }
         if (paysSeasonCupAppearanceGold(fixture) && awardSeasonCupMatch(game, cup.id, fixture.matchId)) { changed = true; rewardChanged = true }
-        if (cup.championId === clubId && round.round === cup.rounds.at(-1)?.round && round.fixtures.length === 1 && fixture.winnerId === clubId) {
+        if (cup.id !== 'promotion' && cup.championId === clubId && round.round === cup.rounds.at(-1)?.round && round.fixtures.length === 1 && fixture.winnerId === clubId) {
           ensurePve(game)
           let trophy = game.pve!.trophies.find(item => item.cupId === `season-${cup.id}` && item.seasonIndex === input.season)
           if (!trophy) {
@@ -2308,8 +2308,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     rollSharedSeason()
   }
 
-  /** 常规赛一结束就把升级杯算出来，让休整期间的世界页能看到赛果。 */
+  /** 常规赛一结束就把升级杯算出来，让休整期间的世界页能看到赛果（开启正式实时赛季杯赛后改由 MatchScheduler 分轮实时开赛）。 */
   function autoPlayoff(): void {
+    if (options.seasonCups === true) return
     if (now() < postseasonStartAt(sharedWorld.world.seasonStartedAt)) return
     // 休整窗口已经走完时会立刻换季，没必要再单独算一次附加赛。
     if (now() >= seasonEndAt(sharedWorld.world.seasonStartedAt)) return

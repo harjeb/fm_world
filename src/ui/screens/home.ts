@@ -1,7 +1,7 @@
 import { UNPAID_PERFORMANCE, economyOf, wageArrearsOf } from '../../game/economy.ts'
 import { transferWindowOpen } from '../../game/market.ts'
 import { FORMATIONS } from '../../game/data/formations.ts'
-import { PLAYER_TEAM_ID, roundKickoffAt, shortCountdown, teamName } from '../../game/season.ts'
+import { PLAYER_TEAM_ID, inPostseason, nextSeasonCountdown, roundKickoffAt, shortCountdown, teamName } from '../../game/season.ts'
 import { validateLineup } from '../../game/squad.ts'
 import { SQUAD_LIMIT } from '../../game/market.ts'
 import { trainingActionsTotal } from '../../game/training.ts'
@@ -68,6 +68,39 @@ function nextMatchPanel(): string {
     .filter(item => !item.fixture.played && (item.fixture.homeId === clubId || item.fixture.awayId === clubId))
     .sort((a, b) => a.fixture.kickoffAt - b.fixture.kickoffAt)[0] : undefined
   if (season.finished && !cup) {
+    const promo = seasonCups?.cups.find(item => item.id === 'promotion')
+    const now = isOnlineMode() ? serverNow() : Date.now()
+    if (promo && !promo.championId) {
+      const inPromo = !!clubId && promo.entrants.includes(clubId)
+      const promoted = !!clubId && !!promo.promotedIds?.includes(clubId)
+      const currentRound = promo.rounds.at(-1)
+      const hasBye = !!clubId && !!currentRound?.byes.includes(clubId)
+      const nextDate = promo.dates[promo.rounds.length] ?? currentRound?.kickoffAt
+      const title = promoted
+        ? '升级杯 · 已锁定升入一级联赛！'
+        : hasBye
+          ? `升级杯 · 本轮轮空（下一阶段 ${nextDate ? kickoffTimeLabel(nextDate) : '待定'}）`
+          : inPromo
+            ? '升级杯赛程进行中'
+            : `赛后休整 · 升级杯进行中（距下赛季 ${nextSeasonCountdown(game, now)}）`
+      const desc = promoted
+        ? '恭喜你已拿到下赛季一级联赛入场券！等待升级杯剩余场次结束后于新赛季正式升级。'
+        : hasBye
+          ? (currentRound?.round === 1 ? '作为赛区第 1 名首轮轮空，资格赛结束后将自动抽签分入 A/B 组踢小组赛。' : '本轮小组赛轮空休整，可在升级杯页面查看同组实时比分与积分。')
+          : '升级杯按赛程自动开赛并直播，可在杯赛页查看完整对阵与实时战报。'
+      return panel('升级杯赛程', `<div class="nm-stack"><div class="nm-live">
+        <div>${icon(promoted ? 'star' : 'clock', 22)}</div>
+        <div><b>${esc(title)}</b><p class="muted">${esc(desc)}</p></div>
+        <button class="btn primary" data-action="go-cup" data-cup="promotion">${icon('badge', 14)}查看升级杯</button>
+      </div>${recentLeagueResult()}</div>`, { className: 'next-match span-8' })
+    }
+    if (isOnlineMode() && inPostseason(game, now)) {
+      return panel('赛后休整', `<div class="nm-stack"><div class="nm-live">
+        <div>${icon('clock', 22)}</div>
+        <div><b>冠军：${ownName(teamName(game, season.champion ?? ''), season.champion === PLAYER_TEAM_ID)} · 距下赛季 ${esc(nextSeasonCountdown(game, now))}</b><p class="muted">你的最终排名：第 ${season.playerFinish ?? '—'} 名。${promo?.championId ? '升级杯已完赛，升降级与合同将在下赛季开启时自动结算。' : '休整期间可调整阵容与约友谊赛，下赛季将自动开启。'}</p></div>
+        ${promo ? '<button class="btn primary" data-action="go-cup" data-cup="promotion">查看升级杯结果</button>' : ''}
+      </div>${recentLeagueResult()}</div>`, { className: 'next-match span-8' })
+    }
     return panel('赛季结束', `<div class="nm-stack"><div class="nm-live">
       <div>${icon('star', 22)}</div>
       <div><b>冠军：${ownName(teamName(game, season.champion ?? ''), season.champion === PLAYER_TEAM_ID)}</b><p class="muted">你的最终排名：第 ${season.playerFinish ?? '—'} 名。升降级和合同会在新赛季开始时结算。</p></div>
@@ -87,7 +120,7 @@ function nextMatchPanel(): string {
   const startButton = !isOnlineMode() && !cupFirst && fixture.round === season.round
     ? `<button class="btn primary nm-go" data-action="start-league">${icon('play', 14)}跳至比赛日</button>` : ''
   const cupRoundText = cupFirst
-    ? cupRoundLabel(cup!.fixture.round, cup!.cup.dates.length, !cup!.cup.groups?.length && (cup!.cup.rounds[0]?.byes.length ?? 0) > 0, cup!.fixture.stage, cup!.fixture.leg)
+    ? cupRoundLabel(cup!.fixture.round, cup!.cup.dates.length, !cup!.cup.groups?.length && (cup!.cup.rounds[0]?.byes.length ?? 0) > 0, cup!.fixture.stage, cup!.fixture.leg, cup!.cup.id)
     : `第 ${fixture.round} 轮`
   return panel('下一轮预告', `<div class="nm-stack" data-next-round="${fixture.round}"><div class="nm-body">
       ${nextMatchSide(fixture.homeId, 'left', homeIsMe)}

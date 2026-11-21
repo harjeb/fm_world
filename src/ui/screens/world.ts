@@ -195,7 +195,7 @@ export function renderWorld(): string {
   const selectedClub = ui.worldClubId ? publicClubFor(world, ui.worldClubId) : null
   const normalizedSelectedId = selectedClub ? (selectedClub.id === ownId ? PLAYER_TEAM_ID : selectedClub.id) : null
   const activeDivLabel = worldDivisionLabel(world, active.id)
-  const playoff = world.lastPromotionPlayoff ?? world.promotionPlayoff
+  const playoff = world.promotionPlayoff ?? world.lastPromotionPlayoff
   const clubLabel = (id: string) => (id === PLAYER_TEAM_ID || id === playerClub?.squadKey || id === ownId ? game.clubName : snapshot?.clubs.find((c) => c.id === id)?.name ?? world.clubs.find((club) => club.id === id)?.name ?? id)
   const picks = d2ClubChoices()
   const colorOf = (id: string) => WORLD_CLUB_DEFS.find((club) => club.id === id)?.color ?? '#64748b'
@@ -232,7 +232,10 @@ export function renderWorld(): string {
             <li>${icon('flag', 13)}二级每个赛区的前 3 名进入升级杯：各区第 1 轮空，2/3 名先加赛一轮；出线的人和轮空的球队随机分成两组打循环（瑞士轮），小组第一直接升级，两个小组第二再打一轮，胜者拿到第 3 个升级名额。</li>
             <li>${icon('flag', 13)}赛区数量不影响升级名额：不管开多少个区，二级每个赛季都是 3 队升入一级联赛。</li>
           </ul>
-          ${playoff ? `<p class="small">升级杯：${playoff.promoted.map((id) => ownName(clubLabel(id), clubLabel(id) === game.clubName)).join('、') || '进行中'}</p>` : '<p class="hint">常规赛结束后留 16 小时休整踢升级杯，期间可以安排友谊赛。</p>'}
+          ${playoff
+            ? `<p class="small">升级杯${playoff.finished ? '已完赛，升级球队' : '进行中，已锁定升级'}：${playoff.promoted.map((id) => ownName(clubLabel(id), clubLabel(id) === game.clubName)).join('、') || '待决出'}</p>`
+            : '<p class="hint">常规赛结束后留 16 小时休整踢升级杯，期间可以安排友谊赛。</p>'}
+          ${world.seasonCupMode === 1 ? `<div class="btn-row" style="margin-top:8px"><button class="btn small" data-action="go-cup" data-cup="promotion">${icon('flag', 13)} 查看升级杯赛程与分组</button></div>` : ''}
         `)}
         ${world.history.length ? panel('历届荣誉', `<div class="rows">${world.history.slice().reverse().slice(0, 5).map((item) => `<div class="row-line"><span class="dim">第 ${item.seasonIndex} 赛季</span><span>冠军 ${ownName(item.champion, item.champion === game.clubName)}</span><span class="muted small">升级 ${item.promotions.length} 队</span></div>`).join('')}</div>`, { flush: true }) : ''}
         ${panel('球队席位', `

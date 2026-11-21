@@ -1,5 +1,5 @@
 import type { GameState } from '../game/types.ts'
-import { LEGEND_GROUP_ROUNDS, SEASON_CUP_NAMES, previousChampionsTop4, type SeasonCup, type SeasonCupId } from '../game/season-cups.ts'
+import { LEGEND_GROUP_ROUNDS, SEASON_CUP_NAMES, previousChampionsTop4, promotionCupQualifiers, type SeasonCup, type SeasonCupId } from '../game/season-cups.ts'
 import { LEGEND_CUP_META } from '../game/data/legend-cup-teams.ts'
 import { SEASON_CUP_REWARDS } from '../game/data/season-cup-rewards.ts'
 import { seasonCupLeaders, type CupLeaderKind } from '../game/season-cup-stats.ts'
@@ -8,7 +8,7 @@ import { buildSeasonCupBracket, type CupBracketNode } from './season-cup-bracket
 import { clubName, emptyState, pageHead, panel, tag } from './components.ts'
 import { cupRoundLabel, esc, kickoffTimeLabel } from './format.ts'
 
-const CUP_ORDER: SeasonCupId[] = ['community', 'league', 'champions', 'cross', 'legend']
+const CUP_ORDER: SeasonCupId[] = ['community', 'league', 'champions', 'cross', 'legend', 'promotion']
 
 function displayId(id: string, ownId: string): string { return id === ownId ? 'player' : id }
 function nodeWinner(node: CupBracketNode): string | undefined {
@@ -154,6 +154,102 @@ function legendPreview(game: GameState, ownId: string): string {
   return `${summary}${panel(qualifierTitle, qualifierHtml, { flush: true })}${rosterTable}`
 }
 
+function promotionPreview(game: GameState, ownId: string): string {
+  const world = game.world
+  const qualified = world ? promotionCupQualifiers(world) : { champions: [], qualifierPairs: [], entrants: [] }
+  const rows = qualified.entrants.map((id, index) => `<div class="row-line"><span class="rank-no">${index + 1}</span>${clubName(displayId(id, ownId), 17)}<span class="muted small">${qualified.champions.includes(id) ? '赛区第 1（首轮轮空）' : '赛区第 2/3（资格赛）'}</span></div>`).join('')
+  const summary = `<div class="sc-summary"><span>状态：<b>第 38 轮常规赛结束后开赛</b></span><span>赛制：<b>各区第 2/3 资格赛 → 2 组循环赛 → 小组第 2 附加赛</b></span><span>升级名额：<b>共 3 支球队升入一级联赛</b></span></div>
+    <p class="hint pad">常规赛 38 轮全部结束后进入 16 小时赛后休整期，升级杯自动分轮排期并采用 2D 正式赛直播与战报（赛前 30 分钟锁阵）：各二级赛区第 1 名首轮轮空，第 2/3 名踢单场资格赛；晋级队与各区第 1 随机分入 A/B 两组踢单循环，小组第 1 直接升级，两个小组第 2 再战单场附加赛决出第 3 个升级名额。</p>`
+  return `${summary}${panel('当前暂定升级杯资格（二级各赛区前 3）', rows ? `<div class="rows">${rows}</div>` : '<p class="hint pad">等待二级联赛积分榜更新。</p>', { flush: true })}`
+}
+
+function promotionStatusLabel(cup: SeasonCup, ownId: string): string {
+  if (cup.promotedIds?.includes(ownId)) return '已升级（升入一级联赛）'
+  if (!cup.entrants.includes(ownId)) return '未获得资格'
+  if (cup.championId) return '未获升级'
+  const current = cup.rounds.at(-1)
+  if (!current) return '待开赛'
+  if (current.byes.includes(ownId)) return current.round === 1 ? '首轮轮空（直通小组赛）' : '本轮轮空'
+  const playing = current.fixtures.some(f => !f.played && (f.homeId === ownId || f.awayId === ownId))
+  if (playing) return cupRoundLabel(current.round, cup.dates.length, false, current.stage, current.leg, 'promotion')
+  const round1 = cup.rounds[0]
+  if (round1?.fixtures.some(f => f.played && (f.homeId === ownId || f.awayId === ownId) && f.winnerId !== ownId)) return '资格赛出局'
+  if (cup.groups?.length && current.round > 1 && current.stage === 'knockout') return '小组赛出局'
+  return '参赛中'
+}
+
+function renderPromotionCup(game: GameState, cup: SeasonCup, ownId: string): string {
+  const status = promotionStatusLabel(cup, ownId)
+  const promoted = cup.promotedIds ?? []
+  const promotedHtml = promoted.length
+    ? promoted.map(id => clubName(displayId(id, ownId), 15)).join(' · ')
+    : '<span class="muted">待决出</span>'
+  const scheduleChips = cup.dates.map((date, idx) => {
+    const stage = idx === 0 ? 'knockout' : idx === cup.dates.length - 1 ? 'knockout' : 'group'
+    const label = cupRoundLabel(idx + 1, cup.dates.length, false, stage, undefined, 'promotion')
+    return `<span>${esc(label)}：<b>${esc(kickoffTimeLabel(date))}</b></span>`
+  }).join('')
+  const summary = `<div class="sc-summary"><span>状态：<b>${esc(status)}</b></span><span>参赛球队：<b>${cup.entrants.length}</b></span><span>已锁定升级（${promoted.length}/3）：<b>${promotedHtml}</b></span></div>
+    <div class="sc-summary">${scheduleChips}</div>
+    <p class="hint pad">升级杯在赛后 16 小时休整期内按档期自动开赛（赛前 30 分钟锁阵、2D 直播、完整战报进复盘）：首轮各二级赛区第 1 名轮空、第 2/3 名踢资格赛（平局点球）；出线队与轮空队分 A/B 两组踢单循环，各组第 1 直接升入一级联赛，两个小组第 2 踢单场附加赛争夺第 3 个升级名额。</p>`
+
+  const fxRow = (fixture: SeasonCup['rounds'][number]['fixtures'][number], prefix = '') => {
+    const replay = fixture.matchId && game.challengeHistory.some(record => record.id === fixture.matchId)
+    const scoreText = fixture.played && fixture.score
+      ? `${fixture.score.home} : ${fixture.score.away}${fixture.shootout ? ` (点 ${fixture.shootout.home}:${fixture.shootout.away})` : ''}`
+      : 'VS'
+    return `<div class="sc-group-fx">
+      ${prefix ? `<span class="muted small">${esc(prefix)}</span>` : ''}
+      <span class="sc-group-fx-pair">${clubName(displayId(fixture.homeId, ownId), 15)} <b class="num-text">${esc(scoreText)}</b> ${clubName(displayId(fixture.awayId, ownId), 15)}</span>
+      ${replay ? `<button class="link small" data-action="open-review" data-record="${esc(fixture.matchId!)}">查看战报</button>` : `<time class="muted small">${esc(kickoffTimeLabel(fixture.kickoffAt))}</time>`}
+    </div>`
+  }
+
+  // 1. 首轮资格赛
+  const r1 = cup.rounds[0]
+  const r1Html = r1
+    ? `<div class="sc-group-fx-list">${r1.fixtures.map(f => fxRow(f, '资格赛')).join('')}</div>${r1.byes.length ? `<p class="hint pad">首轮轮空（直通小组赛）：${r1.byes.map(id => clubName(displayId(id, ownId), 14)).join('、')}</p>` : ''}`
+    : '<p class="hint pad">等待开赛。</p>'
+  const qualifierPanel = panel(`第 1 阶段 · 资格赛（${kickoffTimeLabel(cup.dates[0])}）`, r1Html, { flush: true })
+
+  // 2. 小组赛（A / B 组）
+  let groupSection = ''
+  if (cup.groups?.length) {
+    const groupFixtures = cup.rounds.filter(round => round.stage === 'group').flatMap(round => round.fixtures)
+    const groupCards = cup.groups.map(group => {
+      const rowsHtml = group.table.map((row, index) => {
+        const gd = row.gf - row.ga
+        const isMe = row.teamId === ownId
+        return `<tr class="${index === 0 ? 'sc-group-qual' : ''}${isMe ? ' me' : ''}">
+          <td class="num">${index + 1}</td>
+          <td>${clubName(displayId(row.teamId, ownId), 15)}${index === 0 ? ` ${tag('升级区', 'good')}` : index === 1 ? ` ${tag('附加赛', 'gold')}` : ''}</td>
+          <td class="num">${row.played}</td>
+          <td class="num dim">${row.won}-${row.drawn}-${row.lost}</td>
+          <td class="num dim">${gd > 0 ? `+${gd}` : gd}</td>
+          <td class="num strong">${row.points}</td>
+        </tr>`
+      }).join('')
+      const matches = groupFixtures.filter(f => f.groupIndex === group.index)
+      const fxHtml = matches.map(f => fxRow(f, `第 ${Math.max(1, f.round - 1)} 轮`)).join('')
+      return panel(group.name, `<div class="table-scroll"><table class="dt"><thead><tr><th class="num">#</th><th>球队</th><th class="num">赛</th><th class="num">胜平负</th><th class="num">净胜</th><th class="num">分</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>${fxHtml ? `<div class="sc-group-fx-list">${fxHtml}</div>` : ''}`, { flush: true, aside: '<span class="muted small">第 1 升级 · 第 2 进附加赛</span>' })
+    }).join('')
+    groupSection = `<section class="sc-groups-section"><h2>第 2 阶段 · 小组循环赛</h2><p class="hint">常规时间允许平局（胜 3 分 / 平 1 分 / 负 0 分），同分依次比较净胜球、进球数与相互战绩。每组第 1 直接升入一级联赛，第 2 进入最终附加赛。</p><div class="grid sc-groups-grid">${groupCards}</div></section>`
+  } else {
+    groupSection = panel('第 2 阶段 · 小组循环赛', `<p class="hint pad">资格赛（${esc(kickoffTimeLabel(cup.dates[0]))}）公布结果后，胜者与各区第 1 自动抽签分成 A / B 两组，并于 ${esc(kickoffTimeLabel(cup.dates[1]))} 起开踢小组赛。</p>`, { flush: true })
+  }
+
+  // 3. 小组第二附加赛
+  const finalRound = cup.groups?.length ? cup.rounds.find(round => round.round > 1 && round.stage === 'knockout') : undefined
+  const finalDate = cup.dates[cup.dates.length - 1]
+  const finalBody = finalRound?.fixtures.length
+    ? `<div class="sc-group-fx-list">${finalRound.fixtures.map(f => fxRow(f, '附加赛')).join('')}</div>`
+    : `<p class="hint pad">A 组第 2 vs B 组第 2，单场决胜（平局点球），胜者拿下第 3 个升级名额 · 开球时间 ${esc(kickoffTimeLabel(finalDate))}。</p>`
+  const finalPanel = panel(`第 3 阶段 · 小组第二附加赛（${kickoffTimeLabel(finalDate)}）`, finalBody, { flush: true })
+
+  const leaders = `<div class="grid sc-leader-grid">${leaderPanel(cup, ownId, 'goals', '射手榜', '进球')}${leaderPanel(cup, ownId, 'assists', '助攻榜', '助攻')}${leaderPanel(cup, ownId, 'shots', '射门榜', '射门')}${leaderPanel(cup, ownId, 'tackles', '抢断榜', '抢断')}${leaderPanel(cup, ownId, 'saves', '扑救榜', '扑救')}</div>`
+  return `${summary}${qualifierPanel}${groupSection}${finalPanel}<h2>比赛数据排行</h2>${leaders}`
+}
+
 function cupStatusLabel(cup: SeasonCup, ownId: string): string {
   const entered = cup.entrants.includes(ownId)
   if (cup.championId === ownId) return '冠军'
@@ -183,7 +279,9 @@ export function renderSeasonCups(game: GameState, selected: SeasonCupId = 'commu
     const tabs = `<nav class="seg sc-tabs" aria-label="选择杯赛">${CUP_ORDER.map(id => `<button data-season-cup-tab="${id}" class="${id === selected ? 'active' : ''}" aria-pressed="${id === selected}">${esc(SEASON_CUP_NAMES[id])}</button>`).join('')}</nav>`
     const body = selected === 'legend'
       ? legendPreview(game, ownId)
-      : panel('赛季杯赛', '<p class="hint pad">第 6 轮结束后确定参赛资格；赛程将在确认后公布。</p>', { flush: true })
+      : selected === 'promotion'
+        ? promotionPreview(game, ownId)
+        : panel('赛季杯赛', '<p class="hint pad">第 6 轮结束后确定参赛资格；赛程将在确认后公布。</p>', { flush: true })
     return heading + tabs + body + legacyHistory(game)
   }
   const cup = season.cups.find(item => item.id === selected)
@@ -191,11 +289,15 @@ export function renderSeasonCups(game: GameState, selected: SeasonCupId = 'commu
   const tabs = `<nav class="seg sc-tabs" aria-label="选择杯赛">${CUP_ORDER.map(id => `<button data-season-cup-tab="${id}" class="${id === activeTab ? 'active' : ''}" aria-pressed="${id === activeTab}">${esc(SEASON_CUP_NAMES[id])}</button>`).join('')}</nav>`
   if (!cup) {
     if (selected === 'legend') return `${heading}${tabs}${legendPreview(game, ownId)}${legacyHistory(game)}`
+    if (selected === 'promotion') return `${heading}${tabs}${promotionPreview(game, ownId)}${legacyHistory(game)}`
     const hasLegend = season.cups.some(item => item.id === 'legend')
     const waitNote = hasLegend
       ? '第 6 轮结束后确定参赛资格；赛程将在确认后公布。传奇杯已提前开赛，可切换到「传奇杯」查看。'
       : '第 6 轮结束后确定参赛资格；赛程将在确认后公布。'
     return `${heading}${tabs}${panel(SEASON_CUP_NAMES[selected], `<p class="hint pad">${waitNote}</p>`, { flush: true })}${legacyHistory(game)}`
+  }
+  if (cup.id === 'promotion') {
+    return `${heading}${tabs}${renderPromotionCup(game, cup, ownId)}${legacyHistory(game)}`
   }
   const status = cupStatusLabel(cup, ownId)
   const reward = SEASON_CUP_REWARDS[cup.id]

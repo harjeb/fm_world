@@ -5,7 +5,7 @@ import { derivedRng, splitSeed } from './rng.ts'
 import { GAME_DAY_MS, HOUR_MS, ROUND_INTERVAL_MS, kickoffAtForRound, postseasonStartAt, roundsKickedOff, seasonEndAt } from './calendar.ts'
 import { LEGEND_CUP_TEAM_IDS, isLegendCupTeamId } from './data/legend-cup-teams.ts'
 
-export type SeasonCupId = 'community' | 'league' | 'champions' | 'cross' | 'legend'
+export type SeasonCupId = 'community' | 'league' | 'champions' | 'cross' | 'legend' | 'promotion'
 export type SeasonCupStage = 'group' | 'knockout'
 export type SeasonCupFixture = {
   id: string
@@ -54,8 +54,10 @@ export type SeasonCup = {
   entrants: string[]
   dates: number[]
   rounds: SeasonCupRound[]
-  /** 含小组赛赛制（传奇杯）的分组与积分榜；纯淘汰赛缺省。 */
+  /** 含小组赛赛制（传奇杯 / 升级杯）的分组与积分榜；纯淘汰赛缺省。 */
   groups?: SeasonCupGroup[]
+  /** 升级杯已确定的升级球队（至多 3 支：A/B 组第 1 + 小组第二附加赛胜者）。 */
+  promotedIds?: string[]
   championId?: string
 }
 export type SeasonCups = {
@@ -84,7 +86,7 @@ export const SEASON_CUP_QUALIFICATION_ROUND = 6
 /** 传奇杯资格来自上赛季冠联前 4，赛程从第 5 轮之后启动并一直延续至赛季结束前（含赛后休整期）。 */
 export const LEGEND_CUP_START_ROUND = 5
 const LEGEND_CUP_END_BUFFER = 2 * HOUR
-export const SEASON_CUP_NAMES: Record<SeasonCupId, string> = { community: '社区杯', league: '联盟杯', champions: '冠军杯', cross: '星联杯', legend: '传奇杯' }
+export const SEASON_CUP_NAMES: Record<SeasonCupId, string> = { community: '社区杯', league: '联盟杯', champions: '冠军杯', cross: '星联杯', legend: '传奇杯', promotion: '升级杯' }
 const CORE_SEASON_CUP_IDS: readonly SeasonCupId[] = ['community', 'league', 'champions', 'cross']
 export const LEGEND_GROUP_ROUNDS = 3
 /** 传奇杯总轮数：3 轮小组赛 + 1/4 决赛两回合（2）+ 半决赛两回合（2）+ 单场决赛（1）= 8 轮。 */
@@ -104,9 +106,9 @@ export const LEGEND_QF_SLOTS: readonly (readonly [number, number, number, number
   [3, 0, 2, 1], // D1 vs C2
 ]
 
-/** 该场赛季杯赛是否发放本轮参赛金：小组赛不发，两回合淘汰赛仅在首回合发一次（每轮发一次），单场淘汰赛照发。 */
-export function paysSeasonCupAppearanceGold(fixture: Pick<SeasonCupFixture, 'stage' | 'leg'>): boolean {
-  return fixture.stage !== 'group' && fixture.leg !== 2
+/** 该场赛季杯赛是否发放本轮参赛金：升级杯不发参赛金（奖励为升级资格），小组赛不发，两回合淘汰赛仅在首回合发一次，单场淘汰赛照发。 */
+export function paysSeasonCupAppearanceGold(fixture: Pick<SeasonCupFixture, 'stage' | 'leg'> & { cupId?: SeasonCupId }): boolean {
+  return fixture.cupId !== 'promotion' && fixture.stage !== 'group' && fixture.leg !== 2
 }
 
 /** 按已公布的完整轮次重新计算，不能用某个分区尚未公布的临时榜。 */
@@ -176,7 +178,7 @@ export function seasonCupEntrants(world: WorldState, round: number): Record<Seas
   const ids = (list: Standing[]) => list.map(row => row.id)
   const prevTop4 = previousChampionsTop4(world)
   const legend = prevTop4.length === 4 ? [...prevTop4, ...LEGEND_CUP_TEAM_IDS] : []
-  return { community: ids(community), league: ids(league), champions: ids(champions), cross: ids(cross), legend }
+  return { community: ids(community), league: ids(league), champions: ids(champions), cross: ids(cross), legend, promotion: [] }
 }
 
 const roundCount = (teams: number): number => teams >= 2 ? Math.ceil(Math.log2(teams)) : 0
@@ -484,6 +486,255 @@ export function planSeasonCups(world: WorldState, seed: number, now: number): Se
   return { version: 1, seasonIndex: world.seasonIndex, qualificationRound, createdAt: existing?.createdAt ?? now, drawSeed, ...(existing?.aiRewardVersion ? { aiRewardVersion: existing.aiRewardVersion } : {}), delayedLeagueRounds: [], cups }
 }
 
+/** 为升级杯收集赛后 16 小时休整期内的开球时刻；优先固定整点档（10/12/14/16/18 点），若恢复较晚则顺延至剩余窗口内均分。 */
+export function collectPromotionCupSlots(world: WorldState, now: number, totalRounds: number): number[] {
+  if (totalRounds <= 0) return []
+  const postStart = postseasonStartAt(world.seasonStartedAt, world.clockShift)
+  const endAt = seasonEndAt(world.seasonStartedAt, world.clockShift)
+  const idealOffsetsHours = totalRounds === 5
+    ? [4, 6, 8, 10, 12]
+    : totalRounds === 3
+      ? [4, 8, 12]
+      : Array.from({ length: totalRounds }, (_, i) => 4 + (totalRounds === 1 ? 4 : (8 * i) / (totalRounds - 1)))
+  const ideal = idealOffsetsHours.map(h => postStart + Math.round(h * HOUR))
+  const minLead = 40 * 60_000
+  if (now + minLead <= ideal[0] && ideal[ideal.length - 1] <= endAt - HOUR) return ideal
+  const grid = 30 * 60_000
+  const first = Math.ceil((now + 45 * 60_000) / grid) * grid
+  const last = endAt - HOUR
+  if (first > last) return []
+  if (totalRounds === 1) return [first]
+  if (last - first < (totalRounds - 1) * HOUR) return []
+  const slots: number[] = []
+  for (let i = 0; i < totalRounds; i++) {
+    const raw = first + ((last - first) * i) / (totalRounds - 1)
+    let snapped = Math.round(raw / grid) * grid
+    if (i > 0 && snapped <= slots[i - 1]) snapped = slots[i - 1] + grid
+    if (snapped > last) return []
+    slots.push(snapped)
+  }
+  return slots
+}
+
+/** 根据二级各赛区最终积分榜提取升级杯参赛队伍：每区第 1 轮空，第 2/3 名踢首轮资格赛。 */
+export function promotionCupQualifiers(world: WorldState): {
+  champions: string[]
+  qualifierPairs: { homeId: string; awayId: string }[]
+  entrants: string[]
+} {
+  const names = new Map(world.clubs.map(club => [club.id, club.name]))
+  const d2Zones = world.divisions.filter(division => division.tier === 'division2')
+  const champions: string[] = []
+  const qualifierPairs: { homeId: string; awayId: string }[] = []
+  const entrants: string[] = []
+  for (const division of d2Zones) {
+    const table = division.clubIds?.length
+      ? computeWorldTable(division.clubIds, division.fixtures, names)
+      : division.table
+    const top3 = table.slice(0, 3).map(row => row.teamId)
+    if (top3[0]) {
+      champions.push(top3[0])
+      entrants.push(top3[0])
+    }
+    if (top3[1] && top3[2]) {
+      qualifierPairs.push({ homeId: top3[1], awayId: top3[2] })
+      entrants.push(top3[1], top3[2])
+    } else if (top3[1]) {
+      champions.push(top3[1])
+      entrants.push(top3[1])
+    }
+  }
+  return { champions, qualifierPairs, entrants }
+}
+
+function buildPromotionGroups(qualified: readonly string[], seed: number): SeasonCupGroup[] {
+  const shuffled = shuffleSeasonCupTeams(qualified, seed, 'promotion', 201)
+  const half = Math.ceil(shuffled.length / 2)
+  const lists = [shuffled.slice(0, half), shuffled.slice(half)].filter(list => list.length > 0)
+  return lists.map((teamIds, index) => ({
+    index,
+    name: index === 0 ? 'A 组' : 'B 组',
+    teamIds,
+    table: teamIds.map(emptyCupRow),
+  }))
+}
+
+/** 升级杯小组赛轮次配对（支持 2 / 3 / 4 / 5+ 队每组，确保每队每轮最多 1 场且 3 队组各 1 主 1 客 1 轮空）。 */
+function makePromotionGroupRound(
+  cup: Pick<SeasonCup, 'id' | 'dates' | 'groups'>,
+  seasonIndex: number,
+  roundNum: number,
+  groupRoundIndex: number,
+): SeasonCupRound {
+  const kickoffAt = cup.dates[roundNum - 1]
+  const fixtures: SeasonCupFixture[] = []
+  const byes: string[] = []
+  let seq = 1
+  for (const group of cup.groups ?? []) {
+    const teams = group.teamIds
+    if (teams.length === 2) {
+      if (groupRoundIndex === 0) {
+        fixtures.push({
+          id: `sc-${seasonIndex}-${cup.id}-${roundNum}-${seq++}`,
+          cupId: cup.id,
+          round: roundNum,
+          stage: 'group',
+          groupIndex: group.index,
+          homeId: teams[0],
+          awayId: teams[1],
+          kickoffAt,
+          played: false,
+        })
+      }
+      continue
+    }
+    if (teams.length === 3) {
+      // 3 队单循环：每队 1 主 1 客 1 轮空
+      const triples: readonly [number, number, number][] = [
+        [1, 2, 0], // B vs C, A bye
+        [2, 0, 1], // C vs A, B bye
+        [0, 1, 2], // A vs B, C bye
+      ]
+      const [h, a, byeIdx] = triples[groupRoundIndex % 3]
+      byes.push(teams[byeIdx])
+      fixtures.push({
+        id: `sc-${seasonIndex}-${cup.id}-${roundNum}-${seq++}`,
+        cupId: cup.id,
+        round: roundNum,
+        stage: 'group',
+        groupIndex: group.index,
+        homeId: teams[h],
+        awayId: teams[a],
+        kickoffAt,
+        played: false,
+      })
+      continue
+    }
+    if (teams.length === 4) {
+      const pairings = GROUP_PAIRINGS[groupRoundIndex % GROUP_PAIRINGS.length]
+      for (const [homeSlot, awaySlot] of pairings) {
+        fixtures.push({
+          id: `sc-${seasonIndex}-${cup.id}-${roundNum}-${seq++}`,
+          cupId: cup.id,
+          round: roundNum,
+          stage: 'group',
+          groupIndex: group.index,
+          homeId: teams[homeSlot],
+          awayId: teams[awaySlot],
+          kickoffAt,
+          played: false,
+        })
+      }
+      continue
+    }
+    // 5+ 队采用圆桌轮转法前 3 轮（瑞士轮节奏，每队每轮最多 1 场不重复对阵）
+    const padded: (string | null)[] = teams.length % 2 === 0 ? [...teams] : [...teams, null]
+    const n = padded.length
+    const rotated = [padded[0], ...padded.slice(1)]
+    for (let step = 0; step < groupRoundIndex; step++) {
+      const last = rotated.pop()!
+      rotated.splice(1, 0, last)
+    }
+    for (let i = 0; i < n / 2; i++) {
+      const a = rotated[i]
+      const b = rotated[n - 1 - i]
+      if (!a && b) { byes.push(b); continue }
+      if (!b && a) { byes.push(a); continue }
+      if (!a || !b) continue
+      const swap = (groupRoundIndex + i) % 2 === 1
+      fixtures.push({
+        id: `sc-${seasonIndex}-${cup.id}-${roundNum}-${seq++}`,
+        cupId: cup.id,
+        round: roundNum,
+        stage: 'group',
+        groupIndex: group.index,
+        homeId: swap ? b : a,
+        awayId: swap ? a : b,
+        kickoffAt,
+        played: false,
+      })
+    }
+  }
+  return { round: roundNum, kickoffAt, stage: 'group', byes, fixtures }
+}
+
+/** 常规赛 38 轮全部公布后，在赛后 16 小时休整期内排期正式实时升级杯。 */
+export function planPromotionCup(world: WorldState, _seed: number, now: number): SeasonCup | undefined {
+  if (!Number.isFinite(now)) return undefined
+  if (completedWorldRound(world) < 38) return undefined
+  if (world.seasonCups?.seasonIndex === world.seasonIndex && world.seasonCups.cups.some(cup => cup.id === 'promotion')) {
+    return undefined
+  }
+  const { champions, qualifierPairs, entrants } = promotionCupQualifiers(world)
+  if (entrants.length < 4 || !qualifierPairs.length) return undefined
+  const qualifiedCount = champions.length + qualifierPairs.length
+  const groupASize = Math.ceil(qualifiedCount / 2)
+  const groupRounds = groupASize <= 2 ? 1 : 3
+  const totalRounds = 1 + groupRounds + 1
+  const dates = collectPromotionCupSlots(world, now, totalRounds)
+  if (dates.length < totalRounds) return undefined
+  const kickoffAt = dates[0]
+  const round1: SeasonCupRound = {
+    round: 1,
+    kickoffAt,
+    stage: 'knockout',
+    byes: champions,
+    fixtures: qualifierPairs.map((pair, index) => ({
+      id: `sc-${world.seasonIndex}-promotion-1-${index + 1}`,
+      cupId: 'promotion',
+      round: 1,
+      stage: 'knockout',
+      homeId: pair.homeId,
+      awayId: pair.awayId,
+      kickoffAt,
+      played: false,
+    })),
+  }
+  return {
+    id: 'promotion',
+    name: SEASON_CUP_NAMES.promotion,
+    entrants,
+    dates,
+    rounds: [round1],
+    promotedIds: [],
+  }
+}
+
+/** 把实时升级杯状态同步回 world.promotionPlayoff，供换季升降级与世界页读取。 */
+export function syncPromotionPlayoffFromCup(world: WorldState): boolean {
+  const cup = world.seasonCups?.seasonIndex === world.seasonIndex
+    ? world.seasonCups.cups.find(item => item.id === 'promotion')
+    : undefined
+  if (!cup) return false
+  const matches = cup.rounds.flatMap(round => round.fixtures.map(fixture => ({
+    id: fixture.id,
+    stage: (round.round === 1 ? 'qualifier' : round.stage === 'group' ? 'group' : 'final') as 'qualifier' | 'group' | 'final',
+    homeId: fixture.homeId,
+    awayId: fixture.awayId,
+    ...(fixture.played && fixture.score ? { score: { ...fixture.score } } : {}),
+    ...(fixture.played && fixture.shootout ? { shootout: { ...fixture.shootout } } : {}),
+  })))
+  const groups = cup.groups?.map(group =>
+    cup.rounds
+      .filter(round => round.stage === 'group')
+      .flatMap(round => round.fixtures)
+      .filter(fixture => fixture.groupIndex === group.index)
+      .map(fixture => fixture.id),
+  )
+  const finalRound = cup.groups?.length ? cup.rounds.find(round => round.round > 1 && round.stage === 'knockout') : undefined
+  const runnerUps = finalRound?.fixtures[0] ? [finalRound.fixtures[0].homeId, finalRound.fixtures[0].awayId] : undefined
+  world.promotionPlayoff = {
+    seasonIndex: world.seasonIndex,
+    teams: [...cup.entrants],
+    matches,
+    promoted: [...(cup.promotedIds ?? [])],
+    finished: !!cup.championId,
+    ...(groups?.length ? { groups } : {}),
+    ...(runnerUps?.length ? { runnerUps } : {}),
+  }
+  return true
+}
+
 /** 提交杯赛计划；允许从“仅提前规划传奇杯”安全合并补齐第 6 轮后的 4 项常规杯赛，但绝不覆盖已规划完成的常规杯赛。 */
 export function applySeasonCupPlan(world: WorldState, plan: SeasonCups): void {
   if (plan.seasonIndex !== world.seasonIndex) throw new Error('杯赛计划与赛季不一致')
@@ -515,7 +766,7 @@ export function rescheduleActiveSeasonCups(world: WorldState, now: number): bool
     }
     return done
   }
-  const tierCups = cups.cups.filter(cup => cup.id !== 'cross' && cup.id !== 'legend')
+  const tierCups = cups.cups.filter(cup => cup.id !== 'cross' && cup.id !== 'legend' && cup.id !== 'promotion')
   const crossCup = cups.cups.find(cup => cup.id === 'cross')
   const legendCup = cups.cups.find(cup => cup.id === 'legend')
   const tierNeed = Math.max(0, ...tierCups.map(cup => cup.dates.length - doneOf(cup)))
@@ -544,6 +795,7 @@ export function rescheduleActiveSeasonCups(world: WorldState, now: number): bool
     crossDays = split.crossDays
   }
   for (const cup of cups.cups) {
+    if (cup.id === 'promotion') continue
     const done = doneOf(cup)
     const pool = cup.id === 'cross' ? crossDays : cup.id === 'legend' ? legendDays : tierDays
     for (let index = done; index < cup.dates.length; index++) {
@@ -565,6 +817,45 @@ export function advanceSeasonCup(cup: SeasonCup, seasonIndex: number, seed: numb
   if (cup.championId) return
   const current = cup.rounds.at(-1)
   if (!current) return
+  if (cup.id === 'promotion') {
+    if (!cup.groups?.length) {
+      if (current.fixtures.some(fixture => !fixture.played || !fixture.winnerId)) return
+      const qualified = [...current.byes, ...current.fixtures.map(fixture => fixture.winnerId!)]
+      cup.groups = buildPromotionGroups(qualified, seed)
+      if (!cup.dates[current.round]) throw new Error('升级杯缺少小组赛时间')
+      cup.rounds.push(makePromotionGroupRound(cup, seasonIndex, current.round + 1, 0))
+      return
+    }
+    if (current.stage === 'group') {
+      if (current.fixtures.some(fixture => !fixture.played || !fixture.score)) return
+      refreshSeasonCupGroups(cup, seed)
+      const groupRoundsDone = cup.rounds.filter(round => round.stage === 'group').length
+      const totalGroupRounds = Math.max(1, cup.dates.length - 2)
+      if (!cup.dates[current.round]) throw new Error('升级杯缺少下一轮时间')
+      if (groupRoundsDone < totalGroupRounds) {
+        cup.rounds.push(makePromotionGroupRound(cup, seasonIndex, current.round + 1, groupRoundsDone))
+        return
+      }
+      const winners = cup.groups.map(group => group.table[0]?.teamId).filter((id): id is string => !!id)
+      const runnerUps = cup.groups.map(group => group.table[1]?.teamId).filter((id): id is string => !!id)
+      cup.promotedIds = [...winners]
+      if (runnerUps.length >= 2) {
+        cup.rounds.push(makeFixedKnockoutRound(cup, seasonIndex, current.round + 1, [{ homeId: runnerUps[0], awayId: runnerUps[1] }]))
+      } else {
+        cup.promotedIds = [...new Set([...winners, ...runnerUps])].slice(0, 3)
+        cup.championId = cup.promotedIds[0]
+      }
+      return
+    }
+    if (current.fixtures.some(fixture => !fixture.played || !fixture.winnerId)) return
+    const third = current.fixtures[0]?.winnerId
+    const basePromoted = cup.promotedIds?.length
+      ? cup.promotedIds
+      : (cup.groups ?? []).map(group => group.table[0]?.teamId).filter((id): id is string => !!id)
+    cup.promotedIds = [...new Set([...basePromoted, ...(third ? [third] : [])])].slice(0, 3)
+    cup.championId = cup.promotedIds[0]
+    return
+  }
   if (cup.groups?.length) {
     if (current.stage === 'group') {
       if (current.fixtures.some(fixture => !fixture.played || !fixture.score)) return

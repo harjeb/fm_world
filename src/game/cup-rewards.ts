@@ -15,6 +15,7 @@ export const CUP_CEILING_BONUS: Record<SeasonCupId, number> = {
   champions: SEASON_CUP_REWARDS.champions.ceiling,
   cross: SEASON_CUP_REWARDS.cross.ceiling,
   legend: SEASON_CUP_REWARDS.legend.ceiling,
+  promotion: SEASON_CUP_REWARDS.promotion.ceiling,
 }
 
 const LEGACY_CUP_IDS: CupId[] = ['community', 'league', 'champions']

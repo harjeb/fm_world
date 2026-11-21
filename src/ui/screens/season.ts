@@ -63,7 +63,7 @@ function myCupFixtures(): MyFixtureRow[] {
           kickoffAt: Number.isFinite(fixture.kickoffAt) ? fixture.kickoffAt : cup.dates[round.round - 1] ?? 0,
           competition: cup.name,
           competitionTone: 'info',
-          roundLabel: cupRoundLabel(round.round, cup.dates.length, prelim, round.stage, round.leg),
+          roundLabel: cupRoundLabel(round.round, cup.dates.length, prelim, round.stage, round.leg, cup.id),
           home,
           opponent: home ? fixture.awayId : fixture.homeId,
           played: fixture.played,
@@ -177,7 +177,7 @@ export function renderSeason(): string {
       </div>
     </div>
     ${myRankTrendPanel(division)}
-    ${game.world?.seasonCupMode === 1 ? `<div class="btn-row pad"><button class="btn" data-nav="cups">${icon('badge', 14)} 查看赛季杯赛对阵与排行</button></div>` : ''}
+    ${game.world?.seasonCupMode === 1 ? `<div class="btn-row pad"><button class="btn" data-nav="cups">${icon('badge', 14)} 查看赛季杯赛对阵与排行</button>${season.finished ? `<button class="btn primary" data-action="go-cup" data-cup="promotion">${icon('flag', 14)} 查看升级杯赛程与战报</button>` : ''}</div>` : ''}
     <div class="grid season-bottom">
       ${leaderPanels(season, { limit: 8 })}
     </div>

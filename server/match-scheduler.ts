@@ -2,7 +2,7 @@ import type { AIClubState, AITeam, Fixture, WorldState } from '../src/game/types
 import { awardAISeasonCup } from '../src/game/season-cup-rewards.ts'
 import { seasonCupPlayerStats } from '../src/game/season-cup-stats.ts'
 import { computeWorldTable } from '../src/game/world.ts'
-import { SEASON_CUP_QUALIFICATION_ROUND, advanceSeasonCup, applySeasonCupPlan, completedWorldRound, paysSeasonCupAppearanceGold, planSeasonCups, seasonRoundKickoff, worldRoundsKickedOff, type SeasonCupFixture } from '../src/game/season-cups.ts'
+import { SEASON_CUP_QUALIFICATION_ROUND, advanceSeasonCup, applySeasonCupPlan, completedWorldRound, paysSeasonCupAppearanceGold, planPromotionCup, planSeasonCups, seasonRoundKickoff, syncPromotionPlayoffFromCup, worldRoundsKickedOff, type SeasonCupFixture } from '../src/game/season-cups.ts'
 import { aggregateScore } from '../src/game/match/knockout.ts'
 import { recordMatchDiscipline } from '../src/game/discipline.ts'
 import { splitSeed } from '../src/game/rng.ts'
@@ -50,6 +50,19 @@ export class MatchScheduler {
       applySeasonCupPlan(world, plan)
       this.persist()
       changed = true
+    }
+    if (this.enableSeasonCups) {
+      const promotionCup = planPromotionCup(world, this.shared.seed, now)
+      if (promotionCup) {
+        if (!world.seasonCups || world.seasonCups.seasonIndex !== world.seasonIndex) {
+          world.seasonCups = { version: 1, seasonIndex: world.seasonIndex, qualificationRound: 38, createdAt: now, drawSeed: this.shared.seed, delayedLeagueRounds: [], cups: [promotionCup] }
+        } else {
+          world.seasonCups.cups.push(promotionCup)
+        }
+        syncPromotionPlayoffFromCup(world)
+        this.persist()
+        changed = true
+      }
     }
     const round = Math.min(38, Math.max(1, worldRoundsKickedOff(world, now)))
     for (const division of world.divisions) {
@@ -252,7 +265,8 @@ export class MatchScheduler {
       }
       for (const { cup } of scheduled) {
         advanceSeasonCup(cup, world.seasonIndex, this.shared.seed)
-        if (cup.championId) {
+        if (cup.id === 'promotion') syncPromotionPlayoffFromCup(world)
+        if (cup.championId && cup.id !== 'promotion') {
           const final = ready.find(item => item.fixture.cupId === cup.id && item.winner === cup.championId)
           const locked = final && (final.job.home.team.id === cup.championId ? final.job.home : final.job.away)
           const ai = locked && !locked.coachId ? this.shared.aiClubs?.[cup.championId] : undefined

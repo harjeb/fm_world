@@ -1144,7 +1144,7 @@ document.addEventListener('click', async (event) => {
   const seasonCupTab = target.closest<HTMLElement>('[data-season-cup-tab]')
   if (seasonCupTab?.dataset.seasonCupTab) {
     const id = seasonCupTab.dataset.seasonCupTab
-    if (id === 'community' || id === 'league' || id === 'champions' || id === 'cross' || id === 'legend') ui.seasonCupTab = id
+    if (id === 'community' || id === 'league' || id === 'champions' || id === 'cross' || id === 'legend' || id === 'promotion') ui.seasonCupTab = id
     render()
     return
   }
@@ -1615,6 +1615,12 @@ document.addEventListener('click', async (event) => {
       ui.transferTab = (actionEl.dataset.tab as TransferTab | undefined) ?? 'market'
       go('transfer')
       break
+    case 'go-cup': {
+      const id = actionEl.dataset.cup
+      if (id === 'community' || id === 'league' || id === 'champions' || id === 'cross' || id === 'legend' || id === 'promotion') ui.seasonCupTab = id
+      go('cups')
+      break
+    }
     case 'changelog-open':
       ui.changelogOpen = true
       markChangelogSeen()

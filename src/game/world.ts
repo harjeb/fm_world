@@ -763,6 +763,16 @@ export function worldForClub(base: WorldState, clubId: string): WorldState {
       fixture.isPlayer = fixture.homeId === 'player' || fixture.awayId === 'player'
     }
   }
+  for (const playoff of [world.promotionPlayoff, world.lastPromotionPlayoff]) {
+    if (!playoff) continue
+    playoff.teams = playoff.teams.map((id) => id === clubId ? 'player' : id)
+    playoff.promoted = playoff.promoted.map((id) => id === clubId ? 'player' : id)
+    if (playoff.runnerUps) playoff.runnerUps = playoff.runnerUps.map((id) => id === clubId ? 'player' : id)
+    for (const match of playoff.matches) {
+      if (match.homeId === clubId) match.homeId = 'player'
+      if (match.awayId === clubId) match.awayId = 'player'
+    }
+  }
   club.squadKey = club.id
   club.id = 'player'
   club.isPlayer = true
@@ -791,6 +801,7 @@ export function ownerlessWorldFromClub(base: WorldState, clubId: string): WorldS
     if (!playoff) continue
     playoff.teams = playoff.teams.map((id) => id === 'player' ? clubId : id)
     playoff.promoted = playoff.promoted.map((id) => id === 'player' ? clubId : id)
+    if (playoff.runnerUps) playoff.runnerUps = playoff.runnerUps.map((id) => id === 'player' ? clubId : id)
     for (const match of playoff.matches) {
       if (match.homeId === 'player') match.homeId = clubId
       if (match.awayId === 'player') match.awayId = clubId
@@ -1143,8 +1154,8 @@ function loserOf(match: PromotionMatch): string {
   return winnerOf(match) === match.homeId ? match.awayId : match.homeId
 }
 
-/** 小组循环：人少时这就是一轮瑞士轮，按积分、净胜球、进球排。 */
-function groupWinner(game: GameState, teams: string[], groups: string[][], index: number, matches: PromotionMatch[] = []): string {
+/** 小组循环：人少时这就是一轮瑞士轮，按积分、净胜球、进球排，返回完整排名。 */
+function groupRanking(game: GameState, teams: string[], groups: string[][], index: number, matches: PromotionMatch[] = []): string[] {
   const rows = new Map<string, { id: string; points: number; gf: number; ga: number }>()
   for (const id of teams) rows.set(id, { id, points: 0, gf: 0, ga: 0 })
   for (let i = 0; i < teams.length; i++) {
@@ -1169,8 +1180,9 @@ function groupWinner(game: GameState, teams: string[], groups: string[][], index
       else { home.points += 1; away.points += 1 }
     }
   }
-  return [...rows.values()].sort((a, b) =>
-    b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf || a.id.localeCompare(b.id))[0].id
+  return [...rows.values()]
+    .sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf || a.id.localeCompare(b.id))
+    .map((row) => row.id)
 }
 
 /**
@@ -1199,14 +1211,13 @@ function runPromotionPlayoff(game: GameState): PromotionPlayoff {
   const half = Math.ceil(shuffled.length / 2)
   const groupTeams = [shuffled.slice(0, half), shuffled.slice(half)].filter((group) => group.length > 0)
   const groups: string[][] = groupTeams.map(() => [])
-  const winners = groupTeams.map((teams, index) => groupWinner(game, teams, groups, index, matches))
-  const runnerUps = groupTeams
-    .map((teams, index) => teams.filter((id) => id !== winners[index])[0])
-    .filter((id): id is string => !!id)
+  const rankings = groupTeams.map((teams, index) => groupRanking(game, teams, groups, index, matches))
+  const winners = rankings.map((list) => list[0]).filter((id): id is string => !!id)
+  const runnerUps = rankings.map((list) => list[1]).filter((id): id is string => !!id)
   let runnerUpWinner: string | undefined
   if (runnerUps.length > 0) {
     const runnerGroups: string[][] = [[]]
-    runnerUpWinner = groupWinner(game, runnerUps, runnerGroups, 0, matches)
+    runnerUpWinner = groupRanking(game, runnerUps, runnerGroups, 0, matches)[0]
   }
   const promoted = [...winners, ...(runnerUpWinner ? [runnerUpWinner] : [])].filter((id): id is string => !!id)
   return {
@@ -1254,25 +1265,28 @@ function assignRelegatedToD2(world: WorldState, relegated: string[], current: Ma
 function promoteAndRelegate(game: GameState, protectedClubs: ReadonlySet<string> = new Set()): { promoted: string[]; relegated: string[] } {
   const world = game.world!
   const current = new Map(world.clubs.map((club) => [club.id, club]))
+  const resolveClub = (id: string) => current.get(id) ?? world.clubs.find((club) => club.squadKey === id)
   const champions = world.divisions.find((division) => division.divisionId === 'champions')!
   const d1 = world.divisions.find((division) => division.divisionId === 'division1')!
-  // 附加赛在常规赛一结束就算好并展示在季后赛窗口里；这里直接沿用，不再换一套随机结果。
-  const playoff = world.promotionPlayoff?.seasonIndex === world.seasonIndex ? world.promotionPlayoff : runPromotionPlayoff(game)
+  // 附加赛已完赛时直接沿用实时升级杯/季后赛结果；未完赛则回退兜底结算。
+  const playoff = world.promotionPlayoff?.seasonIndex === world.seasonIndex && world.promotionPlayoff.finished && world.promotionPlayoff.promoted.length > 0
+    ? world.promotionPlayoff
+    : runPromotionPlayoff(game)
   world.promotionPlayoff = playoff
   const champsBottom = champions.table.slice(-3).map((row) => row.teamId)
   const d1Top = d1.table.slice(0, 3).map((row) => row.teamId)
   const d1Bottom = d1.table.slice(-3).map((row) => row.teamId)
-  const promoted = playoff.promoted
+  const promoted = playoff.promoted.map((id) => resolveClub(id)?.id ?? id)
   for (const id of champsBottom) {
-    const club = current.get(id)
+    const club = resolveClub(id)
     if (club) club.tier = 'division1'
   }
   for (const id of d1Top) {
-    const club = current.get(id)
+    const club = resolveClub(id)
     if (club) club.tier = 'champions'
   }
   for (const id of promoted) {
-    const club = current.get(id)
+    const club = resolveClub(id)
     if (club) { club.tier = 'division1'; club.conference = undefined }
   }
   assignRelegatedToD2(world, d1Bottom, current)

@@ -667,7 +667,7 @@ describe('传奇杯奖金规则（小组赛 0 金币，淘汰赛每轮发一次�
     expect(doneLegend.championId).toBeTruthy()
     expect(doneLegend.rounds).toHaveLength(8)
     expect(doneLegend.rounds.reduce((s, r) => s + r.fixtures.length, 0)).toBe(37)
-    expect(schedulerWorld.seasonCups!.cups.every((c) => !!c.championId)).toBe(true)
+    expect(schedulerWorld.seasonCups!.cups.filter((c) => c.id !== 'promotion').every((c) => !!c.championId)).toBe(true)
 
     // 校验 AI 奖金：小组赛 0、两回合首回合 300,000、次回合 0（每轮发一次）、决赛 300,000
     for (const round of doneLegend.rounds) {
