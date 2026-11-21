@@ -747,8 +747,50 @@ export function worldSlots(
   return { total, taken, free: total - taken }
 }
 
+export type WorldForClubReadOnlyCache = {
+  divisions: ReadonlyArray<SeasonState>
+  seasonCups?: WorldState['seasonCups']
+  seasonCupHistory?: WorldState['seasonCupHistory']
+}
+
 /** 共享世界只保存真实球队 ID；账号存档把自己执教的球队映射为 player。 */
-export function worldForClub(base: WorldState, clubId: string): WorldState {
+export function worldForClub(base: WorldState, clubId: string, readOnly?: WorldForClubReadOnlyCache): WorldState {
+  if (readOnly) {
+    const ownIndex = base.divisions.findIndex((item) => item.clubIds?.includes(clubId))
+    if (ownIndex < 0) throw new Error('找不到球队所在赛区')
+    const ownDivision = divisionForClub(base, clubId)
+    const clubs = structuredClone(base.clubs)
+    const club = clubs.find((item) => item.id === clubId)
+    if (!club) throw new Error('找不到球队')
+    club.squadKey = club.id
+    club.id = 'player'
+    club.isPlayer = true
+    const mapPlayoff = (source: WorldState['promotionPlayoff']) => {
+      if (!source) return undefined
+      const playoff = structuredClone(source)
+      playoff.teams = playoff.teams.map((id) => id === clubId ? 'player' : id)
+      playoff.promoted = playoff.promoted.map((id) => id === clubId ? 'player' : id)
+      if (playoff.runnerUps) playoff.runnerUps = playoff.runnerUps.map((id) => id === clubId ? 'player' : id)
+      for (const match of playoff.matches) {
+        if (match.homeId === clubId) match.homeId = 'player'
+        if (match.awayId === clubId) match.awayId = 'player'
+      }
+      return playoff
+    }
+    return {
+      ...base,
+      clubs,
+      starAges: { ...base.starAges },
+      history: structuredClone(base.history),
+      divisions: base.divisions.map((_, index) => (index === ownIndex ? ownDivision : readOnly.divisions[index])),
+      ...(readOnly.seasonCups !== undefined ? { seasonCups: readOnly.seasonCups } : {}),
+      ...(readOnly.seasonCupHistory !== undefined ? { seasonCupHistory: readOnly.seasonCupHistory } : {}),
+      ...(base.promotionPlayoff ? { promotionPlayoff: mapPlayoff(base.promotionPlayoff) } : {}),
+      ...(base.lastPromotionPlayoff ? { lastPromotionPlayoff: mapPlayoff(base.lastPromotionPlayoff) } : {}),
+      ...(base.transferTeams ? { transferTeams: structuredClone(base.transferTeams) } : {}),
+      playerDivisionId: ownDivision.divisionId ?? base.playerDivisionId,
+    }
+  }
   const world = structuredClone(base)
   const club = clubById(world, clubId)
   const division = world.divisions.find((item) => item.clubIds?.includes(clubId))

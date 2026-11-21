@@ -25,8 +25,8 @@ import { createInitialGame, GAME_VERSION, upgradeLegacySignatures } from '../src
 import { addTrainedCard, ensureCards, equipCard, playerCards, recyclePlayerCards, setCardRecycleLock, untrainedPlayer } from '../src/game/cards.ts'
 import { ensurePve } from '../src/game/pve.ts'
 import { loadPveContent } from '../src/game/pve-content.ts'
-import { upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
-import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, migrateLegacyExpandedTactics, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, repairInflatedContractWages, syncAllClubLiveTactics, syncClubLiveTactics, wageForPlayer, worldForClub, worldSlots, worldWageBill } from '../src/game/world.ts'
+import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION, upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
+import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, migrateLegacyExpandedTactics, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, repairInflatedContractWages, syncAllClubLiveTactics, syncClubLiveTactics, wageForPlayer, worldForClub, worldSlots, worldWageBill, type WorldForClubReadOnlyCache } from '../src/game/world.ts'
 import { WORLD_CLUB_DEFS, pickExpandedZoneClubs } from '../src/game/data/world-clubs.ts'
 import { rescaleLegacyRandomPlayer } from '../src/game/data/players.ts'
 import { lineupLockState } from '../src/game/season.ts'
@@ -98,6 +98,7 @@ export const AI_TAKEOVER_INACTIVE_MS = 3 * 24 * 60 * 60_000
 const ONLINE_PERSIST_INTERVAL_MS = 5 * 60_000
 
 import { AccountStore, isVacantSeat, vacantSeatId, type Account } from './account-store.ts'
+import { hydrateMatchRecord, hydrateSeasonHistoryEntry } from './account-parts.ts'
 
 type SharedWorld = {
   seed: number
@@ -606,6 +607,73 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
     return cachedCupOpening.list
   }
+
+  // 全服共享只读快照池：避免 59 个账号在堆内存里各自深拷贝 19 支 AI 球队、4 个其他赛区、赛季杯赛历史与储备球星。
+  const AI_TEAM_COMPARE_IGNORE = new Set(['condition', 'energy', 'recoveryAt', 'energyAt'])
+  const frozenTeamCache = new Map<string, { version: number; team: AITeam }>()
+  function frozenSharedTeam(clubId: string, liveTeam: AITeam): AITeam {
+    const cached = frozenTeamCache.get(clubId)
+    if (cached) {
+      if (cached.version === sharedTeamsPublicVersion) return cached.team
+      if (deepEqual(cached.team, liveTeam, AI_TEAM_COMPARE_IGNORE)) {
+        cached.version = sharedTeamsPublicVersion
+        return cached.team
+      }
+    }
+    const frozen = Object.freeze(structuredClone(liveTeam))
+    frozenTeamCache.set(clubId, { version: sharedTeamsPublicVersion, team: frozen })
+    return frozen
+  }
+
+  let cachedWorldReadOnly: { version: number; cache: WorldForClubReadOnlyCache } | null = null
+  function sharedWorldReadOnlyCache(): WorldForClubReadOnlyCache {
+    if (!cachedWorldReadOnly || cachedWorldReadOnly.version !== sharedWorldVersion) {
+      const cache: WorldForClubReadOnlyCache = {
+        divisions: sharedWorld.world.divisions.map((division) => Object.freeze(structuredClone(division))),
+        ...(sharedWorld.world.seasonCups ? { seasonCups: Object.freeze(structuredClone(sharedWorld.world.seasonCups)) } : {}),
+        ...(sharedWorld.world.seasonCupHistory?.length
+          ? { seasonCupHistory: Object.freeze(structuredClone(sharedWorld.world.seasonCupHistory)) as WorldState['seasonCupHistory'] }
+          : {}),
+      }
+      cachedWorldReadOnly = { version: sharedWorldVersion, cache }
+      return cache
+    }
+    return cachedWorldReadOnly.cache
+  }
+
+  let cachedFrozenReserveStars: { source: Player[]; frozen: Player[] } | null = null
+  function frozenSharedReserveStars(): Player[] {
+    if (!cachedFrozenReserveStars || cachedFrozenReserveStars.source !== sharedWorld.reserveStars) {
+      cachedFrozenReserveStars = {
+        source: sharedWorld.reserveStars,
+        frozen: Object.freeze(structuredClone(sharedWorld.reserveStars)) as Player[],
+      }
+    }
+    return cachedFrozenReserveStars.frozen
+  }
+
+  function hydrateAccountMatchRecord(accountId: string, record: GameState['matchHistory'][number]): GameState['matchHistory'][number] {
+    if (!record.detailDeferred) return record
+    return hydrateMatchRecord(record, accountStore.getMatchDetail(accountId, record.id))
+  }
+
+  function hydrateAccountGameForFullResponse(account: Account, game: GameState): void {
+    const needsMatchDetails = game.matchHistory.some((r) => r.detailDeferred) || game.challengeHistory.some((r) => r.detailDeferred)
+    if (needsMatchDetails) {
+      const details = accountStore.getAllMatchDetails(account.id)
+      if (details.size > 0) {
+        game.matchHistory = game.matchHistory.map((r) => r.detailDeferred ? hydrateMatchRecord(r, details.get(r.id)) : r)
+        game.challengeHistory = game.challengeHistory.map((r) => r.detailDeferred ? hydrateMatchRecord(r, details.get(r.id)) : r)
+      }
+    }
+    const needsSeasonFixtures = (game.seasonHistory ?? []).some((s) => !s.fixtures?.length)
+    if (needsSeasonFixtures && game.seasonHistory) {
+      const fixturesBySeason = accountStore.getAllSeasonHistoryFixtures(account.id)
+      if (fixturesBySeason.size > 0) {
+        game.seasonHistory = game.seasonHistory.map((s) => hydrateSeasonHistoryEntry(s, fixturesBySeason.get(s.index)))
+      }
+    }
+  }
   const matchQueue = new MatchQueue(path.join(dataDir, 'match-jobs'), options.matchQueue)
   // 升级前已公布的杯赛可以从已保存的任务补齐榜单；绝不读取未公开比赛。
   {
@@ -1060,12 +1128,24 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (sync.worldVer === sharedWorldVersion && sync.marketVer === market.version && sync.worldSeason === sharedWorld.world.seasonIndex) {
       return false
     }
-    const canonical = worldForClub(sharedWorld.world, clubId)
+    const canonical = worldForClub(sharedWorld.world, clubId, sharedWorldReadOnlyCache())
     for (const player of market.pool) delete canonical.starAges[player.id]
     sync.worldVer = sharedWorldVersion
     sync.marketVer = market.version
     sync.worldSeason = sharedWorld.world.seasonIndex
-    if (deepEqual(account.game.world, canonical)) return false
+    if (deepEqual(account.game.world, canonical)) {
+      // 内容一致但引用未共享时直接切至共享只读世界快照（不增加 revision、不触发额外落盘）。
+      const ownDiv = canonical.divisions.find((item) => item.divisionId === account.game.season.divisionId)
+      if (ownDiv && ownDiv.index === account.game.season.index && ownDiv.round === account.game.season.round && !account.game.activeMatch?.context.isLeague) {
+        ownDiv.fixtures = account.game.season.fixtures
+      }
+      account.game.world = canonical
+      return false
+    }
+    const ownDiv = canonical.divisions.find((item) => item.divisionId === account.game.season.divisionId)
+    if (ownDiv && ownDiv.index === account.game.season.index && ownDiv.round === account.game.season.round && !account.game.activeMatch?.context.isLeague) {
+      ownDiv.fixtures = account.game.season.fixtures
+    }
     account.game.world = canonical
     return true
   }
@@ -1128,7 +1208,6 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     return changed
   }
 
-  const AI_TEAM_COMPARE_IGNORE = new Set(['condition', 'energy', 'recoveryAt', 'energyAt'])
   function pullSharedTeams(account: Account): boolean {
     const sync = syncOf(account)
     if (sync.teamsVer === sharedTeamsPublicVersion && sync.worldSeason === sharedWorld.world.seasonIndex) {
@@ -1150,22 +1229,22 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (local && shared && local.name !== shared.name) { local.name = shared.name; changed = true }
     }
     const current = account.game.aiTeams
-    let teamsChanged = current.length !== teams.length
+    const frozenTeams = teams.map((team) => frozenSharedTeam(team.id, team))
+    let teamsChanged = current.length !== frozenTeams.length
     if (!teamsChanged) {
-      for (let i = 0; i < teams.length; i++) {
-        if (!deepEqual(current[i], teams[i], AI_TEAM_COMPARE_IGNORE)) {
+      for (let i = 0; i < frozenTeams.length; i++) {
+        if (current[i] !== frozenTeams[i] && !deepEqual(current[i], frozenTeams[i], AI_TEAM_COMPARE_IGNORE)) {
           teamsChanged = true
           break
         }
       }
     }
     if (teamsChanged) {
-      account.game.aiTeams = teams.map((team, index) => (
-        current[index] && deepEqual(current[index], team, AI_TEAM_COMPARE_IGNORE)
-          ? current[index]
-          : structuredClone(team)
-      ))
+      account.game.aiTeams = frozenTeams
       changed = true
+    } else if (current.some((team, index) => team !== frozenTeams[index])) {
+      // 内容一致但引用未共享时直接切到共享冻结对象，不改动 revision、不触发落盘。
+      account.game.aiTeams = frozenTeams
     }
     sync.teamsVer = sharedTeamsPublicVersion
     sync.worldSeason = sharedWorld.world.seasonIndex
@@ -1879,6 +1958,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
           ),
         }
       }
+    } else {
+      hydrateAccountGameForFullResponse(account, game)
     }
     // 直播回放只放在下发的副本里，不写回账号存档。
     if (!game.activeMatch) {
@@ -2084,10 +2165,28 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const signaturesAdded = needsMigration ? upgradeLegacySignatures(account.game) : false
       const cardsAdded = ensureCards(account.game)
       const pveAdded = ensurePve(account.game, cupOpeningTeams())
+      const needLegacyPlayerMigration = needsMigration && (
+        account.game.namesVersion !== NAMES_VERSION
+        || account.game.traitsVersion !== TRAITS_VERSION
+        || account.game.attrsVersion !== ATTRS_VERSION
+      )
+      if (needLegacyPlayerMigration) {
+        if (account.game.aiTeams?.some((team) => team && Object.isFrozen(team))) {
+          account.game.aiTeams = account.game.aiTeams.map((team) => team && Object.isFrozen(team) ? structuredClone(team) : team)
+        }
+        if (account.game.reserveStars && Object.isFrozen(account.game.reserveStars)) {
+          account.game.reserveStars = structuredClone(account.game.reserveStars)
+        }
+      }
       const namesUpgraded = needsMigration ? upgradeNames(account.game) : false
       const traitsUpgraded = needsMigration ? upgradeStarTraits(account.game) : false
       const attrsUpgraded = needsMigration ? upgradeBurstAttr(account.game) : false
-      if (needsMigration) sync.migratedGame = account.game
+      if (needsMigration) {
+        if (account.game.shared && account.game.reserveStars !== frozenSharedReserveStars()) {
+          account.game.reserveStars = frozenSharedReserveStars()
+        }
+        sync.migratedGame = account.game
+      }
       const sharedTeamsChanged = pullSharedTeams(account)
       const sharedFixturesChanged = pullSharedFixtures(account)
       const sharedWorldChanged = pullSharedWorld(account)
@@ -2349,13 +2448,19 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       sharedWorld.teams = teams
       sharedWorld.cupOpening = { seasonIndex: next.seasonIndex, teams: structuredClone(teams) }
       cachedCupOpening = null
+      frozenTeamCache.clear()
+      cachedWorldReadOnly = null
       sharedWorld.reserveStars = nextReserveStars
+      cachedFrozenReserveStars = null
       const openingTeams = cupOpeningTeams()
+      const readOnlyWorld = sharedWorldReadOnlyCache()
+      const sharedReserve = frozenSharedReserveStars()
       // 逐账号生成新赛季世界视图并立刻覆盖旧账号引用，避免新旧 57 份 world/aiTeams 同时驻留堆内存。
       for (const { account, clubId, game } of drafts) {
-        game.world = worldForClub(next, clubId)
+        game.world = worldForClub(next, clubId, readOnlyWorld)
         game.season = game.world.divisions.find((division) => division.clubIds?.includes('player'))!
-        game.aiTeams = (game.season.clubIds ?? []).filter((id) => id !== 'player').map((id) => structuredClone(teams[id]))
+        game.aiTeams = (game.season.clubIds ?? []).filter((id) => id !== 'player').map((id) => frozenSharedTeam(id, teams[id]))
+        game.reserveStars = sharedReserve
         ensurePve(game, openingTeams)
         account.game = game
         accountSync.delete(account)
@@ -2734,8 +2839,12 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         username,
         salt,
         passwordHash: hashPassword(password, salt),
-        // 自由球员全服共用，账号里不再有自己的一份。
-        game: previous?.game ?? createWorldGameFromWorld(sharedWorld.world, club.id, sharedWorld.seed, sharedWorld.startedAt, [], sharedWorld.reserveStars),
+        // 自由球员全服共用，账号里不再有自己的一份；储备球星直接复用共享冻结引用。
+        game: previous?.game ?? (() => {
+          const created = createWorldGameFromWorld(sharedWorld.world, club.id, sharedWorld.seed, sharedWorld.startedAt, [], [])
+          created.reserveStars = frozenSharedReserveStars()
+          return created
+        })(),
         revision: 1,
         lastUserRevision: 1,
         lastOnlineSeason: sharedWorld.world.seasonIndex,
@@ -2834,6 +2943,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         committedAuctions: () => committedFunds(market.auctions, agentAccount.id),
         clubId: () => ownedClubId(agentAccount),
         teamsById: () => sharedWorld.teams,
+        resolveMatchRecord: (record) => hydrateAccountMatchRecord(agentAccount.id, record),
       }
       const agentState = () => withSharedMarket(agentView(agentAccount.game, now(), agentOptions), agentAccount)
       if (url.pathname === '/api/agent/state' && req.method === 'GET') {
@@ -3078,11 +3188,12 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return
     }
 
-    // 复盘明细按需加载：联机精简模式（X-FM-Slim: 1）打开某场战报时再拉完整解说/关键事件/技能统计。
+    // 复盘明细按需加载：联机精简模式（X-FM-Slim: 1）打开某场战报时再从 SQLite 补全完整解说/关键事件/技能统计。
     if (url.pathname === '/api/match/record' && req.method === 'GET') {
       const id = url.searchParams.get('id') ?? ''
-      const record = id ? [...account.game.matchHistory, ...account.game.challengeHistory].find((item) => item.id === id) : undefined
-      if (!record) return json(res, 404, { error: '找不到这场比赛战报' })
+      const summary = id ? [...account.game.matchHistory, ...account.game.challengeHistory].find((item) => item.id === id) : undefined
+      if (!summary) return json(res, 404, { error: '找不到这场比赛战报' })
+      const record = hydrateAccountMatchRecord(account.id, summary)
       await sendJson(200, { record })
       return
     }
@@ -3490,9 +3601,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         if (!body.game.activeMatch.preplayed) return json(res, 400, { error: '联赛必须由服务器开始' })
         delete body.game.activeMatch
       }
-      // 联赛赛程、比分和战报只由服务器产生；旧页面保存不能回滚已赛结果、伪造未来比分或重踢。
+      // 联赛赛程、比分、战报与历年赛区归档只由服务器产生；旧页面保存不能回滚已赛结果、伪造未来比分或重踢。
       body.game.season = account.game.season
       body.game.matchHistory = account.game.matchHistory
+      if (account.game.shared && account.game.seasonHistory) body.game.seasonHistory = account.game.seasonHistory
       // 正式杯赛战报与荣誉由服务器发布；旧客户端不能伪造或覆盖。精简模式上传的延迟摘要恢复服务器完整战报。
       const previousChallengesById = new Map(account.game.challengeHistory.map(item => [item.id, item]))
       const officialRecords = account.game.challengeHistory.filter(item => item.cupId?.startsWith('season-'))
@@ -3534,9 +3646,15 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         ensureCupCeilingClaims(body.game)
       }
       preservePeakAttempts(account.game, body.game)
+      if (body.game.namesVersion !== NAMES_VERSION || body.game.traitsVersion !== TRAITS_VERSION || body.game.attrsVersion !== ATTRS_VERSION) {
+        if (body.game.reserveStars && Object.isFrozen(body.game.reserveStars)) {
+          body.game.reserveStars = structuredClone(body.game.reserveStars)
+        }
+      }
       upgradeNames(body.game)
       upgradeStarTraits(body.game)
       upgradeBurstAttr(body.game)
+      if (account.game.shared) body.game.reserveStars = frozenSharedReserveStars()
       // 成品卡属性、技能和锁定状态以服务器为准；普通存档只能改卡名。
       // 放在旧档升级之后，避免把服务器已经升级的属性再升级一次。
       // 新培养卡仍来自现有客户端培养流程，完整培养模拟尚不是服务器权威。

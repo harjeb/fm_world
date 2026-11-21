@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { ACCOUNT_DB_FILE, ACCOUNT_WRITE_BATCH_SIZE, AccountStore, type Account } from '../server/account-store.ts'
+import { hydrateMatchRecord, hydrateSeasonHistoryEntry } from '../server/account-parts.ts'
 import type { GameState } from '../src/game/types.ts'
 
 const dirs: string[] = []
@@ -222,5 +223,116 @@ describe('SQLite 账号存储', () => {
     expect(next.accounts[0].agentToken).toBeUndefined()
     expect(next.accounts[0].revision).toBe(7)
     expect(next.sessions).toEqual({ 'still-in': alice.id })
+  })
+
+  it('联机账号自动把战报重明细与历年旧赛程拆至 SQLite 冷表按需读取，并共享只读世界/球队部件', async () => {
+    const dir = directory()
+    const sharedTeam = { id: 'ai_01', name: '曼城', players: [{ id: 'p1', name: '哈兰德' }], lineup: { starters: [] } }
+    const otherDiv = { index: 2, divisionId: 'champions', clubIds: ['ai_01'], table: [], fixtures: [{ round: 1, homeId: 'ai_01', awayId: 'ai_02', played: false }] }
+    const sharedCupHistory = [{ version: 1, seasonIndex: 1, cups: [{ id: 'champions', name: '冠军杯', rounds: [] }] }]
+    const sharedReserve = [{ id: 'star_1', name: '储备球星' }]
+    const makeShared = (id: string, ownDivId: string): Account => ({
+      ...account(id),
+      game: {
+        shared: true,
+        clubName: `球队_${id}`,
+        roster: [],
+        aiTeams: [structuredClone(sharedTeam)],
+        reserveStars: structuredClone(sharedReserve),
+        season: { index: 2, divisionId: ownDivId, clubIds: ['player', 'ai_01'], table: [], fixtures: [], round: 1, finished: false },
+        world: {
+          seasonIndex: 2,
+          playerDivisionId: ownDivId,
+          clubs: [{ id: 'player', squadKey: `club_${id}` }],
+          divisions: [
+            structuredClone(otherDiv),
+            { index: 2, divisionId: ownDivId, clubIds: ['player', 'ai_01'], table: [], fixtures: [], round: 1, finished: false },
+          ],
+          seasonCupHistory: structuredClone(sharedCupHistory),
+        },
+        matchHistory: [{
+          id: `m-${id}-1`,
+          seed: 1,
+          createdAt: 1000,
+          isLeague: true,
+          round: 1,
+          homeId: 'player',
+          awayId: 'ai_01',
+          homeName: `球队_${id}`,
+          awayName: '曼城',
+          score: { home: 2, away: 1 },
+          result: 'win',
+          stats: {},
+          playerStats: [{ playerId: 'p1', goals: 2 }],
+          commentary: [{ minute: 12, text: '精彩远射破门！' }],
+          keyEvents: [{ minute: 12, type: 'goal', text: '进球' }],
+          skillStats: [{ playerId: 'p1', skillId: 'long_shot', triggers: 3 }],
+          failureStats: [],
+          goalDetails: [{ minute: 12, scorerId: 'p1' }],
+          instructions: [{ minute: 60, note: '加强逼抢' }],
+          lineup: { formationId: '4-3-3', starters: ['p1'], bench: [], tactics: {} },
+        }],
+        challengeHistory: [],
+        seasonHistory: [{
+          index: 1,
+          divisionId: ownDivId,
+          tier: 'division2',
+          table: [{ teamId: 'player', points: 72 }],
+          finished: true,
+          champion: 'player',
+          playerFinish: 1,
+          fixtures: [{ round: 1, homeId: 'player', awayId: 'ai_01', played: true, score: { home: 1, away: 0 } }],
+        }],
+      } as unknown as GameState,
+    })
+
+    const store = open(dir)
+    const a = makeShared('coach_a', 'd2-north')
+    const b = makeShared('coach_b', 'd2-south')
+    store.save(a)
+    store.save(b)
+
+    // 保存调用后立刻从内存剥离重明细，同时未落盘缓冲仍可即时读取完整数据。
+    expect(a.game.matchHistory[0].detailDeferred).toBe(true)
+    expect(a.game.matchHistory[0].commentary).toBeUndefined()
+    expect(a.game.matchHistory[0].keyEvents).toEqual([])
+    expect(a.game.seasonHistory![0].fixtures).toEqual([])
+    expect(a.game.seasonHistory![0].table).toEqual([{ teamId: 'player', points: 72 }])
+
+    const pendingHydrated = hydrateMatchRecord(a.game.matchHistory[0], store.getMatchDetail(a.id, 'm-coach_a-1'))
+    expect(pendingHydrated.detailDeferred).toBeUndefined()
+    expect(pendingHydrated.commentary).toEqual([{ minute: 12, text: '精彩远射破门！' }])
+    expect(pendingHydrated.lineup.starters).toEqual(['p1'])
+    const pendingSeason = hydrateSeasonHistoryEntry(a.game.seasonHistory![0], store.getSeasonHistoryFixtures(a.id, 1))
+    expect(pendingSeason.fixtures).toHaveLength(1)
+
+    await store.flush()
+    store.close()
+
+    // 重启后验证：1) SQLite 冷表完整可读；2) 共享只读部件跨账号复用同一冻结引用（===）。
+    const reloaded = open(dir)
+    const ra = reloaded.accounts.find((item) => item.id === 'coach_a')!
+    const rb = reloaded.accounts.find((item) => item.id === 'coach_b')!
+    expect(ra.game.aiTeams[0]).toBe(rb.game.aiTeams[0])
+    expect(Object.isFrozen(ra.game.aiTeams[0])).toBe(true)
+    expect(ra.game.reserveStars).toBe(rb.game.reserveStars)
+    expect(Object.isFrozen(ra.game.reserveStars)).toBe(true)
+    expect(ra.game.world!.divisions[0]).toBe(rb.game.world!.divisions[0])
+    expect(Object.isFrozen(ra.game.world!.divisions[0])).toBe(true)
+    expect(ra.game.world!.seasonCupHistory).toBe(rb.game.world!.seasonCupHistory)
+    expect(Object.isFrozen(ra.game.world!.seasonCupHistory)).toBe(true)
+    // 玩家本赛区仍保持可变且直接复用 game.season 引用。
+    expect(ra.game.world!.divisions[1]).toBe(ra.game.season)
+
+    const diskMatch = hydrateMatchRecord(ra.game.matchHistory[0], reloaded.getMatchDetail(ra.id, 'm-coach_a-1'))
+    expect(diskMatch.commentary).toEqual([{ minute: 12, text: '精彩远射破门！' }])
+    const diskSeason = hydrateSeasonHistoryEntry(ra.game.seasonHistory![0], reloaded.getSeasonHistoryFixtures(ra.id, 1))
+    expect(diskSeason.fixtures).toEqual([{ round: 1, homeId: 'player', awayId: 'ai_01', played: true, score: { home: 1, away: 0 } }])
+
+    // 席位交接（replaceHolder）必须连同冷表一起过户给新持有人，不因外键级联丢失战报/历年赛程。
+    const handed: Account = { ...ra, id: 'club:club_coach_a', username: 'club:club_coach_a', agentToken: undefined }
+    reloaded.replaceHolder(ra, handed, 'club_coach_a', '原名')
+    expect(reloaded.getMatchDetail(handed.id, 'm-coach_a-1')).toContain('精彩远射破门！')
+    expect(reloaded.getSeasonHistoryFixtures(handed.id, 1)).toContain('"played":true')
   })
 })

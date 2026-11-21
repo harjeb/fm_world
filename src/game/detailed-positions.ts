@@ -104,10 +104,14 @@ export function migratePlayerPositions(player: Player, potentiallyTrained = fals
 }
 
 /** Migrate durable player builds, never the active match snapshot. */
-export function migrateGamePositions(game: GameState): boolean {
+export function migrateGamePositions(game: GameState, options?: { skipFrozenShared?: boolean }): boolean {
+  const skipFrozen = options?.skipFrozenShared === true
   const players = [
-    ...game.roster, ...game.aiTeams.flatMap(team => team?.players ?? []), ...game.freeStars,
-    ...(game.reserveStars ?? []), ...(game.market?.listings ?? []).map(item => item.player),
+    ...game.roster,
+    ...game.aiTeams.flatMap(team => (skipFrozen && team && Object.isFrozen(team)) ? [] : (team?.players ?? [])),
+    ...game.freeStars,
+    ...((skipFrozen && game.reserveStars && Object.isFrozen(game.reserveStars)) ? [] : (game.reserveStars ?? [])),
+    ...(game.market?.listings ?? []).map(item => item.player),
     ...Object.values(game.training ?? {}).map(session => session?.candidate), ...Object.values(game.candidates ?? {}),
     ...Object.values(game.aiClubs ?? {}).flatMap(club => club.signings ?? []),
     ...Object.values(game.world?.transferTeams ?? {}).flatMap(team => team?.players ?? []),

@@ -3,9 +3,12 @@ import { DETAILED_POSITIONS, migrateGamePositions, migratePlayerPositions, readD
 import { backfillNaturalPlayer, naturalPositionProfile, withPositionFloors, type PositionProfile } from './natural-positions.ts'
 
 /** Explicit live-storage allowlist; never traverse active matches, PvE/cup snapshots or historical lineups. */
-export function livePositionPlayers(game: GameState): Player[] {
+export function livePositionPlayers(game: GameState, options?: { skipFrozenShared?: boolean }): Player[] {
+  const skipFrozen = options?.skipFrozenShared === true
+  const aiPlayers = game.aiTeams.flatMap(t => (skipFrozen && t && Object.isFrozen(t)) ? [] : (t?.players ?? []))
+  const reservePlayers = (skipFrozen && game.reserveStars && Object.isFrozen(game.reserveStars)) ? [] : (game.reserveStars ?? [])
   return [
-    ...game.roster, ...game.aiTeams.flatMap(t => t?.players ?? []), ...game.freeStars, ...(game.reserveStars ?? []),
+    ...game.roster, ...aiPlayers, ...game.freeStars, ...reservePlayers,
     ...(game.market?.listings ?? []).map(l => l.player),
     ...Object.values(game.training ?? {}).map(s => s?.candidate), ...Object.values(game.candidates ?? {}),
     ...Object.values(game.aiClubs ?? {}).flatMap(c => c.signings ?? []),
@@ -18,7 +21,7 @@ export function livePositionPlayers(game: GameState): Player[] {
 export function preservePositionProfiles(previous: GameState, incoming: GameState): void {
   const profiles = new Map<string, PositionProfile>()
   for (const player of livePositionPlayers(previous)) if (player.positionProfile) profiles.set(player.id, player.positionProfile)
-  for (const player of livePositionPlayers(incoming)) {
+  for (const player of livePositionPlayers(incoming, { skipFrozenShared: true })) {
     const profile = profiles.get(player.id)
     if (profile) player.positionProfile = structuredClone(profile)
     else delete player.positionProfile
@@ -37,14 +40,14 @@ export function migrateLivePlayerPositions(player: Player): boolean {
 }
 
 export function migratePositionProfiles(game: GameState, trustedStored = true): boolean {
-  const players = livePositionPlayers(game)
+  const players = livePositionPlayers(game, { skipFrozenShared: true })
   // Preserve effective legacy values even when schema-v1 inference would otherwise lower an absent entry.
   const before = new Map(players.map(p => [p, {
     current: readDetailedPositions(p),
     base: readDetailedPositions({ positions: p.basePositions ?? p.positions, detailedPositions: p.baseDetailedPositions }),
   }]))
   const oldCards = new Map((game.cards ?? []).filter(c => c.positions).map(c => [c, readDetailedPositions(c)]))
-  let changed = migrateGamePositions(game)
+  let changed = migrateGamePositions(game, { skipFrozenShared: true })
   const profileById = new Map<string, PositionProfile>()
   // Prefer roster identities over auxiliary copies, and explicit academy intake roles over generic fallbacks.
   for (const player of [...players].reverse()) if (player.positionProfile) profileById.set(player.id, naturalPositionProfile(player))

@@ -24,3 +24,22 @@ export function prepareAccountParts(db) {
     for (const hash of stale) prune.run(hash, hash)
   }
 }
+
+export function prepareColdDataWriters(db) {
+  const saveMatchDetail = db.prepare(`INSERT INTO match_record_details (account_id, match_id, detail_json) VALUES (?, ?, ?)
+    ON CONFLICT(account_id, match_id) DO UPDATE SET detail_json=excluded.detail_json`)
+  const saveSeasonFixtures = db.prepare(`INSERT INTO season_history_fixtures (account_id, season_index, fixtures_json) VALUES (?, ?, ?)
+    ON CONFLICT(account_id, season_index) DO UPDATE SET fixtures_json=excluded.fixtures_json`)
+  return (id, matchDetails, seasonFixtures) => {
+    if (Array.isArray(matchDetails)) {
+      for (const { matchId, detailJson } of matchDetails) {
+        saveMatchDetail.run(id, matchId, detailJson)
+      }
+    }
+    if (Array.isArray(seasonFixtures)) {
+      for (const { seasonIndex, fixturesJson } of seasonFixtures) {
+        saveSeasonFixtures.run(id, seasonIndex, fixturesJson)
+      }
+    }
+  }
+}

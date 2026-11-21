@@ -87,8 +87,13 @@ it('连续两个完整赛季未上线才删除教练；换季清任务，重启�
     try {
       expect(db.prepare('SELECT 1 FROM accounts WHERE id=?').get(first.user.id)).toBeUndefined()
       expect(db.prepare('SELECT 1 FROM sessions WHERE account_id=?').get(first.user.id)).toBeUndefined()
-      const row = db.prepare('SELECT a.game_json FROM accounts a JOIN club_handovers h ON h.holder=a.id WHERE h.club_id=?').get(club)!
+      const row = db.prepare('SELECT a.id, a.game_json FROM accounts a JOIN club_handovers h ON h.holder=a.id WHERE h.club_id=?').get(club)!
       saved = JSON.parse(row.game_json as string)
+      const fixtureRows = db.prepare('SELECT season_index, fixtures_json FROM season_history_fixtures WHERE account_id=?').all(row.id as string) as { season_index: number; fixtures_json: string }[]
+      const fixturesBySeason = new Map(fixtureRows.map(item => [item.season_index, JSON.parse(item.fixtures_json)]))
+      if (Array.isArray(saved.seasonHistory)) {
+        saved.seasonHistory = saved.seasonHistory.map(s => (!s.fixtures?.length && fixturesBySeason.has(s.index) ? { ...s, fixtures: fixturesBySeason.get(s.index) } : s))
+      }
     } finally { db.close() }
     const next = await register('idle', club, 'new-password')
     expect(next.user.id).not.toBe(first.user.id)

@@ -582,6 +582,7 @@ const slimRecordCache = new WeakMap<MatchRecord, { sig: string; value: MatchReco
 
 /** 精简战报摘要：保留列表/近况/球员统计/奖杯所需的全部字段，复盘明细按需拉取。 */
 export function slimMatchRecord(record: MatchRecord): MatchRecord {
+  if (record.detailDeferred) return record
   const sig = `${record.homeName}|${record.awayName}|${record.bookDrops?.length ?? -1}|${record.hasReplay ? 1 : 0}`
   const cached = slimRecordCache.get(record)
   if (cached && cached.sig === sig) return cached.value

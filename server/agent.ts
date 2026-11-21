@@ -138,6 +138,8 @@ export type AgentOptions = {
   committedAuctions?: () => number
   clubId?: () => string | undefined
   teamsById?: () => Record<string, AITeam> | undefined
+  /** 按需从 SQLite 补全已拆离存储的战报复盘明细（解说/关键事件/技能统计）。 */
+  resolveMatchRecord?: (record: GameState['matchHistory'][number]) => GameState['matchHistory'][number]
 }
 
 const asRecord = (value: unknown): Record<string, unknown> =>
@@ -1355,7 +1357,8 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
     case 'get_match': {
       const matchId = text(body.matchId)
       if (matchId) {
-        const record = findRecord(game, matchId)
+        const raw = findRecord(game, matchId)
+        const record = raw ? (options.resolveMatchRecord ? options.resolveMatchRecord(raw) : raw) : undefined
         return record ? { ok: true, result: { record, review: buildReview(record) } } : { ok: false, error: '比赛记录不存在' }
       }
       const view = matchView(game)
