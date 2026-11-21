@@ -90,20 +90,23 @@ function diffArrow(dir: 'up' | 'down', title: string): string {
 function attributeTable(p: Player, other?: Player): string {
   const raw = (target: Player | undefined, key: AttrKey) => attr(target, key) === undefined ? '—' : number(target!.attrs[key])
   const isHiddenRow = (key: AttrKey) => !isMainAttr(key, isKeeper(p)) && (!other || !isMainAttr(key, isKeeper(other)))
+  const eqSpacer = '<span class="pc-diff pc-diff-eq" aria-hidden="true"></span>'
   const attrCells = (key: AttrKey): string => {
     const aText = raw(p, key)
     const bText = raw(other, key)
     const aRating = attr(p, key)
     const bRating = attr(other, key)
     if (!other || aRating === undefined || bRating === undefined) {
-      return `<td>${aText}</td><td>${bText}</td>`
+      return `<td class="pc-attr-num pc-col-a"><span class="pc-attr-val"><span class="pc-num">${aText}</span>${eqSpacer}</span></td><td class="pc-attr-num pc-col-b"><span class="pc-attr-val"><span class="pc-num">${bText}</span>${eqSpacer}</span></td>`
     }
     const sameScale = isMainAttr(key, isKeeper(p)) === isMainAttr(key, isKeeper(other))
     const round1 = (v: number) => Math.round(v * 10) / 10
     const aCmp = round1(sameScale ? p.attrs[key] : aRating)
     const bCmp = round1(sameScale ? other.attrs[key] : bRating)
     const delta = round1(aCmp - bCmp)
-    if (delta === 0) return `<td>${aText}</td><td>${bText}</td>`
+    if (delta === 0) {
+      return `<td class="pc-attr-num pc-col-a"><span class="pc-attr-val"><span class="pc-num">${aText}</span>${eqSpacer}</span></td><td class="pc-attr-num pc-col-b"><span class="pc-attr-val"><span class="pc-num">${bText}</span>${eqSpacer}</span></td>`
+    }
     const absDelta = Math.abs(delta)
     const aTip = sameScale
       ? `${delta > 0 ? '高于' : '低于'}对比球员 ${delta > 0 ? '+' : '-'}${absDelta}`
@@ -113,9 +116,25 @@ function attributeTable(p: Player, other?: Player): string {
       : `按百分评分${delta < 0 ? '高于' : '低于'}主球员（${bCmp} vs ${aCmp}）`
     const aArrow = diffArrow(delta > 0 ? 'up' : 'down', aTip)
     const bArrow = diffArrow(delta < 0 ? 'up' : 'down', bTip)
-    return `<td><span class="pc-attr-val">${aText}${aArrow}</span></td><td><span class="pc-attr-val">${bText}${bArrow}</span></td>`
+    return `<td class="pc-attr-num pc-col-a"><span class="pc-attr-val"><span class="pc-num">${aText}</span>${aArrow}</span></td><td class="pc-attr-num pc-col-b"><span class="pc-attr-val"><span class="pc-num">${bText}</span>${bArrow}</span></td>`
   }
-  return `<p class="pc-muted">显示与球员档案一致的属性原始值；主属性（0–1500）与<span class="pc-hidden-note">淡紫色隐藏属性（0–20）</span>采用不同量纲，旁侧红绿上下箭头表示双方高低差异。外场球员门将属性不适用。</p>${ATTR_GROUPS.map(group => `<section class="pc-group"><h3>${group.name}</h3><div class="pc-table-wrap"><table class="pc-table"><thead><tr><th>属性</th><th>球员</th><th>对比球员</th></tr></thead><tbody>${group.attrs.map(key => `<tr${isHiddenRow(key) ? ' class="pc-attr-hidden"' : ''}><th>${esc(ATTR_META[key].label)}</th>${attrCells(key)}</tr>`).join('')}</tbody></table></div></section>`).join('')}`
+
+  const maxRows = Math.max(...ATTR_GROUPS.map(group => group.attrs.length))
+  const groupHeads = ATTR_GROUPS.map((group, idx) => `<th colspan="3" class="pc-group-head${idx > 0 ? ' pc-group-sep' : ''}">${esc(group.name)}</th>`).join('')
+  const colHeads = ATTR_GROUPS.map((_, idx) => `<th class="pc-attr-col-label${idx > 0 ? ' pc-group-sep' : ''}">属性</th><th class="pc-attr-col-num pc-col-a" title="${esc(p.name)}">球员</th><th class="pc-attr-col-num pc-col-b" title="${other ? esc(other.name) : '对比球员'}">对比</th>`).join('')
+  const bodyRows = Array.from({ length: maxRows }, (_, rowIndex) => {
+    const cells = ATTR_GROUPS.map((group, gIdx) => {
+      const sep = gIdx > 0 ? ' pc-group-sep' : ''
+      const key = group.attrs[rowIndex]
+      if (!key) return `<td colspan="3" class="pc-attr-empty${sep}"></td>`
+      const hidden = isHiddenRow(key) ? ' pc-attr-hidden' : ''
+      return `<th scope="row" class="pc-attr-name${sep}${hidden}" title="${esc(ATTR_META[key].desc)}">${esc(ATTR_META[key].label)}</th>${attrCells(key)}`
+    }).join('')
+    return `<tr>${cells}</tr>`
+  }).join('')
+
+  const legend = `<div class="pc-attr-bar"><p class="pc-muted">主属性（0–1500）与<span class="pc-hidden-note">淡紫色隐藏属性（0–20）</span>同表分列对比；绿上/红下箭头代表高低差异，外场球员门将属性不适用。</p><div class="pc-legend pc-attr-legend"><span><i class="pc-dot-first"></i>球员：${esc(p.name)}</span>${other ? `<span><i class="pc-dot-second"></i>对比：${esc(other.name)}</span>` : ''}</div></div>`
+  return `${legend}<div class="pc-table-wrap"><table class="pc-table pc-attr-table"><thead><tr class="pc-attr-groups">${groupHeads}</tr><tr class="pc-attr-cols">${colHeads}</tr></thead><tbody>${bodyRows}</tbody></table></div>`
 }
 function positionsTable(p: Player, other?: Player): string {
   return `<p class="pc-muted">显示球员的位置熟练度原始值；球场上由灰、红、黄、绿到青色表示熟练度由低到高。</p><div class="pc-position-pair"><div>${pitch(p)}<p>${esc(p.name)} · ${esc(positionName(p))}</p></div><div>${pitch(other)}<p>${other ? `${esc(other.name)} · ${esc(positionName(other))}` : '未选择球员'}</p></div></div><table class="pc-table"><thead><tr><th>位置</th><th>球员</th><th>对比球员</th></tr></thead><tbody>${DETAILED_POSITIONS.map(pos => `<tr><th>${DETAILED_POSITION_LABELS[pos]}</th><td>${number(detailedPositionValue(p, pos))}</td><td>${other ? number(detailedPositionValue(other, pos)) : '—'}</td></tr>`).join('')}</tbody></table>`

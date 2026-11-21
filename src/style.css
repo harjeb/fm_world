@@ -1668,30 +1668,35 @@ circle.pm-5 { fill: var(--h6); }
 .sc-child:last-child::before { top: 0; bottom: 50%; }
 .sc-parent { position: relative; }
 .sc-parent::before { content: ''; position: absolute; left: -14px; top: 50%; width: 14px; border-top: 1px solid var(--line-2); }
-.sc-card { width: 220px; min-height: 82px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--raised); }
+.sc-card { width: 248px; min-height: 82px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--raised); }
 .sc-card header { display: flex; justify-content: space-between; gap: 5px; margin-bottom: 4px; color: var(--text-3); font-size: 10px; }
 .sc-card time { white-space: nowrap; }
 .sc-team { display: flex; align-items: center; gap: 5px; min-height: 25px; }
 .sc-team .club { flex: 1; min-width: 0; text-align: left; }
-.sc-team .club-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-team .club > svg { flex: none; }
+.sc-team .club-name { white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
 .sc-team.is-winner { color: var(--good); font-weight: 600; }
 .sc-score { margin-left: auto; font-family: var(--font-num); }
 .sc-pending, .sc-bye-label, .sc-card-extra { color: var(--text-3); font-size: 11px; }
 .sc-card-extra { display: block; padding-top: 3px; }
 .sc-leg-line { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .sc-bye { border-style: dashed; }
-.sc-leader-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
+.sc-leader-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); }
+.sc-leader-grid .leader-rows .row-line { grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1.35fr) minmax(26px, max-content); gap: 8px; }
 .sc-groups-section { margin: 16px 0; }
 .sc-groups-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .sc-group-qual td:first-child { box-shadow: inset 3px 0 0 var(--good); color: var(--good); font-weight: 600; }
 .sc-group-fx-list { border-top: 1px solid var(--line); padding: 6px 12px 10px; display: flex; flex-direction: column; gap: 6px; }
 .sc-group-fx { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
-.sc-group-fx-pair { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex: 1; justify-content: center; }
-.sc-leader-club { min-width: 0; max-width: 45%; overflow: hidden; }
-.sc-leader-club .club-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-group-fx-pair { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; min-width: 0; flex: 1; justify-content: center; }
+.sc-group-fx .club-name { white-space: normal; overflow-wrap: anywhere; }
+.sc-leader-club { display: flex; align-items: center; min-width: 0; max-width: 100%; color: var(--text-3); font-size: 12px; line-height: 1.35; }
+.sc-leader-club .club { max-width: 100%; min-width: 0; align-items: center; gap: 5px; }
+.sc-leader-club .club > svg { flex: none; }
+.sc-leader-club .club-name { white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .sc-fallback-round { padding: 8px 12px; }
 .sc-fallback-round h3 { font-size: 13px; }
-@media (max-width: 700px) { .sc-card { width: 185px; } .sc-tree-viewport { max-height: 65vh; padding: 12px 8px; } }
+@media (max-width: 700px) { .sc-card { width: 210px; } .sc-tree-viewport { max-height: 65vh; padding: 12px 8px; } }
 @media (max-width: 900px) {
   .sc-groups-grid { grid-template-columns: 1fr; }
   .cup-cards { grid-template-columns: 1fr; }

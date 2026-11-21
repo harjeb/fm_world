@@ -56,15 +56,20 @@ describe('球员对比', () => {
     a.attrs.vision = 12
     b.attrs.vision = 12
     const attrs = renderPlayerComparison(a, b, [b], 'attributes')
-    expect(attrs).toMatch(/<th>传球<\/th><td><span class="pc-attr-val">1500<span class="pc-diff pc-diff-up"[^>]*><svg[^>]*><path d="M1\.8 6\.6 5 3\.4 8\.2 6\.6"\/><\/svg><\/span><\/span><\/td><td><span class="pc-attr-val">750<span class="pc-diff pc-diff-down"[^>]*><svg[^>]*><path d="M1\.8 3\.4 5 6\.6 8\.2 3\.4"\/><\/svg><\/span><\/span><\/td>/)
-    expect(attrs).toContain('<th>视野</th><td>12</td><td>12</td>')
-    expect(attrs).toContain('<th>扑救反应</th><td>—</td>')
+    // Unified single FM-style multi-column table containing all 4 attribute groups
+    expect(attrs.match(/<table\b/g)).toHaveLength(1)
+    for (const group of ['技术', '精神', '身体', '门将']) {
+      expect(attrs).toContain(`>${group}</th>`)
+    }
+    expect(attrs).toMatch(/<th scope="row" class="pc-attr-name"[^>]*>传球<\/th><td class="pc-attr-num pc-col-a"><span class="pc-attr-val"><span class="pc-num">1500<\/span><span class="pc-diff pc-diff-up"[^>]*><svg[^>]*><path d="M1\.8 6\.6 5 3\.4 8\.2 6\.6"\/><\/svg><\/span><\/span><\/td><td class="pc-attr-num pc-col-b"><span class="pc-attr-val"><span class="pc-num">750<\/span><span class="pc-diff pc-diff-down"[^>]*><svg[^>]*><path d="M1\.8 3\.4 5 6\.6 8\.2 3\.4"\/><\/svg><\/span><\/span><\/td>/)
+    expect(attrs).toMatch(/<th scope="row" class="pc-attr-name pc-group-sep pc-attr-hidden"[^>]*>视野<\/th><td class="pc-attr-num pc-col-a"><span class="pc-attr-val"><span class="pc-num">12<\/span><span class="pc-diff pc-diff-eq" aria-hidden="true"><\/span><\/span><\/td><td class="pc-attr-num pc-col-b"><span class="pc-attr-val"><span class="pc-num">12<\/span><span class="pc-diff pc-diff-eq" aria-hidden="true"><\/span><\/span><\/td>/)
+    expect(attrs).toMatch(/<th scope="row" class="pc-attr-name pc-group-sep"[^>]*>扑救反应<\/th><td class="pc-attr-num pc-col-a"><span class="pc-attr-val"><span class="pc-num">—<\/span><span class="pc-diff pc-diff-eq" aria-hidden="true"><\/span><\/span><\/td>/)
     // Cross-scale GK vs outfielder: composure is 0-20 for outfielder (15 => 75) vs 0-1500 for GK (450 => 30)
     a.attrs.composure = 15
     b.attrs.composure = 450
     const crossAttrs = renderPlayerComparison(a, b, [b], 'attributes')
-    expect(crossAttrs).toMatch(/<th>镇定<\/th><td><span class="pc-attr-val">15<span class="pc-diff pc-diff-up"/)
-    expect(crossAttrs).toMatch(/<th>镇定<\/th>.*?<td><span class="pc-attr-val">450<span class="pc-diff pc-diff-down"/)
+    expect(crossAttrs).toMatch(/>镇定<\/th><td class="pc-attr-num pc-col-a"><span class="pc-attr-val"><span class="pc-num">15<\/span><span class="pc-diff pc-diff-up"/)
+    expect(crossAttrs).toMatch(/>镇定<\/th><td class="pc-attr-num pc-col-a">.*?<\/td><td class="pc-attr-num pc-col-b"><span class="pc-attr-val"><span class="pc-num">450<\/span><span class="pc-diff pc-diff-down"/)
     // No compared player selected => no diff arrows shown
     const soloAttrs = renderPlayerComparison(a, undefined, [b], 'attributes')
     expect(soloAttrs).not.toContain('pc-diff-up')
