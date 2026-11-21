@@ -81,10 +81,41 @@ function statTable(p: Player, other?: Player): string {
   ]
   return `<p class="pc-muted">仅统计本赛季已保存的战报；新增数据只汇总有记录的场次，括号为已记录 / 出场场次；缺失数据以 — 显示。评分为游戏事件估算。</p><div class="pc-table-wrap"><table class="pc-table"><thead><tr><th>本赛季数据</th><th>${esc(p.name)}</th><th>${other ? esc(other.name) : '对比球员'}</th></tr></thead><tbody>${rows.map(([label, a, b]) => `<tr><th>${label}</th><td>${a}</td><td>${b}</td></tr>`).join('')}</tbody></table></div>`
 }
+function diffArrow(dir: 'up' | 'down', title: string): string {
+  const path = dir === 'up' ? 'M1.8 6.6 5 3.4 8.2 6.6' : 'M1.8 3.4 5 6.6 8.2 3.4'
+  const label = dir === 'up' ? '高于对比球员' : '低于对比球员'
+  return `<span class="pc-diff pc-diff-${dir}" title="${esc(title)}" aria-label="${label}"><svg viewBox="0 0 10 10" width="11" height="11" aria-hidden="true"><path d="${path}"/></svg></span>`
+}
+
 function attributeTable(p: Player, other?: Player): string {
   const raw = (target: Player | undefined, key: AttrKey) => attr(target, key) === undefined ? '—' : number(target!.attrs[key])
   const isHiddenRow = (key: AttrKey) => !isMainAttr(key, isKeeper(p)) && (!other || !isMainAttr(key, isKeeper(other)))
-  return `<p class="pc-muted">显示与球员档案一致的属性原始值；主属性（0–1500）与<span class="pc-hidden-note">淡紫色隐藏属性（0–20）</span>采用不同量纲。外场球员门将属性不适用。</p>${ATTR_GROUPS.map(group => `<section class="pc-group"><h3>${group.name}</h3><div class="pc-table-wrap"><table class="pc-table"><thead><tr><th>属性</th><th>球员</th><th>对比球员</th></tr></thead><tbody>${group.attrs.map(key => `<tr${isHiddenRow(key) ? ' class="pc-attr-hidden"' : ''}><th>${esc(ATTR_META[key].label)}</th><td>${raw(p, key)}</td><td>${raw(other, key)}</td></tr>`).join('')}</tbody></table></div></section>`).join('')}`
+  const attrCells = (key: AttrKey): string => {
+    const aText = raw(p, key)
+    const bText = raw(other, key)
+    const aRating = attr(p, key)
+    const bRating = attr(other, key)
+    if (!other || aRating === undefined || bRating === undefined) {
+      return `<td>${aText}</td><td>${bText}</td>`
+    }
+    const sameScale = isMainAttr(key, isKeeper(p)) === isMainAttr(key, isKeeper(other))
+    const round1 = (v: number) => Math.round(v * 10) / 10
+    const aCmp = round1(sameScale ? p.attrs[key] : aRating)
+    const bCmp = round1(sameScale ? other.attrs[key] : bRating)
+    const delta = round1(aCmp - bCmp)
+    if (delta === 0) return `<td>${aText}</td><td>${bText}</td>`
+    const absDelta = Math.abs(delta)
+    const aTip = sameScale
+      ? `${delta > 0 ? '高于' : '低于'}对比球员 ${delta > 0 ? '+' : '-'}${absDelta}`
+      : `按百分评分${delta > 0 ? '高于' : '低于'}对比球员（${aCmp} vs ${bCmp}）`
+    const bTip = sameScale
+      ? `${delta < 0 ? '高于' : '低于'}主球员 ${delta < 0 ? '+' : '-'}${absDelta}`
+      : `按百分评分${delta < 0 ? '高于' : '低于'}主球员（${bCmp} vs ${aCmp}）`
+    const aArrow = diffArrow(delta > 0 ? 'up' : 'down', aTip)
+    const bArrow = diffArrow(delta < 0 ? 'up' : 'down', bTip)
+    return `<td><span class="pc-attr-val">${aText}${aArrow}</span></td><td><span class="pc-attr-val">${bText}${bArrow}</span></td>`
+  }
+  return `<p class="pc-muted">显示与球员档案一致的属性原始值；主属性（0–1500）与<span class="pc-hidden-note">淡紫色隐藏属性（0–20）</span>采用不同量纲，旁侧红绿上下箭头表示双方高低差异。外场球员门将属性不适用。</p>${ATTR_GROUPS.map(group => `<section class="pc-group"><h3>${group.name}</h3><div class="pc-table-wrap"><table class="pc-table"><thead><tr><th>属性</th><th>球员</th><th>对比球员</th></tr></thead><tbody>${group.attrs.map(key => `<tr${isHiddenRow(key) ? ' class="pc-attr-hidden"' : ''}><th>${esc(ATTR_META[key].label)}</th>${attrCells(key)}</tr>`).join('')}</tbody></table></div></section>`).join('')}`
 }
 function positionsTable(p: Player, other?: Player): string {
   return `<p class="pc-muted">显示球员的位置熟练度原始值；球场上由灰、红、黄、绿到青色表示熟练度由低到高。</p><div class="pc-position-pair"><div>${pitch(p)}<p>${esc(p.name)} · ${esc(positionName(p))}</p></div><div>${pitch(other)}<p>${other ? `${esc(other.name)} · ${esc(positionName(other))}` : '未选择球员'}</p></div></div><table class="pc-table"><thead><tr><th>位置</th><th>球员</th><th>对比球员</th></tr></thead><tbody>${DETAILED_POSITIONS.map(pos => `<tr><th>${DETAILED_POSITION_LABELS[pos]}</th><td>${number(detailedPositionValue(p, pos))}</td><td>${other ? number(detailedPositionValue(other, pos)) : '—'}</td></tr>`).join('')}</tbody></table>`
