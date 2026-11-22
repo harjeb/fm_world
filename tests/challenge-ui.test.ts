@@ -53,7 +53,8 @@ describe('挑战页面', () => {
       expect(html).toContain('属性突破卡 ×1')
       expect(html).toContain('首次奖励不会重复发放')
       expect(html).toContain('从全明星名单中任选 1 人加入')
-      expect(html).toContain('彩色技能书「射手直觉」')
+      expect(html).toContain('技能书 <b class="book-name skill-rainbow">射手直觉</b>')
+      expect(html).not.toContain('彩色技能书')
       expect(html).toContain('第 85 关')
       ui.peakPreviewStage = 1
       expect(renderChallenge()).toContain('金币 30,000')
@@ -103,7 +104,8 @@ describe('挑战页面', () => {
     expect(html).toContain('掉落技能书')
     expect(html).toContain('<td><span class="tag skill-rainbow"><span class="skill-label">训练狂人</span></span></td>')
     expect(html).toContain('技能书库存')
-    expect(html).toContain('<span class="tag skill-rainbow"><span class="skill-label">彩</span></span> 训练狂人')
+    expect(html).toContain('<b class="book-name skill-rainbow">训练狂人</b>')
+    expect(html).not.toContain('skill-label">彩<')
     ui.legendSearch = ''
   })
 

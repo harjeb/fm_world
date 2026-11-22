@@ -1,4 +1,4 @@
-import type { AITeamDef, ConferenceId, FormationId, Tactics, TierId } from '../types.ts'
+import type { AITeamDef, ConferenceId, FormationId, Tactics, TierId, WorldClub } from '../types.ts'
 import { AI_TEAM_DEFS } from './ai-teams.ts'
 
 export type WorldClubDef = AITeamDef & { tier: TierId; conference?: ConferenceId; starCount: number }
@@ -117,6 +117,21 @@ export const WORLD_CLUB_DEFS: WorldClubDef[] = [
   ...D2_NORTH_CLUBS.map((club, index) => def(`d2n_${String(index + 1).padStart(2, '0')}`, club, 'division2', index + 40, 'north', index < 5 ? 3 : index < 14 ? 2 : 1)),
   ...D2_SOUTH_CLUBS.map((club, index) => def(`d2s_${String(index + 1).padStart(2, '0')}`, club, 'division2', index + 60, 'south', index < 5 ? 3 : index < 14 ? 2 : 1)),
 ]
+
+/** 初始设定在冠军联赛的 20 支球队 ID（ai_01–ai_20）：即使后续降级到二级也不允许玩家选择或接管。 */
+export const INITIAL_CHAMPIONS_CLUB_IDS: ReadonlySet<string> = new Set(
+  WORLD_CLUB_DEFS.filter((club) => club.tier === 'champions').map((club) => club.id),
+)
+
+/** 判断球队是否被锁定禁止玩家选择（初始冠军联赛球队或显式带 `playerLocked` 标记）。 */
+export function isClubPlayerLocked(
+  club: Pick<WorldClub, 'id' | 'squadKey' | 'playerLocked'> | string,
+): boolean {
+  if (typeof club === 'string') return INITIAL_CHAMPIONS_CLUB_IDS.has(club)
+  return club.playerLocked === true
+    || INITIAL_CHAMPIONS_CLUB_IDS.has(club.id)
+    || (!!club.squadKey && INITIAL_CHAMPIONS_CLUB_IDS.has(club.squadKey))
+}
 
 /** 二级联赛东区（zone3）：中东欧与日韩低级别/次级老牌球队（≤7 字）。 */
 const D2_EAST_CLUBS: readonly ClubIdentity[] = [

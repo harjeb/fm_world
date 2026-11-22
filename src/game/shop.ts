@@ -275,7 +275,7 @@ export function buyShopBook(game: GameState, skillId: string): ShopBuyResult {
   const catalog = shopCatalog(game.seed, shopSeasonIndex(game))
   const offer = catalog.find((item) => item.id === skillId)
   if (!offer) return { ok: false, error: '本期商店没有上架这本技能书' }
-  if (hasBookAtOrAbove(game, offer.id, 'gold')) return { ok: false, error: '库存里已有该技能的金书或更高档位技能书' }
+  if (hasBookAtOrAbove(game, offer.id, 'gold')) return { ok: false, error: '库存里已有该技能的同档或更高档位技能书' }
   const shop = game.shop!
   if (shop.points < offer.price) return { ok: false, error: `商店点数不足：需要 ${offer.price} 点，当前 ${shop.points} 点` }
   shop.points -= offer.price

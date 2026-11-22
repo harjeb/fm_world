@@ -27,7 +27,7 @@ import { ensurePve } from '../src/game/pve.ts'
 import { loadPveContent } from '../src/game/pve-content.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION, upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
 import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, migrateLegacyExpandedTactics, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, repairInflatedContractWages, rolloverOwnerlessTeams, syncAllClubLiveTactics, syncClubLiveTactics, wageForPlayer, worldForClub, worldSlots, worldWageBill, type WorldForClubReadOnlyCache } from '../src/game/world.ts'
-import { WORLD_CLUB_DEFS, pickExpandedZoneClubs } from '../src/game/data/world-clubs.ts'
+import { INITIAL_CHAMPIONS_CLUB_IDS, WORLD_CLUB_DEFS, isClubPlayerLocked, pickExpandedZoneClubs } from '../src/game/data/world-clubs.ts'
 import { rescaleLegacyRandomPlayer } from '../src/game/data/players.ts'
 import { lineupLockState } from '../src/game/season.ts'
 import { completedWorldRound, paysSeasonCupAppearanceGold, seasonRoundKickoff, worldRoundsKickedOff } from '../src/game/season-cups.ts'
@@ -237,6 +237,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     sharedWorld.world = ownerless.world
     sharedWorld.freeStars = ownerless.freeStars
     sharedWorld.reserveStars = ownerless.reserveStars
+  }
+  // 初始冠军联赛 20 支球队永久锁定，即使降级也不开放玩家注册/接管；启动时补齐旧存档标记。
+  for (const club of sharedWorld.world.clubs) {
+    if (INITIAL_CHAMPIONS_CLUB_IDS.has(club.id) && !club.playerLocked) club.playerLocked = true
   }
   // SQLite 原子交接后、world.json 更新前可能重启；以已提交的接管者为准。
   for (const { club_id, holder, initial_name } of accountStore.handovers()) {
@@ -1590,6 +1594,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     return {
       id: club.id, name: validOwner ? owner.game.clubName : club.name, color: club.color,
       tier: club.tier, conference: club.conference, managed: !!owner && !isVacantSeat(owner.id), aiTakeover: !!owner && !isVacantSeat(owner.id) && isAccountAITakeover(owner),
+      ...(isClubPlayerLocked(club) ? { playerLocked: true } : {}),
       formationId: validOwner ? owner.game.lineup.formationId : team?.formationId ?? club.formationId,
       players: includeRoster ? (validOwner ? owner.game.roster : team?.players ?? []).map(publicPlayer) : [],
       ...(includeRoster ? {} : { rosterDeferred: true }),
@@ -2723,7 +2728,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
   /** 二级联赛满员时按需开出新赛区，并补齐名册、AI 经营轮次与前序已公布轮次。 */
   function availableRegistrationClub(): WorldClub | undefined {
-    const existing = sharedWorld.world.clubs.find(item => isVacantSeat(sharedWorld.owners[item.id])) ?? pickFreeClubForNewAccount(sharedWorld.world, sharedWorld.owners, aliveAccountIds())
+    const existing = sharedWorld.world.clubs.find(item => !isClubPlayerLocked(item) && isVacantSeat(sharedWorld.owners[item.id])) ?? pickFreeClubForNewAccount(sharedWorld.world, sharedWorld.owners, aliveAccountIds())
     if (existing) return existing
     const completedBefore = completedWorldRound(sharedWorld.world)
     const { divisionId } = expandWorldConference(
@@ -2825,7 +2830,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (registrationMode === 'closed') return json(res, 403, { error: '本服务器已关闭注册' })
       advanceAllMatches()
       availableRegistrationClub()
-      const clubs = worldSnapshot().clubs.filter((club) => !club.managed && (club.tier === 'division2' || isVacantSeat(sharedWorld.owners[club.id])))
+      const clubs = worldSnapshot().clubs.filter((club) => !club.managed && !club.playerLocked && !isClubPlayerLocked(club.id) && (club.tier === 'division2' || isVacantSeat(sharedWorld.owners[club.id])))
       await sendJson(200, { clubs }, true)
       return
     }
@@ -2854,6 +2859,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       let club = requestedClubId ? sharedWorld.world.clubs.find((item) => item.id === requestedClubId) : undefined
       if (requestedClubId) {
         if (!club) return json(res, 400, { error: '找不到这支球队，请刷新列表' })
+        if (isClubPlayerLocked(club)) {
+          return json(res, 403, { error: '初始冠军联赛球队已锁定，即使降级也不开放玩家选择，请选择其他球队' })
+        }
         const ownerId = sharedWorld.owners[club.id]
         if (!isVacantSeat(ownerId) && db.accounts.some((item) => item.id === ownerId)) {
           return json(res, 409, { error: '这支球队已经有人执教，请选择其他球队' })

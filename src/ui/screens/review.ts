@@ -4,7 +4,7 @@ import { displayClock } from '../../game/match/time.ts'
 import { shotPositionText } from '../../game/match/shooting.ts'
 import { buildReview } from '../../game/review.ts'
 import { PLAYER_TEAM_ID } from '../../game/season.ts'
-import { clubLook, clubName, compareRow, crest, distinctKit, emptyState, icon, ownName, pageHead, panel, recordResult, resultPill, tag } from '../components.ts'
+import { bookTitle, clubLook, clubName, compareRow, crest, distinctKit, emptyState, icon, ownName, pageHead, panel, recordResult, resultPill, tag } from '../components.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
 import { clockText, esc, matchModeLabel, pveModeLabel, skillName } from '../format.ts'
 import { tipAttrs } from '../tooltip.ts'
@@ -100,8 +100,7 @@ function renderGoals(record: MatchRecord): string {
 function renderBookDrops(record: MatchRecord): string {
   if (!record.isLeague || !record.bookDrops) return ''
   const playerSide = record.awayId === PLAYER_TEAM_ID ? 'away' : 'home'
-  const tierShort = { silver: '银书', gold: '金书', rainbow: '彩书' } as const
-  const rows = record.bookDrops.map((drop) => `<div class="row-line"><span>${tag(tierShort[drop.tier], `skill-${drop.tier}`)} <b>${esc(skillName(drop.id))}</b> <small class="muted">来自${drop.side === playerSide ? '我方' : '对方'} ${esc(drop.playerName)} · 上场 ${drop.minutes} 分钟</small></span></div>`).join('')
+  const rows = record.bookDrops.map((drop) => `<div class="row-line"><span>${bookTitle(skillName(drop.id), drop.tier)} <small class="muted">来自${drop.side === playerSide ? '我方' : '对方'} ${esc(drop.playerName)} · 上场 ${drop.minutes} 分钟</small></span></div>`).join('')
   return panel(`赛后技能书掉落 <small>${record.bookDrops.length}</small>`, rows
     ? `<div class="rows">${rows}</div><div class="btn-row pad"><button class="btn small" data-nav="training">去培养配置技能卡 ${icon('right', 12)}</button></div>`
     : '<p class="muted pad">本场没有掉落新的技能书。场上球员每人按上场时间有约 5% 概率掉落其一项未收集技能。</p>', { flush: true, className: 'book-slot-panel' })

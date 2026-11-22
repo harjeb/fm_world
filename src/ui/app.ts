@@ -1421,7 +1421,7 @@ document.addEventListener('click', async (event) => {
           if (!result.ok) throw new Error(result.error)
         }
         const name = SKILLS[skillId as SkillId]?.name ?? skillId
-        ui.notice = `已兑换金书《${name}》，可前往培养页配置。`
+        ui.notice = `已兑换技能书《${name}》，可前往培养页配置。`
       } catch (error) {
         ui.notice = error instanceof Error ? error.message : '技能书兑换失败'
       } finally {

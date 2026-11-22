@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createOwnerlessWorld, expandWorldConference, pickFreeClubForNewAccount, worldSlots } from '../src/game/world.ts'
+import { createOwnerlessWorld, expandWorldConference, INITIAL_CHAMPIONS_CLUB_IDS, isClubPlayerLocked, pickFreeClubForNewAccount, worldSlots } from '../src/game/world.ts'
 import { conferenceLabel } from '../src/game/data/world-clubs.ts'
 import type { ConferenceId, WorldState } from '../src/game/types.ts'
 
@@ -70,10 +70,27 @@ describe('新账号球队分配', () => {
     expect(pickFreeClubForNewAccount(target, owners, ['ghost'])?.id).not.toBe(first.id)
   })
 
-  it('席位统计与分配结果一致', () => {
+  it('席位统计与分配结果一致（不含 20 支初始冠军联赛锁定球队）', () => {
     const target = world()
+    expect(INITIAL_CHAMPIONS_CLUB_IDS.size).toBe(20)
+    const champions = target.clubs.filter((club) => club.tier === 'champions')
+    expect(champions).toHaveLength(20)
+    expect(champions.every((club) => club.playerLocked === true && isClubPlayerLocked(club))).toBe(true)
     const { owners, picked } = assignTimes(target, 12)
-    expect(worldSlots(target, owners, Object.values(owners))).toEqual({ total: 80, taken: picked.length, free: 80 - picked.length })
+    expect(worldSlots(target, owners, Object.values(owners))).toEqual({ total: 60, taken: picked.length, free: 60 - picked.length })
+  })
+
+  it('初始冠军联赛球队即使降级到二级也保持锁定，绝不会被分配给新账号', () => {
+    const target = world()
+    const { owners } = assignTimes(target, 40)
+    expect(pickFreeClubForNewAccount(target, owners, Object.values(owners))).toBeUndefined()
+    // 模拟多特蒙德等初始冠军联赛球队降级到二级联赛
+    const relegatedChamp = target.clubs.find((club) => club.id === 'ai_13')!
+    relegatedChamp.tier = 'division2'
+    relegatedChamp.conference = 'north'
+    expect(isClubPlayerLocked(relegatedChamp)).toBe(true)
+    // 即使它在 division2 且无人执教，也不能分配给新账号（必须返回 undefined 以触发扩区）
+    expect(pickFreeClubForNewAccount(target, owners, [...Object.values(owners), 'newcomer'])).toBeUndefined()
   })
 
   it('连续扩出的赛区依次使用 东区/西区 等无数字命名，球队均带英文原名且中文名 ≤ 7 字无重名', () => {

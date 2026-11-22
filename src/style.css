@@ -430,6 +430,16 @@ h3:first-child { margin-top: 0; }
   color: transparent;
   font-weight: 600;
 }
+.book-name { font-weight: 600; }
+.book-name.skill-silver { color: #cbd5e1; }
+.book-name.skill-gold { color: var(--warn); }
+.book-name.skill-rainbow {
+  display: inline-block;
+  background: linear-gradient(90deg, #ff7eb3 0%, #ffd166 26%, #7cf5a4 52%, #67d4ff 76%, #d094ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
 .tag-row { display: inline-flex; flex-wrap: wrap; gap: 3px; align-items: center; }
 .skill-group { margin-top: 8px; }
 .skill-title { display: block; color: var(--text-3); font-size: 11.5px; margin-bottom: 4px; }

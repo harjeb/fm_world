@@ -18,7 +18,8 @@ import type {
 import { PLAYER_SEEDS, createPlayerFromSeed, seedById } from './data/players.ts'
 import { LEGACY_SQUAD_SIZE, buildNameBook, createRandomPlayer, randomSquadPositionTemplate, type SquadName } from './data/random-players.ts'
 import { allocateNaturalSquad, neededNaturalPosition } from './natural-positions.ts'
-import { DIVISION_IDS, WORLD_CLUB_DEFS, conferenceLabel, conferenceOfDivision, divisionIdForTier, pickExpandedZoneClubs, type WorldClubDef } from './data/world-clubs.ts'
+import { DIVISION_IDS, INITIAL_CHAMPIONS_CLUB_IDS, WORLD_CLUB_DEFS, conferenceLabel, conferenceOfDivision, divisionIdForTier, isClubPlayerLocked, pickExpandedZoneClubs, type WorldClubDef } from './data/world-clubs.ts'
+export { INITIAL_CHAMPIONS_CLUB_IDS, isClubPlayerLocked }
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION } from './names.ts'
 import { FULL_SQUAD, MIN_SQUAD, autoFillLineup, refreshAILineup, repairLineup, validateLineup } from './squad.ts'
 import { applyAITacticsToLineup } from './ai-tactics.ts'
@@ -86,6 +87,7 @@ export function createWorld(seed: number, requestedClubId?: string, startedAt = 
     id: def.id === chosen.id ? 'player' : def.id,
     name: def.id === chosen.id ? chosen.name : def.name,
     isPlayer: def.id === chosen.id,
+    ...(def.tier === 'champions' ? { playerLocked: true } : {}),
     squadKey: def.id === chosen.id ? def.id : undefined,
     starPlayerIds: [],
   }))
@@ -832,20 +834,21 @@ export function pickFreeClubForNewAccount(
       .filter(([, accountId]) => !alive || alive.has(accountId))
       .map(([clubId]) => clubId),
   )
-  return world.clubs.find((club) => club.tier === 'division2' && !taken.has(club.id))
+  return world.clubs.find((club) => club.tier === 'division2' && !isClubPlayerLocked(club) && !taken.has(club.id))
 }
 
-/** 球队席位统计，用于给前端提示「还有几个空位」。 */
+/** 球队席位统计，用于给前端提示「还有几个空位」（不含初始冠军联赛锁定球队）。 */
 export function worldSlots(
   world: WorldState,
   owners: Record<string, string>,
   aliveAccountIds?: Iterable<string>,
 ): { total: number; taken: number; free: number } {
-  const total = world.clubs.length
+  const selectableIds = new Set(world.clubs.filter((club) => !isClubPlayerLocked(club)).map((club) => club.id))
+  const total = selectableIds.size
   const alive = aliveAccountIds ? new Set(aliveAccountIds) : undefined
   const taken = new Set(
     Object.entries(owners)
-      .filter(([, accountId]) => !alive || alive.has(accountId))
+      .filter(([clubId, accountId]) => selectableIds.has(clubId) && (!alive || alive.has(accountId)))
       .map(([clubId]) => clubId),
   ).size
   return { total, taken, free: total - taken }

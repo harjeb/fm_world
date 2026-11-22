@@ -411,6 +411,8 @@ export type WorldClub = AITeamDef & {
   starPlayerIds: string[]
   starCount: number
   isPlayer?: boolean
+  /** 初始设定在冠军联赛的豪门锁定标记：即使后续降级到二级也不允许玩家注册或接管。 */
+  playerLocked?: boolean
   /** 被玩家接管后 id 会变成 player，开局名单仍按这支队原来的 id 生成，否则选哪支队都一样。 */
   squadKey?: string
   /** 当前实时生效的阵型与战术摘要（联机时由共享球队阵容同步，用于跨赛区友谊赛展示，不覆盖建队基底 `tactics`）。 */

@@ -1,4 +1,4 @@
-import type { AttrKey, Attributes, Fixture, Player, Position, SeasonTableRow, SkillId, TierId, TraitId } from '../game/types.ts'
+import type { AttrKey, Attributes, Fixture, Player, Position, SeasonTableRow, SkillId, SkillTier, TierId, TraitId } from '../game/types.ts'
 import { POSITIONS, type PlayerCard } from '../game/types.ts'
 import { cardDisplayName, playerCards } from '../game/cards.ts'
 import { DETAILED_POSITIONS, DETAILED_POSITION_LABELS, detailedPositionValue } from '../game/detailed-positions.ts'
@@ -351,6 +351,11 @@ export function emptyState(text: string): string {
 export function tag(text: string, tone = ''): string {
   if (tone.includes('skill-rainbow')) return `<span class="tag ${tone}"><span class="skill-label">${text}</span></span>`
   return `<span class="tag ${tone}">${text}</span>`
+}
+
+/** 技能书名直接按稀有度着色（银/金/彩），不再额外显示“银书/金书/彩书”前缀。 */
+export function bookTitle(name: string, tier: SkillTier): string {
+  return `<b class="book-name skill-${tier}">${esc(name)}</b>`
 }
 
 /* ---------- 联赛件 ---------- */

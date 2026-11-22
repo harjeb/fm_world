@@ -845,7 +845,9 @@ describe('传奇杯奖金规则（小组赛 0 金币，淘汰赛每轮发一次�
     expect(html).toContain('总比分')
     expect(html).toContain('淘汰赛每轮参赛金')
     expect(html).toContain('小组赛不发奖金')
-    expect(html).toContain('彩书 · 传奇之星')
+    expect(html).toContain('<span class="tag skill-rainbow"><span class="skill-label">传奇之星</span></span>')
+    expect(html).not.toContain('彩书 · 传奇之星')
+    expect(html).not.toContain('彩书《传奇之星》')
     expect(clubLook('lcup-man-city-2022-23')).toMatchObject({ name: '曼城 2022-23', color: '#6cabdd' })
     const pubBarca = publicClubFor(uiGame.world, 'lcup-barcelona-2010-11')!
     expect(pubBarca.players).toHaveLength(16)
@@ -872,7 +874,9 @@ describe('传奇杯奖金规则（小组赛 0 金币，淘汰赛每轮发一次�
     expect(html).toContain('下赛季开启')
     expect(html).toContain('8 强主客场淘汰赛（决赛单场）')
     expect(html).toContain('小组赛不发奖金')
-    expect(html).toContain('彩书 · 传奇之星')
+    expect(html).toContain('<span class="tag skill-rainbow"><span class="skill-label">传奇之星</span></span>')
+    expect(html).not.toContain('彩书 · 传奇之星')
+    expect(html).not.toContain('彩书《传奇之星》')
     expect(html).toContain('特邀 12 支历史最强俱乐部')
     expect(html).toContain('首发 CA 1300–1600')
 

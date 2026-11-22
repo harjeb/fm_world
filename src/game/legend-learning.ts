@@ -98,7 +98,7 @@ export function canUseBookOnPlayer(player: Pick<Player, 'positions' | 'skills' |
 
 /** 学会书上的技能；书本身不在这里扣除。 */
 export function grantBookSkill(session: TrainingSession, book: LegendBook): { ok: boolean; upgraded: boolean; reason?: string } {
-  if (isPassiveTrainingBook(book.id)) return { ok: false, upgraded: false, reason: '被动彩书带入书槽即生效，无需占技能槽' }
+  if (isPassiveTrainingBook(book.id)) return { ok: false, upgraded: false, reason: '被动技能书带入书槽即生效，无需占技能槽' }
   const check = canUseBookOnPlayer(session.candidate, book)
   if (!check.ok) return { ok: false, upgraded: false, reason: check.reason }
   const had = session.candidate.skills.includes(book.id)
@@ -143,7 +143,7 @@ export function bookEvents(session: TrainingSession): EventDef[] {
       once: false,
       maxTimes: 2,
       trigger: { latestAction },
-      text: `书上的分解动作被画成一格一格的。${bookTierLabel(book.tier)}要求：${bookRequirementText(book)}；可以先看成功率再决定。`,
+      text: `书上的分解动作被画成一格一格的。要求：${bookRequirementText(book)}；可以先看成功率再决定。`,
       options: [
         {
           id: 'learn',
@@ -258,14 +258,16 @@ function matchBookEvent(session: TrainingSession): EventDef | undefined {
     title: '交流赛后技能学习', category: 'training', weight: 0, trigger: {},
     text: `从技能书、共同培养的队友和位置基础技能中按概率抽取（${choices.length} 选 1）。技能书权重较高；已学会的技能不会出现。`,
     options: choices.map((choice) => {
-      const source = choice.source === 'book' ? bookTierLabel(choice.tier) : choice.source === 'teammate' ? `队友 ${choice.mentor.name}` : '基础技能'
+      const label = choice.source === 'book'
+        ? SKILLS[choice.id].name
+        : `${choice.source === 'teammate' ? `队友 ${choice.mentor.name}` : '基础技能'} · ${SKILLS[choice.id].name}`
       const chance = choice.source === 'teammate' ? inheritanceChances(session, choice.mentor, choice.id) : null
       const detail = choice.source === 'book'
         ? `要求 ${bookRequirementText(choice)} · `
         : choice.source === 'teammate' && chance
           ? `队友档位 ${{ silver: '银', gold: '金', rainbow: '彩' }[getSkillTier(choice.mentor, choice.id)]}；成功后银 ${Math.round((1 - chance.gold - chance.rainbow) * 100)}% / 金 ${Math.round(chance.gold * 100)}%${chance.rainbow > 0 ? ` / 彩 ${Math.round(chance.rainbow * 100)}%` : ''} · `
           : '成功直接学会银色 · '
-      return { id: trainingSkillChoiceId(choice), label: `${source} · ${SKILLS[choice.id].name}`, hint: `${detail}${SKILLS[choice.id].desc}`, trainingSkill: choice }
+      return { id: trainingSkillChoiceId(choice), label, hint: `${detail}${SKILLS[choice.id].desc}`, trainingSkill: choice }
     }),
   }
   const books = session.pendingBookChoices ?? []
@@ -279,7 +281,7 @@ function matchBookEvent(session: TrainingSession): EventDef | undefined {
     text: `从赛前配置中选择一项尝试学习（${books.length} 选 1）。成功率由当前培养属性决定；失败后以后还能再试，技能书不会消耗。`,
     options: books.map((book) => ({
       id: bookKey(book),
-      label: `${bookTierLabel(book.tier)} · ${bookName(book.id)}`,
+      label: bookName(book.id),
       hint: `要求 ${bookRequirementText(book)} · ${SKILLS[book.id]?.desc ?? ''}`,
       book: { ...book },
     })),

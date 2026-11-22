@@ -35,7 +35,7 @@ export const SPECIAL_BOOK_SKILLS: Record<SpecialBookSkillId, SpecialBookSkillDef
   lg_legend_star: {
     id: 'lg_legend_star',
     name: '传奇之星',
-    desc: '传奇杯首次夺冠专属彩书。培养前带入书槽即全程生效，不占球员实战技能槽。',
+    desc: '传奇杯首次夺冠专属技能书。培养前带入书槽即全程生效，不占球员实战技能槽。',
     condition: '培养前带入技能书槽（不占实战技能槽）',
     cost: '高',
     scope: 'any',

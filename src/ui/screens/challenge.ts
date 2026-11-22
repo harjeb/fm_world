@@ -17,7 +17,7 @@ import { legendBookLabel } from '../../game/legend-books.ts'
 import { cupTeam } from '../../game/cup-run.ts'
 import { startingCa } from '../../game/pve-strength.ts'
 import { pveContentReady } from '../../game/pve-content.ts'
-import { caHeat, clubName, icon, ownName, pageHead, panel, recordResult, resultPill, tag, tile } from '../components.ts'
+import { bookTitle, caHeat, clubName, icon, ownName, pageHead, panel, recordResult, resultPill, tag, tile } from '../components.ts'
 import { aiTeamTacticLabel, countdownText, esc, playerCA } from '../format.ts'
 import { game, ui } from '../state.ts'
 import { conferenceLabel } from '../../game/data/world-clubs.ts'
@@ -67,8 +67,7 @@ function renderFriendly(): string {
 function legendBooksPanel(): string {
   const books = game.legendBooks ?? []
   if (!books.length) return ''
-  const tierShort = { silver: '银', gold: '金', rainbow: '彩' } as const
-  return panel(`技能书库存 <small>${books.length}</small>`, `<p class="hint pad">技能书分银、金、彩等不同稀有度，可重复携带：联赛场上球员会随机掉落，传奇挑战与巅峰之路也能获得；前往培养页选择球员并配置到书槽。</p><div class="rows">${books.map((book) => `<div class="row-line"><span>${tag(tierShort[book.tier], `skill-${book.tier}`)} ${esc(legendBookLabel(book))}</span><small class="muted">可在培养页带进书槽</small></div>`).join('')}</div><div class="btn-row pad"><button class="btn small" data-nav="training">去培养配置技能卡 ${icon('right', 12)}</button></div>`, { flush: true })
+  return panel(`技能书库存 <small>${books.length}</small>`, `<p class="hint pad">技能书分银、金、彩等不同稀有度，可重复携带：联赛场上球员会随机掉落，传奇挑战与巅峰之路也能获得；前往培养页选择球员并配置到书槽。</p><div class="rows">${books.map((book) => `<div class="row-line"><span>${bookTitle(legendBookLabel(book), book.tier)}</span><small class="muted">可在培养页带进书槽</small></div>`).join('')}</div><div class="btn-row pad"><button class="btn small" data-nav="training">去培养配置技能卡 ${icon('right', 12)}</button></div>`, { flush: true })
 }
 
 function renderLegend(): string {
@@ -123,18 +122,18 @@ function peakBreakthroughPanel(): string {
     <button class="btn primary" data-action="use-peak-card" ${game.activeMatch ? 'disabled' : ''}>使用 1 张</button>`, { flush: true })
 }
 
-function peakRewardText(stage: number): string {
+function peakRewardHtml(stage: number): string {
   const parts: string[] = []
   const reward = peakStageReward(stage)
   if (reward) {
-    parts.push(reward.kind === 'money' ? `金币 ${reward.amount.toLocaleString()}` : `球迷 +${reward.amount.toLocaleString()}`)
-    if (reward.breakthroughCards) parts.push(`属性突破卡 ×${reward.breakthroughCards}`)
+    parts.push(esc(reward.kind === 'money' ? `金币 ${reward.amount.toLocaleString()}` : `球迷 +${reward.amount.toLocaleString()}`))
+    if (reward.breakthroughCards) parts.push(esc(`属性突破卡 ×${reward.breakthroughCards}`))
   }
   const shopPts = peakStageShopPoints(stage)
-  if (shopPts > 0) parts.push(`商店点数 +${shopPts}`)
+  if (shopPts > 0) parts.push(esc(`商店点数 +${shopPts}`))
   if (stage === PEAK_REWARD_STAGE) parts.push('从全明星名单中任选 1 人加入')
   const skill = peakSkillForStage(stage)
-  if (skill) parts.push(`彩色技能书「${skill.name}」`)
+  if (skill) parts.push(`技能书 ${bookTitle(skill.name, 'rainbow')}`)
   return parts.join(' · ')
 }
 
@@ -143,8 +142,8 @@ function peakRewardsPanel(stage: number, cleared: number): string {
   const status = stage === PEAK_REWARD_STAGE && stage <= cleared && !game.pve?.peak.reward50
     ? '已通关，金币已发放；请在下方选择全明星球员。首次奖励不会重复发放。'
     : stage <= cleared ? '已通关，首次奖励不会重复发放' : '首次通关时自动发放（第 50 关球员需手动选择）'
-  const choices = stages.map(n => `<button class="row-btn" data-peak-preview="${n}"><b>第 ${n} 关</b><span>${esc(peakRewardText(n))}</span><small>${n <= cleared ? '已通关' : '未通关'}</small></button>`).join('')
-  return panel(`第 ${stage} 关奖励`, `<div class="pad"><b>${esc(peakRewardText(stage))}</b><p class="hint">${esc(status)}</p></div><details class="pad"><summary>查看全部关卡奖励</summary><div class="rows">${choices}</div></details>`, { flush: true })
+  const choices = stages.map(n => `<button class="row-btn" data-peak-preview="${n}"><b>第 ${n} 关</b><span>${peakRewardHtml(n)}</span><small>${n <= cleared ? '已通关' : '未通关'}</small></button>`).join('')
+  return panel(`第 ${stage} 关奖励`, `<div class="pad"><b>${peakRewardHtml(stage)}</b><p class="hint">${esc(status)}</p></div><details class="pad"><summary>查看全部关卡奖励</summary><div class="rows">${choices}</div></details>`, { flush: true })
 }
 
 function renderPeak(): string {

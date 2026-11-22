@@ -17,7 +17,7 @@ import {
 } from '../../game/shop.ts'
 import type { TierId } from '../../game/types.ts'
 import { worldTierLabel } from '../../game/world.ts'
-import { pageHead, panel, tag, tile } from '../components.ts'
+import { bookTitle, pageHead, panel, tag, tile } from '../components.ts'
 import { esc } from '../format.ts'
 import { icon } from '../icons.ts'
 import { game } from '../state.ts'
@@ -40,8 +40,7 @@ function renderOfferCard(offer: ShopOffer, points: number): string {
   return `<article class="shop-card ${owned ? 'owned' : ''}" data-shop-book="${esc(offer.id)}">
     <div class="shop-card-head">
       <div class="shop-card-title">
-        ${tag('金书', 'skill-gold')}
-        <b>${esc(def.name)}</b>
+        ${bookTitle(def.name, 'gold')}
         ${tag(SHOP_GROUP_LABELS[offer.group], badgeTone)}
         ${offer.category === 'auxiliary' ? tag('辅助槽', '') : ''}
       </div>
@@ -117,7 +116,7 @@ export function renderShop(): string {
     ${pageHead({
       kicker: '经营 · 每赛季更新',
       title: '技能书商店',
-      sub: '每赛季轮换上架 8 本外场金书、2 本守门员金书与 2 本辅助金书（共 12 本）；购买后永久入库，不消耗。',
+      sub: '每赛季轮换上架 8 本外场、2 本守门员与 2 本辅助技能书（共 12 本）；购买后永久入库，不消耗。',
       actions: `<button class="btn ghost" data-nav="training">前往培养配置技能卡 ${icon('right', 13)}</button>`,
     })}
     ${backfillNote}
@@ -127,9 +126,9 @@ export function renderShop(): string {
       ${tile('本季预计结算', projected !== null ? `+${projected} 点` : '—', `${worldTierLabel(tier)}${rank ? ` · 暂列第 ${rank}` : ''}`)}
       ${tile('巅峰之路额外点数', `${claimedPeakPts} / ${MAX_PEAK_SHOP_POINTS}`, `已领 ${claimedStages.length} / 100 关`)}
     </div>
-    ${panel(`外场金技能书 <small>${outfieldOwned} / ${outfield.length}</small>`, `<div class="shop-grid">${outfield.map((offer) => renderOfferCard(offer, points)).join('')}</div>`, { flush: true, aside: tag('每本 100 点', 'gold') })}
-    ${panel(`守门员金技能书 <small>${gkOwned} / ${gk.length}</small>`, `<div class="shop-grid">${gk.map((offer) => renderOfferCard(offer, points)).join('')}</div>`, { flush: true, aside: tag('每本 100 点', 'info') })}
-    ${panel(`辅助金技能书 <small>${auxOwned} / ${aux.length}</small>`, `<div class="shop-grid">${aux.map((offer) => renderOfferCard(offer, points)).join('')}</div>`, { flush: true, aside: tag('占辅助槽 · 通用 · 100 点', 'good') })}
+    ${panel(`外场技能书 <small>${outfieldOwned} / ${outfield.length}</small>`, `<div class="shop-grid">${outfield.map((offer) => renderOfferCard(offer, points)).join('')}</div>`, { flush: true, aside: tag('每本 100 点', 'gold') })}
+    ${panel(`守门员技能书 <small>${gkOwned} / ${gk.length}</small>`, `<div class="shop-grid">${gk.map((offer) => renderOfferCard(offer, points)).join('')}</div>`, { flush: true, aside: tag('每本 100 点', 'info') })}
+    ${panel(`辅助技能书 <small>${auxOwned} / ${aux.length}</small>`, `<div class="shop-grid">${aux.map((offer) => renderOfferCard(offer, points)).join('')}</div>`, { flush: true, aside: tag('占辅助槽 · 通用 · 100 点', 'good') })}
     ${renderPointsGuide(tier, rank)}
   `
 }

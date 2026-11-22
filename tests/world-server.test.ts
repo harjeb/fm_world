@@ -93,7 +93,7 @@ describe('服务器共享世界', () => {
     const restored = await (await fetch(`${base}/api/game`, { headers: auth(a.token) })).json()
     expect(restored.clubCoaches).toEqual(coaches)
     expect(restored.game).not.toHaveProperty('clubCoaches')
-    expect(world.slots).toEqual({ total: 80, taken: 2, free: 78 })
+    expect(world.slots).toEqual({ total: 60, taken: 2, free: 58 })
     expect(new Set(Object.keys(world.owners)).size).toBe(2)
     expect(world.round).toBeGreaterThanOrEqual(1)
   })
