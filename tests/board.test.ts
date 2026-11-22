@@ -228,8 +228,8 @@ describe('第 1 赛季兼容、休赛期预选与换季激活', () => {
     expect(mandate.transferBudget).toBe(mandate.initialTransferBudget)
     expect(mandate.facilityBudget).toBe(mandate.initialFacilityBudget)
     expect(mandate.initialTransferBudget).toBeGreaterThan(BOARD_TIER_BASE[mandate.tier].transferGrant)
-    // 独立转会预算 + 独立设施预算已直接注入俱乐部余额
-    expect(economyOf(game).balance).toBe(balanceBeforeRoll + mandate.initialTransferBudget + mandate.initialFacilityBudget)
+    // 转会预算直接注入俱乐部余额；设施预算作为独立专用池不混入余额
+    expect(economyOf(game).balance).toBe(balanceBeforeRoll + mandate.initialTransferBudget)
     expect(game.board?.pendingChoice).toBeUndefined()
     expect(game.board?.offseasonPreview).toBeUndefined()
   })
@@ -327,30 +327,42 @@ describe('第 1 赛季兼容、休赛期预选与换季激活', () => {
 })
 
 describe('独立设施预算、转会预算、工资帽与卖人回流', () => {
-  it('即使余额 5000 万，设施预算用尽后也无法继续升级（不能单季升满训练设施）', () => {
+  it('设施预算优先抵扣且不扣余额，预算不足或用完后可无缝使用自有余额继续升级', () => {
     const game = makeSeason2Game('division2', 'expected')
     const economy = economyOf(game)
     const mandate = game.board!.current!
-    economy.balance = 50_000_000
-    const initialBudget = mandate.facilityBudget
 
-    let upgrades = 0
-    while (upgrades < 100) {
-      const nextCost = facilityUpgradeCost('academy', economy.academy)
-      if (nextCost === null) break
-      const res = upgradeFacility(game, 'academy')
-      if (!res.ok) {
-        expect(res.error).toContain('设施预算不足')
-        expect(mandate.facilityBudget).toBeLessThan(nextCost)
-        break
-      }
-      upgrades++
-    }
-    expect(upgrades).toBeGreaterThan(0)
-    // 单季 D2 设施预算 30 万绝对升不满 LV2（最多只能升少量阶段）
-    expect(economy.academy).toBeLessThan(10)
-    expect(mandate.facilityBudget).toBeLessThan(initialBudget)
-    expect(economy.balance).toBeGreaterThan(49_500_000)
+    // 1. 即使俱乐部余额为 0，仍可直接使用独立设施预算升级设施（两者互不冲突）
+    economy.balance = 0
+    const cost1 = facilityUpgradeCost('academy', economy.academy)!
+    expect(mandate.facilityBudget).toBeGreaterThanOrEqual(cost1)
+    const beforeBudget1 = mandate.facilityBudget
+    expect(upgradeFacility(game, 'academy').ok).toBe(true)
+    expect(economy.balance).toBe(0)
+    expect(mandate.facilityBudget).toBe(beforeBudget1 - cost1)
+
+    // 2. 设施预算不足单次费用时，自动耗尽剩余预算并用余额补足差额
+    const cost2 = facilityUpgradeCost('academy', economy.academy)!
+    mandate.facilityBudget = Math.floor(cost2 / 2)
+    const partialBudget = mandate.facilityBudget
+    economy.balance = 500_000
+    expect(upgradeFacility(game, 'academy').ok).toBe(true)
+    expect(mandate.facilityBudget).toBe(0)
+    expect(economy.balance).toBe(500_000 - (cost2 - partialBudget))
+
+    // 3. 设施预算为 0 后，依然可以使用自有余额继续升级
+    const cost3 = facilityUpgradeCost('academy', economy.academy)!
+    const balBefore3 = economy.balance
+    expect(upgradeFacility(game, 'academy').ok).toBe(true)
+    expect(mandate.facilityBudget).toBe(0)
+    expect(economy.balance).toBe(balBefore3 - cost3)
+
+    // 4. 设施预算与余额合计不足时才拦截
+    const cost4 = facilityUpgradeCost('academy', economy.academy)!
+    economy.balance = Math.max(0, cost4 - 1)
+    const blocked = upgradeFacility(game, 'academy')
+    expect(blocked.ok).toBe(false)
+    expect(blocked.error).toContain('余额不足')
   })
 
   it('签人同时校验转会预算与有效工资帽；卖人收入按留存率回流转会预算', () => {
@@ -529,7 +541,7 @@ describe('转会预算 ↔ 工资帽 38:1 双向滑块与开季档位切换', ()
     expect(mandate.transferBudget).toBe(ambitiousOpt.transferGrant)
     expect(mandate.facilityBudget).toBe(ambitiousOpt.facilityGrant)
     expect(economy.balance).toBe(
-      balBefore + (ambitiousOpt.transferGrant - expectedOpt.transferGrant) + (ambitiousOpt.facilityGrant - expectedOpt.facilityGrant),
+      balBefore + (ambitiousOpt.transferGrant - expectedOpt.transferGrant),
     )
 
     // 花掉大部分设施预算后，不允许下调至稳妥档
@@ -571,8 +583,9 @@ describe('赛季末考核奖惩与下赛季预算变化', () => {
     expect(winGame.board!.confidence).toBeGreaterThan(BOARD_INITIAL_CONFIDENCE)
     expect(winRoll.mandate!.initialTransferBudget).toBeGreaterThan(winOldGrant)
     expect(economyOf(winGame).balance).toBe(
-      balBeforeWinRoll + winMandate.exceedBonus + winRoll.mandate!.initialTransferBudget + winRoll.mandate!.initialFacilityBudget,
+      balBeforeWinRoll + winMandate.exceedBonus + winRoll.mandate!.initialTransferBudget,
     )
+    expect(winRoll.mandate!.facilityBudget).toBe(winRoll.mandate!.initialFacilityBudget)
 
     // 场景 B：严重失职（D 级）
     const failGame = makeSeason2Game('division2', 'ambitious', 222)

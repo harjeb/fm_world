@@ -326,7 +326,7 @@ function boardTab(): string {
             <div class="board-kpi">
               <span class="muted small">独立设施预算</span>
               <b class="num-text">${m.facilityBudget.toLocaleString()}</b>
-              <small class="muted">初始 ${m.initialFacilityBudget.toLocaleString()} · 仅设施升级使用</small>
+              <small class="muted">初始 ${m.initialFacilityBudget.toLocaleString()} · 优先抵扣设施升级，用完可用余额</small>
             </div>
             <div class="board-kpi ${wageHeadroom < 0 ? 'over-cap' : ''}">
               <span class="muted small">每轮有效工资帽</span>
@@ -456,22 +456,29 @@ function facilitiesTab(): string {
     const incomeCell = income
       ? `${income.toLocaleString()}${id === 'stadium' ? '<small class="muted"> / 主场</small>' : ''}`
       : '<span class="muted">—</span>'
-    const lackedBudget = cost !== null && facilityBudget !== null && facilityBudget < cost
-    const lackedBalance = cost !== null && economy.balance < cost
-    const disabledReason = cost === null ? '已满级' : lackedBudget ? `本赛季设施预算不足（剩余 ${facilityBudget!.toLocaleString()}）` : lackedBalance ? '余额不足' : ''
+    const availBudget = facilityBudget ?? 0
+    const lackedFunds = cost !== null && availBudget + economy.balance < cost
+    const disabledReason = cost === null ? '已满级' : lackedFunds ? (availBudget > 0 ? '设施预算与余额合计不足' : '余额不足') : ''
+    const payHint = cost !== null && !lackedFunds && facilityBudget !== null
+      ? availBudget >= cost
+        ? `优先扣除独立设施预算 ${cost.toLocaleString()}（不扣余额）`
+        : availBudget > 0
+          ? `扣除剩余设施预算 ${availBudget.toLocaleString()} + 余额 ${(cost - availBudget).toLocaleString()}`
+          : `设施预算已用完，使用俱乐部余额 ${cost.toLocaleString()} 升级`
+      : ''
     return `<tr>
       <td><span class="facility-name">${icon(info.icon, 16)}<b>${info.label}</b><span class="lv">LV${level}</span></span></td>
       <td>${stagePips(stage)}<small class="muted stage-count">${facilityStageInLevel(stage)} / ${STAGES_PER_LEVEL}</small></td>
       <td class="num">${GROWTH_FACILITIES.has(id) ? `${chance}%` : '<span class="muted">—</span>'}</td>
       <td class="num">${incomeCell}</td>
       <td class="dim wrap">${effectText}</td>
-      <td class="num"><button class="btn small" data-action="club-upgrade" data-facility="${id}" ${disabledReason ? `disabled title="${esc(disabledReason)}"` : ''}>${cost === null ? '已满级' : `升级 · ${cost.toLocaleString()}`}</button></td>
+      <td class="num"><button class="btn small" data-action="club-upgrade" data-facility="${id}" ${disabledReason ? `disabled title="${esc(disabledReason)}"` : payHint ? `title="${esc(payHint)}"` : ''}>${cost === null ? '已满级' : `升级 · ${cost.toLocaleString()}`}</button></td>
     </tr>`
   }).join('')
   const minAtmo = Math.round(HOME_ATMOSPHERE_BASE * MAIN_ATTR_SCALE)
   const maxAtmo = Math.round((HOME_ATMOSPHERE_BASE + HOME_STADIUM_MAX_BONUS) * MAIN_ATTR_SCALE)
   const budgetBanner = boardActive
-    ? `<div class="banner ${facilityBudget! > 0 ? 'info' : 'gold'}">${icon('coin', 16)}<b>本赛季独立设施预算：剩余 ${facilityBudget!.toLocaleString()} / 初始 ${initialFacilityBudget!.toLocaleString()}</b><span>升级设施同时消耗余额与设施预算；设施预算由董事会每季独立拨付，不与转会预算滑块互通。</span><button class="btn small ghost" data-action="go-club" data-tab="board">查看董事会</button></div>`
+    ? `<div class="banner ${facilityBudget! > 0 ? 'info' : 'gold'}">${icon('coin', 16)}<b>本赛季独立设施预算：剩余 ${facilityBudget!.toLocaleString()} / 初始 ${initialFacilityBudget!.toLocaleString()}</b><span>升级设施优先扣除独立设施预算（不扣余额）；设施预算不足或用完后，自动使用俱乐部余额补足，两者互不冲突。</span><button class="btn small ghost" data-action="go-club" data-tab="board">查看董事会</button></div>`
     : ''
   return `${budgetBanner}<div class="grid club-grid">
     ${panel('俱乐部设施', `<div class="table-scroll"><table class="dt"><thead><tr><th>设施</th><th>阶段</th><th class="num">成长概率</th><th class="num">每轮 / 主场收入</th><th>加成效果</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`, { flush: true })}

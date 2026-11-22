@@ -5,8 +5,8 @@
  * 1. 赛季目标：联赛排名目标（70% 权重）+ 本级正式赛季杯赛目标（30% 权重），提供三档雄心可选
  *    （稳妥 safe / 基准推荐 expected / 野心 ambitious）；休赛期可预选，开季第 1–3 轮可最后确认或切换，
  *    第 4 轮自动锁定。
- * 2. 独立预算拨款：每赛季开启时董事会直接拨付「独立转会预算」与「独立设施预算」并注入俱乐部余额。
- *    - 升级设施同时扣减余额与「设施预算」，避免富裕俱乐部单赛季把训练设施直接升满。
+ * 2. 独立预算拨款：每赛季开启时董事会直接拨付「转会预算」（注入俱乐部余额）与「独立设施预算」（独立专用池）。
+ *    - 升级设施优先扣除「独立设施预算」（不扣俱乐部余额），预算不足或用完时自动使用俱乐部自有余额补足，两者互不冲突。
  *    - 签人/竞拍同时校验余额、转会预算与每轮有效工资帽；卖人收入按信任度留存率（50%/75%/85%）回流至转会预算。
  * 3. 转会预算 ↔ 工资帽双向滑块：按 38:1（每赛季 38 轮）在转会预算与基础工资帽之间精确互转；
  *    滑块严格不与「设施预算」互通，守住设施进度上限。
@@ -36,8 +36,8 @@ import { lineupRating } from './club-rating.ts'
 import { economyOf, facilityRoundIncome } from './economy.ts'
 import { MIN_SQUAD } from './squad.ts'
 import { wageForPlayer, worldWageBill } from './wages.ts'
-import { checkFacilityBudget, isBoardBudgetActive, spendFacilityBudget } from './board-budget.ts'
-export { checkFacilityBudget, isBoardBudgetActive, spendFacilityBudget } from './board-budget.ts'
+import { checkFacilityBudget, facilityBudgetAvailable, isBoardBudgetActive, spendFacilityBudget } from './board-budget.ts'
+export { checkFacilityBudget, facilityBudgetAvailable, isBoardBudgetActive, spendFacilityBudget } from './board-budget.ts'
 
 export const BOARD_INITIAL_CONFIDENCE = 60
 export const BOARD_MIN_CONFIDENCE = 15
@@ -723,7 +723,8 @@ export function chooseBoardAmbition(
   const transferDelta = picked.transferGrant - mandate.initialTransferBudget
   const facilityDelta = picked.facilityGrant - mandate.initialFacilityBudget
   const wageDelta = picked.wageCap - mandate.initialWageCap
-  const cashDelta = transferDelta + facilityDelta
+  // 设施预算为独立专用资金池，不混入俱乐部余额；仅转会预算差额同步补退至余额。
+  const cashDelta = transferDelta
   const committed = Math.max(0, options.committedAuctions ?? 0)
 
   const nextTransferBudget = mandate.transferBudget + transferDelta
@@ -1051,10 +1052,9 @@ export function evaluateAndRollBoardSeason(
   const picked = options.find((item) => item.ambition === chosenAmbition) ?? options[1] ?? options[0]
   const retentionRate = transferRetentionRate(board.confidence)
 
-  // 直接发放本赛季转会预算 + 设施预算到俱乐部余额，同时作为本赛季独立额度上限
-  const totalGrant = picked.transferGrant + picked.facilityGrant
-  if (Number.isSafeInteger(economy.balance + totalGrant)) {
-    economy.balance += totalGrant
+  // 转会预算直接注入俱乐部余额；设施预算作为独立专用池发放，与俱乐部余额互不冲突
+  if (Number.isSafeInteger(economy.balance + picked.transferGrant)) {
+    economy.balance += picked.transferGrant
   }
 
   const mandate: BoardSeasonMandate = {

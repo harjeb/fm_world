@@ -3569,7 +3569,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         if (incomingEco && serverEco) {
           const facilityBumped = (Object.keys(FACILITIES) as FacilityId[]).some((id) => incomingEco[id] > serverEco[id])
           if (facilityBumped) {
-            await sendJson(409, { error: '设施升级须通过官方升级接口提交以校验董事会设施预算，请刷新页面后重试', revision: account.revision, game: publicGame(account) }, true)
+            await sendJson(409, { error: '设施升级须通过官方升级接口提交以同步扣减设施预算与余额，请刷新页面后重试', revision: account.revision, game: publicGame(account) }, true)
             return
           }
         }
