@@ -440,6 +440,7 @@ export function createWorldGame(seed = Math.floor(Math.random() * 0x7fffffff), r
   const setup = createWorld(seed, requestedClubId, startedAt)
   const game = createWorldGameFromSetup(setup, seed, startedAt, clubName, seedAIClubs(setup.world, seed))
   ensurePve(game)
+  ensureAchievements(game)
   return game
 }
 
@@ -1604,6 +1605,7 @@ function payWorldWages(game: GameState, round: number): number {
 
 import { archivePastCups } from './pve-season.ts'
 import { ensurePve } from './pve.ts'
+import { ensureAchievements } from './achievements.ts'
 import { evaluateAndRollBoardSeason, oldBoardContextFromSeason, oldBoardContextFromWorld, refreshOffseasonBoardPreview, syncBoardLockState } from './board.ts'
 
 /** 换季跳过休赛期游戏日时，按跳过的毫秒数推进伤病恢复（不改动默契时钟，避免跨赛季清零）。 */

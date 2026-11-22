@@ -17,6 +17,7 @@ import { addLegacySignature } from './data/players.ts'
 import { ensureCards } from './cards.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION, upgradeBurstAttr, upgradeNames, upgradeStarTraits } from './names.ts'
 import { ensurePve } from './pve.ts'
+import { ensureAchievements } from './achievements.ts'
 import { pruneChemistry } from './chemistry.ts'
 import { migratePositionProfiles } from './position-profile-migration.ts'
 
@@ -86,6 +87,7 @@ export function createInitialGame(seed?: number, clubName = '青石'): GameState
   }
   economyOf(game)
   ensurePve(game)
+  ensureAchievements(game)
   return game
 }
 
@@ -194,10 +196,11 @@ export function loadGame(): GameState | null {
     const traitsUpgraded = upgradeStarTraits(parsed)
     const attrsUpgraded = upgradeBurstAttr(parsed)
     const pveAdded = ensurePve(parsed)
+    const achievementsAdded = ensureAchievements(parsed).changed
     const wagesRepaired = repairInflatedContractWages(parsed.roster)
     parsed.ui = parsed.ui ?? { screen: 'home' }
     const chemistryPruned = pruneChemistry(parsed.chemistry, Date.now(), parsed.season.gameDayMs)
-    if (positionsMigrated || chemistryPruned || rescheduled || elevenUpgraded || repaired || aiLineupsRefreshed || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || pveAdded || wagesRepaired) saveGame(parsed)
+    if (positionsMigrated || chemistryPruned || rescheduled || elevenUpgraded || repaired || aiLineupsRefreshed || migrated || signaturesAdded || economyAdded || cardsAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || pveAdded || achievementsAdded || wagesRepaired) saveGame(parsed)
     return parsed
   } catch {
     return null

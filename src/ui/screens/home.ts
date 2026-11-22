@@ -7,6 +7,7 @@ import { SQUAD_LIMIT } from '../../game/market.ts'
 import { trainingActionsTotal } from '../../game/training.ts'
 import { worldDivisionLabel, worldTierLabel } from '../../game/world.ts'
 import { BOARD_AMBITION_META, BOARD_CHOICE_MAX_ROUND, canSwitchCurrentBoardAmbition, ensureBoard, refreshOffseasonBoardPreview, syncBoardLockState } from '../../game/board.ts'
+import { achievementSummary } from '../../game/achievements.ts'
 import { legendCupMetaById } from '../../game/data/legend-cup-teams.ts'
 import { isOnlineMode, onlineKickoffPending, serverNow } from '../../online.ts'
 import { boardMarkings, boardSpot, caHeat, clubLook, crest, emptyState, formPills, humanMark, icon, injuryLabel, leagueTable, meter, ownName, pageHead, panel, recordResult, resultPill, tag, teamForm, tile } from '../components.ts'
@@ -14,6 +15,7 @@ import { isHighOffer } from '../../game/transfers.ts'
 import { countdownText, cupRoundLabel, esc, kickoffTimeLabel, matchModeLabel, playerCA, pveModeLabel, shortName } from '../format.ts'
 import { game } from '../state.ts'
 import type { IconName } from '../icons.ts'
+import type { MatchRecord } from '../../game/types.ts'
 
 function divisionText(): string {
   if (!game.world) return '联赛'
@@ -59,7 +61,7 @@ function nextMatchPanel(): string {
     const active = game.activeMatch
     return panel('比赛进行中', `<div class="nm-stack"><div class="nm-live">
       <div>${icon('live', 22)}</div>
-      <div><b>对阵 ${esc(active.context.opponentName)}</b><p class="muted">${active.context.isLeague ? `联赛第 ${active.context.round} 轮 · 按现实时间进行` : pveModeLabel(active.context.mode, active.context.stage)} · 种子 ${active.context.seed}</p></div>
+      <div><b>对阵 ${esc(active.context.opponentName)}</b><p class="muted">${active.context.isLeague ? `${tag('联赛', 'info')} 第 ${active.context.round} 轮 · 按现实时间进行` : `${tag(esc(pveModeLabel(active.context.mode, active.context.stage)), active.context.mode === 'cup' ? 'gold' : '')}`} · 种子 ${active.context.seed}</p></div>
       <button class="btn primary" data-nav="match">${icon('play', 14)}继续比赛</button>
     </div>${recentLeagueResult()}</div>`, { className: 'next-match span-8' })
   }
@@ -127,12 +129,12 @@ function nextMatchPanel(): string {
       ${nextMatchSide(fixture.homeId, 'left', homeIsMe)}
       <div class="nm-center">
         <div class="nm-vs">VS</div>
-        <div class="nm-meta">${homeIsMe ? '主场' : '客场'} · ${cupFirst ? tag(esc(cup!.cup.name), 'info') : tag('联赛')} ${esc(cupRoundText)}</div>
+        <div class="nm-meta">${homeIsMe ? '主场' : '客场'} · ${cupFirst ? tag(esc(cup!.cup.name), 'gold') : tag('联赛', 'info')} ${esc(cupRoundText)}</div>
         <div class="nm-meta">${icon('clock', 13)} ${esc(kickoffTimeLabel(kickoffAt))} · ${kickoffAt > now ? `距开赛 ${esc(countdown)}` : esc(countdown)}</div>
         ${startButton}
       </div>
       ${nextMatchSide(fixture.awayId, 'right', !homeIsMe)}
-    </div>${recentLeagueResult()}</div>`, { aside: `<span class="muted">${cupFirst ? `${esc(cup!.cup.name)} · ` : ''}${esc(cupRoundText)}</span>`, className: 'next-match span-8' })
+    </div>${recentLeagueResult()}</div>`, { aside: cupFirst ? tag(`${esc(cup!.cup.name)} · ${esc(cupRoundText)}`, 'gold') : tag(`联赛 · ${esc(cupRoundText)}`, 'info'), className: 'next-match span-8' })
 }
 
 function clubStatusPanel(): string {
@@ -163,6 +165,13 @@ function tablePanel(): string {
   })
 }
 
+function recentModeBadge(record: MatchRecord): string {
+  const label = esc(matchModeLabel(record))
+  if (record.isLeague) return tag(label, 'info')
+  if (record.mode === 'cup') return tag(label, 'gold')
+  return `<small class="muted">${label}</small>`
+}
+
 function recentPanel(): string {
   const records = game.matchHistory.slice(0, 5)
   const body = records.length === 0
@@ -170,7 +179,7 @@ function recentPanel(): string {
     : `<div class="rows">${records.map((record) => `<button class="row-btn result-row" data-action="open-review" data-record="${esc(record.id)}">
         ${resultPill(recordResult(record.result))}
         <span class="result-teams">${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)} <b>${record.score.home}:${record.score.away}</b> ${ownName(record.awayName, record.awayId === PLAYER_TEAM_ID)}${record.shootout ? ` <small class="muted">点球 ${record.shootout.home}:${record.shootout.away}</small>` : ''}</span>
-        <small class="muted">${matchModeLabel(record)}</small>
+        ${recentModeBadge(record)}
       </button>`).join('')}</div>`
   return panel('最近比赛', body, { flush: true, aside: `<button class="link" data-nav="review">全部复盘 ${icon('right', 12)}</button>` })
 }
@@ -337,6 +346,20 @@ function boardAlert(): string {
   return ''
 }
 
+function achievementAlert(): string {
+  const summary = achievementSummary(game)
+  if (summary.claimable <= 0) return ''
+  const rewards: string[] = []
+  if (summary.pendingMoney > 0) rewards.push(`金币 +${summary.pendingMoney.toLocaleString()}`)
+  if (summary.pendingShopPoints > 0) rewards.push(`商店点券 +${summary.pendingShopPoints}`)
+  return `<section class="offer-alert ach-alert" role="status">
+    <div class="offer-alert-head">${icon('star', 18)}<b>有 ${summary.claimable} 项俱乐部成就已完成待领取</b>
+      <span class="muted">可领取：${esc(rewards.join(' · '))}</span>
+      <button class="btn small primary" data-action="claim-achievement-all">一键领取</button>
+      <button class="btn small ghost" data-nav="achievements">查看成就 ${icon('right', 12)}</button></div>
+  </section>`
+}
+
 export function renderHome(): string {
   const look = clubLook(PLAYER_TEAM_ID)
   return `
@@ -348,6 +371,7 @@ export function renderHome(): string {
     ${wageArrearsAlert()}
     ${offerAlert()}
     ${boardAlert()}
+    ${achievementAlert()}
     <div class="dash">
       ${nextMatchPanel()}
       ${clubStatusPanel()}

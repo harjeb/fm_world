@@ -1043,6 +1043,10 @@ export async function buyShopBookOnline(skillId: string): Promise<GameState> {
   return protectedGameAction('/api/shop/buy', { skillId })
 }
 
+export async function claimAchievementOnline(id?: string): Promise<GameState> {
+  return protectedGameAction('/api/achievements/claim', id ? { id } : { all: true })
+}
+
 export async function chooseBoardAmbitionOnline(
   ambition: import('./game/types.ts').BoardAmbition,
   options: { scope?: 'offseason' | 'current'; tier?: import('./game/types.ts').TierId; lock?: boolean } = {},

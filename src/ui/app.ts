@@ -72,14 +72,14 @@ import { advanceLeagueRealtime, leagueDisplayClock, setLeagueClock } from '../ga
 import { displayClock } from '../game/match/time.ts'
 import { hasSeenLatestChangelog, markChangelogSeen } from '../game/changelog.ts'
 import { emptyAutoSubs } from '../game/match/management.ts'
-import { payWageArrears, upgradeFacility, type FacilityId } from '../game/economy.ts'
+import { economyOf, payWageArrears, upgradeFacility, type FacilityId } from '../game/economy.ts'
 import { BOARD_AMBITION_META, BOARD_WAGE_SLIDER_ROUNDS, adjustBoardBudgetSlider, chooseBoardAmbition, isBoardAmbition, isBoardTier } from '../game/board.ts'
 import { leadingBid, type Auction, type AuctionResult } from '../game/auction.ts'
 import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPlayer, refreshClubMarket, releasePlayer, renewContract, signWorldClubPlayer, signFreeAgent } from '../game/market.ts'
 import { minimumBid } from '../game/auction.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
 import { clubNameError, normalizeClubName } from '../game/club-name.ts'
-import { adjustBoardBudgetOnline, aiTransferMarket, bidOnline, buyFromAIClubOnline, buyShopBookOnline, chatState, chooseBoardAmbitionOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, recycleCardsOnline, refreshAITransferMarket, refreshChatOnline, refreshGameOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setCardRecycleLockOnline, startPeakOnline, startScoutingOnline, deleteScoutingOnline, startTrainingOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline, upgradeFacilityOnline } from '../online.ts'
+import { adjustBoardBudgetOnline, aiTransferMarket, bidOnline, buyFromAIClubOnline, buyShopBookOnline, chatState, chooseBoardAmbitionOnline, claimAchievementOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, recycleCardsOnline, refreshAITransferMarket, refreshChatOnline, refreshGameOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setCardRecycleLockOnline, startPeakOnline, startScoutingOnline, deleteScoutingOnline, startTrainingOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline, upgradeFacilityOnline } from '../online.ts'
 import { agentHandoffText } from './agent-handoff.ts'
 import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
 import { UNHAPPY_HOURS } from '../game/transfer-rules.ts'
@@ -100,6 +100,8 @@ import { renderChallenge } from './screens/challenge.ts'
 import type { CupId } from '../game/data/cup-config.ts'
 import { loadPveContent } from '../game/pve-content.ts'
 import { renderClub } from './screens/club.ts'
+import { renderAchievements } from './screens/achievements.ts'
+import { claimAchievement, claimAllAchievements } from '../game/achievements.ts'
 import { renderShop } from './screens/shop.ts'
 import { buyShopBook } from '../game/shop.ts'
 import { SKILLS } from '../game/data/skills.ts'
@@ -273,6 +275,8 @@ function renderScreen(): string {
       return renderYouth()
     case 'club':
       return renderClub()
+    case 'achievements':
+      return renderAchievements()
     case 'shop':
       return renderShop()
     case 'transfer':
@@ -1424,6 +1428,37 @@ document.addEventListener('click', async (event) => {
         ui.notice = `已兑换技能书《${name}》，可前往培养页配置。`
       } catch (error) {
         ui.notice = error instanceof Error ? error.message : '技能书兑换失败'
+      } finally {
+        cardActionPending = false
+        render()
+      }
+      break
+    }
+    case 'claim-achievement':
+    case 'claim-achievement-all': {
+      const achievementId = action === 'claim-achievement' ? (actionEl.dataset.achievement ?? '') : ''
+      if (action === 'claim-achievement' && !achievementId) break
+      if (sharedActionUnavailable()) { showNotice('联机连接已断开，请先重新连接服务器'); break }
+      cardActionPending = true
+      try {
+        const beforeBalance = economyOf(game).balance
+        const beforePoints = game.shop?.points ?? 0
+        if (isOnlineMode()) {
+          ui.notice = '正在领取成就奖励，请稍候…'
+          render()
+          await claimAchievementOnline(achievementId || undefined)
+        } else {
+          const result = commitOfflineTransaction(() => achievementId ? claimAchievement(game, achievementId) : claimAllAchievements(game))
+          if (!result.ok) throw new Error(result.error)
+        }
+        const gotMoney = Math.max(0, economyOf(game).balance - beforeBalance)
+        const gotPoints = Math.max(0, (game.shop?.points ?? 0) - beforePoints)
+        const parts: string[] = []
+        if (gotMoney > 0) parts.push(`金币 +${gotMoney.toLocaleString()}`)
+        if (gotPoints > 0) parts.push(`商店点券 +${gotPoints}`)
+        ui.notice = parts.length ? `成就奖励已领取：${parts.join('，')}。` : '成就奖励已领取。'
+      } catch (error) {
+        ui.notice = error instanceof Error ? error.message : '领取成就奖励失败'
       } finally {
         cardActionPending = false
         render()

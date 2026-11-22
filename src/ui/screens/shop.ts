@@ -75,7 +75,7 @@ function renderPointsGuide(tier: TierId, rank: number | null): string {
     ? `当前位于 <b>${esc(worldTierLabel(tier))}</b> 第 <b>${rank}</b> 名，若以此排名完赛预计获得 <b>${projected}</b> 点（约 ${Math.floor(projected / SHOP_BOOK_PRICE)} 本）。`
     : `当前位于 <b>${esc(worldTierLabel(tier))}</b>，赛季常规赛结束时按最终排名发放商店点数。`
   return panel('点数获取说明', `
-    <p class="hint pad">${summary} 商店点数跨赛季永久保留，不会清零；巅峰之路每关首通额外获得一次性点数，旧档已通关关卡会自动补发。</p>
+    <p class="hint pad">${summary} 商店点数跨赛季永久保留，不会清零；达成「俱乐部成就」与巅峰之路每关首通也可获得额外商店点数，旧档已通关关卡会自动补发。</p>
     <div class="grid two pad-grid">
       <div>
         <h4 class="sub-head">巅峰之路每关首通（额外 · 共 ${MAX_PEAK_SHOP_POINTS} 点）</h4>
@@ -117,7 +117,7 @@ export function renderShop(): string {
       kicker: '经营 · 每赛季更新',
       title: '技能书商店',
       sub: '每赛季轮换上架 8 本外场、2 本守门员与 2 本辅助技能书（共 12 本）；购买后永久入库，不消耗。',
-      actions: `<button class="btn ghost" data-nav="training">前往培养配置技能卡 ${icon('right', 13)}</button>`,
+      actions: `<button class="btn ghost" data-nav="achievements">${icon('star', 13)}前往成就领点券</button><button class="btn ghost" data-nav="training">前往培养配置技能卡 ${icon('right', 13)}</button>`,
     })}
     ${backfillNote}
     <div class="kpi-row">

@@ -2,6 +2,7 @@ import type { AttrKey, AutoSubPlan, DetailedPosition, GameState, Lineup, Positio
 import { loadGame, setTeamPickPending } from '../game/state.ts'
 import { createWorldGame, type ClubPreview } from '../game/world.ts'
 import { ensurePve } from '../game/pve.ts'
+import { ensureAchievements } from '../game/achievements.ts'
 import { restoreActiveEngine } from '../game/actions.ts'
 import type { GameEngine } from '../game/pes/engine.ts'
 import type { SeasonGoal, SquadRole } from '../game/negotiation.ts'
@@ -24,7 +25,7 @@ export type NegotiationDraft = {
 import type { TrainingActionId } from '../game/training.ts'
 import type { TrainingActivityId } from '../game/training-calendar.ts'
 
-export type Screen = 'youth' | 'club' | 'shop' | 'transfer' | 'home' | 'academy' | 'inventory' | 'training' | 'lineup' | 'season' | 'cups' | 'world' | 'challenge' | 'review' | 'match'
+export type Screen = 'youth' | 'club' | 'achievements' | 'shop' | 'transfer' | 'home' | 'academy' | 'inventory' | 'training' | 'lineup' | 'season' | 'cups' | 'world' | 'challenge' | 'review' | 'match'
 export type ClubTab = 'board' | 'facilities' | 'contracts' | 'history'
 export type TransferTab = 'market' | 'free' | 'ai' | 'offers'
 export type SquadSortKey = 'pos' | 'name' | 'age' | 'ca' | 'condition' | 'energy' | 'value' | `attr${number}`
@@ -158,7 +159,7 @@ export type UIState = {
   newGamePreview: { seed: number; clubs: ClubPreview[] } | null
 }
 
-const SAVE_SCREEN: Screen[] = ['youth', 'club', 'shop', 'transfer', 'home', 'academy', 'inventory', 'training', 'lineup', 'season', 'cups', 'world', 'challenge', 'review', 'match']
+const SAVE_SCREEN: Screen[] = ['youth', 'club', 'achievements', 'shop', 'transfer', 'home', 'academy', 'inventory', 'training', 'lineup', 'season', 'cups', 'world', 'challenge', 'review', 'match']
 
 /** 模式选定后才初始化；启动页不读取、迁移或生成离线世界。 */
 export let game: GameState
@@ -167,6 +168,7 @@ export function startOfflineGame(): void {
   const saved = loadGame()
   game = saved ?? createWorldGame()
   ensurePve(game)
+  ensureAchievements(game)
   if (!saved) setTeamPickPending(true)
   restoreSavedScreen()
 }

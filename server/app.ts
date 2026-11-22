@@ -74,6 +74,7 @@ import { MatchScheduler } from './match-scheduler.ts'
 import { emptyMatchBook, matchJobId, seasonCupJobId, recordForClub, type LockedTeam, type MatchBook, type MatchJob } from './match-job.ts'
 import { awardLeagueBookDrops } from '../src/game/league-book-drops.ts'
 import { awardSeasonShopPoints, buyShopBook } from '../src/game/shop.ts'
+import { claimAchievement, claimAllAchievements, ensureAchievements } from '../src/game/achievements.ts'
 import { chemistryForPlayers, mergeChemistryTraining } from '../src/game/chemistry.ts'
 import { isStyleId, tryValidateInstructions } from '../src/game/pes/tactics.ts'
 import { isMatchPlanId, matchPlanConditionFactor } from '../src/game/pes/match-plan.ts'
@@ -2196,6 +2197,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const signaturesAdded = needsMigration ? upgradeLegacySignatures(account.game) : false
       const cardsAdded = ensureCards(account.game)
       const pveAdded = ensurePve(account.game, cupOpeningTeams())
+      const achResult = ensureAchievements(account.game, now())
       const needLegacyPlayerMigration = needsMigration && (
         account.game.namesVersion !== NAMES_VERSION
         || account.game.traitsVersion !== TRAITS_VERSION
@@ -2232,7 +2234,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const youthChanged = settleYouth(account.game, now())
       // 体能每小时按比例恢复；PvE 迁移不覆盖 main 的体能和共享名册逻辑。
       const rested = settleAccountConditions(account)
-      let migrated = youthChanged || seasonShopAwarded || boardLocked || boardPreviewed || markedShared || elevenUpgraded || signaturesAdded || cardsAdded || pveAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || sharedTeamsChanged || sharedFixturesChanged || sharedWorldChanged || publishedMatches.changed || rested || absorbInto(account)
+      let migrated = achResult.changed || youthChanged || seasonShopAwarded || boardLocked || boardPreviewed || markedShared || elevenUpgraded || signaturesAdded || cardsAdded || pveAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || sharedTeamsChanged || sharedFixturesChanged || sharedWorldChanged || publishedMatches.changed || rested || absorbInto(account)
       const economyAdded = account.game.economy == null || account.game.economy.fans === undefined
       economyOf(account.game)
       const progressingLeague = !!account.game.activeMatch?.context.isLeague
@@ -2257,8 +2259,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       pullSharedFixtures(account)
       pullSharedWorld(account)
       account.revision++
-      // 杯赛/商店结算发奖后，旧客户端基于奖励前的余额不能再覆盖该账号。
-      if (publishedMatches.rewardChanged || seasonShopAwarded) account.lastUserRevision = account.revision
+      // 杯赛/商店/成就福利补发后，旧客户端基于奖励前的余额不能再覆盖该账号。
+      if (publishedMatches.rewardChanged || seasonShopAwarded || achResult.backfilledMoney > 0) account.lastUserRevision = account.revision
       // lastUserRevision 通常只记录“玩家自己保存”的版本；AI / 共享世界 / 自动结算的改动不算，
       // 否则这些服务端变化会把玩家的下一次保存判成冲突。
       account.updatedAt = now()
@@ -2348,6 +2350,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       economy: source.economy ? structuredClone(source.economy) : undefined,
       board: source.board ? structuredClone(source.board) : undefined,
       shop: source.shop ? structuredClone(source.shop) : undefined,
+      achievements: source.achievements ? structuredClone(source.achievements) : undefined,
       injuries: source.injuries ? { ...source.injuries } : undefined,
       market: source.market ? structuredClone(source.market) : undefined,
       freeStars: [],
@@ -2397,6 +2400,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       economy: source.economy ? structuredClone(source.economy) : undefined,
       board: source.board ? structuredClone(source.board) : undefined,
       shop: source.shop ? structuredClone(source.shop) : undefined,
+      achievements: source.achievements ? structuredClone(source.achievements) : undefined,
       injuries: source.injuries ? { ...source.injuries } : undefined,
       market: source.market ? structuredClone(source.market) : undefined,
       legendBooks: source.legendBooks ? structuredClone(source.legendBooks) : undefined,
@@ -3445,7 +3449,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return
     }
 
-    if (['/api/cards/recycle', '/api/cards/lock', '/api/training/start', '/api/shop/buy'].includes(url.pathname) && req.method === 'POST') {
+    if (['/api/cards/recycle', '/api/cards/lock', '/api/training/start', '/api/shop/buy', '/api/achievements/claim'].includes(url.pathname) && req.method === 'POST') {
       const body = await readJsonBody(req)
       if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
       advanceAccount(account)
@@ -3468,6 +3472,14 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       } else if (url.pathname === '/api/shop/buy') {
         if (typeof body.skillId !== 'string' || !body.skillId) return json(res, 400, { error: '技能书 ID 无效' })
         outcome = buyShopBook(game, body.skillId)
+      } else if (url.pathname === '/api/achievements/claim') {
+        if (body.all === true || body.id === undefined || body.id === '') {
+          outcome = claimAllAchievements(game, now())
+        } else if (typeof body.id === 'string') {
+          outcome = claimAchievement(game, body.id, now())
+        } else {
+          return json(res, 400, { error: '成就 ID 无效' })
+        }
       } else {
         if (typeof body.playerId !== 'string' || !body.playerId || !Array.isArray(body.bookKeys) || !body.bookKeys.every(key => typeof key === 'string') || typeof body.points !== 'number') return json(res, 400, { error: '培养参数无效' })
         outcome = startTrainingWithSupport(game, body.playerId, undefined, body.bookKeys as string[], body.points as number, false)
@@ -3563,6 +3575,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       ;(body.game as GameState & { scoutReportSeq?: number }).scoutReportSeq = (account.game as GameState & { scoutReportSeq?: number }).scoutReportSeq
       body.game.trainingPoints = account.game.trainingPoints
       body.game.shop = structuredClone(account.game.shop)
+      body.game.achievements = structuredClone(account.game.achievements)
       body.game.board = structuredClone(account.game.board)
       if (isBoardBudgetActive(account.game)) {
         const incomingEco = body.game.economy

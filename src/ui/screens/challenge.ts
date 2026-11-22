@@ -15,10 +15,12 @@ import { legendRecordOf } from '../../game/pve.ts'
 import { legendSkillForTeam } from '../../game/data/legend-skills.ts'
 import { legendBookLabel } from '../../game/legend-books.ts'
 import { cupTeam } from '../../game/cup-run.ts'
-import { startingCa } from '../../game/pve-strength.ts'
+import { clubRatings, lineupRating } from '../../game/club-rating.ts'
 import { pveContentReady } from '../../game/pve-content.ts'
 import { bookTitle, caHeat, clubName, icon, ownName, pageHead, panel, recordResult, resultPill, tag, tile } from '../components.ts'
 import { aiTeamTacticLabel, countdownText, esc, playerCA } from '../format.ts'
+import { divisionRatings } from '../club-view.ts'
+import { starRating } from '../stars.ts'
 import { game, ui } from '../state.ts'
 import { conferenceLabel } from '../../game/data/world-clubs.ts'
 import { inPostseason, PLAYER_TEAM_ID } from '../../game/season.ts'
@@ -32,7 +34,7 @@ const MODE_SUB = {
   friendly: '不计联赛积分，平局直接进入点球大战。',
   legend: '50 支历史俱乐部队；胜/平掉技能书，首胜发球迷/资金。固定阵容与属性，可查看完整首发、替补和 7 项主属性。',
   cup: '两个 16 队杯和一个 32 队杯。世界球队 + 随机队，小组循环后淘汰赛；决赛单场。',
-  peak: '100 关，首发平均 CA 350→1300。前 80 关生成/特别，最后 20 关世界杯国家队，所有玩家对手相同。',
+  peak: '100 关，对手 RANK 3850→14300。前 80 关生成/特别，最后 20 关世界杯国家队，所有玩家对手相同。',
 }
 
 function recordsPanel(records: MatchRecord[], title = '挑战记录'): string {
@@ -55,12 +57,13 @@ function renderFriendly(): string {
       players: [],
     }] : []
   })
+  const ratings = game.world ? divisionRatings(game.world, teams.map((team) => team.id)) : clubRatings(game)
   return `${inPostseason(game) ? '<div class="banner info">赛后休整期间也可以约战世界球队。</div>' : ''}<div class="toolbar"><span>选择联赛</span><div class="seg">${options.map((entry) => `<button class="${active === entry.id ? 'active' : ''}" data-challenge-div="${entry.id}">${esc(entry.label)}</button>`).join('')}</div>${onlineState.status === 'online' ? '<span class="muted small">联机对手名单由服务器提供。</span>' : ''}</div>
-    <div class="grid challenge-grid">${panel(`可挑战球队 <small>${teams.length}</small>`, `<div class="table-scroll"><table class="dt"><thead><tr><th>球队</th><th>阵型</th><th>战术</th><th>实力</th><th>平均 CA</th><th>核心球员</th><th></th></tr></thead><tbody>${teams.map((team) => {
+    <div class="grid challenge-grid">${panel(`可挑战球队 <small>${teams.length}</small>`, `<div class="table-scroll"><table class="dt"><thead><tr><th>球队</th><th>阵型</th><th>战术</th><th>实力</th><th class="num" title="首发 CA 之和">RANK</th><th>核心球员</th><th></th></tr></thead><tbody>${teams.map((team) => {
       const best = [...team.players].sort((a, b) => playerCA(b) - playerCA(a))
-      const average = best.slice(0, 11).reduce((sum, p) => sum + playerCA(p), 0) / Math.min(11, best.length || 1)
+      const rank = ratings.get(team.id) ?? ('lineup' in team && team.lineup ? lineupRating(team.players, team.lineup) : undefined)
       const formationId = 'lineup' in team && team.lineup ? team.lineup.formationId : team.formationId
-      return `<tr><td>${clubName(team.id)}</td><td>${formationId}</td><td>${esc(aiTeamTacticLabel(team))}</td><td>${team.strength} / 5</td><td>${best.length ? caHeat(average) : '约战后再看'}</td><td>${best.slice(0, 3).map((p) => esc(p.name)).join('、')}</td><td><button class="btn small" data-action="start-world-challenge" data-team="${esc(team.id)}" ${game.activeMatch ? 'disabled' : ''}>约战</button></td></tr>`
+      return `<tr><td>${clubName(team.id)}</td><td>${formationId}</td><td>${esc(aiTeamTacticLabel(team))}</td><td>${starRating(team.strength, '球队实力')}</td><td class="num strong">${rank ? Math.round(rank) : '约战后再看'}</td><td>${best.slice(0, 3).map((p) => esc(p.name)).join('、')}</td><td><button class="btn small" data-action="start-world-challenge" data-team="${esc(team.id)}" ${game.activeMatch ? 'disabled' : ''}>约战</button></td></tr>`
     }).join('')}</tbody></table></div>`, { flush: true })}${recordsPanel(game.challengeHistory.filter((record) => !record.mode || record.mode === 'friendly'))}</div>`
 }
 
@@ -79,10 +82,10 @@ function renderLegend(): string {
     (ui.legendEra === 'ALL' || def.season.startsWith(ui.legendEra.slice(0, 3))) &&
     (!search || [def.club, def.clubEn, def.season, def.coach, ...def.players.flatMap((p) => [p[0], p[1], p[2]])].join(' ').toLocaleLowerCase().includes(search)))
   return `<div class="toolbar"><select id="legend-country" aria-label="俱乐部国家"><option value="ALL">全部国家</option>${countries.map((country) => `<option ${country === ui.legendCountry ? 'selected' : ''} value="${country}">${country}</option>`).join('')}</select><input id="legend-search" type="search" aria-label="搜索传奇队" placeholder="球队、球员、国家或年份" value="${esc(ui.legendSearch)}"><select id="legend-era" aria-label="传奇队年代"><option value="ALL">全部年代</option>${eras.map((era) => `<option value="${era}" ${ui.legendEra === era ? 'selected' : ''}>${era} 年代</option>`).join('')}</select><div class="seg">${(['ALL', 'S+', 'S', 'A', 'B'] as const).map((tier) => `<button data-legend-tier="${tier}" class="${ui.legendTier === tier ? 'active' : ''}">${tier === 'ALL' ? '全部' : tier}</button>`).join('')}</div></div>
-    ${panel(`传奇球队 <small>${teams.length}</small>`, teams.length ? `<div class="table-scroll"><table class="dt"><thead><tr><th>球队</th><th>赛季</th><th>教练</th><th>首发 CA</th><th>核心球员</th><th>掉落技能书</th><th>战绩</th><th></th></tr></thead><tbody>${teams.map((def) => {
+    ${panel(`传奇球队 <small>${teams.length}</small>`, teams.length ? `<div class="table-scroll"><table class="dt"><thead><tr><th>球队</th><th>赛季</th><th>教练</th><th class="num" title="首发 CA 之和">RANK</th><th>核心球员</th><th>掉落技能书</th><th>战绩</th><th></th></tr></thead><tbody>${teams.map((def) => {
       const team = legendTeamById(def.id)!, record = legendRecordOf(game, def.id)
       const drop = legendSkillForTeam(def.id)
-      return `<tr><td>${tag(def.tier, def.tier === 'S+' ? 'gold' : '')} ${pveTeamButton(`legend:${def.id}`, def.club)}<details><summary>历史注解</summary>${esc(def.note)}</details></td><td>${def.season}</td><td>${esc(def.coach)}</td><td>${caHeat(startingCa(team))}</td><td>${esc(coreNames(team))}</td><td>${drop ? tag(esc(drop.name), 'skill-rainbow') : '—'}</td><td>${record.played ? `${record.won}胜 ${record.drawn}平 ${record.lost}负 · ${record.goals}:${record.conceded}` : '尚未挑战'}</td><td><button class="btn small" data-action="start-legend-challenge" data-team="${def.id}" ${game.activeMatch ? 'disabled' : ''}>开战</button></td></tr>`
+      return `<tr><td>${tag(def.tier, def.tier === 'S+' ? 'gold' : '')} ${pveTeamButton(`legend:${def.id}`, def.club)}<details><summary>历史注解</summary>${esc(def.note)}</details></td><td>${def.season}</td><td>${esc(def.coach)}</td><td class="num strong">${Math.round(lineupRating(team.players, team.lineup))}</td><td>${esc(coreNames(team))}</td><td>${drop ? tag(esc(drop.name), 'skill-rainbow') : '—'}</td><td>${record.played ? `${record.won}胜 ${record.drawn}平 ${record.lost}负 · ${record.goals}:${record.conceded}` : '尚未挑战'}</td><td><button class="btn small" data-action="start-legend-challenge" data-team="${def.id}" ${game.activeMatch ? 'disabled' : ''}>开战</button></td></tr>`
     }).join('')}</tbody></table></div>` : '<p class="muted pad">没有符合条件的球队，请修改筛选。</p>', { flush: true })}
     ${legendBooksPanel()}
     ${recordsPanel(game.challengeHistory.filter((record) => record.mode === 'legend'), '传奇战报')}`
@@ -158,13 +161,14 @@ function renderPeak(): string {
   const quota = peakDailyStatus(game, now)
   const disabled = !canPlay || !!game.activeMatch || !!ui.completing || quota.remaining <= 0
   const kindLabel = def.kind === 'national' ? '世界杯国家队' : def.kind === 'special' ? '动漫全明星' : '生成队'
-  return `<div class="kpi-row">${tile('已通关', `${cleared} / ${PEAK_STAGE_COUNT}`)}${tile('当前关', done ? '全部完成' : String(current))}${tile('今日剩余', `${quota.remaining} / ${PEAK_DAILY_LIMIT}`)}${tile('首发平均 CA', String(Math.round(startingCa(team))))}</div>
+  const teamRank = Math.round(lineupRating(team.players, team.lineup))
+  return `<div class="kpi-row">${tile('已通关', `${cleared} / ${PEAK_STAGE_COUNT}`)}${tile('当前关', done ? '全部完成' : String(current))}${tile('今日剩余', `${quota.remaining} / ${PEAK_DAILY_LIMIT}`)}${tile('对手 RANK', String(teamRank), '首发 CA 之和')}</div>
     <p class="hint pad" data-peak-reset-at="${quota.resetAt}">每天（北京时间 00:00 重置）最多挑战 ${PEAK_DAILY_LIMIT} 次；开赛即消耗，胜负及重打均计入。下次重置：<span class="countdown" data-countdown-end="${quota.resetAt}">${esc(countdownText(quota.resetAt - now))}</span>。</p>
     ${panel('进度 · 点击任意关卡预览', `<div class="peak-track" aria-label="巅峰之路关卡">${Array.from({ length: 100 }, (_, i) => `<button class="peak-cell ${i < cleared ? 'done' : ''} ${i + 1 === current && !done ? 'current' : ''} ${i >= 80 ? 'national' : ''}" data-peak-preview="${i + 1}" aria-label="第 ${i + 1} 关${i < cleared ? '，已通关' : i + 1 === current ? '，当前关' : '，未解锁'}" aria-pressed="${i + 1 === stage}">${i + 1}</button>`).join('')}</div><p class="hint pad">绿色已通关，高亮为当前关；81–100 关为世界杯国家队。可重打已通关关卡或挑战当前关，其余关卡只能预览。</p>`, { flush: true })}
     ${peakRewardsPanel(stage, cleared)}
     ${peakRewardPanel()}
     ${peakBreakthroughPanel()}
-    ${panel(replay ? '已通关对手' : canPlay ? '当前对手' : '关卡预览', `<div class="peak-current"><div class="peak-stage-no">第 ${stage} 关</div><div class="peak-stage-main"><b>${esc(team.name)}</b><span>${kindLabel} · ${team.formationId} · ${esc(aiTeamTacticLabel(team))}</span><span>核心：${esc(coreNames(team))}</span></div><div class="peak-stage-ca"><span>目标 CA ${def.targetCa}</span><b>${startingCa(team).toFixed(0)}</b></div>${pveTeamButton(`peak:${stage}`)}<button class="btn" data-action="start-peak-stage" data-stage="${stage}" ${disabled ? 'disabled' : ''}>${!canPlay ? '仅预览' : quota.remaining <= 0 ? '次数已用完' : replay ? '重打' : '挑战'}</button></div>`, { flush: true })}
+    ${panel(replay ? '已通关对手' : canPlay ? '当前对手' : '关卡预览', `<div class="peak-current"><div class="peak-stage-no">第 ${stage} 关</div><div class="peak-stage-main"><b>${esc(team.name)}</b><span>${kindLabel} · ${team.formationId} · ${esc(aiTeamTacticLabel(team))}</span><span>核心：${esc(coreNames(team))}</span></div><div class="peak-stage-ca"><span>对手 RANK</span><b>${teamRank}</b></div>${pveTeamButton(`peak:${stage}`)}<button class="btn" data-action="start-peak-stage" data-stage="${stage}" ${disabled ? 'disabled' : ''}>${!canPlay ? '仅预览' : quota.remaining <= 0 ? '次数已用完' : replay ? '重打' : '挑战'}</button></div>`, { flush: true })}
     ${recordsPanel(game.challengeHistory.filter((record) => record.mode === 'peak'), '最近闯关')}
     <p class="hint pad">每关对手固定，每次开赛重新模拟；获胜推进当前关，重打不重复发首次通关奖励。调整阵容、战术不会受关卡预览影响。</p>`
 }

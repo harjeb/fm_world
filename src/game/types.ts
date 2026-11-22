@@ -1342,11 +1342,29 @@ export type BoardState = {
   history: BoardEvaluation[]
 }
 
+export type AchievementClaim = {
+  claimedAt: number
+  /** 由 1.0 上线自动补发给已通关老玩家时为 true。 */
+  backfilled?: true
+}
+
+export type AchievementState = {
+  version: 1
+  /** 已领取成就 ID -> 领取记录（防重复领取）。 */
+  claimed: Record<string, AchievementClaim>
+  /** 是否已完成 1.0 上线老存档的巅峰首胜 100 万福利检查（确保幂等）。 */
+  welfareBackfillChecked?: boolean
+  /** 最近一次为老存档自动补发的 1.0 巅峰首胜福利金额（用于界面提示）。 */
+  welfareBackfillMoney?: number
+}
+
 export type GameState = {
   /** 独立青训营；缺省旧档首次进入时初始化一次。 */
   youth?: YouthState
   /** 技能书商店点数与领取账本；旧档首次进入时初始化并补发已通关巅峰关卡点数。 */
   shop?: ShopState
+  /** 俱乐部成就领取账本与 1.0 福利补发状态。 */
+  achievements?: AchievementState
   /** 俱乐部董事会目标、独立转会/设施预算、工资帽与考核记录（第 2 赛季起激活）。 */
   board?: BoardState
   scoutReports?: ScoutReport[]

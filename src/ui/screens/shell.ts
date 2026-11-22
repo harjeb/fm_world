@@ -2,6 +2,7 @@ import { economyOf } from '../../game/economy.ts'
 import { transferWindowOpen } from '../../game/market.ts'
 import { PLAYER_TEAM_ID, inPostseason, matchdayCountdown, nextMatchCountdown, nextSeasonCountdown, playerFixture, seasonRoundLabel } from '../../game/season.ts'
 import { APP_VERSION } from '../../game/changelog.ts'
+import { claimableAchievementCount } from '../../game/achievements.ts'
 import { worldDivisionLabel } from '../../game/world.ts'
 import { chatState, isOnlineMode, marketState, onlineKickoffPending, onlineState, serverNow } from '../../online.ts'
 import { clubLook, crest, ownName } from '../components.ts'
@@ -47,6 +48,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
   { label: '经营', items: [
     { id: 'club', label: '俱乐部', icon: 'club' },
+    { id: 'achievements', label: '成就', icon: 'star', badge: () => claimableAchievementCount(game) },
     { id: 'shop', label: '商店', icon: 'bag' },
     { id: 'transfer', label: '转会', icon: 'swap', alert: pendingOffers, badge: () => (isOnlineMode() ? marketState.auctions.length : 0) },
   ] },
