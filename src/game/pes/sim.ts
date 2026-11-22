@@ -1185,8 +1185,8 @@ export class PesMatch {
       }
     }
 
-    // 刚接到球：先带一下（除非被逼得很紧或已近射程）
-    if (this.time < p.holdUntil && press < 0.5 && dGoal > 26 * K) {
+    // 刚接到球：先带一下（除非被逼得很紧、已近射程，或 simV2 具备一脚出球）
+    if (this.time < p.holdUntil && press < 0.5 && dGoal > 26 * K && !(this.v2 && this.contact?.quickRelease?.(this, p))) {
       this.execCarry(p)
       return
     }
@@ -2900,8 +2900,9 @@ export class PesMatch {
       // simV2 提高了无球积极性与带球速度，按跑动强度校准系数，保持 90 分钟约消耗 70% 体力曲线不变。
       const ef = 0.509 + 0.617 * p.ab.stamina
       const v2Scale = this.v2 ? 0.84 : 1
+      const skillDrain = this.v2 ? (this.contact?.staminaDrainScale?.(this, p) ?? 1) : 1
       if (spd < 0.8) p.stamina = clamp01(p.stamina + 2e-4 * dt)
-      else p.stamina = clamp01(p.stamina - moved * this.rules.fatiguePerMeter * v2Scale * stamMul * (900 / (P.HALF * 2)) * (0.6 + 0.4 * (spd / 5) ** 2) / ef)
+      else p.stamina = clamp01(p.stamina - moved * this.rules.fatiguePerMeter * v2Scale * skillDrain * stamMul * (900 / (P.HALF * 2)) * (0.6 + 0.4 * (spd / 5) ** 2) / ef)
     } else {
       const drain = 1.05e-4 * stamMul * (0.35 + (spd / 7.2) ** 3 * 1.5) * (1.35 - 0.5 * p.ab.stamina)
       p.stamina = clamp01(p.stamina + (spd > 3.0 ? -drain : 4.5e-5) * dt)

@@ -68,7 +68,7 @@ export const SHOP_SKILLS: Record<ShopSkillId, ShopSkillDef> = {
   // 中场（6）
   sh_switch_play: shopSkill('sh_switch_play', '转移分边', 'field', 'midfield', 'passing', '低', '从中路大范围或快速分球至边路时更精准。', '中路向边路传球'),
   sh_halfspace_pass: shopSkill('sh_halfspace_pass', '肋部渗透', 'field', 'midfield', 'vision', '中', '在前场组织短传与直塞渗透时传球质量更高。', '前场短传 / 直塞'),
-  sh_ball_magnet: shopSkill('sh_ball_magnet', '接应大师', 'field', 'midfield', 'firstTouch', '低', '接应队友传球时的可控范围更大，减少落点偏差失误。', '接应队友传球'),
+  sh_ball_magnet: shopSkill('sh_ball_magnet', '接应大师', 'field', 'midfield', 'firstTouch', '低', '接应队友传球更稳健，显著提高传接成功率与二点球控制力。', '接应传球 / 二点球'),
   sh_counter_press: shopSkill('sh_counter_press', '反抢猎犬', 'field', 'midfield', 'anticipation', '中', '在对方半场争抢二点球与球权反抢时更积极。', '对方半场争抢二点球'),
   sh_ball_carrier: shopSkill('sh_ball_carrier', '推进节拍', 'field', 'midfield', 'dribbling', '中', '在中路区域带球推进和摆脱防守时更稳健。', '中路区域盘带'),
   sh_lane_cut: shopSkill('sh_lane_cut', '传球封线', 'field', 'midfield', 'anticipation', '中', '拦截对手长传转移或身后直塞时抢截更有效。', '拦截长传 / 直塞'),
@@ -86,7 +86,7 @@ export const SHOP_SKILLS: Record<ShopSkillId, ShopSkillDef> = {
   sh_free_kick: shopSkill('sh_free_kick', '任意球大师', 'field', 'forward', 'shooting', '中', '优先主罚直接任意球并拓展射程，弧线与落点极具破门威胁。', '直接任意球（射程 +3m）'),
   sh_poised_finish: shopSkill('sh_poised_finish', '抗压终结', 'field', 'forward', 'strength', '中', '在防守球员贴身干扰下依然能稳定完成射门。', '受贴身压迫时起脚'),
   sh_target_link: shopSkill('sh_target_link', '支点做球', 'field', 'forward', 'strength', '低', '在前场作为进攻支点接应传球时更容易护住并衔接成功。', '前场接应队友传球'),
-  sh_tight_angle: shopSkill('sh_tight_angle', '小角度巧射', 'field', 'forward', 'shooting', '中', '在射门角度狭小时仍能打向门框范围之内。', '小角度（< 22°）起脚'),
+  sh_tight_angle: shopSkill('sh_tight_angle', '小角度巧射', 'field', 'forward', 'shooting', '中', '在禁区两侧及小角度起脚时仍能精准命中门框并提升破门率。', '小角度（< 36°）起脚'),
   sh_box_poacher: shopSkill('sh_box_poacher', '门前补射', 'field', 'forward', 'offBall', '中', '在对方禁区附近嗅觉敏锐，更容易抢下二点球。', '对方禁区附近争二点球'),
 
   // 门将（6）

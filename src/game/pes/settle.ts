@@ -18,7 +18,7 @@ import { shotPositionText, shotTargetText } from '../match/shooting.ts'
 import { recordChance, recordChanceGoal, recordSave, recordShot, recordTackleAttempt } from '../match/performance.ts'
 import { MatchRatings } from '../match/ratings.ts'
 import { SettlementKernel, pickByWeight, totalWeight } from '../match/resolution.ts'
-import { GOAL_Y, PITCH_LENGTH, PITCH_WIDTH, buildMatchTeam } from '../match/team.ts'
+import { GOAL_Y, PITCH_LENGTH, PITCH_WIDTH, buildMatchTeam, skillTierMultiplier } from '../match/team.ts'
 import { distanceToSegment, goalXOf } from '../match/pitch.ts'
 import { legendMultiplier } from '../legend-bonus.ts'
 import type { GameState, GoalDetail, MatchLogEntry, MatchTeamStats, SkillId } from '../types.ts'
@@ -374,6 +374,29 @@ export class PesSettlement implements ContactModel {
     const trait = STAR_TRAITS[mp.traitId]
     if (mp.skills.includes('sh_free_kick') || (trait?.kind === 'shot' && trait.scope === 'freeKick')) return 3
     return 0
+  }
+
+  /** simV2：跑动体能消耗倍率（铁肺全程降耗，下半场省力在下半场实时生效）。 */
+  staminaDrainScale(m: PesMatch, player: PesPlayer): number {
+    const mp = this.mp[player.pid]
+    if (!mp) return 1
+    let scale = 1
+    if (mp.skills.includes('iron_lung')) {
+      const tierMul = skillTierMultiplier(mp, 'iron_lung')
+      const cut = 0.05 + (tierMul - 1) * 0.25
+      scale *= Math.max(0.5, 1 - cut)
+    }
+    if (mp.skills.includes('lg_second_half_legs') && (m.half >= 2 || m.time >= m.spec.HALF)) {
+      const cut = Math.min(0.4, 0.15 * legendMultiplier(mp, 'lg_second_half_legs'))
+      scale *= 1 - cut
+    }
+    return scale
+  }
+
+  /** simV2：一脚出球允许低压接球后跳过停顿立即出球。 */
+  quickRelease(_m: PesMatch, player: PesPlayer): boolean {
+    const mp = this.mp[player.pid]
+    return !!mp?.skills.includes('one_touch')
   }
 
   /* ---------- 射门 ---------- */
@@ -733,7 +756,14 @@ export class PesSettlement implements ContactModel {
         break
       case 'half':
         if (this.extra.keyPass !== undefined) this.extra.keyPass = null
-        for (const team of g.teams) for (const player of team.players) if (player.onPitch) this.recover(player, m, 'lg_halftime_recovery', 8)
+        for (const team of g.teams) {
+          for (const player of team.players) {
+            if (!player.onPitch) continue
+            this.recover(player, m, 'lg_halftime_recovery', 8)
+            if (this.simV2 && player.skills.includes('iron_lung')) this.markSkill(player, 'iron_lung', true, true)
+            if (this.simV2 && player.skills.includes('lg_second_half_legs')) this.markSkill(player, 'lg_second_half_legs', true, true)
+          }
+        }
         this.note('half', 'none', '上半场结束，双方交换半场。', {}, e.t)
         break
       case 'offside':

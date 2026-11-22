@@ -497,4 +497,114 @@ describe('simV2 2D 动画与 AI 演进回归', () => {
     expect(s2Adv.block).toBeLessThan(s1Adv.block - 0.04)
     expect(s2Adv.pGoal).toBeGreaterThan(s1Adv.pGoal + 0.02)
   })
+
+  it('T4 失效技能全面复活：10 个此前在 2D 引擎失效的技能在 simV2 中全部产生真实增益', () => {
+    const { home, away } = baselineTeams(1)
+    const g = new PesGame({ seed: 730, home: structuredClone(home), away: structuredClone(away), offside: true, noInjuries: true, rules: { ...GAME_RULES, simV2: true } })
+    const k = g.settlement.settlementKernel
+    const hTeam = g.state.teams[0]
+    const aTeam = g.state.teams[1]
+    const att = hTeam.players.find((p) => p.position !== 'GK')!
+    const mate = hTeam.players.find((p) => p.position !== 'GK' && p !== att)!
+    const gk = hTeam.players.find((p) => p.position === 'GK')!
+    const oppDef = aTeam.players.find((p) => p.position === 'CB')!
+    const oppGk = aTeam.players.find((p) => p.position === 'GK')!
+    const reset = () => {
+      for (const p of [...hTeam.players, ...aTeam.players]) {
+        p.skills = []; p.skillTiers = {}; p.traitId = 'star_none'; p.foot = 'R'; p.age = 26; p.stamina = p.maxStamina; p.positions[p.position] = 100; p.detailedPosition = undefined
+        for (const a of ['shooting', 'composure', 'dribbling', 'strength', 'tackling', 'heading', 'anticipation', 'defPos', 'offBall', 'speed', 'acceleration', 'agility', 'firstTouch', 'passing', 'reflexes', 'oneOnOne', 'handling', 'rushing', 'decisions', 'vision'] as AttrKey[]) {
+          p.attrs[a] = 55
+        }
+      }
+      for (const p of aTeam.players) if (p !== oppDef && p !== oppGk) { p.x = 15; p.y = 32 }
+      att.x = 60; att.y = 32; mate.x = 70; mate.y = 32
+      oppDef.x = 20; oppDef.y = 32; oppGk.x = 99.5; oppGk.y = 32
+      gk.x = 10; gk.y = 32
+      g.state.score = { home: 0, away: 0 }
+      g.match.half = 1
+      g.match.time = 10
+    }
+
+    // 1 & 2. iron_lung（全程降耗）& lg_second_half_legs（下半场实时降耗）
+    reset()
+    const pesAtt = g.match.teams[0].players.find((q) => g.settlement.gamePlayer(q.pid).id === att.id)!
+    expect(g.settlement.staminaDrainScale!(g.match, pesAtt)).toBeCloseTo(1, 5)
+    att.skills = ['iron_lung']; att.skillTiers = { iron_lung: 'rainbow' }
+    expect(g.settlement.staminaDrainScale!(g.match, pesAtt)).toBeCloseTo(0.85, 5)
+    att.skills = ['lg_second_half_legs']; att.skillTiers = { lg_second_half_legs: 'gold' }
+    expect(g.settlement.staminaDrainScale!(g.match, pesAtt)).toBeCloseTo(1, 5)
+    g.match.half = 2
+    expect(g.settlement.staminaDrainScale!(g.match, pesAtt)).toBeCloseTo(0.85, 5)
+
+    // 3. one_touch（快速出球 + 低压短传/直塞传球加成）
+    reset()
+    expect(g.settlement.quickRelease!(g.match, pesAtt)).toBe(false)
+    const basePass = k.passModel(att, mate, 'short', aTeam, att, mate, false)
+    att.skills = ['one_touch']; att.skillTiers = { one_touch: 'rainbow' }
+    expect(g.settlement.quickRelease!(g.match, pesAtt)).toBe(true)
+    const otPass = k.passModel(att, mate, 'short', aTeam, att, mate, false)
+    expect(otPass.a).toBeGreaterThan(basePass.a + 5)
+
+    // 4. gk_sweeper（门将出球 + 单刀/常规扑救 + 高空/二点球出击）
+    reset()
+    const baseGkPass = k.passModel(gk, mate, 'short', aTeam, gk, mate, false)
+    const base1v1 = k.shotModel(att, hTeam, aTeam, { point: { x: 89, y: 32 }, header: false, penalty: false, freeKick: false, foot: 'right' })
+    const baseLoose = k.looseBallContestants([hTeam, aTeam], { x: 10, y: 32 }, () => 0.5).find((c) => c.player.id === gk.id)!.weight
+    gk.skills = ['gk_sweeper']; gk.skillTiers = { gk_sweeper: 'rainbow' }
+    oppGk.skills = ['gk_sweeper']; oppGk.skillTiers = { gk_sweeper: 'rainbow' }
+    expect(k.passModel(gk, mate, 'short', aTeam, gk, mate, false).a).toBeGreaterThan(baseGkPass.a + 5)
+    expect(k.shotModel(att, hTeam, aTeam, { point: { x: 89, y: 32 }, header: false, penalty: false, freeKick: false, foot: 'right' }).gkScore).toBeGreaterThan(base1v1.gkScore + 6)
+    expect(k.looseBallContestants([hTeam, aTeam], { x: 10, y: 32 }, () => 0.5).find((c) => c.player.id === gk.id)!.weight).toBeGreaterThan(baseLoose)
+
+    // 5 & 6. sh_ball_magnet & lg_anticipate（接应传球评分 + 二点球）
+    reset()
+    const baseRecv = k.passModel(att, mate, 'short', aTeam, att, mate, false)
+    mate.skills = ['sh_ball_magnet']; mate.skillTiers = { sh_ball_magnet: 'gold' }
+    const magRecv = k.passModel(att, mate, 'short', aTeam, att, mate, false)
+    expect(magRecv.a - baseRecv.a).toBeCloseTo(4.5 * 1.2, 4)
+    mate.skills = ['lg_anticipate']; mate.skillTiers = { lg_anticipate: 'gold' }
+    const antRecv = k.passModel(att, mate, 'short', aTeam, att, mate, false)
+    expect(antRecv.a - baseRecv.a).toBeCloseTo(6.5, 4)
+
+    // 7. sh_tight_angle（偏侧/小角度 <36° 射正与进球双提升）
+    reset()
+    const diagPt = { x: 89, y: 21 } // 禁区右侧偏侧约 26°
+    const baseTight = k.shotModel(att, hTeam, aTeam, { point: diagPt, header: false, penalty: false, freeKick: false, foot: 'right' })
+    expect(baseTight.chance.angle).toBeGreaterThan(22)
+    expect(baseTight.chance.angle).toBeLessThan(36)
+    att.skills = ['sh_tight_angle']; att.skillTiers = { sh_tight_angle: 'gold' }
+    const tightAfter = k.shotModel(att, hTeam, aTeam, { point: diagPt, header: false, penalty: false, freeKick: false, foot: 'right' })
+    expect(tightAfter.onTarget).toBeGreaterThan(baseTight.onTarget + 0.04)
+    expect(tightAfter.goalGivenOnTarget).toBeGreaterThan(baseTight.goalGivenOnTarget + 0.02)
+
+    // 8. lg_calm_mind（受压传球、盘带、射门全面生效）
+    reset()
+    oppDef.x = 87; oppDef.y = 33
+    att.x = 86; att.y = 32
+    const baseCalmPass = k.passModel(att, mate, 'short', aTeam, att, mate, false)
+    const baseCalmDrib = k.dribbleModel(att, oppDef, false)
+    const baseCalmShot = k.shotModel(att, hTeam, aTeam, { point: att, header: false, penalty: false, freeKick: false, foot: 'right' })
+    att.skills = ['lg_calm_mind']; att.skillTiers = { lg_calm_mind: 'gold' }
+    expect(k.passModel(att, mate, 'short', aTeam, att, mate, false).a).toBeGreaterThan(baseCalmPass.a + 5)
+    expect(k.dribbleModel(att, oppDef, false).a).toBeGreaterThan(baseCalmDrib.a + 4)
+    expect(k.shotModel(att, hTeam, aTeam, { point: att, header: false, penalty: false, freeKick: false, foot: 'right' }).pGoal).toBeGreaterThan(baseCalmShot.pGoal + 0.02)
+
+    // 9. lg_opportunist（禁区内终结 + 前场二点球）
+    reset()
+    att.x = 89; att.y = 32
+    const baseOppShot = k.shotModel(att, hTeam, aTeam, { point: att, header: false, penalty: false, freeKick: false, foot: 'right' })
+    const baseOppLoose = k.looseBallContestants([hTeam, aTeam], att, () => 0.5).find((c) => c.player.id === att.id)!.weight
+    att.skills = ['lg_opportunist']; att.skillTiers = { lg_opportunist: 'gold' }
+    expect(k.shotModel(att, hTeam, aTeam, { point: att, header: false, penalty: false, freeKick: false, foot: 'right' }).pGoal).toBeGreaterThan(baseOppShot.pGoal + 0.04)
+    expect(k.looseBallContestants([hTeam, aTeam], att, () => 0.5).find((c) => c.player.id === att.id)!.weight).toBeGreaterThan(baseOppLoose)
+
+    // 10. lg_leader（比分落后时提升全队镇定/传球/抢断/决断）
+    reset()
+    g.state.score = { home: 0, away: 1 }
+    const beforeMatePass = k.passModel(mate, att, 'short', aTeam, mate, att, false)
+    const beforeMateShot = k.shotModel(mate, hTeam, aTeam, { point: { x: 89, y: 32 }, header: false, penalty: false, freeKick: false, foot: 'right' })
+    att.skills = ['lg_leader']; att.skillTiers = { lg_leader: 'gold' }
+    expect(k.passModel(mate, att, 'short', aTeam, mate, att, false).a).toBeGreaterThan(beforeMatePass.a + 3)
+    expect(k.shotModel(mate, hTeam, aTeam, { point: { x: 89, y: 32 }, header: false, penalty: false, freeKick: false, foot: 'right' }).finishScore).toBeGreaterThan(beforeMateShot.finishScore + 1)
+  })
 })

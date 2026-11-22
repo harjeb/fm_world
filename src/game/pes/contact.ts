@@ -96,6 +96,10 @@ export interface ContactModel {
   setPiecePreference?(m: PesMatch, player: PesPlayer, mode: 'fk_shot' | 'fk_cross' | 'corner'): number
   /** simV2：直接任意球专家额外射程（米，默认 0；如电梯球 +6m、任意球大师 +3m）。 */
   freeKickExtraRange?(m: PesMatch, player: PesPlayer): number
+  /** simV2：跑动体能消耗倍率（iron_lung、lg_second_half_legs 等体能技能实时生效）。 */
+  staminaDrainScale?(m: PesMatch, player: PesPlayer): number
+  /** simV2：低压接球后免去停顿直接一脚出球（one_touch）。 */
+  quickRelease?(m: PesMatch, player: PesPlayer): boolean
   /** 存档（纯数据） */
   toJSON(): unknown
 }
