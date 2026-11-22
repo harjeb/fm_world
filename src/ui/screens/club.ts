@@ -39,7 +39,7 @@ import { game, ui, type ClubTab } from '../state.ts'
 
 const FACILITY_INFO: Record<FacilityId, { label: string; icon: IconName; effect: string }> = {
   stadium: { label: '球场', icon: 'stadium', effect: `所有属性成长 +${STADIUM_BONUS_PER_LEVEL} / 等级` },
-  academy: { label: '青训设施', icon: 'cap', effect: `技术属性成长 +${CATEGORY_BONUS_PER_LEVEL} / 等级` },
+  academy: { label: '青训设施', icon: 'cap', effect: `技术属性成长 +${CATEGORY_BONUS_PER_LEVEL} / 等级；更容易发现高潜力苗子` },
   medical: { label: '医疗设施', icon: 'cross', effect: `身体属性成长 +${CATEGORY_BONUS_PER_LEVEL} / 等级；另缩短新伤恢复` },
   psychology: { label: '心理辅导室', icon: 'psychology', effect: `决断、团队合作、镇定成长 +${CATEGORY_BONUS_PER_LEVEL} / 等级` },
   tactics: { label: '战术研究室', icon: 'tactics', effect: `视野、预判、无球跑动、防守站位成长 +${CATEGORY_BONUS_PER_LEVEL} / 等级` },

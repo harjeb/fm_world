@@ -4,6 +4,7 @@ import type { GameState, MatchRecord, PlayerMatchStats } from '../src/game/types
 import { DAY_MS } from '../src/game/calendar.ts'
 import { applyYouthAction } from '../src/game/youth-actions.ts'
 import { ensureYouth, growYouthAttributes, recordYouthMatch, settleYouth, shiftYouthClock, validYouthPlan, YOUTH_TIERS, YOUTH_WEEK_MS, youthCA, youthDailyRoll, youthMatchFactor, youthPerformanceBonus, youthPlayer, youthView } from '../src/game/youth.ts'
+import { youthStars } from '../src/game/youth-rating.ts'
 import { preserveYouthState } from '../src/game/youth-authority.ts'
 import { startTraining } from '../src/game/actions.ts'
 import { equipCard } from '../src/game/cards.ts'
@@ -96,6 +97,97 @@ describe('青训生成与招募', () => {
     expect(game.economy!.balance).toBe(coins)
     expect(game.freeStars.some(p => p.id === batch[0].player.id)).toBe(false)
     expect(game.youth!.members).toHaveLength(7)
+  })
+
+  it('青训设施 LV1–LV5 按阶梯提升每期 4.5★+、第 2 名 4.5★+、5.0★ 与 14–15 岁黄金苗子概率', () => {
+    const N = 400
+    const stats = (stage: number) => {
+      let has40 = 0, has45 = 0, two45 = 0, has50 = 0, max45Count = 0
+      let goldenCount = 0, goldenYoung = 0, goldenCeilingSum = 0, goldenMin = Infinity, goldenMax = -Infinity
+      const game: GameState = {
+        ...base,
+        seed: 10000 + stage * 97,
+        roster: [],
+        freeStars: [],
+        reserveStars: [],
+        aiTeams: [],
+        world: undefined,
+        matchHistory: [],
+        challengeHistory: [],
+        youth: undefined,
+        season: { ...base.season, fixtures: [] },
+        economy: { ...base.economy!, academy: stage },
+      }
+      ensureYouth(game, NOW)
+      game.youth!.members = []
+      for (let p = 1; p <= N; p++) {
+        settleYouth(game, NOW + p * YOUTH_WEEK_MS)
+        const cands = game.youth!.intake.candidates
+        const stars = cands.map(c => youthStars(c.ceiling))
+        const count45 = stars.filter(s => s >= 4.5).length
+        const count50 = stars.filter(s => s >= 5).length
+        if (stars.some(s => s >= 4)) has40++
+        if (count45 >= 1) has45++
+        if (count45 >= 2) two45++
+        if (count50 >= 1) has50++
+        if (count45 > max45Count) max45Count = count45
+        for (const c of cands) {
+          if (youthStars(c.ceiling) >= 5) {
+            goldenCount++
+            if (c.initialAge <= 15) goldenYoung++
+            goldenCeilingSum += c.ceiling
+            goldenMin = Math.min(goldenMin, c.ceiling)
+            goldenMax = Math.max(goldenMax, c.ceiling)
+          }
+        }
+      }
+      return {
+        has40: has40 / N, has45: has45 / N, two45: two45 / N, has50: has50 / N, max45Count,
+        goldenCount, goldenYoungRate: goldenCount ? goldenYoung / goldenCount : 0,
+        goldenAvgCeiling: goldenCount ? goldenCeilingSum / goldenCount : 0,
+        goldenMin, goldenMax,
+      }
+    }
+
+    const lv1 = stats(1)
+    const lv2 = stats(10)
+    const lv3 = stats(11)
+    const lv4 = stats(16)
+    const lv5 = stats(25)
+
+    // LV1–LV2：100% 保底 4.0★+，4.5★+ 约 25%–40%，5.0★ 约 4%–6%
+    expect(lv1.has40).toBe(1)
+    expect(lv2.has40).toBe(1)
+    expect(lv1.has45).toBeGreaterThan(0.18)
+    expect(lv1.has45).toBeLessThan(0.33)
+    expect(lv2.has45).toBeGreaterThan(0.32)
+    expect(lv2.has45).toBeLessThan(0.48)
+    expect(lv1.has50).toBeGreaterThan(0.01)
+    expect(lv1.has50).toBeLessThan(0.09)
+
+    // LV3–LV5：100% 保底 1 名 4.5★+，每期最多 2 名防通胀
+    for (const lv of [lv3, lv4, lv5]) {
+      expect(lv.has45).toBe(1)
+      expect(lv.max45Count).toBe(2)
+    }
+    // 阶梯严格递增：第 2 名 4.5★+ (~25% → ~55% → ~80%) 与 5.0★ (~10% → ~20% → ~35%)
+    expect(lv3.two45).toBeGreaterThan(0.18)
+    expect(lv3.two45).toBeLessThan(0.33)
+    expect(lv4.two45).toBeGreaterThan(0.46)
+    expect(lv4.two45).toBeLessThan(0.64)
+    expect(lv5.two45).toBeGreaterThan(0.72)
+    expect(lv5.two45).toBeLessThan(0.88)
+    expect(lv3.has50).toBeLessThan(lv4.has50)
+    expect(lv4.has50).toBeLessThan(lv5.has50)
+    expect(lv5.has50).toBeGreaterThan(0.27)
+    expect(lv5.has50).toBeLessThan(0.43)
+
+    // LV5 满级黄金苗子：CA 上限集中在 270 左右（266–274）且更易刷出 14–15 岁
+    expect(lv5.goldenMin).toBeGreaterThanOrEqual(266)
+    expect(lv5.goldenMax).toBeLessThanOrEqual(274)
+    expect(lv5.goldenAvgCeiling).toBeGreaterThan(268)
+    expect(lv5.goldenAvgCeiling).toBeLessThan(272)
+    expect(lv5.goldenYoungRate).toBeGreaterThan(0.70)
   })
 })
 

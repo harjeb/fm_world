@@ -106,14 +106,114 @@ export function scaleYouthAttributes(player: Player, target: number): void {
   for (const key of ALL_ATTRIBUTES) player.attrs[key] *= factor
   player.baseAttrs = { ...player.attrs }
 }
-function generateYouth(game: GameState, at: number, slot: string, position: DetailedPosition, used: Set<string>): YouthMember {
+type IntakeStarTarget = 'regular' | 'star40' | 'star45' | 'star50'
+
+type AcademyIntakeProfile = {
+  guaranteed45: boolean
+  first45Chance: number
+  second45Chance: number
+  star50Chance: number
+  youngAgeChance: number
+  goldenYoungAgeChance: number
+}
+
+/** Private academy-level intake tuning (LV1–LV5). Never exposed as exact numbers in UI. */
+const ACADEMY_INTAKE_PROFILES: Record<1 | 2 | 3 | 4 | 5, AcademyIntakeProfile> = {
+  1: { guaranteed45: false, first45Chance: 0.25, second45Chance: 0, star50Chance: 0.04, youngAgeChance: 0.40, goldenYoungAgeChance: 0.45 },
+  2: { guaranteed45: false, first45Chance: 0.40, second45Chance: 0, star50Chance: 0.06, youngAgeChance: 0.44, goldenYoungAgeChance: 0.50 },
+  3: { guaranteed45: true, first45Chance: 1, second45Chance: 0.25, star50Chance: 0.10, youngAgeChance: 0.52, goldenYoungAgeChance: 0.60 },
+  4: { guaranteed45: true, first45Chance: 1, second45Chance: 0.55, star50Chance: 0.20, youngAgeChance: 0.62, goldenYoungAgeChance: 0.70 },
+  5: { guaranteed45: true, first45Chance: 1, second45Chance: 0.80, star50Chance: 0.35, youngAgeChance: 0.72, goldenYoungAgeChance: 0.82 },
+}
+
+function academyLevelForStage(stage: number): 1 | 2 | 3 | 4 | 5 {
+  const clamped = clamp(Math.round(Number.isFinite(stage) ? stage : 1), 1, 25)
+  return Math.ceil(clamped / 5) as 1 | 2 | 3 | 4 | 5
+}
+
+function planIntakeTargets(
+  rng: ReturnType<typeof derivedRng>,
+  count: number,
+  profile: AcademyIntakeProfile,
+  preferSlotZero: boolean,
+): IntakeStarTarget[] {
+  const targets: IntakeStarTarget[] = Array.from({ length: count }, () => 'regular')
+  if (count <= 0) return targets
+  const spotlights: IntakeStarTarget[] = []
+  const r50 = rng.float()
+  const r45 = rng.float()
+  const r2 = rng.float()
+  if (profile.guaranteed45) {
+    spotlights.push(r50 < profile.star50Chance ? 'star50' : 'star45')
+    if (count >= 2 && r2 < profile.second45Chance) spotlights.push('star45')
+  } else if (r50 < profile.star50Chance) {
+    spotlights.push('star50')
+  } else {
+    const cond45 = (profile.first45Chance - profile.star50Chance) / Math.max(1e-9, 1 - profile.star50Chance)
+    spotlights.push(r45 < cond45 ? 'star45' : 'star40')
+  }
+  const slots = Array.from({ length: count }, (_, i) => i)
+  // 定向寻找槽（0 号位）享有略高的头号苗子命中率，同时保留其他位置出高星的惊喜感。
+  const firstIdx = preferSlotZero && count > 1 && rng.float() < 0.35 ? 0 : rng.int(slots.length)
+  const chosenFirst = slots.splice(firstIdx, 1)[0]
+  targets[chosenFirst] = spotlights[0]
+  for (let i = 1; i < spotlights.length && slots.length > 0; i++) {
+    const pick = slots.splice(rng.int(slots.length), 1)[0]
+    targets[pick] = spotlights[i]
+  }
+  return targets
+}
+
+function rollYouthAge(rng: ReturnType<typeof derivedRng>, youngChance?: number): number {
+  if (youngChance === undefined) return 14 + rng.int(5)
+  return rng.float() < youngChance ? 14 + rng.int(2) : 16 + rng.int(3)
+}
+
+function generateYouth(
+  game: GameState,
+  at: number,
+  slot: string,
+  position: DetailedPosition,
+  used: Set<string>,
+  target: IntakeStarTarget,
+  profile: AcademyIntakeProfile,
+): YouthMember {
   const identity = `${game.createdAt}:${game.world?.clubs.find(c => c.id === 'player')?.squadKey ?? game.clubName}`
   const rng = derivedRng(game.seed, 'youth-v1', identity, slot)
-  const roll = rng.float()
-  const tier: YouthTier = roll < 0.01 ? 'genius' : roll < 0.06 ? 'excellent' : roll < 0.30 ? 'promising' : 'ordinary'
-  const range = YOUTH_TIERS[tier]
-  const ceiling = range.min + rng.float() * (range.max - range.min)
-  const age = 14 + rng.int(5)
+  let tier: YouthTier
+  let ceiling: number
+  let age: number
+  if (target === 'star50') {
+    // 5.0★ 黄金苗子：潜力上限集中在 270 左右（266–274），必显 5.0★ 且位于 genius 区间内。
+    tier = 'genius'
+    ceiling = 266 + rng.float() * 8
+    age = rollYouthAge(rng, profile.goldenYoungAgeChance)
+  } else if (target === 'star45') {
+    // 4.5★ 优秀苗子：238–255，必显 4.5★ 且位于 excellent 区间内。
+    tier = 'excellent'
+    ceiling = 238 + rng.float() * 17
+    age = rollYouthAge(rng, profile.youngAgeChance)
+  } else if (target === 'star40') {
+    // 4.0★ 保底苗子：210–237.5，必显 4.0★。
+    if (rng.float() < 0.5) {
+      tier = 'promising'
+      ceiling = 210 + rng.float() * 15
+    } else {
+      tier = 'excellent'
+      ceiling = 220 + rng.float() * 17.5
+    }
+    age = rollYouthAge(rng)
+  } else {
+    // 其余背景位封顶 4.0★，控制每期 4.5★+ 总人数稳定在 1–2 名、避免膨胀。
+    if (rng.float() < 0.35) {
+      tier = 'promising'
+      ceiling = 190 + rng.float() * 35
+    } else {
+      tier = 'ordinary'
+      ceiling = 190 + rng.float() * 19.5
+    }
+    age = rollYouthAge(rng)
+  }
   const initial = age <= 15 ? 60 + rng.float() * 40 : age <= 17 ? 80 + rng.float() * 45 : 100 + rng.float() * 45
   const player = createRandomPlayer({ seed: rng.int(0x7fffffff), position: DETAILED_TO_POSITION[position], detailedPosition: position, tier: 2, usedNames: used, idPrefix: `academy-${game.seed}-${slot}` })
   scaleYouthAttributes(player, initial)
@@ -132,13 +232,28 @@ function generateYouth(game: GameState, at: number, slot: string, position: Deta
   const currentSeasonEnd = seasonEndAt(game.season.startedAt, game.season.clockShift ?? 0)
   return { balanceVersion: 2, player, initialCa: youthCA(player), ceiling, tier, speed: 0.8 + rng.float() * 0.4, initialAge: age, joinedSeason: game.season.index, enrolledAt: at, endsAt: Math.max(at, currentSeasonEnd) + (18 - age) * YOUTH_WEEK_MS, settledAt: at, calledUp: false, plan, plans: [{ at, plan: { ...plan } }], growth: [] }
 }
+function generateYouthBatch(
+  game: GameState,
+  at: number,
+  batchKey: string,
+  positions: readonly DetailedPosition[],
+  academyStage: number,
+  preferSlotZero: boolean,
+): YouthMember[] {
+  const used = usedNames(game)
+  const identity = `${game.createdAt}:${game.world?.clubs.find(c => c.id === 'player')?.squadKey ?? game.clubName}`
+  const profile = ACADEMY_INTAKE_PROFILES[academyLevelForStage(academyStage)]
+  const planRng = derivedRng(game.seed, 'youth-intake-plan-v2', identity, batchKey)
+  const targets = planIntakeTargets(planRng, positions.length, profile, preferSlotZero)
+  return positions.map((pos, i) => generateYouth(game, at, `${batchKey}-${i}`, pos, used, targets[i], profile))
+}
 function usedNames(game: GameState): Set<string> {
   return new Set([...game.roster, ...(game.youth?.members.map(m => m.player) ?? [])].flatMap(p => [p.name, p.enName]))
 }
 export function ensureYouth(game: GameState, now = Date.now()): boolean {
   if (game.youth) return false
-  const used = usedNames(game)
-  game.youth = { version: 1, startedAt: now, members: INITIAL_POSITIONS.map((pos, i) => generateYouth(game, now, `initial-${i}`, pos, used)), intake: { period: 0, candidates: [], signed: [] }, recruitPosition: 'MC', facilities: [{ at: now, stage: game.economy?.academy ?? 1 }], matches: [] }
+  const stage = clamp(game.economy?.academy ?? 1, 1, 25)
+  game.youth = { version: 1, startedAt: now, members: generateYouthBatch(game, now, 'initial', INITIAL_POSITIONS, stage, false), intake: { period: 0, candidates: [], signed: [] }, recruitPosition: 'MC', facilities: [{ at: now, stage }], matches: [] }
   // First batch is immediately usable; subsequent recruitment begins one real week later.
   return true
 }
@@ -281,9 +396,10 @@ export function settleYouth(game: GameState, now = Date.now()): boolean {
   }
   const period = Math.max(0, Math.floor((now - youth.startedAt) / YOUTH_WEEK_MS))
   if (period > youth.intake.period) {
-    const used = usedNames(game)
     const at = youth.startedAt + period * YOUTH_WEEK_MS
-    youth.intake = { period, signed: [], candidates: Array.from({ length: YOUTH_INTAKE_SIZE }, (_, i) => generateYouth(game, now, `intake-${period}-${i}`, i === 0 ? youth.recruitPosition : INITIAL_POSITIONS[(period + i) % INITIAL_POSITIONS.length], used)) }
+    const stageAtIntake = [...youth.facilities].reverse().find(f => f.at <= at)?.stage ?? game.economy?.academy ?? 1
+    const positions = Array.from({ length: YOUTH_INTAKE_SIZE }, (_, i) => i === 0 ? youth.recruitPosition : INITIAL_POSITIONS[(period + i) % INITIAL_POSITIONS.length])
+    youth.intake = { period, signed: [], candidates: generateYouthBatch(game, now, `intake-${period}`, positions, stageAtIntake, true) }
     // Candidates are generated once per period; appearance time doesn't change their identity or rolls.
     for (const candidate of youth.intake.candidates) {
       candidate.enrolledAt = at
