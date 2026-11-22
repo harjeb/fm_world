@@ -2,6 +2,7 @@ import type { BoardAmbition, BoardGoalOption, Player, SeasonState, TierId } from
 import { CLUB_NAME_MAX } from '../../game/club-name.ts'
 import { PLAYER_TEAM_ID } from '../../game/season.ts'
 import { worldTierLabel, worldWageBill } from '../../game/world.ts'
+import { previewContractRenewal } from '../../game/wages.ts'
 import { conferenceLabel } from '../../game/data/world-clubs.ts'
 import { isOnlineMode, marketState, onlineState } from '../../online.ts'
 import { BASE_ROUND_INCOME, economyOf, FACILITIES, facilityLevel, facilityRoundIncome, facilityStageChance, facilityStageInLevel, facilityUpgradeCost, GOAL_INCOME_BONUS, HOME_ATMOSPHERE_BASE, HOME_STADIUM_MAX_BONUS, homeAtmosphereBonus, LEAGUE_WIN_BONUS, MAX_FACILITY_LEVEL, MAX_FACILITY_STAGE, projectedRoundIncome, STAGES_PER_LEVEL, type FacilityId } from '../../game/economy.ts'
@@ -493,16 +494,37 @@ function contractsTab(): string {
   const rows = [...game.roster]
     .sort((a, b) => (a.contract?.expiresSeason ?? 0) - (b.contract?.expiresSeason ?? 0) || playerCA(b) - playerCA(a))
     .map((player) => {
-      const expiring = player.contract && player.contract.expiresSeason <= game.season.index
+      const basePreview = previewContractRenewal(game, player)
+      const draftYears = ui.renewYearsByPlayer[player.id]
+      const chosenYears = draftYears !== undefined && basePreview.availableYears.includes(draftYears) ? draftYears : undefined
+      const preview = chosenYears === undefined ? basePreview : previewContractRenewal(game, player, chosenYears)
+      const expiryBadge = !player.contract
+        ? ''
+        : preview.remainingSeasons <= 0
+          ? tag('本季到期', 'gold')
+          : preview.remainingSeasons === 1
+            ? tag('余 1 季', 'dim')
+            : tag(`余 ${preview.remainingSeasons} 季`, 'dim')
+      const renewals = player.contract?.renewals ?? 0
+      const demandCell = preview.canRenew
+        ? `<div class="contract-demand">
+            <div>→ <b>${preview.demandedWage.toLocaleString()}</b>/轮 ${preview.raiseAmount > 0 ? `<span class="down">+${preview.raiseAmount.toLocaleString()} (+${preview.raisePct}%)</span>` : '<span class="dim">已封顶</span>'}</div>
+            <small class="dim">至第 ${preview.nextExpiresSeason} 赛季 · 要求 ${preview.preferredYears} 年${preview.isEarlyRenewal ? ' · 提前续约' : ''}</small>
+          </div>`
+        : `<span class="dim">已签满 5 年</span>`
+      const renewControl = preview.canRenew
+        ? `<select class="contract-years-select" data-renew-years="${esc(player.id)}" aria-label="续约年限">${preview.availableYears.map((y) => `<option value="${y}" ${y === preview.years ? 'selected' : ''}>${y} 年${y === preview.preferredYears ? '·要求' : ''}</option>`).join('')}</select><button class="btn small ${preview.isEarlyRenewal ? '' : 'primary'}" data-action="contract-renew" data-player="${esc(player.id)}" data-years="${preview.years}">${preview.isEarlyRenewal ? '提前续约' : '续约'}</button>`
+        : `<button class="btn small" disabled title="${esc(preview.reason ?? '已签满 5 年')}">已签满</button>`
       return `<tr data-key="${esc(player.id)}">
         <td>${posBadge(primaryPosition(player))}</td>
         ${nameCell(player)}
         <td class="num">${player.age ?? 24}</td>
         <td class="num strong">${caHeat(playerCA(player))}</td>
-        <td class="num">${player.contract ? `第 ${player.contract.expiresSeason} 赛季` : '—'} ${expiring ? tag('本季到期', 'gold') : ''}</td>
-        <td class="num">${player.contract?.wage?.toLocaleString() ?? '—'}</td>
+        <td class="num">${player.contract ? `第 ${player.contract.expiresSeason} 赛季` : '—'} ${expiryBadge}</td>
+        <td class="num">${player.contract?.wage?.toLocaleString() ?? '—'}${renewals > 0 ? `<small class="dim block-sub">已续 ${renewals} 次</small>` : ''}</td>
+        <td class="num">${demandCell}</td>
         <td class="num dim">${bestMarketValue(game, player).toLocaleString()}</td>
-        <td class="num actions-cell"><button class="btn small" data-action="contract-renew" data-player="${esc(player.id)}">续约 2 年</button><button class="btn small ghost" data-action="contract-release" data-player="${esc(player.id)}">解约</button></td>
+        <td class="num actions-cell">${renewControl}<button class="btn small ghost" data-action="contract-release" data-player="${esc(player.id)}">解约</button></td>
       </tr>`
     }).join('')
   const wages = worldWageBill(game)
@@ -511,8 +533,8 @@ function contractsTab(): string {
   const capBanner = cap !== null
     ? `<div class="banner ${headroom! >= 0 ? 'info' : 'bad'}">${icon('coin', 16)}<b>每轮工资 ${wages.toLocaleString()} / 有效工资帽 ${cap.toLocaleString()}</b><span>${headroom! >= 0 ? `剩余薪资空间 +${headroom!.toLocaleString()}/轮（含商业设施 30% 加成）` : `已超出工资帽 ${(-headroom!).toLocaleString()}/轮：不能签入高薪新援或加薪续约`}</span><button class="btn small ghost" data-action="go-club" data-tab="board">调整工资帽滑块</button></div>`
     : ''
-  return `${capBanner}${panel('合同与工资', `<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th class="num">龄</th><th class="num">CA</th><th class="num">合同至</th><th class="num">工资 / 轮</th><th class="num">估值</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
-    <p class="hint pad">合同到期赛季结束后，球员进入自由市场；阵容不足 18 人时自动续约。工资每轮从俱乐部余额扣除；第 2 赛季起加薪续约与签约新援受董事会每轮有效工资帽限制。</p>`, { flush: true, aside: `<span class="muted small">每轮工资 ${wages.toLocaleString()}${cap !== null ? ` / 帽 ${cap.toLocaleString()}` : ''}</span>` })}`
+  return `${capBanner}${panel('合同与工资', `<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th class="num">龄</th><th class="num">CA</th><th class="num">合同至</th><th class="num">现工资 / 轮</th><th class="num">续约要求（3–5 年）</th><th class="num">估值</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="hint pad">球员续约要求签订 3–5 年新合同（从当前赛季起算），每次续约均会根据现工资、培养成长与年限要求加薪；合同余 2–4 季时可随时「提前续约」（需延长到期赛季，并含少量提前锁定溢价），签满 5 年后暂无需再续。合同到期赛季结束后球员进入自由市场，阵容不足 18 人时自动保底续约；第 2 赛季起加薪续约与签约新援受董事会每轮有效工资帽限制。</p>`, { flush: true, aside: `<span class="muted small">每轮工资 ${wages.toLocaleString()}${cap !== null ? ` / 帽 ${cap.toLocaleString()}` : ''}</span>` })}`
 }
 
 export function renderClub(): string {

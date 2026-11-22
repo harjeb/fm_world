@@ -160,8 +160,9 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     accept: z.boolean(),
   }, (args) => action('respond_offer', args))
 
-  register('renew_contract', '续约', '给自己的球员续约 2 年，工资按身价上调。', {
+  register('renew_contract', '续约 / 提前续约', '给自己的球员续约或提前续约（3-5 年新合同，从当前赛季起算且须晚于原到期赛季）。每次续约均按当前工资、能力成长与年限要求加薪；可先查看 get_state 中球员的 renewal 字段了解要求的年限、薪资与涨幅。', {
     playerId: z.string().min(1),
+    years: z.number().int().min(3).max(5).optional().describe('新合同年限（3-5 年，须晚于当前到期赛季）；省略时按球员要求年限续约'),
   }, (args) => action('renew_contract', args))
 
   register('release_player', '解约', '解约球员，球员进入自由市场；阵容至少保留 18 人（一套完整比赛名单）。', {

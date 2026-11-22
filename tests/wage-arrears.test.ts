@@ -5,7 +5,7 @@ import { UNPAID_PERFORMANCE, economyOf, matchPerformanceOf, payWageArrears, payW
 import { buildMatchEngineForGame } from '../src/game/match/setup.ts'
 import type { MatchEngine } from '../src/game/match/engine.ts'
 import { attrRating, attrStorage } from '../src/game/scale.ts'
-import { WAGE_CAP, createWorldGame, repairInflatedContractWages, wageForPlayer } from '../src/game/world.ts'
+import { RENEWAL_WAGE_CAP, WAGE_CAP, createWorldGame, previewContractRenewal, repairInflatedContractWages, wageForPlayer } from '../src/game/world.ts'
 import { renewContract } from '../src/game/market.ts'
 
 describe('欠薪', () => {
@@ -110,7 +110,7 @@ describe('工资口径与存量天价合同修复', () => {
     expect(wageForPlayer(player)).toBe(WAGE_CAP)
   })
 
-  it('repairInflatedContractWages 修复天价存量合同且不伤及正常签约、1.1× 续约与青训合同', () => {
+  it('repairInflatedContractWages 修复天价存量合同且不伤及正常签约、渐进加薪续约与青训合同', () => {
     const game = createWorldGame(6103)
     const [inflated, normal, renewed, youth] = game.roster
     const fair0 = wageForPlayer(inflated)
@@ -119,19 +119,20 @@ describe('工资口径与存量天价合同修复', () => {
 
     inflated.contract = { clubId: 'player', wage: 484_471_900, expiresSeason: 4 }
     normal.contract = { clubId: 'player', wage: fair1, expiresSeason: 4 }
-    renewed.contract = { clubId: 'player', wage: Math.round(fair2 * 1.1), expiresSeason: 6 }
+    const progressiveWage = Math.min(RENEWAL_WAGE_CAP, Math.round((fair2 * 2.2) / 50) * 50)
+    renewed.contract = { clubId: 'player', wage: progressiveWage, expiresSeason: 6, renewals: 3 }
     youth.contract = { clubId: 'player', wage: 100, expiresSeason: 5 }
 
     expect(repairInflatedContractWages([inflated, normal, renewed, youth])).toBe(true)
     expect(inflated.contract.wage).toBe(fair0)
     expect(normal.contract.wage).toBe(fair1)
-    expect(renewed.contract.wage).toBe(Math.round(fair2 * 1.1))
+    expect(renewed.contract.wage).toBe(progressiveWage)
     expect(youth.contract.wage).toBe(100)
     // 幂等：再次调用不再修改
     expect(repairInflatedContractWages([inflated, normal, renewed, youth])).toBe(false)
   })
 
-  it('给已培养或残留天价合同的球员续约时，按原始属性合理涨薪而不再锁死天价', () => {
+  it('续约支持 3-5 年、提前续约与历次渐进加薪，同时把残留天价合同拉回合理区间', () => {
     const game = createWorldGame(6104)
     const player = game.roster.find((p) => p.positions.GK === 0)!
     const fair = wageForPlayer(player)
@@ -139,7 +140,39 @@ describe('工资口径与存量天价合同修复', () => {
     for (const key of ALL_ATTRIBUTES) player.attrs[key] = attrStorage(key, 68, false)
     player.contract = { clubId: 'player', wage: 83_322_200, expiresSeason: 4 }
 
-    expect(renewContract(game, player.id, 2).ok).toBe(true)
-    expect(player.contract.wage).toBe(Math.round(fair * 1.1))
+    // 2 年合同被拒（要求 3-5 年）；3 年合同未晚于现有第 4 赛季也被拒
+    expect(renewContract(game, player.id, 2).ok).toBe(false)
+    expect(renewContract(game, player.id, 3).ok).toBe(false)
+
+    // 剩余 3 季可提前续约 4 或 5 年，同时天价合同回到封顶内合理涨薪
+    const firstPreview = previewContractRenewal(game, player, 4)
+    expect(firstPreview.isEarlyRenewal).toBe(true)
+    expect(firstPreview.canRenew).toBe(true)
+    expect(firstPreview.demandedWage).toBeGreaterThan(fair)
+    expect(firstPreview.demandedWage).toBeLessThanOrEqual(RENEWAL_WAGE_CAP)
+    expect(renewContract(game, player.id, 4).ok).toBe(true)
+    const firstWage = player.contract.wage
+    expect(firstWage).toBe(firstPreview.demandedWage)
+    expect(player.contract.expiresSeason).toBe(5)
+    expect(player.contract.renewals).toBe(1)
+
+    // 再提前续约到 5 年：工资应在前一次基础上继续上涨
+    expect(renewContract(game, player.id, 5).ok).toBe(true)
+    const secondWage = player.contract.wage
+    expect(secondWage).toBeGreaterThan(firstWage)
+    expect(player.contract.expiresSeason).toBe(6)
+    expect(player.contract.renewals).toBe(2)
+
+    // 已签满 5 年（第 1 赛季签至第 6 赛季）禁止重复续约
+    expect(previewContractRenewal(game, player).canRenew).toBe(false)
+    expect(renewContract(game, player.id, 5).ok).toBe(false)
+
+    // 进入第 3 赛季后剩余 3 季，可再次提前续约且工资继续递涨
+    game.world!.seasonIndex = 3
+    game.season.index = 3
+    expect(renewContract(game, player.id, 4).ok).toBe(true)
+    expect(player.contract.wage).toBeGreaterThan(secondWage)
+    expect(player.contract.expiresSeason).toBe(7)
+    expect(player.contract.renewals).toBe(3)
   })
 })

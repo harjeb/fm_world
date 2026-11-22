@@ -37,6 +37,8 @@ export type UIState = {
   clubTab: ClubTab
   /** 董事会转会预算↔工资帽滑块的未提交草稿值（正=工资帽转转会，负=转会转工资帽）。 */
   boardSliderDraft: number
+  /** 合同页每位球员当前选择的续约年限（3–5 年，仅界面草稿）。 */
+  renewYearsByPlayer: Record<string, number>
   transferTab: TransferTab
   clubSearch: string
   clubPage: number
@@ -178,6 +180,7 @@ export const ui: UIState = {
   bootGate: true,
   clubTab: 'facilities',
   boardSliderDraft: 0,
+  renewYearsByPlayer: {},
   transferTab: 'market',
   clubSearch: '',
   clubPage: 0,

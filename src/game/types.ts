@@ -395,6 +395,8 @@ export type Contract = {
   wage: number
   /** 到期赛季序号；该赛季结束后进入自由市场。 */
   expiresSeason: number
+  /** 已续约次数（用于记录渐进涨薪历史）。 */
+  renewals?: number
 }
 
 export type TierId = 'champions' | 'division1' | 'division2'

@@ -13,6 +13,12 @@ import { scoutKeepsOnMarket } from './scouting.ts'
 /** 每天自由市场上至少有多少人。 */
 export const FREE_MARKET_TARGET = 200
 
+/** 自由市场每日随机球员基础 CA 区间：常规 200-230，小概率出现 230.5-240 的高潜遗珠。 */
+export const MARKET_RANDOM_CA_MIN = 200
+export const MARKET_RANDOM_CA_MAX = 230
+export const MARKET_RANDOM_CA_RARE_MAX = 240
+export const MARKET_RANDOM_RARE_CHANCE = 0.06
+
 /** 补充球员的位置配比（和 25 人名单的比例接近）。 */
 const FILLER_POSITIONS: Position[] = ['GK', 'CB', 'CB', 'W', 'W', 'W', 'CM', 'CM', 'ST', 'ST', 'CB', 'W', 'CM', 'ST', 'W', 'CM']
 
@@ -65,12 +71,17 @@ export function refreshFreeMarket(input: {
   const today = pool.filter((player) => player.marketDay === day).length
   const rng = derivedRng(splitSeed(input.seed, 'free-market-fillers'), day)
   for (let index = today; index < today + need; index++) {
-    const roll = rng.float()
-    const tier = roll < 0.15 ? 1 : roll < 0.85 ? 2 : 3
+    const rareRoll = rng.float()
+    const spread = rng.float()
+    const targetBaseCa = rareRoll < MARKET_RANDOM_RARE_CHANCE
+      ? Math.round((MARKET_RANDOM_CA_MAX + 0.5 + spread * (MARKET_RANDOM_CA_RARE_MAX - MARKET_RANDOM_CA_MAX - 0.5)) * 10) / 10
+      : Math.round((MARKET_RANDOM_CA_MIN + spread * (MARKET_RANDOM_CA_MAX - MARKET_RANDOM_CA_MIN)) * 10) / 10
+    const tier = targetBaseCa > MARKET_RANDOM_CA_MAX ? 4 : targetBaseCa >= 218 ? 3 : 2
     const player = createRandomPlayer({
       seed: splitSeed(input.seed, `free-market-${day}-${index}`),
       position: FILLER_POSITIONS[index % FILLER_POSITIONS.length],
       tier,
+      targetBaseCa,
       usedNames: used,
       idPrefix: `fa${day}-${index}`,
     })

@@ -1,6 +1,7 @@
 import type { AttrKey, AutoTrainingPresetId, DetailedPosition, GameState, Lineup, MatchMentality, Player, Position, RoleId, SkillId, Tactics } from '../game/types.ts'
 import { cacheGameLocally, cacheOnlineGame, loadGame, saveGame, setTeamPickPending, teamPickPending, upgradeLegacySignatures } from '../game/state.ts'
 import { createWorldGame, previewD2Clubs, worldTransferTeams } from '../game/world.ts'
+import { previewContractRenewal } from '../game/wages.ts'
 import { friendlyStepMs } from './match-timing.ts'
 import { filterTrainingBookIds, trainingBookLoadout } from './training-books.ts'
 import {
@@ -1665,9 +1666,21 @@ document.addEventListener('click', async (event) => {
       break
     case 'contract-renew': {
       if (!playerId) break
-      const result = renewContract(game, playerId, 2)
-      if (result.ok) persist()
-      showNotice(result.ok ? '已续约 2 年。' : `续约失败：${result.error ?? '未知错误'}`)
+      const rawYears = Number(actionEl.dataset.years ?? ui.renewYearsByPlayer[playerId])
+      const years = Number.isSafeInteger(rawYears) && rawYears > 0 ? rawYears : undefined
+      const targetPlayer = game.roster.find((item) => item.id === playerId)
+      const preview = targetPlayer ? previewContractRenewal(game, targetPlayer, years) : null
+      const result = renewContract(game, playerId, years)
+      if (result.ok) {
+        delete ui.renewYearsByPlayer[playerId]
+        persist()
+        const contract = targetPlayer?.contract
+        const label = preview?.isEarlyRenewal ? '已提前续约' : '已续约'
+        const raiseText = preview && preview.raiseAmount > 0 ? `（+${preview.raiseAmount.toLocaleString()}）` : ''
+        showNotice(`${label} ${preview?.years ?? years ?? ''} 年（至第 ${contract?.expiresSeason ?? '?'} 赛季），新工资 ${contract?.wage.toLocaleString() ?? '—'}/轮${raiseText}。`)
+      } else {
+        showNotice(`续约失败：${result.error ?? '未知错误'}`)
+      }
       break
     }
     case 'contract-release': {
@@ -2721,6 +2734,15 @@ document.addEventListener('click', async (event) => {
 document.addEventListener('change', (event) => {
   if (trainingStartPending || cardActionPending) return
   const target = event.target as HTMLSelectElement | HTMLInputElement
+  if (target.dataset.renewYears !== undefined) {
+    const id = target.dataset.renewYears
+    const years = Number(target.value)
+    if (id && Number.isSafeInteger(years)) {
+      ui.renewYearsByPlayer[id] = years
+      render()
+    }
+    return
+  }
   if (target.dataset.recycleCard !== undefined) {
     const id = target.dataset.recycleCard
     if (!id || (target as HTMLInputElement).disabled) return

@@ -4,7 +4,8 @@ import os from 'node:os'
 import path from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
-import { FREE_MARKET_TARGET, marketDayOf, refreshFreeMarket, refreshLocalFreeMarket } from '../src/game/free-market.ts'
+import { FREE_MARKET_TARGET, MARKET_RANDOM_CA_MAX, MARKET_RANDOM_CA_MIN, MARKET_RANDOM_CA_RARE_MAX, marketDayOf, refreshFreeMarket, refreshLocalFreeMarket } from '../src/game/free-market.ts'
+import { caOf } from '../src/game/ca.ts'
 import { isOnMarketToday } from '../src/game/market-window.ts'
 import { buyFreeAgent } from '../src/game/market.ts'
 import { DAY_MS } from '../src/game/calendar.ts'
@@ -26,6 +27,31 @@ describe('自由市场每日补充', () => {
     const fillers = pool.filter((player) => player.marketDay !== undefined)
     expect(fillers.every((player) => player.marketDay === marketDayOf(game, now) && !player.starKey)).toBe(true)
     expect(new Set(pool.map((player) => player.id)).size).toBe(pool.length)
+  })
+
+  it('市场随机补充球员的基础 CA 落在 200-230 区间，并偶尔出现 230-240 的高潜球员', () => {
+    const game = createWorldGame(3110)
+    const cas: number[] = []
+    for (let day = 1; day <= 4; day++) {
+      const now = game.world!.calendarStartAt! + day * DAY_MS + 1000
+      const { pool } = refreshFreeMarket({ pool: [], anchor: game, now, seed: game.seed + day })
+      for (const player of pool) {
+        if (player.marketDay === undefined) continue
+        const isGk = player.positions.GK > 0
+        const ca = caOf(player.attrs, isGk)
+        const baseCa = caOf(player.baseAttrs ?? player.attrs, isGk)
+        expect(ca).toBeGreaterThanOrEqual(MARKET_RANDOM_CA_MIN - 0.5)
+        expect(ca).toBeLessThanOrEqual(MARKET_RANDOM_CA_RARE_MAX + 0.5)
+        expect(Math.abs(ca - baseCa)).toBeLessThan(0.2)
+        expect(player.pa).toBeGreaterThanOrEqual(ca)
+        cas.push(ca)
+      }
+    }
+    const normalBand = cas.filter((ca) => ca >= MARKET_RANDOM_CA_MIN - 0.5 && ca <= MARKET_RANDOM_CA_MAX + 0.5)
+    const rareBand = cas.filter((ca) => ca > MARKET_RANDOM_CA_MAX + 0.2 && ca <= MARKET_RANDOM_CA_RARE_MAX + 0.5)
+    expect(normalBand.length / cas.length).toBeGreaterThan(0.85)
+    expect(rareBand.length).toBeGreaterThan(0)
+    expect(rareBand.length / cas.length).toBeLessThan(0.15)
   })
 
   it('第二天没人买的随机球员销毁、换一批新的，名单不会越滚越大；正在竞拍的先留着', () => {
@@ -98,6 +124,46 @@ describe('联机：全服自由市场每天补到 200 人', () => {
     const base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`
     const market = await (await fetch(`${base}/api/market`)).json() as { pool: Player[] }
     expect(market.pool.length).toBeGreaterThanOrEqual(FREE_MARKET_TARGET)
-    expect(market.pool.some((player) => player.marketDay !== undefined)).toBe(true)
+    const fillers = market.pool.filter((player) => player.marketDay !== undefined)
+    expect(fillers.length).toBeGreaterThan(0)
+    expect(fillers.every((player) => {
+      const ca = caOf(player.attrs, player.positions.GK > 0)
+      return ca >= MARKET_RANDOM_CA_MIN - 0.5 && ca <= MARKET_RANDOM_CA_RARE_MAX + 0.5
+    })).toBe(true)
+  })
+
+  it('存量旧版自由市场重启时自动把当天低 CA 随机人刷新为 200-240，且保留真实球星', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-free-market-upgrade-'))
+    dirs.push(dataDir)
+    const app1 = createAppServer({ dataDir, staticDir: path.resolve('dist'), tickMs: 0 })
+    const worldPath = path.join(dataDir, 'world.json')
+    app1.close()
+    // 模拟旧版 world.json：移除 marketRandomCaVersion，并把今天的随机人压低到 ~185 CA
+    const raw = JSON.parse(fs.readFileSync(worldPath, 'utf8'))
+    delete raw.marketRandomCaVersion
+    const originalStars = raw.freeStars.filter((p: Player) => p.marketDay === undefined).map((p: Player) => p.id)
+    for (const p of raw.freeStars) {
+      if (p.marketDay !== undefined) {
+        for (const k of Object.keys(p.attrs)) p.attrs[k] = Math.round(p.attrs[k] * 0.85 * 10) / 10
+        p.baseAttrs = { ...p.attrs }
+      }
+    }
+    fs.writeFileSync(worldPath, JSON.stringify(raw))
+
+    const app2 = createAppServer({ dataDir, staticDir: path.resolve('dist'), tickMs: 0 })
+    servers.push(app2)
+    await new Promise<void>((resolve) => app2.server.listen(0, '127.0.0.1', resolve))
+    const base = `http://127.0.0.1:${(app2.server.address() as AddressInfo).port}`
+    const market = await (await fetch(`${base}/api/market`)).json() as { pool: Player[] }
+    const fillers = market.pool.filter((p) => p.marketDay !== undefined)
+    expect(fillers.length).toBeGreaterThan(0)
+    expect(fillers.every((p) => {
+      const ca = caOf(p.attrs, p.positions.GK > 0)
+      return ca >= MARKET_RANDOM_CA_MIN - 0.2 && ca <= MARKET_RANDOM_CA_RARE_MAX + 0.2
+    })).toBe(true)
+    const upgradedWorld = JSON.parse(fs.readFileSync(worldPath, 'utf8'))
+    expect(upgradedWorld.marketRandomCaVersion).toBe(2)
+    const afterStars = upgradedWorld.freeStars.filter((p: Player) => p.marketDay === undefined).map((p: Player) => p.id)
+    expect(afterStars).toEqual(originalStars)
   })
 })

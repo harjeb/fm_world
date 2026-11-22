@@ -16,6 +16,7 @@ import {
   syncBoardLockState,
 } from '../src/game/board.ts'
 import { worldWageBill } from '../src/game/world.ts'
+import { previewContractRenewal } from '../src/game/wages.ts'
 import { detailedPositionForSlot, isDetailedPosition, readDetailedPositions, slotPositionValue } from '../src/game/detailed-positions.ts'
 import { MAX_SCOUT_REPORTS, SCOUT_LEVELS, deleteScoutReport, startScouting, visibleScoutReports, type ScoutReport, type ScoutSource, type ScoutTarget, type VisibleScoutReport } from '../src/game/scouting.ts'
 import { preferredPositionRatings } from '../src/game/scout-rating.ts'
@@ -262,7 +263,8 @@ export function playerView(player: GameState['roster'][number], game: GameState,
     cardIds: playerCards(game, player.id).map((card) => card.id),
     /** 估值（只看原始属性）；挂牌上限和买回价都用这个数。 */
     marketValue: bestMarketValue(game, player),
-    contract: player.contract ? { wage: player.contract.wage, expiresSeason: player.contract.expiresSeason } : null,
+    contract: player.contract ? { wage: player.contract.wage, expiresSeason: player.contract.expiresSeason, renewals: player.contract.renewals ?? 0 } : null,
+    renewal: player.contract?.clubId === 'player' ? previewContractRenewal(game, player) : null,
   }
 }
 
@@ -1206,9 +1208,11 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       }
     }
     case 'renew_contract': {
-      // 和俱乐部页“续约 2 年”一致。
-      const result = renewContract(game, text(body.playerId), 2)
-      return result.ok ? { ok: true, result: game.roster.find((player) => player.id === text(body.playerId))?.contract ?? null } : result
+      // 和俱乐部页“续约 / 提前续约（3-5 年）”一致；省略 years 时按球员要求年限续约。
+      const playerId = text(body.playerId)
+      const years = body.years === undefined ? undefined : Number(body.years)
+      const result = renewContract(game, playerId, years)
+      return result.ok ? { ok: true, result: game.roster.find((player) => player.id === playerId)?.contract ?? null } : result
     }
     case 'release_player': {
       const result = releasePlayer(game, text(body.playerId))

@@ -1,9 +1,11 @@
 import { backfillNaturalPlayer, initializeNaturalPositions, naturalStyle, randomNaturalPosition } from '../natural-positions.ts'
 import { DETAILED_TO_POSITION } from '../detailed-positions.ts'
 import type { DetailedPosition, Player, Position, StyleId } from '../types.ts'
-import { POSITIONS } from '../types.ts'
-import { caOf } from '../ca.ts'
+import { ALL_ATTRIBUTES, POSITIONS } from '../types.ts'
+import { CA_SCALE, caOf, costAttrs } from '../ca.ts'
+import { attrLimit, attrRating, mainAttrsFor } from '../scale.ts'
 import { derivedRng } from '../rng.ts'
+import { normalizeCeilings } from './attr-profile.ts'
 import { pickRandomName } from './name-pools.ts'
 import { PLAYER_SEEDS, createPlayerFromSeed, type PlayerSeed } from './players.ts'
 
@@ -28,6 +30,8 @@ export type RandomPlayerOptions = {
   modernPositions?: boolean
   /** 1-4；随机球员默认不超过 4，潜力低于世界级。 */
   tier: number
+  /** 可选：显式指定生成后的基础 CA（如自由市场每日补充球员 200-240）。 */
+  targetBaseCa?: number
   usedNames?: Set<string>
   idPrefix?: string
   /** 名字已经定好时用它，比如从名册里发的。 */
@@ -105,6 +109,34 @@ export function createRandomPlayer(options: RandomPlayerOptions): Player {
     height,
   }
   const player = createPlayerFromSeed(playerSeed)
+  if (options.targetBaseCa !== undefined && Number.isFinite(options.targetBaseCa) && options.targetBaseCa > 0) {
+    const isGk = position === 'GK'
+    const rawCa = caOf(player.attrs, isGk)
+    if (rawCa > 0) {
+      const scale = Math.sqrt(options.targetBaseCa / rawCa)
+      for (const key of ALL_ATTRIBUTES) {
+        player.attrs[key] = Math.min(attrLimit(key, isGk), Math.round(player.attrs[key] * scale * 10) / 10)
+      }
+      // 隐藏属性按 0.1 舍入会带来 ±0.7 的 CA 抖动，用主属性微调一次收口到目标 CA 附近（±0.05）。
+      const afterCa = caOf(player.attrs, isGk)
+      const deltaCa = options.targetBaseCa - afterCa
+      if (Math.abs(deltaCa) > 0.05) {
+        const mains = mainAttrsFor(isGk)
+        const totalKeys = costAttrs(isGk).length
+        let mainSum = 0
+        for (const key of mains) mainSum += (attrRating(key, player.attrs[key], isGk) / 100) ** 2
+        const mainCa = (CA_SCALE * mainSum) / totalKeys
+        if (mainCa + deltaCa > 0 && mainCa > 0) {
+          const fineScale = Math.sqrt((mainCa + deltaCa) / mainCa)
+          for (const key of mains) {
+            player.attrs[key] = Math.min(attrLimit(key, isGk), Math.round(player.attrs[key] * fineScale * 10) / 10)
+          }
+        }
+      }
+      player.baseAttrs = { ...player.attrs }
+      player.ceilings = normalizeCeilings(player.attrs, player.ceilings, (key) => attrLimit(key, isGk))
+    }
+  }
   // 随机球员的潜力上限低于世界级（真实球星约 170-200）；同时保证不低于当前 CA。
   const cap = (148 + tier * 5 + rng.float() * 7) * 7.5
   const current = caOf(player.attrs, position === 'GK')

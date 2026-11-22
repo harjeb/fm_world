@@ -93,9 +93,14 @@ describe('Agent API 和手动界面能做的事一致', () => {
 
     game = await state()
     const target = game.roster[game.roster.length - 1]
-    const renewed = await action({ action: 'renew_contract', playerId: target.id })
+    expect(target.renewal?.canRenew).toBe(true)
+    expect(target.renewal?.isEarlyRenewal).toBe(true)
+    expect(target.renewal?.demandedWage).toBeGreaterThan(target.contract.wage)
+    const renewed = await action({ action: 'renew_contract', playerId: target.id, years: 5 })
     expect(renewed.status).toBe(200)
-    expect(renewed.body.result.expiresSeason).toBeGreaterThanOrEqual(target.contract.expiresSeason + 2)
+    expect(renewed.body.result.expiresSeason).toBe(target.contract.expiresSeason + 2)
+    expect(renewed.body.result.wage).toBeGreaterThan(target.contract.wage)
+    expect(renewed.body.result.renewals).toBe(1)
     const released = await action({ action: 'release_player', playerId: target.id })
     expect(released.status).toBe(200)
     expect(released.body.game.roster.some((player: any) => player.id === target.id)).toBe(false)

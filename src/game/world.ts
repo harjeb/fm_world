@@ -1132,7 +1132,19 @@ export function d2ClubChoices(): { id: string; name: string; enName?: string; co
   return WORLD_CLUB_DEFS.filter((club) => club.tier === 'division2').map((club) => ({ id: club.id, name: club.name, enName: club.enName, conference: club.conference ?? 'north' }))
 }
 
-export { SQUAD_WAGE_SCALE, WAGE_CAP, repairInflatedContractWages, wageForPlayer, worldWageBill } from './wages.ts'
+export {
+  CONTRACT_RENEWAL_MAX_YEARS,
+  CONTRACT_RENEWAL_MIN_YEARS,
+  RENEWAL_WAGE_CAP,
+  SQUAD_WAGE_SCALE,
+  WAGE_CAP,
+  preferredRenewalYears,
+  previewContractRenewal,
+  repairInflatedContractWages,
+  wageForPlayer,
+  worldWageBill,
+  type ContractRenewalPreview,
+} from './wages.ts'
 import { wageForPlayer, worldWageBill } from './wages.ts'
 
 export function syncPlayerDivision(game: GameState): void {

@@ -30,6 +30,7 @@ import {
 } from '../src/game/board.ts'
 import { economyOf, facilityUpgradeCost, upgradeFacility } from '../src/game/economy.ts'
 import { buyFreeAgent, listPlayer, renewContract, settleMarket } from '../src/game/market.ts'
+import { isOnMarketToday } from '../src/game/market-window.ts'
 import { minimumBid, placeBid, settleAuctions, type FreeMarket } from '../src/game/auction.ts'
 import { respondToOffer, type MarketClub } from '../src/game/transfers.ts'
 import { MIN_SQUAD } from '../src/game/squad.ts'
@@ -357,7 +358,9 @@ describe('独立设施预算、转会预算、工资帽与卖人回流', () => {
     const economy = economyOf(game)
     const mandate = game.board!.current!
     economy.balance = 50_000_000
-    const candidate = game.freeStars.find((p) => !p.starKey) ?? game.freeStars[0]
+    const candidate = game.freeStars.find((p) => !p.starKey && isOnMarketToday(game, p))
+      ?? game.freeStars.find((p) => isOnMarketToday(game, p))
+      ?? game.freeStars[0]
     candidate.marketDay = undefined
 
     // 1. 转会预算不足拦截（哪怕余额 5000 万）
@@ -439,12 +442,9 @@ describe('独立设施预算、转会预算、工资帽与卖人回流', () => {
     // 让有效工资帽正好等于当前工资，任何加薪都会超帽
     mandate.wageCap = Math.max(0, currentBill - commercial)
     target.contract = { clubId: 'player', wage: 500, expiresSeason: 2 }
-    const fair = wageForPlayer(target)
-    if (Math.round(fair * 1.1) > 500) {
-      const blockedRenew = renewContract(game, target.id, 2)
-      expect(blockedRenew.ok).toBe(false)
-      expect(blockedRenew.error).toContain('工资帽')
-    }
+    const blockedRenew = renewContract(game, target.id, 3)
+    expect(blockedRenew.ok).toBe(false)
+    expect(blockedRenew.error).toContain('工资帽')
 
     // 联机竞拍校验转会预算与工资帽
     const marketPlayer = structuredClone(game.freeStars[0])

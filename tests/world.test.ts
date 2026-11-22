@@ -146,8 +146,14 @@ describe('三级共享世界', () => {
     expect(buyFreeAgent(game, player.id).ok).toBe(true)
     expect(player.contract?.clubId).toBe('player')
     const before = player.contract!.expiresSeason
-    expect(renewContract(game, player.id, 2).ok).toBe(true)
-    expect(player.contract!.expiresSeason).toBe(before + 2)
+    const beforeWage = player.contract!.wage
+    // 新签球员剩余 3 季，提前续约 5 年应把到期赛季延至第 6 赛季并加薪，且拒绝低于 3 年的合同
+    expect(renewContract(game, player.id, 2).ok).toBe(false)
+    expect(renewContract(game, player.id, 5).ok).toBe(true)
+    expect(player.contract!.expiresSeason).toBe(game.season.index + 5)
+    expect(player.contract!.expiresSeason).toBeGreaterThan(before)
+    expect(player.contract!.wage).toBeGreaterThan(beforeWage)
+    expect(player.contract!.renewals).toBe(1)
     expect(releasePlayer(game, player.id).ok).toBe(true)
     expect(game.freeStars).toContain(player)
     game.season.round = 11

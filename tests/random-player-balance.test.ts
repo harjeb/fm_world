@@ -119,14 +119,14 @@ describe('方案 A：随机球员基础 CA 与转会市场身价分层', () => {
     expect(chHtml.match(/class="num rank zone-legend"/g)).toHaveLength(3)
     expect(chHtml.match(/class="num rank zone-relegate"/g)).toHaveLength(3)
 
-    // 球员对比属性表：隐藏属性行带 pc-attr-hidden，主属性行不带
+    // 球员对比属性表：隐藏属性名格带 pc-attr-hidden，主属性名格不带
     const g = createInitialGame(777)
     setGame(g)
     try {
       const outfield = g.roster.filter((p) => p.positions.GK === 0)
       const cmp = renderPlayerComparison(outfield[0], outfield[1], outfield, 'attributes')
-      expect(cmp).toContain('<tr class="pc-attr-hidden"><th>视野</th>')
-      expect(cmp).toContain('<tr><th>传球</th>')
+      expect(cmp).toMatch(/<th[^>]*class="[^"]*\bpc-attr-hidden\b[^"]*"[^>]*>视野<\/th>/)
+      expect(cmp).toMatch(/<th[^>]*class="pc-attr-name"[^>]*>传球<\/th>/)
     } finally {
       setGame(originalGame)
     }

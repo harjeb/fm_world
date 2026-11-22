@@ -6,6 +6,7 @@ export { VALUE_AT_CA_205, VALUE_GROWTH_PER_CA, VALUE_CAP, RANDOM_PLAYER_VALUE_SC
 import { FULL_SQUAD, MIN_SQUAD, autoFillLineup, repairLineup, validateLineup } from './squad.ts'
 import { assessRelease, releaseChance, releaseRoll, type ReleaseAssessment } from './transfer-rules.ts'
 import { wageForPlayer, worldTransferTeams } from './world.ts'
+import { CONTRACT_RENEWAL_MAX_YEARS, CONTRACT_RENEWAL_MIN_YEARS, previewContractRenewal } from './wages.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 import { closeFinishedTraining, destroyPlayerCards, untrainedPlayer } from './cards.ts'
 import { sanitizeAutoSubPlan } from './match/management.ts'
@@ -522,21 +523,23 @@ export function refreshClubMarket(game: GameState, round: number): number {
   return moved
 }
 
-export function renewContract(game: GameState, playerId: string, years = 2): MarketOutcome {
-  if (!Number.isSafeInteger(years) || years < 1 || years > 5) return fail('合同年限需为 1-5 年')
+export function renewContract(game: GameState, playerId: string, years?: number): MarketOutcome {
+  if (years !== undefined && (!Number.isSafeInteger(years) || years < CONTRACT_RENEWAL_MIN_YEARS || years > CONTRACT_RENEWAL_MAX_YEARS)) {
+    return fail(`球员要求签订 ${CONTRACT_RENEWAL_MIN_YEARS}-${CONTRACT_RENEWAL_MAX_YEARS} 年合同`)
+  }
   if (game.activeMatch) return fail('比赛进行中不能续约')
   const player = game.roster.find((item) => item.id === playerId)
   if (!player) return fail('球员不在你的阵容')
-  const fair = wageForPlayer(player)
-  const current = player.contract?.wage ?? 0
-  const baseWage = current <= Math.round(fair * 1.15) ? current : fair
-  const nextWage = Math.max(baseWage, Math.round(fair * 1.1))
-  const wageCheck = checkWageCapForRenewal(game, playerId, nextWage)
+  const preview = previewContractRenewal(game, player, years)
+  if (!preview.canRenew) return fail(preview.reason ?? '合同已签满年限，暂无需续约')
+  if (!preview.validYears) return fail(preview.reason ?? `新合同需为 ${CONTRACT_RENEWAL_MIN_YEARS}-${CONTRACT_RENEWAL_MAX_YEARS} 年且晚于当前到期赛季`)
+  const wageCheck = checkWageCapForRenewal(game, playerId, preview.demandedWage)
   if (!wageCheck.ok) return fail(wageCheck.error)
   player.contract = {
     clubId: 'player',
-    wage: nextWage,
-    expiresSeason: Math.max((player.contract?.expiresSeason ?? game.season.index) + years, game.season.index + years),
+    wage: preview.demandedWage,
+    expiresSeason: preview.nextExpiresSeason,
+    renewals: (player.contract?.renewals ?? 0) + 1,
   }
   return { ok: true }
 }

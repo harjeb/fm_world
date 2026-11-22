@@ -117,6 +117,8 @@ type SharedWorld = {
   marketVersion?: number
   positionProfilesVersion?: 1
   randomBaseCaVersion?: 1
+  /** 自由市场每日随机补充球员基础 CA 升级版本（2 = 200-230 区间，小概率 230.5-240）。 */
+  marketRandomCaVersion?: 2
   /** 电脑球队的钱、设施和培养成果；全服一份，跟着赛季一起滚。 */
   aiClubs?: Record<string, AIClubState>
   /** 自由市场最近一次每日补充是第几个游戏日。 */
@@ -217,6 +219,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     marketVersion: loadedWorld?.marketVersion ?? 1,
     positionProfilesVersion: loadedWorld?.positionProfilesVersion,
     randomBaseCaVersion: loadedWorld ? loadedWorld.randomBaseCaVersion : 1,
+    marketRandomCaVersion: loadedWorld ? loadedWorld.marketRandomCaVersion : 2,
+    freeMarketDay: loadedWorld?.freeMarketDay,
     aiClubs: loadedWorld?.aiClubs,
     aiRound: loadedWorld?.aiRound,
     matchBook: loadedWorld?.matchBook,
@@ -1461,6 +1465,12 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const keptIds = collectScoutKeptIds(t)
     const auctionIds = new Set(market.auctions.map((auction) => auction.playerId))
     const busy = (id: string) => auctionIds.has(id) || keptIds.has(id)
+    const needsMarketCaUpgrade = sharedWorld.marketRandomCaVersion !== 2
+    if (needsMarketCaUpgrade) {
+      market.pool = market.pool.filter((player) => player.marketDay === undefined || busy(player.id))
+      sharedWorld.freeMarketDay = undefined
+      sharedWorld.marketRandomCaVersion = 2
+    }
     if (sharedWorld.freeMarketDay === day) {
       const pool = market.pool.filter(player => player.marketDay === undefined || player.marketDay >= day || busy(player.id))
       if (pool.length !== market.pool.length) {
@@ -1473,7 +1483,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
     sharedWorld.freeMarketDay = day
     const result = refreshFreeMarket({ pool: market.pool, anchor, now: t, seed: sharedWorld.seed, busy })
-    if (result.changed) {
+    if (result.changed || needsMarketCaUpgrade) {
       market.pool = result.pool
       market.version += 1
       persistMarket()
