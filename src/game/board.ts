@@ -37,6 +37,7 @@ import { lineupRating } from './club-rating.ts'
 import { economyOf, facilityRoundIncome } from './economy.ts'
 import { MIN_SQUAD } from './squad.ts'
 import { wageForPlayer, worldWageBill } from './wages.ts'
+import { hasDualD1, shouldUseDualD1 } from './world.ts'
 import { checkFacilityBudget, facilityBudgetAvailable, isBoardBudgetActive, spendFacilityBudget } from './board-budget.ts'
 export { checkFacilityBudget, facilityBudgetAvailable, isBoardBudgetActive, spendFacilityBudget } from './board-budget.ts'
 
@@ -509,13 +510,30 @@ export function projectNextSeasonTier(
     return { tier: finish > total - 3 ? 'division1' : 'champions', confirmed: true }
   }
   if (currentTier === 'division1') {
-    if (finish <= 3) return { tier: 'champions', confirmed: true }
+    const dualD1 = game.world ? hasDualD1(game.world) : false
+    if (!dualD1) {
+      if (finish <= 3) return { tier: 'champions', confirmed: true }
+      if (finish > total - 3) return { tier: 'division2', confirmed: true }
+      return { tier: 'division1', confirmed: true }
+    }
+    if (finish === 1) return { tier: 'champions', confirmed: true }
+    if (finish === 2) {
+      const d1Divs = game.world?.divisions.filter((d) => d.tier === 'division1') ?? []
+      if (d1Divs.length >= 2 && d1Divs.every((d) => d.finished && d.table.length >= 2)) {
+        const seconds = d1Divs.map((d) => d.table[1]).sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf || a.teamId.localeCompare(b.teamId))
+        const ownSet = new Set<string>(['player', ...(clubId ? [clubId] : [])])
+        const sk = game.world?.clubs.find((c) => c.id === 'player')?.squadKey
+        if (sk) ownSet.add(sk)
+        return { tier: ownSet.has(seconds[0].teamId) ? 'champions' : 'division1', confirmed: true }
+      }
+      return { tier: 'division1', confirmed: false }
+    }
     if (finish > total - 3) return { tier: 'division2', confirmed: true }
     return { tier: 'division1', confirmed: true }
   }
 
-  // 二级联赛：前 3 参加升级杯决定 3 个升级名额；第 4 名起已锁定留级二级
-  if (finish > 3) return { tier: 'division2', confirmed: true }
+  const maxPromoRank = game.world && shouldUseDualD1(game.world) ? 4 : 3
+  if (finish > maxPromoRank) return { tier: 'division2', confirmed: true }
 
   const ids = new Set<string>(['player'])
   if (clubId) ids.add(clubId)

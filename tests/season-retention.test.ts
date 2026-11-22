@@ -4,12 +4,12 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { expect, it, vi } from 'vitest'
 import { AccountStore } from '../server/account-store.ts'
-import { createAppServer, type AppServer } from '../server/app.ts'
+import { createAppServer, IDLE_COACH_RELEASE_MS, type AppServer } from '../server/app.ts'
 import { seasonEndAt } from '../src/game/calendar.ts'
 import { computeWorldTable } from '../src/game/world.ts'
 import type { GameState, WorldState } from '../src/game/types.ts'
 
-it('连续两个完整赛季未上线才删除教练；换季清任务，重启后新身份接手同一份球队进度', async () => {
+it('连续 7 天未上线自动清理教练账号并释放球队（保留进度、恢复原名），未满 7 天保留，换季清任务安全回滚', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-retention-'))
   const worldFile = path.join(dir, 'world.json')
   const queueDir = path.join(dir, 'match-jobs')
@@ -60,19 +60,53 @@ it('连续两个完整赛季未上线才删除教练；换季清任务，重启�
     const originalName = first.game.clubName
     expect((await request('/api/club/rename', { name: '回收测试队' }, first.token)).status).toBe(200)
     const agent = await (await request('/api/agent/token', {}, first.token)).json() as { token: string }
+
+    // 推进 6 天（超过 3 天 AI 接管，但未满 7 天）：重启后不应清除账号。
+    clock += 6 * 24 * 60 * 60_000
+    await stop()
+    await open()
+    expect(app!.accountCount()).toBe(2)
+    // 活跃教练刷新在线时间，确保后续不会满 7 天。
+    expect((await request('/api/game', undefined, active.token)).status).toBe(200)
+
+    // 同时验证换季失败回滚与清理逻辑（seasonEndAt 距开季 ~7.5 天，idle 超过 7 天，active 仅离线 ~1.5 天）。
     await stop()
     fs.writeFileSync(path.join(queueDir, 'index.json'), JSON.stringify([{ id: jobId, season: 1, status: 'published' }]))
     fs.writeFileSync(path.join(queueDir, `${jobId}.input.json`), '{}')
     fs.writeFileSync(resultFile, '{}')
     await open(); expect(fs.existsSync(resultFile)).toBe(true)
     await roll(true); expect(fs.existsSync(resultFile)).toBe(true) // 世界虽已换季，账号提交失败，不能清成果。
-    await roll(); expect(fs.existsSync(resultFile)).toBe(false)
-    expect(app!.accountCount()).toBe(2) // 第 2 赛季才是第一个完整缺席赛季。
+    // 活跃教练在赛季中上线打卡（一整个完整赛季为 7.0 天，不上线会被正常清理）
+    clock += 3 * 24 * 60 * 60_000
     expect((await request('/api/game', undefined, active.token)).status).toBe(200)
-    await roll(); expect(app!.accountCount()).toBe(1)
+    await roll(); expect(fs.existsSync(resultFile)).toBe(false)
+    expect(app!.accountCount()).toBe(1)
     expect((await request('/api/game', undefined, first.token)).status).toBe(401)
     expect((await request('/api/agent/state', undefined, agent.token)).status).toBe(401)
     expect((await request('/api/login', { username: 'idle', password: 'first-password' })).status).toBe(401)
+
+    // 再测试赛季中（不换季）直接满 7 天离线 + 孤儿账号清理：
+    expect((await request('/api/game', undefined, active.token)).status).toBe(200)
+    const midIdle = await register('mid_idle', 'd2n_02', 'mid-password')
+    const orphan = await register('orphan_idle', 'd2n_03', 'orphan-password')
+    expect(app!.accountCount()).toBe(3)
+    await stop()
+    // 把 orphan_idle 从 world.owners 移除，模拟无球队孤儿账号
+    const worldNoOrphan = stored()
+    delete worldNoOrphan.owners['d2n_03']
+    fs.writeFileSync(worldFile, JSON.stringify(worldNoOrphan))
+    // 推进 4 天让 active 打卡续命，再推进 3 天 + 1 秒让 mid_idle 与 orphan_idle 都满 7 天
+    clock += 4 * 24 * 60 * 60_000
+    await open()
+    expect(app!.accountCount()).toBe(3)
+    expect((await request('/api/game', undefined, active.token)).status).toBe(200)
+    await stop()
+    clock += (IDLE_COACH_RELEASE_MS - 4 * 24 * 60 * 60_000) + 1000
+    await open()
+    expect(app!.accountCount()).toBe(1) // mid_idle 和 orphan_idle 都被立刻清理，仅剩 active
+    expect((await request('/api/game', undefined, midIdle.token)).status).toBe(401)
+    expect((await request('/api/game', undefined, orphan.token)).status).toBe(401)
+
     await stop()
     // 模拟交接事务成功后，旧 world.json 尚未替换即重启。
     const stale = stored(); stale.owners[club] = first.user.id
@@ -86,6 +120,7 @@ it('连续两个完整赛季未上线才删除教练；换季清任务，重启�
     let saved: GameState
     try {
       expect(db.prepare('SELECT 1 FROM accounts WHERE id=?').get(first.user.id)).toBeUndefined()
+      expect(db.prepare('SELECT 1 FROM accounts WHERE id=?').get(orphan.user.id)).toBeUndefined()
       expect(db.prepare('SELECT 1 FROM sessions WHERE account_id=?').get(first.user.id)).toBeUndefined()
       const row = db.prepare('SELECT a.id, a.game_json FROM accounts a JOIN club_handovers h ON h.holder=a.id WHERE h.club_id=?').get(club)!
       saved = JSON.parse(row.game_json as string)

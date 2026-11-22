@@ -410,6 +410,7 @@ export class AccountStore {
       this.db.prepare('DELETE FROM accounts WHERE id=?').run(previous.id)
       this.db.prepare('INSERT INTO club_handovers (club_id, holder, initial_name) VALUES (?, ?, ?)').run(clubId, next.id, initialName)
     })
+    this.dirty.delete(previous.id)
     this.pendingMatchDetails.delete(next.id)
     this.pendingSeasonFixtures.delete(next.id)
     this.pendingMatchDetails.delete(previous.id)
@@ -417,6 +418,24 @@ export class AccountStore {
     this.retired.add(previous)
     this.accounts[index] = next
     for (const [token, id] of Object.entries(this.sessions)) if (id === previous.id) delete this.sessions[token]
+  }
+
+  /** 彻底删除无归属球队的长期离线/孤儿账号及其会话和附属部件。 */
+  deleteAccount(account: Account): void {
+    this.assertOpen()
+    this.flushSync()
+    const index = this.accounts.indexOf(account)
+    if (index < 0) return
+    transaction(this.db, () => {
+      prepareAccountParts(this.db)(account.id, [])
+      this.db.prepare('DELETE FROM accounts WHERE id=?').run(account.id)
+    })
+    this.dirty.delete(account.id)
+    this.pendingMatchDetails.delete(account.id)
+    this.pendingSeasonFixtures.delete(account.id)
+    this.retired.add(account)
+    this.accounts.splice(index, 1)
+    for (const [token, id] of Object.entries(this.sessions)) if (id === account.id) delete this.sessions[token]
   }
 
   private assertOpen(): void {

@@ -214,6 +214,25 @@ export function computeWorldTable(ids: string[], fixtures: Fixture[], names: Map
   })
 }
 
+export function hasDualD1(world: Pick<WorldState, 'divisions' | 'clubs'>): boolean {
+  const d1Divs = world.divisions?.filter((division) => division.tier === 'division1') ?? []
+  if (d1Divs.length >= 2) return true
+  return (world.clubs ?? []).some((club) => club.tier === 'division1' && (club.conference === 'north' || club.conference === 'south'))
+}
+
+/** 二级达到 4 个及以上赛区（或一级已为双区）时启用一级南北双区制（1 冠联 → 2 一级 → N 二级，升级杯升 6 队）。 */
+export function shouldUseDualD1(world: Pick<WorldState, 'divisions' | 'clubs'>): boolean {
+  if (hasDualD1(world)) return true
+  const d2Divs = world.divisions?.filter((division) => division.tier === 'division2') ?? []
+  if (d2Divs.length >= 4) return true
+  const d2Confs = new Set((world.clubs ?? []).filter((club) => club.tier === 'division2').map((club) => club.conference ?? 'north'))
+  return d2Confs.size >= 4
+}
+
+export function promotionSpotCount(world: Pick<WorldState, 'divisions' | 'clubs'>): number {
+  return shouldUseDualD1(world) ? 6 : 3
+}
+
 export function buildWorldDivision(
   world: WorldState,
   id: string,
@@ -221,7 +240,7 @@ export function buildWorldDivision(
   startedAt: number,
   index = world.seasonIndex,
 ): SeasonState {
-  const tier: TierId = id === 'champions' ? 'champions' : id === 'division1' ? 'division1' : 'division2'
+  const tier: TierId = id === 'champions' ? 'champions' : (id === 'division1' || id.startsWith('d1-')) ? 'division1' : 'division2'
   const conference: ConferenceId | undefined = conferenceOfDivision(id)
   const clubs = world.clubs.filter((club) => divisionIdForTier(club.tier, club.conference) === id)
   const clubIds = clubs.map((club) => club.id)
@@ -249,9 +268,9 @@ export function buildWorldDivision(
   return season
 }
 
-/** 二级联赛现有的赛区 ID：南北两区 + 后来开出的新区。 */
+/** 现有的赛区 ID：冠军、一级（单区或南北双区）以及二级各赛区。 */
 export function divisionIdsOf(world: WorldState): string[] {
-  const ids = ['champions', 'division1']
+  const ids = hasDualD1(world) ? ['champions', 'd1-north', 'd1-south'] : ['champions', 'division1']
   const zones = new Set<string>()
   for (const club of world.clubs.filter((item) => item.tier === 'division2')) {
     zones.add(divisionIdForTier('division2', club.conference))
@@ -1324,8 +1343,103 @@ function groupRanking(game: GameState, teams: string[], groups: string[][], inde
  */
 function runPromotionPlayoff(game: GameState): PromotionPlayoff {
   const world = game.world!
-  const seed = playoffSeed(world)
+  const spots = promotionSpotCount(world)
   const matches: PromotionMatch[] = []
+  if (spots === 6) {
+    const zones = world.divisions
+      .filter((division) => division.tier === 'division2')
+      .sort((a, b) => (a.divisionId ?? '').localeCompare(b.divisionId ?? ''))
+    const rankedByZone = zones.map((zone) => zone.table.map((row) => ({ id: row.teamId, row })))
+    const compareRow = (a: { id: string; row: SeasonTableRow }, b: { id: string; row: SeasonTableRow }) =>
+      b.row.points - a.row.points || (b.row.gf - b.row.ga) - (a.row.gf - a.row.ga) || b.row.gf - a.row.gf || a.id.localeCompare(b.id)
+    const byes: string[] = []
+    const pairs: [string, string][] = []
+    const zCount = zones.length
+    if (zCount === 4) {
+      for (const list of rankedByZone) {
+        if (list[0]) byes.push(list[0].id)
+        if (list[1]) byes.push(list[1].id)
+        if (list[2] && list[3]) pairs.push([list[2].id, list[3].id])
+      }
+    } else if (zCount === 5) {
+      const thirds: { id: string; row: SeasonTableRow }[] = []
+      for (const list of rankedByZone) {
+        if (list[0]) byes.push(list[0].id)
+        if (list[1]) byes.push(list[1].id)
+        if (list[2]) thirds.push(list[2])
+      }
+      thirds.sort(compareRow)
+      if (thirds.length >= 4) {
+        pairs.push([thirds[0].id, thirds[3].id], [thirds[1].id, thirds[2].id])
+      }
+    } else if (zCount === 6) {
+      for (const list of rankedByZone) {
+        if (list[0]) byes.push(list[0].id)
+        if (list[1] && list[2]) pairs.push([list[1].id, list[2].id])
+      }
+    } else if (zCount < 12) {
+      const seconds: { id: string; row: SeasonTableRow }[] = []
+      for (const list of rankedByZone) {
+        if (list[0]) byes.push(list[0].id)
+        if (list[1]) seconds.push(list[1])
+      }
+      seconds.sort(compareRow)
+      const needPairs = Math.max(0, 12 - byes.length)
+      const picked = seconds.slice(0, needPairs * 2)
+      for (let i = 0; i + 1 < picked.length; i += 2) {
+        pairs.push([picked[i].id, picked[picked.length - 1 - i].id])
+      }
+    } else {
+      const firsts = rankedByZone.map((list) => list[0]).filter((item): item is { id: string; row: SeasonTableRow } => !!item).sort(compareRow)
+      const byeCount = Math.max(0, 24 - firsts.length)
+      byes.push(...firsts.slice(0, byeCount).map((item) => item.id))
+      const rest = firsts.slice(byeCount, byeCount + (12 - byeCount) * 2)
+      for (let i = 0; i + 1 < rest.length; i += 2) pairs.push([rest[i].id, rest[rest.length - 1 - i].id])
+    }
+    const teams = [...byes, ...pairs.flat()]
+    const qualified = [...byes]
+    pairs.forEach(([homeId, awayId], index) => {
+      const match = simulatePlayoffMatch(game, homeId, awayId, 'qualifier', index)
+      matches.push(match)
+      qualified.push(winnerOf(match))
+    })
+    const rng = derivedRng(splitSeed(game.seed, `playoff-groups-${world.seasonIndex}`), 'groups')
+    const shuffled = [...qualified]
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const other = rng.int(i + 1)
+      ;[shuffled[i], shuffled[other]] = [shuffled[other], shuffled[i]]
+    }
+    const groupTeams = [shuffled.slice(0, 4), shuffled.slice(4, 8), shuffled.slice(8, 12)].filter((g) => g.length > 0)
+    const groups: string[][] = groupTeams.map(() => [])
+    const rankings = groupTeams.map((list, index) => groupRanking(game, list, groups, index, matches))
+    const winners = rankings.map((list) => list[0]).filter((id): id is string => !!id)
+    const crossPairs: [string, string][] = []
+    if (rankings.length === 3) {
+      const pairings: [number, number][] = [[0, 1], [1, 2], [2, 0]]
+      for (const [gA, gB] of pairings) {
+        if (rankings[gA]?.[1] && rankings[gB]?.[2]) crossPairs.push([rankings[gA][1], rankings[gB][2]])
+      }
+    }
+    const runnerUps = crossPairs.flat()
+    const playoffWinners: string[] = []
+    crossPairs.forEach(([hId, aId], idx) => {
+      const match = simulatePlayoffMatch(game, hId, aId, 'final', 500 + idx)
+      matches.push(match)
+      playoffWinners.push(winnerOf(match))
+    })
+    const promoted = [...new Set([...winners, ...playoffWinners])].slice(0, 6)
+    return {
+      seasonIndex: world.seasonIndex,
+      teams,
+      matches,
+      promoted,
+      finished: true,
+      groups,
+      runnerUps,
+    }
+  }
+
+  const seed = playoffSeed(world)
   const qualified: string[] = [...seed.champions]
   // 每个赛区的 2/3 名加赛一轮。
   seed.byZone.forEach((zone, index) => {
@@ -1394,34 +1508,154 @@ function assignRelegatedToD2(world: WorldState, relegated: string[], current: Ma
   }
 }
 
+function addExpansionClubs(
+  world: WorldState,
+  seed: number,
+  tier: 'division1' | 'division2',
+  count: number,
+  conferencePicker: (index: number) => ConferenceId | undefined,
+): WorldClub[] {
+  if (count <= 0) return []
+  const usedNames = new Set(world.clubs.flatMap((club) => [club.name, club.initialName ?? club.name]))
+  const existingIds = new Set(world.clubs.map((club) => club.id))
+  const rng = derivedRng(seed, `expand-${tier}-${world.seasonIndex}`, count)
+  const identities = pickExpandedZoneClubs(tier === 'division1' ? 19 : 23, usedNames, count)
+  let nextNum = tier === 'division1' ? 21 : 1
+  const created: WorldClub[] = identities.map(([name, enName, color], index) => {
+    let id = ''
+    do {
+      id = tier === 'division1' ? `d1_${String(nextNum).padStart(2, '0')}` : `d2z99_${String(nextNum).padStart(2, '0')}`
+      nextNum++
+    } while (existingIds.has(id))
+    existingIds.add(id)
+    const strength = tier === 'division1' ? (index < 5 ? 4 : index < 13 ? 3 : 2) : (index < 1 ? 3 : 2)
+    return {
+      id,
+      name,
+      initialName: name,
+      enName,
+      short: name.slice(0, 2),
+      color,
+      accent: '#0f172a',
+      style: tier === 'division1' ? '一级联赛球队。' : '二级联赛球队。',
+      formationId: rng.pick(['4-4-2', '4-3-3', '4-2-3-1', '3-5-2', '5-3-2', '4-1-4-1', '3-4-3', '4-1-2-1-2'] as const),
+      tactics: { ...rng.pick(EXPAND_TACTICS) },
+      strength,
+      playerNames: [],
+      tier,
+      conference: conferencePicker(index),
+      starPlayerIds: [],
+      starCount: tier === 'division1' ? (strength >= 3 ? 2 : 1) : 0,
+    }
+  })
+  world.clubs.push(...created)
+  return created
+}
+
+function assignDualD1Conferences(world: WorldState, incoming: WorldClub[], fullRebalance: boolean): void {
+  const allD1 = world.clubs.filter((club) => club.tier === 'division1')
+  if (fullRebalance) {
+    const sorted = [...allD1].sort((a, b) => b.strength - a.strength || a.id.localeCompare(b.id))
+    sorted.forEach((club, index) => {
+      // 蛇形均衡分入南北两区，保证每区恰好 20 队且实力均衡
+      const pair = Math.floor(index / 2)
+      club.conference = (index % 2 === 0 ? pair % 2 === 0 : pair % 2 === 1) ? 'north' : 'south'
+    })
+    return
+  }
+  let northCount = allD1.filter((club) => club.conference === 'north' && !incoming.includes(club)).length
+  let southCount = allD1.filter((club) => club.conference === 'south' && !incoming.includes(club)).length
+  for (const club of incoming) {
+    if (northCount <= southCount) {
+      club.conference = 'north'
+      northCount++
+    } else {
+      club.conference = 'south'
+      southCount++
+    }
+  }
+}
+
 function promoteAndRelegate(game: GameState, protectedClubs: ReadonlySet<string> = new Set()): { promoted: string[]; relegated: string[] } {
   const world = game.world!
   const current = new Map(world.clubs.map((club) => [club.id, club]))
   const resolveClub = (id: string) => current.get(id) ?? world.clubs.find((club) => club.squadKey === id)
   const champions = world.divisions.find((division) => division.divisionId === 'champions')!
-  const d1 = world.divisions.find((division) => division.divisionId === 'division1')!
+  const d1Divisions = world.divisions
+    .filter((division) => division.tier === 'division1')
+    .sort((a, b) => (a.divisionId ?? '').localeCompare(b.divisionId ?? ''))
+  const dualNow = d1Divisions.length >= 2
+  const dualNext = shouldUseDualD1(world)
   // 附加赛已完赛时直接沿用实时升级杯/季后赛结果；未完赛则回退兜底结算。
   const playoff = world.promotionPlayoff?.seasonIndex === world.seasonIndex && world.promotionPlayoff.finished && world.promotionPlayoff.promoted.length > 0
     ? world.promotionPlayoff
     : runPromotionPlayoff(game)
   world.promotionPlayoff = playoff
+
   const champsBottom = champions.table.slice(-3).map((row) => row.teamId)
-  const d1Top = d1.table.slice(0, 3).map((row) => row.teamId)
-  const d1Bottom = d1.table.slice(-3).map((row) => row.teamId)
+  let d1Top: string[]
+  let d1Bottom: string[]
+  if (dualNow) {
+    // 一级南北双区：两区冠军直接升冠联；两区亚军按联赛积分/净胜球/进球比较，胜者拿第 3 席
+    const firsts = d1Divisions.map((div) => div.table[0]?.teamId).filter((id): id is string => !!id)
+    const seconds = d1Divisions
+      .map((div) => div.table[1])
+      .filter((row): row is SeasonTableRow => !!row)
+      .sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf || a.teamId.localeCompare(b.teamId))
+    d1Top = [...firsts, ...(seconds[0] ? [seconds[0].teamId] : [])].slice(0, 3)
+    d1Bottom = d1Divisions.flatMap((div) => div.table.slice(-3).map((row) => row.teamId))
+  } else {
+    const d1 = d1Divisions[0] ?? world.divisions.find((division) => division.divisionId === 'division1')!
+    d1Top = d1.table.slice(0, 3).map((row) => row.teamId)
+    d1Bottom = d1.table.slice(-3).map((row) => row.teamId)
+  }
+
   const promoted = playoff.promoted.map((id) => resolveClub(id)?.id ?? id)
+  const incomingD1: WorldClub[] = []
   for (const id of champsBottom) {
     const club = resolveClub(id)
-    if (club) club.tier = 'division1'
+    if (club) {
+      club.tier = 'division1'
+      club.conference = undefined
+      incomingD1.push(club)
+    }
   }
   for (const id of d1Top) {
     const club = resolveClub(id)
-    if (club) club.tier = 'champions'
+    if (club) {
+      club.tier = 'champions'
+      club.conference = undefined
+    }
   }
   for (const id of promoted) {
     const club = resolveClub(id)
-    if (club) { club.tier = 'division1'; club.conference = undefined }
+    if (club) {
+      club.tier = 'division1'
+      club.conference = undefined
+      incomingD1.push(club)
+    }
   }
   assignRelegatedToD2(world, d1Bottom, current)
+
+  if (dualNext) {
+    // 一级单区扩充至南北双区（40 队）时，补充缺口 AI 球队并补齐二级各区至恰好 20 队
+    const d1CurrentCount = world.clubs.filter((club) => club.tier === 'division1').length
+    const d1Missing = Math.max(0, 40 - d1CurrentCount)
+    if (d1Missing > 0) {
+      const addedD1 = addExpansionClubs(world, game.seed, 'division1', d1Missing, () => undefined)
+      incomingD1.push(...addedD1)
+      for (const c of addedD1) current.set(c.id, c)
+    }
+    const d2Confs = [...new Set(world.clubs.filter((club) => club.tier === 'division2').map((club) => club.conference ?? 'north'))]
+    for (const conf of d2Confs) {
+      const count = world.clubs.filter((club) => club.tier === 'division2' && (club.conference ?? 'north') === conf).length
+      if (count < 20) {
+        const addedD2 = addExpansionClubs(world, splitSeed(game.seed, `d2-refill-${conf}`), 'division2', 20 - count, () => conf)
+        for (const c of addedD2) current.set(c.id, c)
+      }
+    }
+    assignDualD1Conferences(world, incomingD1, !dualNow)
+  }
   for (const club of world.clubs) {
     club.starCount = club.tier === 'champions' ? (club.strength >= 4 ? 4 : 3) : club.tier === 'division1' ? (club.strength >= 3 ? 2 : 1) : 0
   }
@@ -1771,6 +2005,7 @@ export function ensureWorldCalendar(world: WorldState): boolean {
 export function worldDivisionLabel(_world: WorldState, divisionId: string): string {
   if (divisionId === 'champions') return '冠军联赛'
   if (divisionId === 'division1') return '一级联赛'
+  if (divisionId.startsWith('d1-')) return `一级联赛 · ${conferenceLabel(conferenceOfDivision(divisionId) ?? 'north')}`
   return `二级联赛 · ${conferenceLabel(conferenceOfDivision(divisionId) ?? 'north')}`
 }
 

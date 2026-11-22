@@ -1,4 +1,4 @@
-import { d2ClubChoices, divisionLeaders, worldDivisionLabel, worldTierLabel } from '../../game/world.ts'
+import { d2ClubChoices, divisionLeaders, hasDualD1, promotionSpotCount, worldDivisionLabel, worldTierLabel } from '../../game/world.ts'
 import { latestPlayedRound } from '../../game/standings-history.ts'
 import { leaderPanels } from '../leaderboard.ts'
 import { renderClubRankTrendPanel } from '../rank-chart.ts'
@@ -13,30 +13,36 @@ import type { Fixture, SeasonTableRow, TierId, WorldState } from '../../game/typ
 
 type DivisionTierMeta = { id: string; label: string; note: string; tier: TierId }
 
-const BASE_TIERS: DivisionTierMeta[] = [
-  { id: 'champions', label: '冠军联赛', note: '20 队 · 顶级 3-4 名真实球星', tier: 'champions' },
-  { id: 'division1', label: '一级联赛', note: '20 队 · 1-2 名真实球星', tier: 'division1' },
-  { id: 'd2-north', label: '二级联赛 · 北区', note: '20 队 · 无真实球星', tier: 'division2' },
-  { id: 'd2-south', label: '二级联赛 · 南区', note: '20 队 · 无真实球星', tier: 'division2' },
-]
-
 function allTierMetas(world: WorldState): DivisionTierMeta[] {
   const snapshot = onlineState.status === 'online' ? publicWorld : null
-  const items = [...BASE_TIERS]
-  const seen = new Set(items.map((item) => item.id))
   const extraIds = [
     ...(snapshot?.divisions.map((d) => d.id) ?? []),
     ...world.divisions.map((d) => d.divisionId ?? ''),
   ]
+  const dualD1 = extraIds.includes('d1-north') || extraIds.includes('d1-south') || hasDualD1(world)
+  const items: DivisionTierMeta[] = [
+    { id: 'champions', label: '冠军联赛', note: '20 队 · 顶级 3-4 名真实球星', tier: 'champions' },
+    ...(dualD1
+      ? [
+          { id: 'd1-north', label: '一级联赛 · 北区', note: '20 队 · 1-2 名真实球星', tier: 'division1' as TierId },
+          { id: 'd1-south', label: '一级联赛 · 南区', note: '20 队 · 1-2 名真实球星', tier: 'division1' as TierId },
+        ]
+      : [{ id: 'division1', label: '一级联赛', note: '20 队 · 1-2 名真实球星', tier: 'division1' as TierId }]),
+    { id: 'd2-north', label: '二级联赛 · 北区', note: '20 队 · 无真实球星', tier: 'division2' },
+    { id: 'd2-south', label: '二级联赛 · 南区', note: '20 队 · 无真实球星', tier: 'division2' },
+  ]
+  const seen = new Set(items.map((item) => item.id))
   for (const id of extraIds) {
     // 快照和账号存档通常包含同一赛区；逐项检查，避免两边的扩展赛区重复渲染。
     if (!id || seen.has(id)) continue
+    if (dualD1 && id === 'division1') continue
     seen.add(id)
+    const tier: TierId = id === 'champions' ? 'champions' : (id === 'division1' || id.startsWith('d1-')) ? 'division1' : 'division2'
     items.push({
       id,
       label: worldDivisionLabel(world, id),
-      note: '20 队 · 扩展赛区',
-      tier: id === 'champions' ? 'champions' : id === 'division1' ? 'division1' : 'division2',
+      note: tier === 'division1' ? '20 队 · 1-2 名真实球星' : '20 队 · 扩展赛区',
+      tier,
     })
   }
   return items
@@ -175,7 +181,10 @@ export function renderWorld(): string {
   }
   const world = game.world
   const tiers = allTierMetas(world)
+  const d1Tiers = tiers.filter((item) => item.tier === 'division1')
   const d2Tiers = tiers.filter((item) => item.tier === 'division2')
+  const dualD1 = d1Tiers.length >= 2
+  const promoSpots = promotionSpotCount(world)
   const playerClub = world.clubs.find((club) => club.id === PLAYER_TEAM_ID)
   const activeId = ui.worldDivision && tiers.some((item) => item.id === ui.worldDivision) ? ui.worldDivision : world.playerDivisionId
   const active = tiers.find((item) => item.id === activeId) ?? tiers[0]
@@ -211,13 +220,13 @@ export function renderWorld(): string {
     ${pageHead({
       kicker: `赛季 ${snapshot?.seasonIndex ?? world.seasonIndex} · ${snapshot?.clubs.length ?? world.clubs.length} 支球队`,
       title: '三级共享世界',
-      sub: `冠军联赛 / 一级联赛 / 二级联赛（${d2Summary}）。当前执教：<b>${ownName(game.clubName)}</b> · ${worldTierLabel(playerClub?.tier ?? 'division2')}${playerClub?.conference ? ` · ${conferenceLabel(playerClub.conference)}` : ''}。`,
+      sub: `冠军联赛 / 一级联赛${dualD1 ? '（南北双区）' : ''} / 二级联赛（${d2Summary}）。当前执教：<b>${ownName(game.clubName)}</b> · ${worldTierLabel(playerClub?.tier ?? 'division2')}${playerClub?.conference ? ` · ${conferenceLabel(playerClub.conference)}` : ''}。`,
       actions: `${onlineState.status === 'online' ? '' : '<button class="btn" data-action="new-game">开始本地新游戏</button>'}`,
     })}
     ${inPostseason(game) ? `<div class="banner info">${icon('clock', 18)}<b>赛后休整 · 还剩 ${esc(nextSeasonCountdown(game))}</b><span>升级杯正在进行；所有球队都可以约友谊赛，赛季将在休整窗口结束后自动开始。</span></div>` : ''}
     <div class="pyramid">
       <div class="pyramid-level l1">${tierButton(world, tiers[0], activeId)}</div>
-      <div class="pyramid-level l2">${tierButton(world, tiers[1], activeId)}</div>
+      <div class="pyramid-level l2${dualD1 ? ' dual' : ''}">${d1Tiers.map((item) => tierButton(world, item, activeId)).join('')}</div>
       <div class="pyramid-level l3">${d2Tiers.map((item) => tierButton(world, item, activeId)).join('')}</div>
     </div>
     <div class="grid season-grid">
@@ -227,10 +236,14 @@ export function renderWorld(): string {
         ${leaderPanels(division, { limit: 5 })}
         ${panel('升降级', `
           <ul class="rule-list">
-            <li>${icon('flag', 13)}一级联赛前三升入冠军联赛；冠军联赛后三降入一级联赛。</li>
-            <li>${icon('flag', 13)}一级联赛后三降入二级联赛。</li>
-            <li>${icon('flag', 13)}二级每个赛区的前 3 名进入升级杯：各区第 1 轮空，2/3 名先加赛一轮；出线的人和轮空的球队随机分成两组打循环（瑞士轮），小组第一直接升级，两个小组第二再打一轮，胜者拿到第 3 个升级名额。</li>
-            <li>${icon('flag', 13)}赛区数量不影响升级名额：不管开多少个区，二级每个赛季都是 3 队升入一级联赛。</li>
+            ${dualD1
+              ? `<li>${icon('flag', 13)}一级联赛南北两区第 1 名直接升入冠军联赛，两区第 2 名按积分/净胜球/进球比较，成绩更好者拿到第 3 个升级名额；冠军联赛后三降入一级联赛。</li>
+                 <li>${icon('flag', 13)}一级联赛南北两区各自后三名（共 6 队）降入二级联赛。</li>`
+              : `<li>${icon('flag', 13)}一级联赛前三升入冠军联赛；冠军联赛后三降入一级联赛。</li>
+                 <li>${icon('flag', 13)}一级联赛后三降入二级联赛。${promoSpots === 6 ? '（下赛季起一级联赛扩编为南北双区，本季二级升 6 队）' : ''}</li>`}
+            ${promoSpots === 6
+              ? `<li>${icon('flag', 13)}二级升级杯（6 席方案）：首轮资格赛决出 12 强，分 A / B / C 3 个 4 队小组踢 3 轮单循环；各组第 1 直接升级（3 队），3 场跨组附加赛（A2vB3、B2vC3、C2vA3）胜者升级（3 队），共 6 队升入一级联赛。</li>`
+              : `<li>${icon('flag', 13)}二级每个赛区的前 3 名进入升级杯：各区第 1 轮空，2/3 名先加赛一轮；出线球队与轮空球队随机分成两组踢单循环，小组第一直接升级，两个小组第二附加赛决出第 3 个升级名额。</li>`}
           </ul>
           ${playoff
             ? `<p class="small">升级杯${playoff.finished ? '已完赛，升级球队' : '进行中，已锁定升级'}：${playoff.promoted.map((id) => ownName(clubLabel(id), clubLabel(id) === game.clubName)).join('、') || '待决出'}</p>`
@@ -239,7 +252,7 @@ export function renderWorld(): string {
         `)}
         ${world.history.length ? panel('历届荣誉', `<div class="rows">${world.history.slice().reverse().slice(0, 5).map((item) => `<div class="row-line"><span class="dim">第 ${item.seasonIndex} 赛季</span><span>冠军 ${ownName(item.champion, item.champion === game.clubName)}</span><span class="muted small">升级 ${item.promotions.length} 队</span></div>`).join('')}</div>`, { flush: true }) : ''}
         ${panel('球队席位', `
-          <p class="hint">新账号可选择二级联赛空位，也可接手原教练连续两个完整赛季未上线后释放的球队（不限级别）。释放时恢复原队名，保留阵容与经营进度。没有可接管球队时，服务器会增开二级赛区。联机账号不能自行重开世界；退出账号后可以创建独立的本地存档。</p>
+          <p class="hint">新账号可选择二级联赛空位，也可接手原教练连续 7 天未上线后自动释放的球队（超过 3 天未上线由 AI 临时接管，满 7 天自动清理账号并释放席位，不限级别）。释放时恢复原队名，保留阵容与经营进度。没有可接管球队时，服务器会增开二级赛区。联机账号不能自行重开世界；退出账号后可以创建独立的本地存档。</p>
           <div class="club-chips">${picks.slice(0, 8).map((club) => `<span class="club-chip">${crest({ name: club.name, color: colorOf(club.id) }, 15)}${esc(club.name)}<small>${club.conference === 'north' ? '北区' : '南区'}</small></span>`).join('')}</div>
         `)}
       </div>

@@ -96,6 +96,9 @@ import {
 
 /** 玩家超过 3 天未上线（现实 72 小时）后，球队临时进入 AI 接管状态；重新上线即刻解除。 */
 export const AI_TAKEOVER_INACTIVE_MS = 3 * 24 * 60 * 60_000
+/** AI 临时接管最长维持至连续 7 天未上线（1 周）；满 7 天未上线即清理教练账号并释放球队席位（保留进度）。 */
+export const IDLE_COACH_RELEASE_MS = 7 * 24 * 60 * 60_000
+const IDLE_SWEEP_INTERVAL_MS = 5 * 60_000
 const ONLINE_PERSIST_INTERVAL_MS = 5 * 60_000
 
 import { AccountStore, isVacantSeat, vacantSeatId, type Account } from './account-store.ts'
@@ -2317,28 +2320,75 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   // 扩区名按当时可用的名字抽取，不能只按队号倒推。旧版改名不改 enName。
   const expandedNames = new Map(pickExpandedZoneClubs(3, new Set(), Infinity).map(([name, en]) => [en, name]))
 
-  function releaseIdleCoach(account: Account, clubId: string, finishedSeason: number): boolean {
-    if (isVacantSeat(account.id) || isAccountOnlineNow(account) || account.lastOnlineSeason === undefined || finishedSeason - account.lastOnlineSeason < 2) return false
-    const club = sharedWorld.world.clubs.find(item => item.id === clubId)!
-    const name = initialClubName(club)
-    if (!name || sharedWorld.world.clubs.some(other => other.id !== clubId && other.name === name)) {
-      console.warn(`闲置席位 ${clubId} 原名不明或被占用，保留账号等待核查`)
-      return false
-    }
+  function releaseIdleCoach(account: Account, clubId: string, at = now()): boolean {
+    if (isVacantSeat(account.id) || isAccountOnlineNow(account)) return false
+    const lastOnline = account.lastOnlineAt ?? account.createdAt
+    if (at - lastOnline < IDLE_COACH_RELEASE_MS) return false
+    const club = sharedWorld.world.clubs.find(item => item.id === clubId)
+    if (!club) return false
+    const originalName = initialClubName(club)
+    const name = originalName && !sharedWorld.world.clubs.some(other => other.id !== clubId && other.name === originalName)
+      ? originalName
+      : club.name
     const id = vacantSeatId(clubId)
     const seat: Account = { id, username: id, salt: '', passwordHash: '', game: { ...account.game, clubName: name },
       revision: account.revision, lastUserRevision: account.lastUserRevision, appliedMatchIds: account.appliedMatchIds,
-      offerKey: account.offerKey, aiTakeoverKey: account.aiTakeoverKey, createdAt: account.createdAt, updatedAt: now() }
+      offerKey: account.offerKey, aiTakeoverKey: account.aiTakeoverKey, createdAt: account.createdAt, updatedAt: at }
     accountStore.replaceHolder(account, seat, clubId, name)
+    accountSync.delete(account)
     sharedWorld.owners[clubId] = id
     club.name = name
-    sharedWorld.teams![clubId].name = name
+    if (sharedWorld.teams?.[clubId]) sharedWorld.teams[clubId].name = name
     const openingTeam = sharedWorld.cupOpening?.teams[clubId]
     if (openingTeam) {
       sharedWorld.cupOpening!.teams[clubId] = Object.freeze({ ...openingTeam, name })
       cachedCupOpening = null
     }
     return true
+  }
+
+  /** 清理连续 7 天未上线的教练账号：有球队者交接为空缺托管席（保留球队进度并恢复原名），无球队孤儿账号直接删除。 */
+  function sweepIdleCoaches(at = now()): number {
+    let released = 0
+    let worldDirty = false
+    for (const account of [...db.accounts]) {
+      if (isVacantSeat(account.id) || isAccountOnlineNow(account)) continue
+      const lastOnline = account.lastOnlineAt ?? account.createdAt
+      if (at - lastOnline < IDLE_COACH_RELEASE_MS) continue
+      const clubId = ownedClubId(account)
+      if (clubId && sharedWorld.world.clubs.some(item => item.id === clubId)) {
+        try {
+          if (releaseIdleCoach(account, clubId, at)) {
+            released++
+            worldDirty = true
+          }
+        } catch (error) {
+          console.error(`闲置教练交接失败 (${account.username} / ${clubId})`, error)
+        }
+      } else {
+        try {
+          accountStore.deleteAccount(account)
+          accountSync.delete(account)
+          released++
+        } catch (error) {
+          console.error(`闲置孤儿账号清理失败 (${account.username})`, error)
+        }
+      }
+    }
+    if (worldDirty) {
+      try { persistWorld({ world: true, teams: true, immediate: true }) }
+      catch (error) { console.error('交接已记入 SQLite，世界归属将在重启时恢复', error) }
+    }
+    if (released > 0) console.info(`已自动清理 ${released} 名连续 7 天未上线的教练账号`)
+    return released
+  }
+
+  let lastIdleSweepAt = -Infinity
+  function autoSweepIdleCoaches(): void {
+    const t = now()
+    if (t - lastIdleSweepAt < IDLE_SWEEP_INTERVAL_MS) return
+    lastIdleSweepAt = t
+    sweepIdleCoaches(t)
   }
 
   /** 仅复制换季代表账号所需的最小可变切片，避免把历史战报/球员卡/PvE 冻结池整份深拷贝。 */
@@ -2460,11 +2510,17 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       representative = null
       const teamSeed = splitSeed(sharedWorld.seed, `world-teams-${next.seasonIndex}`)
       const marketPoolIds = new Set(market.pool.map((player) => player.id))
+      const provisionalAiClubs = sharedWorld.aiClubs ? structuredClone(sharedWorld.aiClubs) : {}
+      for (const club of next.clubs) {
+        if (!provisionalAiClubs[club.id]) {
+          provisionalAiClubs[club.id] = createAIClub(club, splitSeed(sharedWorld.seed, `ai-club-${club.id}`))
+        }
+      }
       let provisional: Record<string, AITeam> | null = rolloverOwnerlessTeams(
         next,
         teamSeed,
         survivedAITeams,
-        sharedWorld.aiClubs ? structuredClone(sharedWorld.aiClubs) : undefined,
+        provisionalAiClubs,
         marketPoolIds,
       )
       const drafts = managed.map(({ account, clubId }) => {
@@ -2497,6 +2553,12 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         ...drafts.flatMap(({ game }) => game.roster.map((player) => player.id)),
       ])
       const managedClubIds = new Set(drafts.map(({ clubId }) => clubId))
+      sharedWorld.aiClubs ??= {}
+      for (const club of next.clubs) {
+        if (!sharedWorld.aiClubs[club.id]) {
+          sharedWorld.aiClubs[club.id] = createAIClub(club, splitSeed(sharedWorld.seed, `ai-club-${club.id}`))
+        }
+      }
       const teams = rolloverOwnerlessTeams(next, teamSeed, survivedAITeams, sharedWorld.aiClubs, excludedForAI, managedClubIds)
       for (const { clubId, game } of drafts) {
         teams[clubId] = { ...teams[clubId], players: structuredClone(game.roster), lineup: structuredClone(game.lineup) }
@@ -2561,15 +2623,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       // world.json、赛果及所有换季存档均已提交。维护失败不能误报换季失败。
       try { matchQueue.prunePublishedBefore(next.seasonIndex) }
       catch (error) { console.error('换季后的比赛任务清理失败', error) }
-      let holderChanged = false
-      for (const { account, clubId } of drafts) {
-        try { if (releaseIdleCoach(account, clubId, old.seasonIndex)) holderChanged = true }
-        catch (error) { console.error('闲置教练交接失败', error) }
-      }
-      if (holderChanged) {
-        try { persistWorld({ world: true, teams: true, immediate: true }) }
-        catch (error) { console.error('交接已记入 SQLite，世界归属将在重启时恢复', error) }
-      }
+      sweepIdleCoaches(now())
       for (const { account } of drafts) if (isAccountOnlineNow(account)) broadcast(account)
       return { ok: true }
     } catch (error) {
@@ -3989,6 +4043,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         advanceAllMatches()
         autoRollSharedSeason()
         autoPlayoff()
+        autoSweepIdleCoaches()
         aiAuctionTick()
       }, tickMs)
     : null
@@ -4008,6 +4063,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   advanceAllMatches()
   autoRollSharedSeason()
   autoPlayoff()
+  sweepIdleCoaches(now())
+  lastIdleSweepAt = now()
   flushWorldSync()
   accountStore.flushSync()
 

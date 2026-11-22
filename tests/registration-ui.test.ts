@@ -63,5 +63,34 @@ describe('注册选队预览', () => {
     expect(html).toContain('罗斯托克 · 东区 · RANK 750')
     expect(html).toContain('温布尔登 · 西区 · RANK 740')
     expect(html).not.toContain('第 3 区')
+    // 注册界面醒目提示 3 天 AI 接管与 7 天自动清理释放规则
+    expect(html).toContain('banner warn')
+    expect(html).toContain('3 天')
+    expect(html).toContain('7 天')
+    expect(html).toContain('自动清理教练账号并释放球队席位')
+  })
+
+  it('双区一级联赛空缺球队在注册下拉框中显示南北分区名', async () => {
+    const positions = { GK: 0, CB: 0, W: 0, CM: 99, ST: 0 }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        clubs: [
+          { id: 'd1_01', name: '塞维利亚', tier: 'division1', conference: 'north', rating: 1850, players: [{ name: '主力', ca: 180, positions }] },
+        ],
+      }),
+    }))
+    const online = await import('../src/online.ts')
+    const { ui } = await import('../src/ui/state.ts')
+    const { renderAccountOverlay } = await import('../src/ui/screens/overlays.ts')
+    online.publicConfig.registration = 'open'
+    online.onlineState.status = 'offline'
+    await online.refreshRegistrationClubs()
+    ui.accountOpen = true
+    ui.authMode = 'register'
+    ui.registrationClubId = 'd1_01'
+
+    const html = renderAccountOverlay()
+    expect(html).toContain('塞维利亚 · 一级联赛 · 北区 · RANK 1850')
   })
 })

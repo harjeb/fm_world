@@ -324,7 +324,11 @@ export function pickExpandedZoneClubs(zoneNo: number, usedNames: ReadonlySet<str
 export const DIVISION_IDS = ['champions', 'division1', 'd2-north', 'd2-south'] as const
 export function divisionIdForTier(tier: TierId, conference?: ConferenceId): string {
   if (tier === 'champions') return 'champions'
-  if (tier === 'division1') return 'division1'
+  if (tier === 'division1') {
+    if (conference === 'north') return 'd1-north'
+    if (conference === 'south') return 'd1-south'
+    return 'division1'
+  }
   if (conference === 'south') return 'd2-south'
   if (conference === 'north' || conference === undefined) return 'd2-north'
   return `d2-${conference}`
@@ -368,10 +372,10 @@ export function conferenceLabel(conference?: ConferenceId): string {
   return '扩展区'
 }
 
-/** 从 d2-xxx 的赛区 ID 反推赛区；一级和冠军没有赛区。 */
+/** 从 d1-xxx / d2-xxx 的赛区 ID 反推赛区；单区一级和冠军没有赛区。 */
 export function conferenceOfDivision(divisionId: string): ConferenceId | undefined {
-  if (divisionId === 'd2-north') return 'north'
-  if (divisionId === 'd2-south') return 'south'
+  if (divisionId === 'd1-north' || divisionId === 'd2-north') return 'north'
+  if (divisionId === 'd1-south' || divisionId === 'd2-south') return 'south'
   if (divisionId.startsWith('d2-')) return divisionId.slice(3) as ConferenceId
   return undefined
 }

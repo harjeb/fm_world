@@ -214,7 +214,7 @@ export function renderAccountOverlay(): string {
         ${online ? `
           <p>当前账号：<b>${esc(onlineState.user?.username ?? '')}</b> · ${onlineState.error ? '存档同步失败' : onlineState.connected ? '实时同步中' : '正在重连服务器'}</p>
           ${onlineState.error ? `<p class="warn-text small">${esc(onlineState.error)}<br>刷新页面可重新读取服务器已保存的进度，未同步的修改可能丢失。</p>` : ''}
-          <p class="hint">另一台设备保存后会自动同步到这里。连续两个完整赛季未上线，换季时将删除教练账号，球队保留并开放接管。</p>
+          <p class="hint">另一台设备保存后会自动同步到这里。超过 3 天未上线将由 AI 临时接管，连续 7 天未上线将自动清除教练账号并释放球队（保留球队进度供新教练接管）。</p>
           <div class="btn-row"><button class="btn primary" data-action="agent-token">复制给 AI（令牌 + 文档 + 简介）</button><button class="btn ghost" data-action="agent-revoke">重置令牌</button></div>
           <p class="hint">复制的内容包含 fm_... 令牌、API 文档链接和游戏简介，直接粘贴给能发 HTTP 请求的 AI（Claude / ChatGPT / Cursor），或把令牌填进 MCP 配置；不需要给账号密码。令牌可随时重置。</p>
           <div class="btn-row"><button class="btn ghost" data-action="account-logout">退出登录</button><button class="btn" data-action="account-close">关闭</button></div>
@@ -226,10 +226,11 @@ export function renderAccountOverlay(): string {
           ${registering ? `
             <div class="form-row"><label for="account-club">执教球队</label><select id="account-club">
               <option value="">${registrationClubs === null ? '正在加载球队…' : clubs.length ? '请选择一支可接管的球队' : '暂无空缺球队'}</option>
-              ${clubs.map((club) => `<option value="${esc(club.id)}" ${selectedClub?.id === club.id ? 'selected' : ''}>${esc(club.name)} · ${esc(club.tier === 'champions' ? '冠军联赛' : club.tier === 'division1' ? '一级联赛' : conferenceLabel(club.conference))} · RANK ${club.rating ?? '—'}</option>`).join('')}
+              ${clubs.map((club) => `<option value="${esc(club.id)}" ${selectedClub?.id === club.id ? 'selected' : ''}>${esc(club.name)} · ${esc(club.tier === 'champions' ? '冠军联赛' : club.tier === 'division1' ? (club.conference ? `一级联赛 · ${conferenceLabel(club.conference)}` : '一级联赛') : conferenceLabel(club.conference))} · RANK ${club.rating ?? '—'}</option>`).join('')}
             </select></div>
             ${selectedClub ? `<p class="hint">${[...selectedClub.players].sort((a, b) => b.ca - a.ca).slice(0, 3).map((player) => `${posBadge(primaryPosition(player))} ${esc(player.name)} · CA ${player.ca.toFixed(0)}`).join(' / ')}</p>` : ''}
-            <p class="hint">球队在注册时确定，注册后不允许换队。连续两个完整赛季未上线的教练账号会在换季时删除，球队恢复原名，保留球队进度供新教练接手。联赛每天固定 6 轮（北京时间 02/06/10/14/18/22 点）。</p>
+            <div class="banner warn compact"><b>活跃度与接管提示：</b>连续超过 <b>3 天</b>未上线，球队将由 AI 临时接管（最多接管至满 1 周）；连续 <b>7 天</b>未上线将<b>自动清理教练账号并释放球队席位</b>（恢复原队名，保留球队阵容与进度供新教练接手）。</div>
+            <p class="hint">球队在注册时确定，注册后不允许换队。联赛每天固定 6 轮（北京时间 02/06/10/14/18/22 点）。</p>
             <button class="btn ghost small" data-action="registration-clubs-refresh">刷新球队列表</button>
           ` : ''}
           ${registering && publicConfig.turnstileSiteKey ? '<div class="turnstile-slot" id="turnstile-slot" data-morph-skip></div>' : ''}

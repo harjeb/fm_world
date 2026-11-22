@@ -751,6 +751,7 @@ button.nm-recent:hover { background: var(--raised); }
 .pyramid-level { display: grid; gap: 6px; width: 100%; }
 .pyramid-level.l1 { max-width: 46%; }
 .pyramid-level.l2 { max-width: 70%; }
+.pyramid-level.l2.dual { max-width: 84%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .pyramid-level.l3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .tier { display: grid; gap: 2px; width: 100%; padding: 8px 12px; text-align: left; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--radius); }
 .tier:hover { background: var(--hover); }
@@ -1436,7 +1437,7 @@ circle.pm-5 { fill: var(--h6); }
   .cal-week { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
   .cal-week-label { display: none; }
   .cal-slot { padding: 0 2px; font-size: 9.5px; }
-  .pyramid-level.l1, .pyramid-level.l2 { max-width: none; }
+  .pyramid-level.l1, .pyramid-level.l2, .pyramid-level.l2.dual { max-width: none; grid-template-columns: minmax(0, 1fr); }
   .pyramid-level.l3 { grid-template-columns: minmax(0, 1fr); }
   .fx { grid-template-columns: minmax(0, 1fr) 46px minmax(0, 1fr); gap: 4px; padding: 4px 8px; font-size: 12px; }
   .fx.with-round { grid-template-columns: 30px minmax(0, 1fr) 46px minmax(0, 1fr); }

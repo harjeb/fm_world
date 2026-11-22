@@ -42,7 +42,7 @@ function recordsPanel(records: MatchRecord[], title = '挑战记录'): string {
 }
 
 function renderFriendly(): string {
-  const options = game.world ? game.world.divisions.map((division) => ({ id: division.divisionId!, label: division.tier === 'champions' ? '冠军联赛' : division.tier === 'division1' ? '一级联赛' : `二级联赛 · ${conferenceLabel(division.conference)}` })) : [{ id: 'own', label: '本联赛' }]
+  const options = game.world ? game.world.divisions.map((division) => ({ id: division.divisionId!, label: division.tier === 'champions' ? '冠军联赛' : division.tier === 'division1' ? (division.conference ? `一级联赛 · ${conferenceLabel(division.conference)}` : '一级联赛') : `二级联赛 · ${conferenceLabel(division.conference)}` })) : [{ id: 'own', label: '本联赛' }]
   const fallback = game.world?.playerDivisionId ?? 'own'
   const active = options.some((entry) => entry.id === ui.challengeDivision) ? ui.challengeDivision! : fallback
   const own = !game.world || active === game.world.playerDivisionId

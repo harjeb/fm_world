@@ -1,5 +1,5 @@
 import type { CupTableRow, SeasonState, SeasonTableRow, TierId, WorldState } from './types.ts'
-import { computeWorldTable } from './world.ts'
+import { computeWorldTable, promotionSpotCount } from './world.ts'
 import { emptyCupRow, sortCupTable, updateCupTable } from './cup-table.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 import { GAME_DAY_MS, HOUR_MS, ROUND_INTERVAL_MS, kickoffAtForRound, postseasonStartAt, roundsKickedOff, seasonEndAt } from './calendar.ts'
@@ -167,14 +167,34 @@ export function previousChampionsTop4(world: WorldState): string[] {
   return result
 }
 
+/** 跨赛区纯按总积分榜排名（方案 C：二级超过 4 个分区时的社区杯资格排名）。 */
+function compareCrossZonePoints(a: Standing, b: Standing): number {
+  return b.row.points - a.row.points
+    || (b.row.gf - b.row.ga) - (a.row.gf - a.row.ga)
+    || b.row.gf - a.row.gf
+    || a.id.localeCompare(b.id, 'en')
+}
+
 export function seasonCupEntrants(world: WorldState, round: number): Record<SeasonCupId, string[]> {
   const rows = standings(world, round)
+  const d1Count = world.divisions.filter(d => d.tier === 'division1').length
+  const d2Count = world.divisions.filter(d => d.tier === 'division2').length
   const champions = rows.filter(row => row.tier === 'champions').sort(compareStanding)
-  const league = rows.filter(row => row.tier === 'division1').sort(compareStanding)
-  const community = rows.filter(row => row.tier === 'division2' && row.rank <= 8).sort(compareStanding)
-  // 32 队固定席位：顶级全员、一级前 8，再按各赛区名次逐层分配至多 4 席。
+  // 联盟杯：单区一级全员 20 队；双区一级各区前 16 组成 32 强（固定 5 轮）。
+  const league = (d1Count >= 2
+    ? rows.filter(row => row.tier === 'division1' && row.rank <= 16)
+    : rows.filter(row => row.tier === 'division1')
+  ).sort(compareStanding)
+  // 社区杯：≤4 个二级赛区各区取前 8；超过 4 个二级赛区（方案 C）全部二级球队一起按总积分排前 32 参赛。
+  const community = d2Count > 4
+    ? rows.filter(row => row.tier === 'division2').sort(compareCrossZonePoints).slice(0, 32)
+    : rows.filter(row => row.tier === 'division2' && row.rank <= 8).sort(compareStanding)
+  // 32 队固定席位：顶级全员 20 队 + 一级 8 队（单区前 8 / 双区各前 4）+ 二级前 4。
+  const d1Cross = d1Count >= 2
+    ? rows.filter(row => row.tier === 'division1' && row.rank <= 4).sort(compareStanding).slice(0, 8)
+    : league.filter(row => row.rank <= 8)
   const lower = rows.filter(row => row.tier === 'division2').sort(compareStanding)
-  const cross = [...champions, ...league.filter(row => row.rank <= 8), ...lower.slice(0, 4)]
+  const cross = [...champions, ...d1Cross, ...lower.slice(0, 4)]
   const ids = (list: Standing[]) => list.map(row => row.id)
   const prevTop4 = previousChampionsTop4(world)
   const legend = prevTop4.length === 4 ? [...prevTop4, ...LEGEND_CUP_TEAM_IDS] : []
@@ -516,21 +536,92 @@ export function collectPromotionCupSlots(world: WorldState, now: number, totalRo
   return slots
 }
 
-/** 根据二级各赛区最终积分榜提取升级杯参赛队伍：每区第 1 轮空，第 2/3 名踢首轮资格赛。 */
+/**
+ * 根据二级各赛区最终积分榜提取升级杯参赛队伍：
+ * - 3 席模式（≤3 个二级区且一级单区）：每区第 1 轮空，第 2/3 名踢资格赛 → 2 组循环 + 亚军附加赛决出 3 席；
+ * - 6 席模式（≥4 个二级区或一级双区）：凑齐精确 12 支小组赛球队 → A/B/C 3 组 × 4 队完整单循环 + 3 场跨组附加赛决出 6 席。
+ */
 export function promotionCupQualifiers(world: WorldState): {
   champions: string[]
   qualifierPairs: { homeId: string; awayId: string }[]
   entrants: string[]
+  spots: number
 } {
   const names = new Map(world.clubs.map(club => [club.id, club.name]))
-  const d2Zones = world.divisions.filter(division => division.tier === 'division2')
+  const d2Zones = world.divisions
+    .filter(division => division.tier === 'division2')
+    .sort((a, b) => (a.divisionId ?? '').localeCompare(b.divisionId ?? ''))
+  const spots = promotionSpotCount(world)
   const champions: string[] = []
   const qualifierPairs: { homeId: string; awayId: string }[] = []
   const entrants: string[] = []
-  for (const division of d2Zones) {
-    const table = division.clubIds?.length
+  const tables = d2Zones.map(division => (
+    division.clubIds?.length
       ? computeWorldTable(division.clubIds, division.fixtures, names)
       : division.table
+  ))
+
+  if (spots === 6 && d2Zones.length >= 4) {
+    const compareRow = (a: SeasonTableRow, b: SeasonTableRow) =>
+      b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf || a.teamId.localeCompare(b.teamId, 'en')
+    const zCount = d2Zones.length
+    if (zCount === 4) {
+      // 4 区：每区前 2 直通（8 队），第 3/4 名踢资格赛（4 场）→ 12 队进 3 组
+      for (const table of tables) {
+        if (table[0]) champions.push(table[0].teamId)
+        if (table[1]) champions.push(table[1].teamId)
+        if (table[2] && table[3]) qualifierPairs.push({ homeId: table[2].teamId, awayId: table[3].teamId })
+      }
+    } else if (zCount === 5) {
+      // 5 区：每区前 2 直通（10 队），5 个第 3 名取成绩最好 4 队踢 2 场资格赛 → 12 队
+      const thirds: SeasonTableRow[] = []
+      for (const table of tables) {
+        if (table[0]) champions.push(table[0].teamId)
+        if (table[1]) champions.push(table[1].teamId)
+        if (table[2]) thirds.push(table[2])
+      }
+      thirds.sort(compareRow)
+      if (thirds.length >= 4) {
+        qualifierPairs.push(
+          { homeId: thirds[0].teamId, awayId: thirds[3].teamId },
+          { homeId: thirds[1].teamId, awayId: thirds[2].teamId },
+        )
+      }
+    } else if (zCount === 6) {
+      // 6 区：每区第 1 直通（6 队），第 2/3 名踢资格赛（6 场）→ 12 队
+      for (const table of tables) {
+        if (table[0]) champions.push(table[0].teamId)
+        if (table[1] && table[2]) qualifierPairs.push({ homeId: table[1].teamId, awayId: table[2].teamId })
+      }
+    } else if (zCount < 12) {
+      // 7–11 区：各区第 1 直通，剩余 (12 - N) 席由各区成绩最好第 2 名踢单场资格赛产生 → 12 队
+      const seconds: SeasonTableRow[] = []
+      for (const table of tables) {
+        if (table[0]) champions.push(table[0].teamId)
+        if (table[1]) seconds.push(table[1])
+      }
+      seconds.sort(compareRow)
+      const needPairs = Math.max(0, 12 - champions.length)
+      const pool = seconds.slice(0, needPairs * 2)
+      for (let i = 0; i < needPairs && i * 2 + 1 < pool.length; i++) {
+        qualifierPairs.push({ homeId: pool[i].teamId, awayId: pool[pool.length - 1 - i].teamId })
+      }
+    } else {
+      // 12+ 区：成绩最好的区冠军轮空，其余区冠军踢资格赛凑精确 12 队
+      const firsts = tables.map(t => t[0]).filter((row): row is SeasonTableRow => !!row).sort(compareRow)
+      const byeCount = Math.max(0, 24 - firsts.length)
+      champions.push(...firsts.slice(0, byeCount).map(r => r.teamId))
+      const needPairs = 12 - byeCount
+      const pool = firsts.slice(byeCount, byeCount + needPairs * 2)
+      for (let i = 0; i < needPairs && i * 2 + 1 < pool.length; i++) {
+        qualifierPairs.push({ homeId: pool[i].teamId, awayId: pool[pool.length - 1 - i].teamId })
+      }
+    }
+    entrants.push(...champions, ...qualifierPairs.flatMap(p => [p.homeId, p.awayId]))
+    return { champions, qualifierPairs, entrants, spots }
+  }
+
+  for (const table of tables) {
     const top3 = table.slice(0, 3).map(row => row.teamId)
     if (top3[0]) {
       champions.push(top3[0])
@@ -544,11 +635,19 @@ export function promotionCupQualifiers(world: WorldState): {
       entrants.push(top3[1])
     }
   }
-  return { champions, qualifierPairs, entrants }
+  return { champions, qualifierPairs, entrants, spots }
 }
 
 function buildPromotionGroups(qualified: readonly string[], seed: number): SeasonCupGroup[] {
   const shuffled = shuffleSeasonCupTeams(qualified, seed, 'promotion', 201)
+  // 12 队（6 升级名额模式）：严格拆成 A / B / C 三个 4 队小组，3 轮打满完整单循环！
+  if (shuffled.length === 12) {
+    const names = ['A 组', 'B 组', 'C 组'] as const
+    return [0, 1, 2].map((index) => {
+      const teamIds = shuffled.slice(index * 4, index * 4 + 4)
+      return { index, name: names[index], teamIds, table: teamIds.map(emptyCupRow) }
+    })
+  }
   const half = Math.ceil(shuffled.length / 2)
   const lists = [shuffled.slice(0, half), shuffled.slice(half)].filter(list => list.length > 0)
   return lists.map((teamIds, index) => ({
@@ -665,15 +764,22 @@ export function planPromotionCup(world: WorldState, _seed: number, now: number):
   if (world.seasonCups?.seasonIndex === world.seasonIndex && world.seasonCups.cups.some(cup => cup.id === 'promotion')) {
     return undefined
   }
-  const { champions, qualifierPairs, entrants } = promotionCupQualifiers(world)
-  if (entrants.length < 4 || !qualifierPairs.length) return undefined
+  const { champions, qualifierPairs, entrants, spots } = promotionCupQualifiers(world)
+  if (entrants.length < 4) return undefined
   const qualifiedCount = champions.length + qualifierPairs.length
-  const groupASize = Math.ceil(qualifiedCount / 2)
-  const groupRounds = groupASize <= 2 ? 1 : 3
-  const totalRounds = 1 + groupRounds + 1
+  const groupSize = qualifiedCount === 12 ? 4 : Math.ceil(qualifiedCount / 2)
+  const groupRounds = groupSize <= 2 ? 1 : 3
+  const hasQualifierRound = qualifierPairs.length > 0
+  const totalRounds = (hasQualifierRound ? 1 : 0) + groupRounds + 1
   const dates = collectPromotionCupSlots(world, now, totalRounds)
   if (dates.length < totalRounds) return undefined
   const kickoffAt = dates[0]
+  if (!hasQualifierRound) {
+    const groups = buildPromotionGroups(champions, _seed)
+    const cup: SeasonCup = { id: 'promotion', name: SEASON_CUP_NAMES.promotion, entrants, dates, rounds: [], groups, promotedIds: [] }
+    cup.rounds.push(makePromotionGroupRound(cup, world.seasonIndex, 1, 0))
+    return cup
+  }
   const round1: SeasonCupRound = {
     round: 1,
     kickoffAt,
@@ -690,6 +796,7 @@ export function planPromotionCup(world: WorldState, _seed: number, now: number):
       played: false,
     })),
   }
+  void spots
   return {
     id: 'promotion',
     name: SEASON_CUP_NAMES.promotion,
@@ -722,7 +829,7 @@ export function syncPromotionPlayoffFromCup(world: WorldState): boolean {
       .map(fixture => fixture.id),
   )
   const finalRound = cup.groups?.length ? cup.rounds.find(round => round.round > 1 && round.stage === 'knockout') : undefined
-  const runnerUps = finalRound?.fixtures[0] ? [finalRound.fixtures[0].homeId, finalRound.fixtures[0].awayId] : undefined
+  const runnerUps = finalRound?.fixtures.length ? finalRound.fixtures.flatMap(f => [f.homeId, f.awayId]) : undefined
   world.promotionPlayoff = {
     seasonIndex: world.seasonIndex,
     teams: [...cup.entrants],
@@ -838,21 +945,31 @@ export function advanceSeasonCup(cup: SeasonCup, seasonIndex: number, seed: numb
       }
       const winners = cup.groups.map(group => group.table[0]?.teamId).filter((id): id is string => !!id)
       const runnerUps = cup.groups.map(group => group.table[1]?.teamId).filter((id): id is string => !!id)
+      const thirds = cup.groups.map(group => group.table[2]?.teamId).filter((id): id is string => !!id)
       cup.promotedIds = [...winners]
-      if (runnerUps.length >= 2) {
+      if (cup.groups.length === 3 && runnerUps.length === 3 && thirds.length === 3) {
+        // 6 席模式：3 个小组第 1 直接升级，A2 vs B3、B2 vs C3、C2 vs A3 三场单败决出最后 3 席
+        cup.rounds.push(makeFixedKnockoutRound(cup, seasonIndex, current.round + 1, [
+          { homeId: runnerUps[0], awayId: thirds[1] },
+          { homeId: runnerUps[1], awayId: thirds[2] },
+          { homeId: runnerUps[2], awayId: thirds[0] },
+        ]))
+      } else if (runnerUps.length >= 2) {
         cup.rounds.push(makeFixedKnockoutRound(cup, seasonIndex, current.round + 1, [{ homeId: runnerUps[0], awayId: runnerUps[1] }]))
       } else {
-        cup.promotedIds = [...new Set([...winners, ...runnerUps])].slice(0, 3)
+        const cap = cup.groups.length === 3 ? 6 : 3
+        cup.promotedIds = [...new Set([...winners, ...runnerUps])].slice(0, cap)
         cup.championId = cup.promotedIds[0]
       }
       return
     }
     if (current.fixtures.some(fixture => !fixture.played || !fixture.winnerId)) return
-    const third = current.fixtures[0]?.winnerId
+    const playoffWinners = current.fixtures.map(fixture => fixture.winnerId!).filter((id): id is string => !!id)
     const basePromoted = cup.promotedIds?.length
       ? cup.promotedIds
       : (cup.groups ?? []).map(group => group.table[0]?.teamId).filter((id): id is string => !!id)
-    cup.promotedIds = [...new Set([...basePromoted, ...(third ? [third] : [])])].slice(0, 3)
+    const cap = (cup.groups?.length ?? 2) === 3 ? 6 : 3
+    cup.promotedIds = [...new Set([...basePromoted, ...playoffWinners])].slice(0, cap)
     cup.championId = cup.promotedIds[0]
     return
   }
