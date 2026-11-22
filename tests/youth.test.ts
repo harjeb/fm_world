@@ -250,6 +250,30 @@ describe('每日成长、设施、方案与比赛', () => {
     const view = JSON.stringify(youthView(game, NOW))
     expect(view).not.toMatch(/facilities|probability|breakthrough|speed/)
   })
+  it('成长曲线支持高潜力苗子在毕业前兑现潜力（14–15 岁稳定满潜，16–17 岁接近潜力，18 岁有效冲刺）', () => {
+    const runBand = (age: number, ceiling: number, stage: number) => {
+      let sumProgress = 0
+      const count = 12
+      for (let i = 0; i < count; i++) {
+        const game = fixture()
+        game.seed = 9000 + i * 31
+        game.economy!.academy = stage
+        const member = game.youth!.members[0]
+        member.initialAge = age
+        member.player.age = age
+        member.ceiling = ceiling
+        member.tier = ceiling >= 255 ? 'genius' : 'excellent'
+        member.endsAt = NOW + (19 - age) * YOUTH_WEEK_MS
+        settleYouth(game, NOW + 40 * DAY_MS)
+        sumProgress += (youthCA(member.player) - member.initialCa) / (member.ceiling - member.initialCa)
+      }
+      return sumProgress / count
+    }
+    expect(runBand(15, 270, 1)).toBeGreaterThan(0.98)
+    expect(runBand(16, 250, 1)).toBeGreaterThan(0.92)
+    expect(runBand(17, 250, 25)).toBeGreaterThan(0.85)
+    expect(runBand(18, 250, 1)).toBeGreaterThan(0.50)
+  })
   it('只记录真实正式赛事，每周期前90分钟计入，重复战报不重复奖励', () => {
     const game = fixture(), member = game.youth!.members[0]
     const first = record(game, NOW + 1000, 60, 8)

@@ -10,7 +10,8 @@ import { MAIN_FIELD_ATTRS, MAIN_GK_ATTRS } from '../../game/scale.ts'
 import { worldTransferTeams, type ClubPreview } from '../../game/world.ts'
 import { conferenceLabel } from '../../game/data/world-clubs.ts'
 import { aiTransferMarket, isOnlineMode, marketState, onlineState, publicConfig, registrationClubs } from '../../online.ts'
-import { AUCTION_EXTEND_MS, auctionRaiseFee } from '../../game/auction.ts'
+import { AUCTION_EXTEND_MS, auctionRaiseFee, committedFunds } from '../../game/auction.ts'
+import { checkWageCapForSigning, transferBudgetAvailable } from '../../game/board.ts'
 import { previewClubSigning } from '../../game/market.ts'
 import { releaseChance, SQUAD_STATUS_LABELS } from '../../game/transfer-rules.ts'
 import { economyOf } from '../../game/economy.ts'
@@ -381,7 +382,14 @@ export function renderNegotiationOverlay(): string {
   // 全服竞拍里已经有人出过价：这口是跟价，要另交不退还的手续费；最后 10 分钟内跟价，倒计时重新回到 10 分钟。
   const auction = draft.kind === 'bid' ? marketState.auctions.find((item) => item.playerId === draft.playerId && item.bids.length > 0) : undefined
   const fee = auction ? auctionRaiseFee(draft.offer) : 0
-  const canPay = economyOf(game).balance >= draft.offer + fee
+  const balance = economyOf(game).balance
+  const boardTransfer = transferBudgetAvailable(game)
+  const committed = draft.kind === 'bid' && isOnlineMode() ? committedFunds(marketState.auctions, onlineState.user?.id ?? '', draft.playerId) : 0
+  const canPay = boardTransfer + balance - committed >= draft.offer + fee
+  const wageCheck = fullPlayer ? checkWageCapForSigning(game, fullPlayer) : { ok: true as const }
+  const fundingLabel = boardTransfer > 0
+    ? `转会预算 ${boardTransfer.toLocaleString()} + 余额 ${balance.toLocaleString()}`
+    : `余额 ${balance.toLocaleString()}`
   return `
     <div class="overlay" data-action="nego-cancel">
       <div class="modal nego-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="球员谈判">
@@ -396,7 +404,7 @@ export function renderNegotiationOverlay(): string {
           <div class="form-row"><label>你给他的位置</label><div class="seg wrap">${roleButtons}</div></div>
         </div>
         ${clubSection}
-        <div class="form-row"><label for="nego-offer">报价（${draft.kind === 'club' ? '俱乐部要价' : '底价'} ${draft.asking.toLocaleString()}，余额 ${economyOf(game).balance.toLocaleString()}）</label>
+        <div class="form-row"><label for="nego-offer">报价（${draft.kind === 'club' ? '俱乐部要价' : '底价'} ${draft.asking.toLocaleString()}，${fundingLabel}）</label>
           <input id="nego-offer" type="number" min="${draft.asking}" step="1000" value="${draft.offer}" data-nego-offer></div>
         <div class="nego-chance ${chance >= 70 ? 'good' : chance >= 35 ? 'warn' : 'bad'}">
           <span>谈判成功率</span><b>${chance.toFixed(1)}%</b><span class="nego-bar"><i style="width:${Math.min(100, chance)}%"></i></span>
@@ -404,9 +412,10 @@ export function renderNegotiationOverlay(): string {
         <ul class="nego-reasons">${reasons}</ul>
         ${draft.message ? `<p class="warn-text">${esc(draft.message)}</p>` : ''}
         ${fee ? `<p class="warn-text small">${icon('coin', 13)} 跟价手续费 <b>${fee.toLocaleString()}</b>（出价的 2%，至少 1,000），出价成功立即扣除、不退还；如果离落槌不到 ${AUCTION_EXTEND_MS / 60_000} 分钟，倒计时重新回到 ${AUCTION_EXTEND_MS / 60_000} 分钟。</p>` : ''}
-        ${!canPay ? `<p class="warn-text small">余额不够这个报价${fee ? '（含手续费）' : ''}。</p>` : ''}
+        ${!canPay ? `<p class="warn-text small">${boardTransfer > 0 ? '转会预算与余额合计' : '余额'}不够这个报价${fee ? '（含手续费）' : ''}。</p>` : ''}
+        ${!wageCheck.ok ? `<p class="warn-text small">${esc(wageCheck.error)}</p>` : ''}
         <div class="btn-row">
-          <button class="btn primary" data-action="nego-confirm" ${canPay ? '' : 'disabled'}>${draft.kind === 'bid' ? '确认出价' : '确认谈判'}</button>
+          <button class="btn primary" data-action="nego-confirm" ${canPay && wageCheck.ok ? '' : 'disabled'}>${draft.kind === 'bid' ? '确认出价' : '确认谈判'}</button>
           <button class="btn ghost" data-action="nego-cancel">再想想</button>
         </div>
         <p class="hint">同一份报价 + 同一组回答，结果固定；换报价或换个承诺才会重新掷骰。</p>

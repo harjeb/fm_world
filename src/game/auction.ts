@@ -1,7 +1,6 @@
-import { economyOf } from './economy.ts'
 import { joinRoster, transferWindowOpen } from './market.ts'
 import { basePlayerMarketValue } from './pricing.ts'
-import { checkTransferBudget, checkWageCapForSigning, spendTransferBudget } from './board.ts'
+import { checkTransferBudget, checkWageCapForSigning, spendTransferFunds } from './board.ts'
 import type { GameState, Player } from './types.ts'
 
 /**
@@ -118,17 +117,12 @@ export function placeBid(market: FreeMarket, game: GameState, accountId: string,
   const minimum = minimumBid(player, auction)
   if (minimum <= 0) return fail('球员估值无效')
   if (amount < minimum) return fail(`出价至少 ${minimum.toLocaleString()}`)
-  const economy = economyOf(game)
   const committed = committedFunds(market.auctions, accountId, playerId)
   const fee = auction ? auctionRaiseFee(amount) : 0
-  const budgetCheck = checkTransferBudget(game, amount, committed)
-  if (!budgetCheck.ok) return fail(budgetCheck.error)
   const wageCheck = checkWageCapForSigning(game, player)
   if (!wageCheck.ok) return fail(wageCheck.error)
-  if (economy.balance - committed < amount + fee) {
-    const need = fee ? `（含跟价手续费 ${fee.toLocaleString()}）` : ''
-    return fail(committed > 0 ? `余额不足${need}：其他领先的竞拍占用了 ${committed.toLocaleString()}` : `余额不足${need}`)
-  }
+  const budgetCheck = checkTransferBudget(game, amount, committed, fee)
+  if (!budgetCheck.ok) return fail(budgetCheck.error)
   const bid: AuctionBid = { accountId, club: game.clubName, amount, at: now }
   if (!auction) {
     const created: Auction = { playerId, playerName: player.name, startedAt: now, endsAt: now + AUCTION_DURATION_MS, bids: [bid] }
@@ -136,8 +130,8 @@ export function placeBid(market: FreeMarket, game: GameState, accountId: string,
     return { ok: true, auction: created, outbid: null, fee: 0 }
   }
   const outbid = leadingBid(auction).accountId
-  // 手续费当场扣掉，不管最后有没有拍到都不退。
-  economy.balance -= fee
+  // 手续费当场扣掉（优先从转会预算扣，不够扣余额），不管最后有没有拍到都不退。
+  spendTransferFunds(game, fee)
   raise(auction, bid)
   return { ok: true, auction, outbid, fee }
 }
@@ -170,7 +164,7 @@ export function settleAuctions(market: FreeMarket, gameOf: (accountId: string) =
       const clubId = aiClubIdOf(bid.accountId)
       if (clubId) return !!ai && ai.balance(clubId) >= bid.amount && ai.canSign(clubId)
       const game = gameOf(bid.accountId)
-      return !!game && economyOf(game).balance >= bid.amount
+      return !!game
         && checkTransferBudget(game, bid.amount).ok
         && (!player || checkWageCapForSigning(game, player).ok)
     })
@@ -184,8 +178,7 @@ export function settleAuctions(market: FreeMarket, gameOf: (accountId: string) =
         ai!.sign(clubId, player, eligible.amount)
       } else {
         const game = gameOf(eligible.accountId)!
-        economyOf(game).balance -= eligible.amount
-        spendTransferBudget(game, eligible.amount)
+        spendTransferFunds(game, eligible.amount)
         joinRoster(game, player)
       }
       market.pool = market.pool.filter((item) => item.id !== player.id)

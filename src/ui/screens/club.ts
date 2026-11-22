@@ -25,7 +25,6 @@ import {
   isBoardBudgetActive,
   refreshOffseasonBoardPreview,
   syncBoardLockState,
-  transferRetentionRate,
 } from '../../game/board.ts'
 import { MAIN_ATTR_SCALE } from '../../game/scale.ts'
 import { CATEGORY_BONUS_PER_LEVEL, STADIUM_BONUS_PER_LEVEL } from '../../game/training.ts'
@@ -232,7 +231,6 @@ function boardTab(): string {
   const active = isBoardBudgetActive(game)
   const economy = economyOf(game)
   const confMeta = boardConfidenceLabel(board.confidence)
-  const retentionPct = Math.round((active ? board.current!.retentionRate : transferRetentionRate(board.confidence)) * 100)
   const lastGrade = board.lastGrade ? BOARD_GRADE_META[board.lastGrade] : null
 
   const headerCard = panel('董事会信任度与政策', `
@@ -247,12 +245,12 @@ function boardTab(): string {
         ${meter(board.confidence)}
       </div>
       <div class="board-policy-pills">
-        <div><span class="muted small">卖人预算回流</span><b>${retentionPct}%</b></div>
+        <div><span class="muted small">卖人收入归属</span><b>100% 进俱乐部余额</b></div>
         <div><span class="muted small">商业工资帽加成</span><b>+${boardCommercialWageBonus(economy).toLocaleString()} / 轮</b></div>
         <div><span class="muted small">滑块换算比率</span><b>${BOARD_WAGE_SLIDER_ROUNDS} : 1</b></div>
       </div>
     </div>
-    <p class="hint">每赛季开启时由董事会直接拨付「独立转会预算」与「独立设施预算」并注入余额；升级设施同步扣减设施预算，避免单赛季直接升满设施。未达标将扣减信任度并在下赛季明显削减转会预算、设施预算与工资帽。</p>
+    <p class="hint">每赛季开启时由董事会分别拨付「独立转会预算」与「独立设施预算」，均与俱乐部自有余额互不冲突：买人优先抵扣转会预算、升级设施优先抵扣设施预算，预算用完后仍可直接用余额支付；但每轮工资帽严格生效，超帽无法签人。未达标将扣减信任度并在下赛季明显削减预算与工资帽。</p>
   `)
 
   let currentSection = ''
@@ -321,7 +319,7 @@ function boardTab(): string {
             <div class="board-kpi">
               <span class="muted small">独立转会预算</span>
               <b class="num-text">${m.transferBudget.toLocaleString()}</b>
-              <small class="muted">初始 ${m.initialTransferBudget.toLocaleString()}${committed > 0 ? ` · 竞拍占用 ${committed.toLocaleString()}` : ''}</small>
+              <small class="muted">初始 ${m.initialTransferBudget.toLocaleString()} · 优先抵扣买人，用完可用余额${committed > 0 ? ` · 竞拍占 ${committed.toLocaleString()}` : ''}</small>
             </div>
             <div class="board-kpi">
               <span class="muted small">独立设施预算</span>
@@ -364,7 +362,7 @@ function boardTab(): string {
         `)}
       </div>
       ${canSwitch ? panel(`开季目标确认与档位切换（第 ${game.season.round} / ${BOARD_CHOICE_MAX_ROUND} 轮可调）`, `
-        <p class="hint">开季前 ${BOARD_CHOICE_MAX_ROUND} 轮内可切换目标档位（按新旧档位差额实时补退预算与余额），第 ${BOARD_CHOICE_MAX_ROUND + 1} 轮起自动锁定。</p>
+        <p class="hint">开季前 ${BOARD_CHOICE_MAX_ROUND} 轮内可切换目标档位（按新旧档位差额实时调整独立预算与工资帽，不影响俱乐部自有余额），第 ${BOARD_CHOICE_MAX_ROUND + 1} 轮起自动锁定。</p>
         <div class="board-options">${m.options.map((opt) => boardOptionCard(opt, opt.ambition === m.ambition, 'current', false)).join('')}</div>
         <div class="board-lock-row">
           <button class="btn small ghost" data-action="board-choose" data-ambition="${m.ambition}" data-scope="current" data-lock="1">确认并立即锁定「${esc(ambitionLabel)}」</button>
@@ -376,7 +374,7 @@ function boardTab(): string {
       <ul class="rule-list">
         <li>${icon('info', 13)}第 1 赛季由董事会全额承担球员工资，不限制转会预算、设施预算或工资帽，方便新俱乐部完成初步建队。</li>
         <li>${icon('flag', 13)}第 38 轮常规赛结束进入休赛期后，董事会将立即发布<b>第 2 赛季三档目标方案</b>（稳妥 / 基准 / 野心），供你提前选择并预览下赛季独立预算。</li>
-        <li>${icon('coin', 13)}第 2 赛季起，每赛季换季时直接拨付独立的<b>转会预算</b>与<b>设施预算</b>，并启用<b>每轮工资帽</b>与 <b>38 : 1 转会↔工资帽滑块</b>；未完成目标将扣减信任度并削减下赛季预算。</li>
+        <li>${icon('coin', 13)}第 2 赛季起，每赛季换季时直接拨付独立的<b>转会预算</b>与<b>设施预算</b>（均优先抵扣，用完可用自有余额），并严格启用<b>每轮工资帽</b>与 <b>38 : 1 转会↔工资帽滑块</b>；未完成目标将扣减信任度并削减下赛季预算。</li>
       </ul>
     `)
   }

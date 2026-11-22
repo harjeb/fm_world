@@ -13,7 +13,7 @@ import { sanitizeAutoSubPlan } from './match/management.ts'
 import { negotiationDemands, negotiationFailure, negotiationRoll, negotiationTerms, type NegotiationAnswers, type NegotiationDemands } from './negotiation.ts'
 import { isLocalFreeAgentAvailable } from './free-market.ts'
 import { isYouthTrainee, youthTransferBlocked } from './youth.ts'
-import { checkTransferBudget, checkWageCapForRenewal, checkWageCapForSigning, creditTransferSale, spendTransferBudget } from './board.ts'
+import { checkTransferBudget, checkWageCapForRenewal, checkWageCapForSigning, creditTransferSale, spendTransferFunds } from './board.ts'
 
 type Market = NonNullable<GameState['market']>
 type Listing = Market['listings'][number]
@@ -214,9 +214,7 @@ export type NegotiationOutcome = MarketOutcome & {
 export type { NegotiationAnswers, NegotiationDemands } from './negotiation.ts'
 
 function completeSigning(game: GameState, player: Player, fee: number): void {
-  const economy = economyOf(game)
-  economy.balance -= fee
-  spendTransferBudget(game, fee)
+  spendTransferFunds(game, fee)
   arriveWithoutCards(player)
   game.roster.push(player)
   assignContract(game, player)
@@ -253,7 +251,8 @@ function negotiate(
       asks,
     }
   }
-  if (economy.balance < offer) return { ok: false, error: '余额不足，谈成了也付不起', chance: terms.chance, reasons: terms.reasons, asks }
+  const finalFunding = checkTransferBudget(game, offer)
+  if (!finalFunding.ok) return { ok: false, error: '转会预算与余额合计不足，谈成了也付不起', chance: terms.chance, reasons: terms.reasons, asks }
   return { ok: true, chance: terms.chance, reasons: terms.reasons, asks }
 }
 
@@ -367,7 +366,6 @@ export function buyFreeAgent(game: GameState, playerId: string): MarketOutcome {
   if (!budgetCheck.ok) return fail(budgetCheck.error)
   const wageCheck = checkWageCapForSigning(game, player)
   if (!wageCheck.ok) return fail(wageCheck.error)
-  if (economy.balance < price) return fail('余额不足')
   completeSigning(game, player, price)
   game.freeStars = game.freeStars.filter(p => p.id !== playerId)
   return { ok: true }
@@ -469,11 +467,11 @@ export function buyFromClub(game: GameState, clubId: string, playerId: string): 
   if (!team || !player) return fail('球员不在该球队')
   const price = clubAsking(game, player)
   const economy = economyOf(game)
+  if (!validBalance(economy.balance)) return fail('余额数据无效')
   const budgetCheck = checkTransferBudget(game, price)
   if (!budgetCheck.ok) return fail(budgetCheck.error)
   const wageCheck = checkWageCapForSigning(game, player)
   if (!wageCheck.ok) return fail(wageCheck.error)
-  if (!validBalance(economy.balance) || economy.balance < price) return fail('余额不足')
   completeSigning(game, player, price)
   team.players = team.players.filter((item) => item.id !== playerId)
   team.starPlayerIds = team.starPlayerIds.filter((id) => id !== playerId)

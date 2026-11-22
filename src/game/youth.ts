@@ -15,8 +15,8 @@ export const YOUTH_INTAKE_SIZE = 5
 export const YOUTH_INTAKE_KEEP = 2
 export const YOUTH_WEEK_MS = 7 * DAY_MS
 export const YOUTH_WAGE = 100
-/** Calibrated over the 1–5 remaining weekly seasons; 1.5 made even developed geniuses unreachable. */
-export const YOUTH_BASE_GROWTH = 4.5
+/** Calibrated over the 1–5 remaining weekly seasons so academy prospects reliably approach potential before graduation. */
+export const YOUTH_BASE_GROWTH = 6.0
 export const YOUTH_TIERS = {
   ordinary: { label: '普通苗子', min: 190, max: 210 },
   promising: { label: '有前途', min: 190, max: 225 },
@@ -214,7 +214,7 @@ function generateYouth(
     }
     age = rollYouthAge(rng)
   }
-  const initial = age <= 15 ? 60 + rng.float() * 40 : age <= 17 ? 80 + rng.float() * 45 : 100 + rng.float() * 45
+  const initial = age <= 15 ? 75 + rng.float() * 35 : age <= 17 ? 105 + rng.float() * 30 : 125 + rng.float() * 20
   const player = createRandomPlayer({ seed: rng.int(0x7fffffff), position: DETAILED_TO_POSITION[position], detailedPosition: position, tier: 2, usedNames: used, idPrefix: `academy-${game.seed}-${slot}` })
   scaleYouthAttributes(player, initial)
   player.age = age
@@ -376,11 +376,12 @@ export function settleYouth(game: GameState, now = Date.now()): boolean {
       const stage = [...youth.facilities].reverse().find(f => f.at <= from)?.stage ?? 1
       const before = youthCA(player)
       const progress = clamp((before - member.initialCa) / Math.max(1, member.ceiling - member.initialCa), 0, 1)
+      const potentialScale = clamp((member.ceiling - member.initialCa) / 120, 0.95, 1.52)
       const daysRemaining = (member.endsAt - from) / DAY_MS
       const trainingAge = 18 - Math.max(0, Math.ceil(daysRemaining / 7) - 1)
-      const ageFactor = trainingAge >= 18 ? 0.9 : trainingAge >= 16 ? 1.1 : 1
+      const ageFactor = trainingAge >= 18 ? 1.45 : trainingAge >= 16 ? 1.18 : 1.0
       const match = youthMatchFactor(youth, player.id, from, to)
-      const budget = YOUTH_BASE_GROWTH * member.speed * ageFactor * (1 - 0.6 * progress) * youthDailyRoll(game.seed, player.id, member.growth.length, stage) * match.factor * (to - from) / DAY_MS
+      const budget = YOUTH_BASE_GROWTH * potentialScale * member.speed * ageFactor * (1 - 0.35 * progress) * youthDailyRoll(game.seed, player.id, member.growth.length, stage) * match.factor * (to - from) / DAY_MS
       growYouthAttributes(player, plan, budget, member.ceiling)
       const coarse = DETAILED_TO_POSITION[plan.position]
       const proficiency = Math.min(100, (player.baseDetailedPositions?.[plan.position] ?? 0) + 3 * (to - from) / DAY_MS)

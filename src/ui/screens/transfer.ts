@@ -76,8 +76,8 @@ function auctionTab(): string {
   const economy = economyOf(game)
   const me = onlineState.user?.id ?? ''
   const committed = committedFunds(marketState.auctions, me)
-  const available = economy.balance - committed
-  const boardTransferAvailable = isBoardBudgetActive(game) ? game.board!.current!.transferBudget - committed : null
+  const boardTransfer = isBoardBudgetActive(game) ? Math.max(0, game.board!.current!.transferBudget) : 0
+  const totalAvailable = boardTransfer + economy.balance - committed
   const canTrade = transferWindowOpen(game) && (!game.activeMatch || !!game.activeMatch.context.isLeague)
   const running = marketState.auctions.filter((auction) => marketState.pool.some((player) => player.id === auction.playerId))
   const auctionRows = running.map((auction) => {
@@ -110,10 +110,8 @@ function auctionTab(): string {
       ? '球员估值无效'
       : !canTrade
         ? '比赛进行中不能出价'
-        : boardTransferAvailable !== null && boardTransferAvailable < opening
-          ? `转会预算不足（可用 ${Math.max(0, boardTransferAvailable).toLocaleString()}）`
-        : available < opening
-          ? (committed > 0 ? `可用余额不足（其他竞拍已占用 ${committed.toLocaleString()}）` : '余额不足')
+        : totalAvailable < opening
+          ? (committed > 0 ? `可用转会预算与余额合计不足（其他竞拍已占用 ${committed.toLocaleString()}）` : boardTransfer > 0 ? '转会预算与余额合计不足' : '余额不足')
           : ''
     return `<tr class="clickable" data-action="detail" data-player="${esc(player.id)}" data-key="${esc(player.id)}">
       <td>${posBadge(primaryPosition(player))}</td>
@@ -270,15 +268,16 @@ function offersTab(): string {
 function boardBudgetStrip(): string {
   if (!isBoardBudgetActive(game)) return ''
   const mandate = game.board!.current!
+  const economy = economyOf(game)
   const committed = isOnlineMode() ? committedFunds(marketState.auctions, onlineState.user?.id ?? '') : 0
-  const transferAvail = Math.max(0, mandate.transferBudget - committed)
+  const transferPool = Math.max(0, mandate.transferBudget)
+  const totalAvail = Math.max(0, transferPool + economy.balance - committed)
   const cap = boardEffectiveWageCap(game) ?? mandate.wageCap
   const wages = worldWageBill(game)
   const headroom = cap - wages
   return `<div class="board-budget-strip">
-    <span><small class="muted">可用转会预算</small><b class="num-text">${transferAvail.toLocaleString()}</b>${committed > 0 ? `<small class="muted">（竞拍占 ${committed.toLocaleString()}）</small>` : ''}</span>
-    <span><small class="muted">每轮工资 / 有效工资帽</small><b class="num-text ${headroom < 0 ? 'down' : ''}">${wages.toLocaleString()} / ${cap.toLocaleString()}</b><small class="${headroom < 0 ? 'down' : 'muted'}">（${headroom >= 0 ? `余 +${headroom.toLocaleString()}` : `超 ${(-headroom).toLocaleString()}`}）</small></span>
-    <span><small class="muted">卖人回流比例</small><b>${Math.round(mandate.retentionRate * 100)}%</b></span>
+    <span><small class="muted">可用转会预算（优先抵扣）</small><b class="num-text">${transferPool.toLocaleString()}</b><small class="muted">（含自有余额共可买 ${totalAvail.toLocaleString()}${committed > 0 ? ` · 竞拍占 ${committed.toLocaleString()}` : ''}）</small></span>
+    <span><small class="muted">每轮工资 / 有效工资帽</small><b class="num-text ${headroom < 0 ? 'down' : ''}">${wages.toLocaleString()} / ${cap.toLocaleString()}</b><small class="${headroom < 0 ? 'down' : 'muted'}">（${headroom >= 0 ? `余 +${headroom.toLocaleString()}` : `超 ${(-headroom).toLocaleString()}`} · 超帽不可签人）</small></span>
     <button class="btn small ghost" data-action="go-club" data-tab="board">去董事会调滑块</button>
   </div>`
 }

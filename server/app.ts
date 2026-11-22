@@ -44,7 +44,7 @@ import { preserveYouthState } from '../src/game/youth-authority.ts'
 import { settleCondition } from '../src/game/condition.ts'
 import { splitSeed } from '../src/game/rng.ts'
 import { FACILITIES, awardRoundIncome, awardSeasonPrize, economyOf, matchPerformanceOf, payWageBill, upgradeFacility, type FacilityId } from '../src/game/economy.ts'
-import { adjustBoardBudgetSlider, boardEffectiveWageCap, chooseBoardAmbition, isBoardAmbition, isBoardBudgetActive, isBoardTier, refreshOffseasonBoardPreview, syncBoardLockState } from '../src/game/board.ts'
+import { adjustBoardBudgetSlider, boardEffectiveWageCap, chooseBoardAmbition, isBoardAmbition, isBoardBudgetActive, isBoardTier, refreshOffseasonBoardPreview, syncBoardLockState, transferBudgetAvailable } from '../src/game/board.ts'
 import { advanceLeagueRealtime } from '../src/game/realtime.ts'
 import { DEFAULT_PRE_MATCH_STAMINA_BELOW, DEFAULT_STAMINA_BELOW, emptyAutoSubs, validateAutoSubPlan } from '../src/game/match/management.ts'
 import type { ActiveMatchSave, GameState, PlayerCard } from '../src/game/types.ts'
@@ -3329,7 +3329,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       }
       if (!player || account.game.roster.some(p => p.id === playerId)) return json(res, 400, { error: '球员不在指定的球探目标中' })
       const fee = SCOUT_LEVELS.find(item => item.level === level)?.fee
-      if (fee !== undefined && economyOf(account.game).balance - committedFunds(market.auctions, account.id) < fee) {
+      const committedFromBalance = Math.max(0, committedFunds(market.auctions, account.id) - transferBudgetAvailable(account.game))
+      if (fee !== undefined && economyOf(account.game).balance - committedFromBalance < fee) {
         return json(res, 400, { error: '可用余额不足，其他领先的竞拍已占用部分资金' })
       }
       const game = structuredClone(account.game)

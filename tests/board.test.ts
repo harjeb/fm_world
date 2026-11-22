@@ -29,7 +29,7 @@ import {
   type OldBoardSeasonContext,
 } from '../src/game/board.ts'
 import { economyOf, facilityUpgradeCost, upgradeFacility } from '../src/game/economy.ts'
-import { buyFreeAgent, listPlayer, renewContract, settleMarket } from '../src/game/market.ts'
+import { bestMarketValue, buyFreeAgent, listPlayer, renewContract, settleMarket } from '../src/game/market.ts'
 import { isOnMarketToday } from '../src/game/market-window.ts'
 import { minimumBid, placeBid, settleAuctions, type FreeMarket } from '../src/game/auction.ts'
 import { respondToOffer, type MarketClub } from '../src/game/transfers.ts'
@@ -228,8 +228,8 @@ describe('第 1 赛季兼容、休赛期预选与换季激活', () => {
     expect(mandate.transferBudget).toBe(mandate.initialTransferBudget)
     expect(mandate.facilityBudget).toBe(mandate.initialFacilityBudget)
     expect(mandate.initialTransferBudget).toBeGreaterThan(BOARD_TIER_BASE[mandate.tier].transferGrant)
-    // 转会预算直接注入俱乐部余额；设施预算作为独立专用池不混入余额
-    expect(economyOf(game).balance).toBe(balanceBeforeRoll + mandate.initialTransferBudget)
+    // 转会预算与设施预算均作为董事会独立专用池，不混入俱乐部自有余额
+    expect(economyOf(game).balance).toBe(balanceBeforeRoll)
     expect(game.board?.pendingChoice).toBeUndefined()
     expect(game.board?.offseasonPreview).toBeUndefined()
   })
@@ -326,7 +326,7 @@ describe('第 1 赛季兼容、休赛期预选与换季激活', () => {
   })
 })
 
-describe('独立设施预算、转会预算、工资帽与卖人回流', () => {
+describe('独立设施预算、独立转会预算与严格工资帽', () => {
   it('设施预算优先抵扣且不扣余额，预算不足或用完后可无缝使用自有余额继续升级', () => {
     const game = makeSeason2Game('division2', 'expected')
     const economy = economyOf(game)
@@ -365,53 +365,76 @@ describe('独立设施预算、转会预算、工资帽与卖人回流', () => {
     expect(blocked.error).toContain('余额不足')
   })
 
-  it('签人同时校验转会预算与有效工资帽；卖人收入按留存率回流转会预算', () => {
+  it('转会预算优先抵扣且与余额互不冲突，用完可直接用余额买人；工资帽仍严格限制且卖人不重复加预算', () => {
     const game = makeSeason2Game('division2', 'expected')
     const economy = economyOf(game)
     const mandate = game.board!.current!
+    const onMarket = game.freeStars.filter((p) => isOnMarketToday(game, p))
+    const nonStar = onMarket.filter((p) => !p.starKey)
+    const pool = [...nonStar, ...onMarket.filter((p) => p.starKey)].slice(0, 4)
+    expect(pool.length).toBe(4)
+    const [p1, p2, p3, p4] = pool
+    const price1 = bestMarketValue(game, p1)
+    const price2 = bestMarketValue(game, p2)
+    const price3 = bestMarketValue(game, p3)
+    const price4 = bestMarketValue(game, p4)
+
+    // 1. 余额为 0 但独立转会预算足够时：直接花转会预算签约成功，余额保持 0
+    mandate.wageCap = 300_000
+    economy.balance = 0
+    mandate.transferBudget = price1 + 1_000_000
+    const before1 = mandate.transferBudget
+    expect(buyFreeAgent(game, p1.id).ok).toBe(true)
+    expect(mandate.transferBudget).toBe(before1 - price1)
+    expect(economy.balance).toBe(0)
+
+    // 2. 转会预算不足单笔转会费时：自动耗尽转会预算并用自有余额补足差额
+    const partialBudget = Math.min(1_000, Math.floor(price2 / 2))
+    mandate.transferBudget = partialBudget
+    economy.balance = price2 + 5_000_000
+    const balBefore2 = economy.balance
+    expect(buyFreeAgent(game, p2.id).ok).toBe(true)
+    expect(mandate.transferBudget).toBe(0)
+    expect(economy.balance).toBe(balBefore2 - (price2 - partialBudget))
+
+    // 3. 转会预算为 0 后，仍可直接使用俱乐部自有余额买人（预算不拦自有资金）
+    economy.balance = price3 + 5_000_000
+    const balBefore3 = economy.balance
+    expect(buyFreeAgent(game, p3.id).ok).toBe(true)
+    expect(mandate.transferBudget).toBe(0)
+    expect(economy.balance).toBe(balBefore3 - price3)
+
+    // 4. 转会预算与自有余额合计不足时才拦截
+    mandate.transferBudget = Math.floor(price4 / 4)
+    economy.balance = Math.floor(price4 / 4)
+    const blockedByFunds = buyFreeAgent(game, p4.id)
+    expect(blockedByFunds.ok).toBe(false)
+    expect(blockedByFunds.error).toContain('不足')
+
+    // 5. 工资帽依然严格拦截：哪怕余额 5000 万 + 转会预算 500 万，超帽依然买不了
     economy.balance = 50_000_000
-    const candidate = game.freeStars.find((p) => !p.starKey && isOnMarketToday(game, p))
-      ?? game.freeStars.find((p) => isOnMarketToday(game, p))
-      ?? game.freeStars[0]
-    candidate.marketDay = undefined
-
-    // 1. 转会预算不足拦截（哪怕余额 5000 万）
-    mandate.transferBudget = 1_000
-    const blockedByBudget = buyFreeAgent(game, candidate.id)
-    expect(blockedByBudget.ok).toBe(false)
-    expect(blockedByBudget.error).toContain('转会预算不足')
-
-    // 2. 工资帽不足拦截
-    mandate.transferBudget = 5_000_000
+    mandate.transferBudget = price4 + 5_000_000
     mandate.wageCap = 1_000
-    const blockedByWage = buyFreeAgent(game, candidate.id)
+    const blockedByWage = buyFreeAgent(game, p4.id)
     expect(blockedByWage.ok).toBe(false)
     expect(blockedByWage.error).toContain('工资帽')
 
-    // 3. 青训球员豁免工资帽
-    const youthClone: Player = { ...structuredClone(candidate), youthOrigin: { club: 'player', enrolledAt: 1, transferAfter: 100, promotedAt: 2 } }
+    // 6. 青训球员豁免工资帽
+    const youthClone: Player = { ...structuredClone(p4), youthOrigin: { club: 'player', enrolledAt: 1, transferAfter: 100, promotedAt: 2 } }
     expect(checkWageCapForSigning(game, youthClone).ok).toBe(true)
 
-    // 4. 放开工资帽后签约成功，同步扣减余额与转会预算
-    mandate.wageCap = 200_000
-    const budgetBefore = mandate.transferBudget
-    const balBefore = economy.balance
-    const bought = buyFreeAgent(game, candidate.id)
-    expect(bought.ok).toBe(true)
-    const fee = balBefore - economy.balance
-    expect(fee).toBeGreaterThan(0)
-    expect(mandate.transferBudget).toBe(budgetBefore - fee)
-
-    // 5. 本地挂牌卖出回流 75% 至转会预算
+    // 7. 本地挂牌卖出：收入 100% 进俱乐部余额，不再重复叠加转会预算（防止刷钱）
     const seller = game.roster[game.roster.length - 1]
     const listPrice = 20_000
     expect(listPlayer(game, seller.id, listPrice).ok).toBe(true)
+    const balBeforeSale = economy.balance
     const transferBeforeSale = mandate.transferBudget
     const proceeds = settleMarket(game, 1)
     expect(proceeds).toBe(listPrice)
-    expect(mandate.transferBudget).toBe(transferBeforeSale + Math.round(listPrice * mandate.retentionRate))
+    expect(economy.balance).toBe(balBeforeSale + listPrice)
+    expect(mandate.transferBudget).toBe(transferBeforeSale)
 
-    // 6. 接受 AI 报价卖出同样按留存率回流转会预算
+    // 8. 接受 AI 报价卖出同样 100% 进俱乐部余额，不重复叠加转会预算
     const offerTarget = game.roster[game.roster.length - 1]
     const buyerTeam = structuredClone(game.aiTeams[0])
     const buyer: MarketClub = {
@@ -435,13 +458,15 @@ describe('独立设施预算、转会预算、工资帽与卖人回流', () => {
       expiresAt: 100_000,
       status: 'pending',
     }]
+    const balBeforeOffer = economy.balance
     const beforeOfferBudget = mandate.transferBudget
     const offerRes = respondToOffer(game, 'offer-board-test', true, 2000, buyer, 2)
     expect(offerRes.ok).toBe(true)
-    expect(mandate.transferBudget).toBe(beforeOfferBudget + Math.round(100_000 * mandate.retentionRate))
+    expect(economy.balance).toBe(balBeforeOffer + 100_000)
+    expect(mandate.transferBudget).toBe(beforeOfferBudget)
   })
 
-  it('续约加薪校验工资帽，全服竞拍出价与结算均校验并扣减转会预算与工资帽', () => {
+  it('续约加薪校验工资帽；全服竞拍优先用转会预算、用完可用余额，超工资帽仍严格拦截', () => {
     const game = makeSeason2Game('division2', 'expected')
     const economy = economyOf(game)
     const mandate = game.board!.current!
@@ -458,30 +483,49 @@ describe('独立设施预算、转会预算、工资帽与卖人回流', () => {
     expect(blockedRenew.ok).toBe(false)
     expect(blockedRenew.error).toContain('工资帽')
 
-    // 联机竞拍校验转会预算与工资帽
+    // 联机竞拍：预算与余额合计不足才拦截
     const marketPlayer = structuredClone(game.freeStars[0])
     const market: FreeMarket = { pool: [marketPlayer], auctions: [], log: [], version: 1 }
     const opening = minimumBid(marketPlayer)
-    mandate.transferBudget = Math.max(1, opening - 1_000)
+    mandate.transferBudget = Math.max(1, Math.floor(opening / 2) - 1_000)
+    economy.balance = Math.floor(opening / 2)
     mandate.wageCap = 200_000
     const bidBlockedBudget = placeBid(market, game, 'acc-1', marketPlayer.id, opening, 1000)
     expect(bidBlockedBudget.ok).toBe(false)
-    if (!bidBlockedBudget.ok) expect(bidBlockedBudget.error).toContain('转会预算')
+    if (!bidBlockedBudget.ok) expect(bidBlockedBudget.error).toContain('不足')
 
+    // 超工资帽：即使预算 + 余额远超起拍价也严格拦截
     mandate.transferBudget = opening + 5_000_000
+    economy.balance = 50_000_000
     mandate.wageCap = 1_000
     const bidBlockedWage = placeBid(market, game, 'acc-1', marketPlayer.id, opening, 1000)
     expect(bidBlockedWage.ok).toBe(false)
     if (!bidBlockedWage.ok) expect(bidBlockedWage.error).toContain('工资帽')
 
+    // 工资帽放开、余额为 0 但转会预算充足：竞拍与结算只扣转会预算，不动余额
     mandate.wageCap = 200_000
+    economy.balance = 0
+    const beforeSettleTransfer = mandate.transferBudget
     const bidOk = placeBid(market, game, 'acc-1', marketPlayer.id, opening, 1000)
     expect(bidOk.ok).toBe(true)
-    const beforeSettleTransfer = mandate.transferBudget
     const settled = settleAuctions(market, (id) => (id === 'acc-1' ? game : undefined), 1000 + 7_200_000)
     expect(settled.length).toBe(1)
     expect(settled[0].winnerId).toBe('acc-1')
     expect(mandate.transferBudget).toBe(beforeSettleTransfer - opening)
+    expect(economy.balance).toBe(0)
+
+    // 转会预算为 0、自有余额充足：竞拍与结算无缝改用自有余额
+    const secondPlayer = structuredClone(game.freeStars[1])
+    market.pool.push(secondPlayer)
+    const opening2 = minimumBid(secondPlayer)
+    mandate.transferBudget = 0
+    economy.balance = opening2 + 500_000
+    expect(placeBid(market, game, 'acc-1', secondPlayer.id, opening2, 2000).ok).toBe(true)
+    const settled2 = settleAuctions(market, (id) => (id === 'acc-1' ? game : undefined), 2000 + 7_200_000)
+    expect(settled2.length).toBe(1)
+    expect(settled2[0].winnerId).toBe('acc-1')
+    expect(mandate.transferBudget).toBe(0)
+    expect(economy.balance).toBe(500_000)
   })
 })
 
@@ -526,11 +570,10 @@ describe('转会预算 ↔ 工资帽 38:1 双向滑块与开季档位切换', ()
     expect(overPull.error).toContain('工资帽下限')
   })
 
-  it('开季第 1–3 轮可切换目标档位并精确补退预算差额；已超额花费或第 4 轮后禁止更改', () => {
+  it('开季第 1–3 轮可切换目标档位并独立调整预算差额（不动余额）；已超额花费或第 4 轮后禁止更改', () => {
     const game = makeSeason2Game('division2', 'expected')
     const economy = economyOf(game)
     const mandate = game.board!.current!
-    const expectedOpt = mandate.options.find((o) => o.ambition === 'expected')!
     const ambitiousOpt = mandate.options.find((o) => o.ambition === 'ambitious')!
     const balBefore = economy.balance
 
@@ -540,9 +583,7 @@ describe('转会预算 ↔ 工资帽 38:1 双向滑块与开季档位切换', ()
     expect(mandate.ambition).toBe('ambitious')
     expect(mandate.transferBudget).toBe(ambitiousOpt.transferGrant)
     expect(mandate.facilityBudget).toBe(ambitiousOpt.facilityGrant)
-    expect(economy.balance).toBe(
-      balBefore + (ambitiousOpt.transferGrant - expectedOpt.transferGrant),
-    )
+    expect(economy.balance).toBe(balBefore)
 
     // 花掉大部分设施预算后，不允许下调至稳妥档
     mandate.facilityBudget = 50_000
@@ -582,9 +623,7 @@ describe('赛季末考核奖惩与下赛季预算变化', () => {
     expect(winRoll.evaluation?.bonusPaid).toBe(winMandate.exceedBonus)
     expect(winGame.board!.confidence).toBeGreaterThan(BOARD_INITIAL_CONFIDENCE)
     expect(winRoll.mandate!.initialTransferBudget).toBeGreaterThan(winOldGrant)
-    expect(economyOf(winGame).balance).toBe(
-      balBeforeWinRoll + winMandate.exceedBonus + winRoll.mandate!.initialTransferBudget,
-    )
+    expect(economyOf(winGame).balance).toBe(balBeforeWinRoll + winMandate.exceedBonus)
     expect(winRoll.mandate!.facilityBudget).toBe(winRoll.mandate!.initialFacilityBudget)
 
     // 场景 B：严重失职（D 级）

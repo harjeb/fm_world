@@ -5,13 +5,14 @@
  * 1. 赛季目标：联赛排名目标（70% 权重）+ 本级正式赛季杯赛目标（30% 权重），提供三档雄心可选
  *    （稳妥 safe / 基准推荐 expected / 野心 ambitious）；休赛期可预选，开季第 1–3 轮可最后确认或切换，
  *    第 4 轮自动锁定。
- * 2. 独立预算拨款：每赛季开启时董事会直接拨付「转会预算」（注入俱乐部余额）与「独立设施预算」（独立专用池）。
- *    - 升级设施优先扣除「独立设施预算」（不扣俱乐部余额），预算不足或用完时自动使用俱乐部自有余额补足，两者互不冲突。
- *    - 签人/竞拍同时校验余额、转会预算与每轮有效工资帽；卖人收入按信任度留存率（50%/75%/85%）回流至转会预算。
+ * 2. 独立预算拨款：每赛季开启时董事会独立发放「转会预算」与「设施预算」（均不混入俱乐部余额）。
+ *    - 买人/竞拍优先扣除「转会预算」（不扣俱乐部余额），预算不足或用完时自动使用俱乐部自有余额补足；卖人收入 100% 归入俱乐部余额。
+ *    - 升级设施优先扣除「设施预算」（不扣俱乐部余额），预算不足或用完时自动使用俱乐部自有余额补足，两者均与自有资金互不冲突。
+ *    - 每轮有效工资帽严格生效：签约新援与加薪续约超帽均会拦截。
  * 3. 转会预算 ↔ 工资帽双向滑块：按 38:1（每赛季 38 轮）在转会预算与基础工资帽之间精确互转；
- *    滑块严格不与「设施预算」互通，守住设施进度上限。
+ *    滑块严格不与「设施预算」互通。
  * 4. 赛季末考核奖惩闭环：按综合完成度评定 S/A/B/C/D，更新董事会信任度（15–100）、发放 S/A 达标奖金，
- *    并直接缩放下赛季转会预算、设施预算、工资帽与卖人留存率（未达目标下赛季预算明显削减）。
+ *    并直接缩放下赛季转会预算、设施预算与工资帽（未达目标下赛季预算明显削减）。
  */
 import type {
   AITeam,
@@ -252,22 +253,36 @@ export function syncBoardLockState(game: Pick<GameState, 'board' | 'season'>): b
 
 /* ---------- 预算与工资帽校验 & 记账 ---------- */
 
+export function transferBudgetAvailable(game: Pick<GameState, 'board' | 'season'>): number {
+  if (!isBoardBudgetActive(game)) return 0
+  return Math.max(0, game.board!.current!.transferBudget)
+}
+
+/**
+ * 校验转会买人/竞拍资金是否充足：
+ * 董事会转会预算为独立专用池（与俱乐部余额互不冲突），优先扣除转会预算，不足或用完时自动使用俱乐部余额补足。
+ */
 export function checkTransferBudget(
   game: GameState,
   amount: number,
   committedAuctions = 0,
-): { ok: true } | { ok: false; error: string } {
-  if (!isBoardBudgetActive(game)) return { ok: true }
-  const mandate = game.board!.current!
-  const available = mandate.transferBudget - Math.max(0, committedAuctions)
-  if (available < amount) {
-    const extra = committedAuctions > 0 ? `（其他领先竞拍已占用 ${committedAuctions.toLocaleString()}）` : ''
-    return {
-      ok: false,
-      error: `转会预算不足：需要 ${amount.toLocaleString()}，可用转会预算 ${Math.max(0, available).toLocaleString()}${extra}（可在「俱乐部 → 董事会」出售球员回流或用滑块调拨预算）`,
-    }
+  extraFee = 0,
+): { ok: true; fromBudget: number; fromBalance: number } | { ok: false; error: string } {
+  const availBudget = transferBudgetAvailable(game)
+  const balance = Math.max(0, economyOf(game).balance)
+  const committed = Math.max(0, committedAuctions)
+  const fee = Math.max(0, extraFee)
+  const needed = Math.max(0, amount) + fee
+  const totalAvailable = availBudget + balance - committed
+  if (totalAvailable < needed) {
+    const feeNote = fee > 0 ? `（含跟价手续费 ${fee.toLocaleString()}）` : ''
+    const extra = committed > 0 ? `：其他领先竞拍已占用 ${committed.toLocaleString()}` : ''
+    const label = availBudget > 0 ? '转会预算与余额合计不足' : '余额不足'
+    return { ok: false, error: `${label}${feeNote}${extra}` }
   }
-  return { ok: true }
+  const usableBudget = Math.max(0, availBudget - committed)
+  const fromBudget = Math.min(usableBudget, Math.max(0, amount))
+  return { ok: true, fromBudget, fromBalance: Math.max(0, amount) - fromBudget }
 }
 
 export function spendTransferBudget(game: GameState, amount: number): void {
@@ -276,13 +291,20 @@ export function spendTransferBudget(game: GameState, amount: number): void {
   mandate.transferBudget = Math.max(0, mandate.transferBudget - Math.max(0, Math.round(amount)))
 }
 
-/** 卖人成交时按董事会留存率把部分收入回流至本季转会预算，返回回流金额。 */
-export function creditTransferSale(game: GameState, proceeds: number): number {
-  if (!isBoardBudgetActive(game) || proceeds <= 0) return 0
-  const mandate = game.board!.current!
-  const added = Math.round(proceeds * mandate.retentionRate)
-  mandate.transferBudget += added
-  return added
+/** 买人或支付跟价手续费扣款：优先消耗独立转会预算（不扣余额），不足或用完时自动从俱乐部余额扣除差额。 */
+export function spendTransferFunds(game: GameState, amount: number): { fromBudget: number; fromBalance: number } {
+  const cost = Math.max(0, Math.round(amount))
+  const availBudget = transferBudgetAvailable(game)
+  const fromBudget = Math.min(availBudget, cost)
+  const fromBalance = cost - fromBudget
+  if (fromBudget > 0) spendTransferBudget(game, fromBudget)
+  if (fromBalance > 0) economyOf(game).balance -= fromBalance
+  return { fromBudget, fromBalance }
+}
+
+/** 卖人收入已 100% 归入俱乐部自有余额（与独立转会预算池解耦，不再重复叠加，防止刷钱）。 */
+export function creditTransferSale(_game: GameState, _proceeds: number): number {
+  return 0
 }
 
 /** 签约新援前的每轮工资帽校验；青训球员或阵容不足最低人数时豁免。 */
@@ -723,23 +745,18 @@ export function chooseBoardAmbition(
   const transferDelta = picked.transferGrant - mandate.initialTransferBudget
   const facilityDelta = picked.facilityGrant - mandate.initialFacilityBudget
   const wageDelta = picked.wageCap - mandate.initialWageCap
-  // 设施预算为独立专用资金池，不混入俱乐部余额；仅转会预算差额同步补退至余额。
-  const cashDelta = transferDelta
+  // 转会预算与设施预算均为董事会独立专用池，不混入俱乐部余额；切换档位仅调整两项预算与工资帽。
   const committed = Math.max(0, options.committedAuctions ?? 0)
 
   const nextTransferBudget = mandate.transferBudget + transferDelta
   const nextFacilityBudget = mandate.facilityBudget + facilityDelta
   const nextWageCap = mandate.wageCap + wageDelta
-  const nextBalance = economy.balance + cashDelta
 
   if (nextTransferBudget < committed) {
     return { ok: false, error: `无法下调至「${picked.label}」：已花费或竞拍占用的转会预算超出该档位额度` }
   }
   if (nextFacilityBudget < 0) {
     return { ok: false, error: `无法下调至「${picked.label}」：本季已花掉的设施预算超出该档位额度` }
-  }
-  if (nextBalance < 0) {
-    return { ok: false, error: `无法下调至「${picked.label}」：俱乐部余额不足以退回差额 ${(-cashDelta).toLocaleString()}` }
   }
   const commercialBonus = boardCommercialWageBonus(economy)
   const currentBill = worldWageBill(game)
@@ -751,7 +768,6 @@ export function chooseBoardAmbition(
     return { ok: false, error: `无法下调至「${picked.label}」：下调后有效工资帽 ${(nextWageCap + commercialBonus).toLocaleString()}/轮 低于当前全队工资 ${currentBill.toLocaleString()}/轮` }
   }
 
-  economy.balance = nextBalance
   mandate.ambition = picked.ambition
   mandate.leagueTarget = picked.leagueTarget
   mandate.cupId = picked.cupId
@@ -1052,11 +1068,7 @@ export function evaluateAndRollBoardSeason(
   const picked = options.find((item) => item.ambition === chosenAmbition) ?? options[1] ?? options[0]
   const retentionRate = transferRetentionRate(board.confidence)
 
-  // 转会预算直接注入俱乐部余额；设施预算作为独立专用池发放，与俱乐部余额互不冲突
-  if (Number.isSafeInteger(economy.balance + picked.transferGrant)) {
-    economy.balance += picked.transferGrant
-  }
-
+  // 转会预算与设施预算均作为董事会独立专用池发放，不混入俱乐部自有余额（两者互不冲突）
   const mandate: BoardSeasonMandate = {
     seasonIndex: nextSeasonIndex,
     tier: nextTier,
