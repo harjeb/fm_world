@@ -1418,6 +1418,9 @@ export type AICard = {
   /** 1500 分制的能力评分，和属性一起变；只有更高分的新卡才会替换旧卡。 */
   rating: number
   attrs: Attributes
+  /** 培养卡学会的技能及档位；装备时一并同步到球员身上（原始技能保留在 baseSkills）。 */
+  skills?: SkillId[]
+  skillTiers?: Partial<Record<SkillId, SkillTier>>
   /** 这张卡属于谁（球员 id 加英文名）。槽位上换了人，旧卡不能套给新人。 */
   owner?: string
 }

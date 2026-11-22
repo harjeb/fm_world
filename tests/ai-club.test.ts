@@ -8,6 +8,7 @@ import {
   aiClubOf,
   aiSignFreeAgents,
   aiTierProfile,
+  backfillAICardSkills,
   createAIClub,
   equipAICards,
   playerCa,
@@ -22,6 +23,7 @@ import { facilityUpgradeCost, facilityLevel, projectedRoundIncome } from '../src
 import { AVERAGE_ROUND_GAME_DAYS } from '../src/game/calendar.ts'
 import { cachedOwnerlessTeams, createWorldGame } from '../src/game/world.ts'
 import { simulateAITrainingRound } from '../src/game/ai-training.ts'
+import { untrainedPlayer } from '../src/game/cards.ts'
 import { initialDisplayCA } from '../src/game/rating.ts'
 import { caCeilingOf } from '../src/game/ca.ts'
 import { refreshAILineup } from '../src/game/squad.ts'
@@ -518,5 +520,103 @@ describe('设施升级价格', () => {
     expect(cheap).toBeGreaterThan(0)
     expect(expensive).toBeGreaterThan(cheap)
     expect(facilityUpgradeCost('stadium', 25)).toBeNull()
+  })
+})
+
+describe('AI 培养卡技能保存、装备与队友传承', () => {
+  it('AI 培养保存并装备技能及档位，保留原始 baseSkills 并在转会/再次培养时还原', () => {
+    const base = game()
+    const team = structuredClone(base.aiTeams[0])
+    const ai = state(5_000_000, 'champions')
+    const initialSkills = new Map(team.players.map((p) => [p.id, [...p.skills]]))
+    const result = advanceAIClub(ai, { id: team.id, tier: 'champions' }, team, 4, 303, true, 2)
+    expect(result.trained).toBeGreaterThan(10)
+
+    const learnedPlayers = team.players.filter((p) => p.skills.length > (initialSkills.get(p.id)?.length ?? 0))
+    expect(learnedPlayers.length).toBeGreaterThan(5)
+
+    for (const player of learnedPlayers) {
+      const orig = initialSkills.get(player.id) ?? []
+      expect(player.baseSkills).toEqual(orig)
+      // untrainedPlayer 必须还原回原始技能，绝不把 AI 培养卡上的技能泄漏给买方或下轮培养起点
+      const reset = untrainedPlayer(player)
+      expect(reset.skills).toEqual(orig)
+      // 账本里对应卡也存着同样的技能
+      const slot = team.players.findIndex((item) => item.id === player.id)
+      expect(ai.cards[String(slot)]?.skills).toEqual(player.skills)
+    }
+
+    // 换季/槽位顺移后 equipAICards 也能把卡上的技能同步回来
+    const target = learnedPlayers[0]
+    const moved = structuredClone(team.players)
+    const idx = moved.findIndex((p) => p.id === target.id)
+    const stripped = untrainedPlayer(moved[idx])
+    expect(stripped.skills).toEqual(initialSkills.get(target.id))
+    const otherIdx = (idx + 3) % moved.length
+    moved[idx] = moved[otherIdx]
+    moved[otherIdx] = stripped
+    expect(equipAICards(ai, moved)).toBe(true)
+    expect(moved[otherIdx].skills).toEqual(target.skills)
+  })
+
+  it('AI 培养支持同队队友技能传承，且槽位满时不覆盖招牌技能', () => {
+    const base = game()
+    const fieldPlayer = structuredClone(base.roster.find((p) => p.positions.GK === 0 && p.skills.length === 0)!)
+    const starMentor = structuredClone(base.roster.find((p) => p.positions.GK === 0 && p.id !== fieldPlayer.id)!)
+    starMentor.skills = ['sh_free_kick']
+    starMentor.skillTiers = { sh_free_kick: 'rainbow' }
+    starMentor.signatureSkill = 'sh_free_kick'
+    const ai = state(5_000_000, 'champions')
+
+    // 多次不同种子运行：应当能通过队友传承学到导师的招牌技能（含银/金/彩档位）
+    let inherited = false
+    for (let seed = 1; seed <= 30; seed++) {
+      const trained = simulateAITrainingRound(fieldPlayer, seed * 97, ai.economy, 2, 0, [fieldPlayer, starMentor])
+      if (trained.skills.includes('sh_free_kick')) {
+        inherited = true
+        expect(['silver', 'gold', 'rainbow']).toContain(trained.skillTiers?.sh_free_kick)
+        break
+      }
+    }
+    expect(inherited).toBe(true)
+
+    // 已有 4 主技能（含彩虹招牌技）的球星再次培养：绝不被替换掉招牌技
+    const fullStar = structuredClone(fieldPlayer)
+    fullStar.signatureSkill = 'sh_free_kick'
+    fullStar.skills = ['sh_free_kick', 'long_shot', 'through_ball', 'safe_pass']
+    fullStar.skillTiers = { sh_free_kick: 'rainbow', long_shot: 'silver', through_ball: 'silver', safe_pass: 'silver' }
+    const trainedFull = simulateAITrainingRound(fullStar, 777, ai.economy, 2, 0, [fullStar, starMentor])
+    expect(trainedFull.skills).toContain('sh_free_kick')
+    expect(trainedFull.skillTiers?.sh_free_kick).toBe('rainbow')
+  })
+
+  it('backfillAICardSkills 为旧账本无技能高 CA 卡补齐培养技能且不降 CA，并保持幂等', () => {
+    const base = game()
+    const team = structuredClone(base.aiTeams[0])
+    const ai = state(5_000_000, 'champions')
+    // 模拟线上历史旧卡：高 CA（+250）但没有 skills 字段
+    for (let slot = 0; slot < team.players.length; slot++) {
+      const p = team.players[slot]
+      const boosted = scale(p, 1.8)
+      ai.cards[String(slot)] = {
+        rating: playerCa(boosted),
+        attrs: { ...boosted.attrs },
+        owner: `${p.id}|${p.enName}`,
+      }
+    }
+    equipAICards(ai, team.players)
+    const caBefore = team.players.map((p) => playerCa(p))
+    const skillsBefore = team.players.reduce((s, p) => s + p.skills.length, 0)
+
+    expect(backfillAICardSkills(ai, team, 2026, 2)).toBe(true)
+    const skillsAfter = team.players.reduce((s, p) => s + p.skills.length, 0)
+    expect(skillsAfter).toBeGreaterThan(skillsBefore + team.players.length)
+    team.players.forEach((p, slot) => {
+      expect(playerCa(p)).toBeCloseTo(caBefore[slot], 5)
+      expect(ai.cards[String(slot)]?.skills).toEqual(p.skills)
+    })
+
+    // 二次调用幂等
+    expect(backfillAICardSkills(ai, team, 2026, 2)).toBe(false)
   })
 })

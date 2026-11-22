@@ -52,7 +52,7 @@ import { LEAGUE_REALTIME_MS, LOGIC_MATCH_SECONDS } from '../src/game/match/time.
 import { absorbFreeAgents, aiClubIdOf, auctionRaiseFee, committedFunds, leadingBid, minimumBid, placeAIBid, placeBid, settleAuctions, type AIBidder, type Auction, type AuctionResult, type BidResult, type FreeMarket } from '../src/game/auction.ts'
 import { isOnMarketToday } from '../src/game/market-window.ts'
 import { lineupRating } from '../src/game/club-rating.ts'
-import { AI_SQUAD_LIMIT, advanceAIClub, aiBidFor, createAIClub, recordAISigning, seedAIClubs } from '../src/game/ai-club.ts'
+import { AI_SQUAD_LIMIT, advanceAIClub, aiBidFor, backfillAICardSkills, createAIClub, recordAISigning, seedAIClubs } from '../src/game/ai-club.ts'
 import { agentView, applyAgentAction, playerView, type AgentOptions } from './agent.ts'
 import { clubNameError, normalizeClubName } from '../src/game/club-name.ts'
 import { negotiationDemands, SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../src/game/negotiation.ts'
@@ -119,6 +119,8 @@ type SharedWorld = {
   randomBaseCaVersion?: 1
   /** 自由市场每日随机补充球员基础 CA 升级版本（2 = 200-230 区间，小概率 230.5-240）。 */
   marketRandomCaVersion?: 2
+  /** AI 培养卡补齐技能版本（1 = 为历史已练卡但无技能字段的 AI 球员补齐培养技能）。 */
+  aiCardSkillsVersion?: 1
   /** 电脑球队的钱、设施和培养成果；全服一份，跟着赛季一起滚。 */
   aiClubs?: Record<string, AIClubState>
   /** 自由市场最近一次每日补充是第几个游戏日。 */
@@ -220,6 +222,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     positionProfilesVersion: loadedWorld?.positionProfilesVersion,
     randomBaseCaVersion: loadedWorld ? loadedWorld.randomBaseCaVersion : 1,
     marketRandomCaVersion: loadedWorld ? loadedWorld.marketRandomCaVersion : 2,
+    aiCardSkillsVersion: loadedWorld ? loadedWorld.aiCardSkillsVersion : 1,
     freeMarketDay: loadedWorld?.freeMarketDay,
     aiClubs: loadedWorld?.aiClubs,
     aiRound: loadedWorld?.aiRound,
@@ -409,6 +412,19 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     teams: sharedWorld.teams,
     owners: sharedWorld.owners,
   })
+  // 存量 AI 培养卡补技能迁移：为此前已练卡但未记录技能的 AI 球队补齐培养技能（保留现有 CA 不回退）。
+  let backfilledAICardSkills = false
+  if (sharedWorld.aiCardSkillsVersion !== 1) {
+    for (const club of sharedWorld.world.clubs) {
+      if (club.isPlayer || sharedWorld.owners[club.id]) continue
+      const state = sharedWorld.aiClubs?.[club.id]
+      const team = sharedWorld.teams?.[club.id]
+      if (state && team && backfillAICardSkills(state, team, sharedWorld.seed, sharedWorld.world.seasonIndex)) {
+        backfilledAICardSkills = true
+      }
+    }
+    sharedWorld.aiCardSkillsVersion = 1
+  }
   // 以前 AI 买进来的球员没排进首发（只修“不合法”的阵容），一直坐在名单外：无主的 AI 球队按名单重排一次。
   // 有教练的球队阵容是教练自己排的，不动。
   refreshAILineups(Object.entries(sharedWorld.teams ?? {}).filter(([clubId]) => !sharedWorld.owners[clubId]).map(([, team]) => team))
@@ -425,7 +441,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   let sharedWorldVersion = 1
   let sharedTeamsPublicVersion = 1
   let sharedMatchBookVersion = 1
-  let worldDirty = rescaledLegacyRandoms
+  let worldDirty = rescaledLegacyRandoms || backfilledAICardSkills
   let worldWriteUrgent = false
   let worldWriteGen = 0
   let worldWriteTimer: ReturnType<typeof setTimeout> | null = null
@@ -2156,7 +2172,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       target.energy = Math.max(0, (target.energy ?? 100) - TRAINING_ENERGY_COST)
       const economy = economyOf(game)
       const seed = splitSeed(sharedWorld.seed, `ai-takeover-train-${account.id}-${game.season.index}-${game.season.round}-${target.id}`)
-      const session = simulateAITrainingSession(target, seed, economy, game.season.index, cupCeilingBonus(game))
+      const session = simulateAITrainingSession(target, seed, economy, game.season.index, cupCeilingBonus(game), game.roster)
       const gk = target.positions.GK > 0
       if (caOf(session.candidate.attrs, gk) > caOf(target.attrs, gk) + 0.5) {
         const card = addTrainedCard(game, session)

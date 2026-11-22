@@ -7,7 +7,7 @@ import { untrainedPlayer } from './cards.ts'
 import { isOnMarketToday } from './market-window.ts'
 import { attrHardLimit, attrMax, isMainAttr } from './scale.ts'
 import { cupCeilingBonusFromClaims } from './cup-rewards.ts'
-import { ALL_ATTRIBUTES, type AICard, type AIClubState, type AITeam, type AttrKey, type Attributes, type FacilityId, type GameState, type Player, type TierId, type WorldClub, type WorldState } from './types.ts'
+import { ALL_ATTRIBUTES, type AICard, type AIClubState, type AITeam, type AttrKey, type Attributes, type FacilityId, type GameState, type Player, type SkillId, type SkillTier, type TierId, type WorldClub, type WorldState } from './types.ts'
 import { FULL_SQUAD, refreshAILineup } from './squad.ts'
 import { cachedOwnerlessTeams } from './world.ts'
 import { aiBuysLeft, noteAIBuy } from './transfer-rules.ts'
@@ -162,6 +162,44 @@ function cardOf(state: AIClubState, slot: number, base: Player): AICard {
   return card
 }
 
+const SKILL_TIER_SCORE: Record<SkillTier, number> = { silver: 6, gold: 10, rainbow: 15 }
+
+function aiSkillScore(skills?: readonly SkillId[], skillTiers?: Partial<Record<SkillId, SkillTier>>): number {
+  if (!skills?.length) return 0
+  let total = 0
+  for (const id of skills) total += SKILL_TIER_SCORE[skillTiers?.[id] ?? 'silver']
+  return total
+}
+
+function sameSkills(
+  a: readonly SkillId[] | undefined,
+  aTiers: Partial<Record<SkillId, SkillTier>> | undefined,
+  b: readonly SkillId[] | undefined,
+  bTiers: Partial<Record<SkillId, SkillTier>> | undefined,
+): boolean {
+  const left = a ?? []
+  const right = b ?? []
+  if (left.length !== right.length) return false
+  for (let i = 0; i < left.length; i++) {
+    if (left[i] !== right[i]) return false
+    if ((aTiers?.[left[i]] ?? 'silver') !== (bTiers?.[right[i]] ?? 'silver')) return false
+  }
+  return true
+}
+
+/** 把 AI 卡上学会的技能同步到球员身上；首次改写前快照原始技能到 baseSkills，确保下次培养与转会还原不受污染。 */
+function applyCardSkills(player: Player, card: AICard): boolean {
+  if (!card.skills) return false
+  if (sameSkills(player.skills, player.skillTiers, card.skills, card.skillTiers)) return false
+  if (player.baseSkills === undefined) {
+    player.baseSkills = [...player.skills]
+    player.baseSkillTiers = player.skillTiers ? { ...player.skillTiers } : {}
+  }
+  player.skills = [...card.skills]
+  player.skillTiers = card.skillTiers ? { ...card.skillTiers } : {}
+  return true
+}
+
 function clampAttrs(attrs: Attributes, gk: boolean, clubBonus = 0): void {
   for (const key of ALL_ATTRIBUTES) {
     const max = clubBonus > 0 && isMainAttr(key, gk) ? attrHardLimit(key, gk) : attrMax(key, gk)
@@ -186,7 +224,13 @@ export function equipAICards(state: AIClubState, players: Player[]): boolean {
       continue
     }
     const prev = byOwner.get(card.owner)
-    if (!prev || card.rating > prev.rating) byOwner.set(card.owner, card)
+    if (
+      !prev
+      || card.rating > prev.rating + 0.5
+      || (Math.abs(card.rating - prev.rating) <= 0.5 && aiSkillScore(card.skills, card.skillTiers) > aiSkillScore(prev.skills, prev.skillTiers))
+    ) {
+      byOwner.set(card.owner, card)
+    }
   }
   const clubBonus = cupCeilingBonusFromClaims(state.cupCeilingClaims)
   const nextCards: Record<string, AICard> = {}
@@ -212,11 +256,21 @@ export function equipAICards(state: AIClubState, players: Player[]): boolean {
     if (card.rating > current + 0.5) {
       for (const attr of ALL_ATTRIBUTES) player.attrs[attr] = card.attrs[attr] ?? player.attrs[attr]
       clampAttrs(player.attrs, player.positions.GK > 0, clubBonus)
+      applyCardSkills(player, card)
       nextCards[key] = card
       changed = true
     } else if (current > card.rating + 0.5) {
-      nextCards[key] = { rating: current, attrs: { ...player.attrs }, owner }
+      nextCards[key] = {
+        rating: current,
+        attrs: { ...player.attrs },
+        skills: [...player.skills],
+        skillTiers: player.skillTiers ? { ...player.skillTiers } : {},
+        owner,
+      }
     } else {
+      if (card.skills && aiSkillScore(card.skills, card.skillTiers) > aiSkillScore(player.skills, player.skillTiers)) {
+        if (applyCardSkills(player, card)) changed = true
+      }
       nextCards[key] = card
     }
   }
@@ -230,12 +284,27 @@ function equipSlot(state: AIClubState, players: Player[], slot: number): boolean
   if (!player) return false
   const card = cardOf(state, slot, player)
   const current = playerCa(player)
-  if (card.rating > current + 0.5) {
+  if (card.rating > current + 0.4) {
     for (const key of ALL_ATTRIBUTES) player.attrs[key] = card.attrs[key] ?? player.attrs[key]
     clampAttrs(player.attrs, player.positions.GK > 0, cupCeilingBonusFromClaims(state.cupCeilingClaims))
+    applyCardSkills(player, card)
     return true
   }
-  if (current > card.rating + 0.5) state.cards[String(slot)] = { rating: current, attrs: { ...player.attrs }, owner: ownerOf(player) }
+  if (current > card.rating + 0.5) {
+    state.cards[String(slot)] = {
+      rating: current,
+      attrs: { ...player.attrs },
+      skills: [...player.skills],
+      skillTiers: player.skillTiers ? { ...player.skillTiers } : {},
+      owner: ownerOf(player),
+    }
+    return false
+  }
+  if (card.skills && aiSkillScore(card.skills, card.skillTiers) > aiSkillScore(player.skills, player.skillTiers)) {
+    for (const key of ALL_ATTRIBUTES) player.attrs[key] = card.attrs[key] ?? player.attrs[key]
+    clampAttrs(player.attrs, player.positions.GK > 0, cupCeilingBonusFromClaims(state.cupCeilingClaims))
+    return applyCardSkills(player, card)
+  }
   return false
 }
 
@@ -345,15 +414,44 @@ export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | '
     // 没有当季名单（其他分区）就不练：账本里的卡等下赛季随名单重建，免得把 GK 属性练到场上球员身上。
     if (!base) break
     const card = cardOf(state, slot, base)
-    // 真实培养：从原始属性开始跑完当季培养时段（30 / 40 / 44）和事件，产出这一轮的候选属性。
-    const trainedPlayer = simulateAITrainingRound(base, splitSeed(seed, `program-${state.trained}-${slot}`), state.economy, seasonIndex, cupCeilingBonusFromClaims(state.cupCeilingClaims))
+    // 真实培养：从原始属性开始跑完当季培养时段（30 / 40 / 44）、事件与周一交流赛队友技能传承，产出本轮候选卡。
+    const trainedPlayer = simulateAITrainingRound(
+      base,
+      splitSeed(seed, `program-${state.trained}-${slot}`),
+      state.economy,
+      seasonIndex,
+      cupCeilingBonusFromClaims(state.cupCeilingClaims),
+      players,
+    )
     state.trained += 1
     trained += 1
     const rating = playerCa(trainedPlayer)
-    if (rating <= card.rating + 0.4) continue
-    state.cards[String(slot)] = { rating, attrs: { ...trainedPlayer.attrs }, owner: card.owner }
-    // 按名单下标装这个槽位自己的卡（不能拿一个人当 0 号槽位去套）。
-    if (applyToTeam && players && equipSlot(state, players, slot)) equipped = true
+    const trainedSkills = [...trainedPlayer.skills]
+    const trainedSkillTiers = trainedPlayer.skillTiers ? { ...trainedPlayer.skillTiers } : {}
+    const newSkillScore = aiSkillScore(trainedSkills, trainedSkillTiers)
+    const oldSkillScore = aiSkillScore(card.skills ?? base.skills, card.skills ? card.skillTiers : base.skillTiers)
+    const betterRating = rating > card.rating + 0.4 && (rating + newSkillScore >= card.rating + oldSkillScore)
+    const betterSkillsAtSameCa = rating >= card.rating - 0.4 && newSkillScore > oldSkillScore
+    const backfillLegacySkills = card.skills === undefined && newSkillScore > oldSkillScore
+    if (betterRating || betterSkillsAtSameCa) {
+      state.cards[String(slot)] = {
+        rating,
+        attrs: { ...trainedPlayer.attrs },
+        skills: trainedSkills,
+        skillTiers: trainedSkillTiers,
+        owner: card.owner,
+      }
+      // 按名单下标装这个槽位自己的卡（不能拿一个人当 0 号槽位去套）。
+      if (applyToTeam && players && equipSlot(state, players, slot)) equipped = true
+    } else if (backfillLegacySkills) {
+      // 老账本无技能字段的旧卡：保留高 CA 属性，补上本轮真实培养学到的技能。
+      state.cards[String(slot)] = {
+        ...card,
+        skills: trainedSkills,
+        skillTiers: trainedSkillTiers,
+      }
+      if (applyToTeam && players && equipSlot(state, players, slot)) equipped = true
+    }
   }
   if (equipped && team) refreshAILineup(team)
 
@@ -371,6 +469,48 @@ export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | '
     upgrades += 1
   }
   return { trained, upgrades }
+}
+
+/**
+ * 一次性存量迁移：为此前已练过卡、但旧版未保存技能的 AI 球员补跑一轮真实培养（含同队队友技能传承），
+ * 保留其现有最高 CA 属性不回退，并把学会的技能写入卡片与现役名单。幂等。
+ */
+export function backfillAICardSkills(
+  state: AIClubState,
+  team: AITeam | undefined,
+  seed: number,
+  seasonIndex = 1,
+): boolean {
+  if (!team?.players?.length) return false
+  const players = team.players
+  let changed = equipAICards(state, players)
+  // 先处理原本就带技能或 CA 更高的核心球员，便于后续队友传承。
+  const slots = players
+    .map((player, slot) => ({ slot, priority: (player.skills.length > 0 ? 10_000 : 0) + playerCa(player) }))
+    .sort((a, b) => b.priority - a.priority)
+    .map((item) => item.slot)
+  const cupBonus = cupCeilingBonusFromClaims(state.cupCeilingClaims)
+  for (const slot of slots) {
+    const player = players[slot]
+    const card = state.cards[String(slot)]
+    if (!player || !card || card.skills !== undefined) continue
+    if (card.rating <= originalCa(player) + 5) continue
+    const trained = simulateAITrainingRound(
+      player,
+      splitSeed(seed, `ai-card-skills-backfill-${team.id}-${slot}`),
+      state.economy,
+      seasonIndex,
+      cupBonus,
+      players,
+    )
+    const trainedSkills = [...trained.skills]
+    const trainedSkillTiers = trained.skillTiers ? { ...trained.skillTiers } : {}
+    // 仅回填技能与档位，不额外赠送免费 CA 成长，保持对真人玩家公平。
+    state.cards[String(slot)] = { ...card, skills: trainedSkills, skillTiers: trainedSkillTiers }
+    if (equipSlot(state, players, slot)) changed = true
+  }
+  if (changed && team) refreshAILineup(team)
+  return changed
 }
 
 /** 当前买得起的最便宜的那次升级要多少钱。 */

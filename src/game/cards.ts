@@ -172,7 +172,7 @@ export function addTrainedCard(game: GameState, session: TrainingSession): Playe
 
 /** 原始属性。旧存档里已培养过的球员没记录原始技能，只能还原成招牌技能。 */
 export function baseBuild(player: Player): Build {
-  const untouched = !player.equippedCardId && player.version === 0
+  const untouched = !player.equippedCardId && player.version === 0 && player.baseSkills === undefined
   const skills = untouched ? player.skills : player.baseSkills ?? (player.signatureSkill ? [player.signatureSkill] : [])
   const tiers = untouched ? player.skillTiers : player.baseSkillTiers ?? player.skillTiers
   return {
@@ -198,8 +198,8 @@ function wear(player: Player, build: Build, cardId: string | null): void {
   if (!player.equippedCardId && player.version === 0) {
     player.baseDetailedPositions = player.detailedPositions && { ...player.detailedPositions }
     player.baseDetailedPositionsVersion = player.detailedPositionsVersion
-    player.baseSkills = [...player.skills]
-    player.baseSkillTiers = { ...player.skillTiers }
+    if (player.baseSkills === undefined) player.baseSkills = [...player.skills]
+    if (player.baseSkillTiers === undefined) player.baseSkillTiers = { ...player.skillTiers }
   }
   const copy = cloneBuild(build)
   copy.detailedPositions ??= inferDetailedPositions({ positions: copy.positions, style: player.style, foot: player.foot })
