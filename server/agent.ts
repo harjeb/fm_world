@@ -84,7 +84,7 @@ import { cardRecyclePoints, cardsOf, playerCards, recyclePlayerCards, setCardRec
 import { skillEffectText, traitEffectText } from '../src/game/data/skill-effects.ts'
 import { hasBookAtOrAbove } from '../src/game/legend-books.ts'
 import { SHOP_BOOK_PRICE, buyShopBook, peakStageShopPoints, shopCatalog, shopPointsOf, shopSeasonIndex } from '../src/game/shop.ts'
-import { achievementSummary, claimAchievement, claimAllAchievements } from '../src/game/achievements.ts'
+import { claimAchievement, claimAllAchievements, publicAchievementSummary } from '../src/game/achievements.ts'
 import { traitNameOf } from '../src/game/data/star-traits.ts'
 import {
   applyLineupPreset,
@@ -709,7 +709,7 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
     })),
     roles: ROLES_BY_POSITION,
     trainingSessions: sessionView,
-    achievements: achievementSummary(game),
+    achievements: publicAchievementSummary(game),
     shop: {
       points: shopPointsOf(game),
       seasonIndex: shopSeasonIndex(game),

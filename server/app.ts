@@ -74,7 +74,7 @@ import { MatchScheduler } from './match-scheduler.ts'
 import { emptyMatchBook, matchJobId, seasonCupJobId, recordForClub, type LockedTeam, type MatchBook, type MatchJob } from './match-job.ts'
 import { awardLeagueBookDrops } from '../src/game/league-book-drops.ts'
 import { awardSeasonShopPoints, buyShopBook } from '../src/game/shop.ts'
-import { claimAchievement, claimAllAchievements, ensureAchievements } from '../src/game/achievements.ts'
+import { claimAchievement, claimAllAchievements, ensureAchievements, syncUnlockedAchievements } from '../src/game/achievements.ts'
 import { chemistryForPlayers, mergeChemistryTraining } from '../src/game/chemistry.ts'
 import { isStyleId, tryValidateInstructions } from '../src/game/pes/tactics.ts'
 import { isMatchPlanId, matchPlanConditionFactor } from '../src/game/pes/match-plan.ts'
@@ -3716,6 +3716,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         if (!owned.legend) delete body.game.pve.cupCeilingClaims.legend
         ensureCupCeilingClaims(body.game)
       }
+      ensureAchievements(body.game, now())
+      syncUnlockedAchievements(body.game, now())
       preservePeakAttempts(account.game, body.game)
       if (body.game.namesVersion !== NAMES_VERSION || body.game.traitsVersion !== TRAITS_VERSION || body.game.attrsVersion !== ATTRS_VERSION) {
         if (body.game.reserveStars && Object.isFrozen(body.game.reserveStars)) {

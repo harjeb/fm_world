@@ -21,6 +21,7 @@ import { recordMatchInjuries } from './injury.ts'
 import { scoutMarketGraceMs } from './scouting.ts'
 import { emptyAutoSubs } from './match/management.ts'
 import { applyPveResult, ensurePve } from './pve.ts'
+import { syncUnlockedAchievements } from './achievements.ts'
 import { awardRoundIncome, economyOf } from './economy.ts'
 import { playerMarketValue, settleMarket } from './market.ts'
 import { LOGIC_MATCH_SECONDS } from './match/time.ts'
@@ -839,6 +840,7 @@ export function finishActiveMatch(game: GameState, engine: GameEngine, now = Dat
     applyPveResult(game, record, active.context)
   }
   game.activeMatch = undefined
+  syncUnlockedAchievements(game)
   return record
 }
 

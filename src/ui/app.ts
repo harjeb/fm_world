@@ -90,7 +90,7 @@ import { morph } from './morph.ts'
 import { installTooltips, syncTooltip } from './tooltip.ts'
 import { drawPitch, pitchPlaybackPending, resetPitchView } from './pitch-canvas.ts'
 import { isPesEngine, setPesViewHooks } from './pes-pitch.ts'
-import { game, replay, resetReplay, restoreSavedScreen, setGame, startOfflineGame, stopReplay, ui, type ClubTab, type Screen, type SquadSortKey, type TransferTab } from './state.ts'
+import { game, replay, resetReplay, restoreSavedScreen, setGame, startOfflineGame, stopReplay, ui, type AchievementFilter, type ClubTab, type Screen, type SquadSortKey, type TransferTab } from './state.ts'
 import { renderAcademy } from './screens/academy.ts'
 import { renderYouth } from './screens/youth.ts'
 import { ensureYouth, settleYouth, type YouthPlan } from '../game/youth.ts'
@@ -1147,6 +1147,12 @@ document.addEventListener('click', async (event) => {
     render()
     return
   }
+  const achFilter = target.closest<HTMLElement>('[data-ach-filter]')
+  if (achFilter?.dataset.achFilter) {
+    ui.achievementFilter = achFilter.dataset.achFilter as AchievementFilter
+    render()
+    return
+  }
   const seasonCupTab = target.closest<HTMLElement>('[data-season-cup-tab]')
   if (seasonCupTab?.dataset.seasonCupTab) {
     const id = seasonCupTab.dataset.seasonCupTab
@@ -1442,6 +1448,7 @@ document.addEventListener('click', async (event) => {
       cardActionPending = true
       try {
         const beforeBalance = economyOf(game).balance
+        const beforeFans = economyOf(game).fans
         const beforePoints = game.shop?.points ?? 0
         if (isOnlineMode()) {
           ui.notice = '正在领取成就奖励，请稍候…'
@@ -1453,9 +1460,11 @@ document.addEventListener('click', async (event) => {
         }
         const gotMoney = Math.max(0, economyOf(game).balance - beforeBalance)
         const gotPoints = Math.max(0, (game.shop?.points ?? 0) - beforePoints)
+        const gotFans = Math.max(0, economyOf(game).fans - beforeFans)
         const parts: string[] = []
         if (gotMoney > 0) parts.push(`金币 +${gotMoney.toLocaleString()}`)
         if (gotPoints > 0) parts.push(`商店点券 +${gotPoints}`)
+        if (gotFans > 0) parts.push(`球迷 +${gotFans.toLocaleString()}`)
         ui.notice = parts.length ? `成就奖励已领取：${parts.join('，')}。` : '成就奖励已领取。'
       } catch (error) {
         ui.notice = error instanceof Error ? error.message : '领取成就奖励失败'

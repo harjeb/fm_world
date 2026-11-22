@@ -12,6 +12,8 @@ import {
   claimAllAchievements,
   claimableAchievementCount,
   ensureAchievements,
+  publicAchievementSummary,
+  syncUnlockedAchievements,
 } from '../src/game/achievements.ts'
 import { economyOf } from '../src/game/economy.ts'
 import { ensureShop, shopPointsOf } from '../src/game/shop.ts'
@@ -319,5 +321,147 @@ describe('v1.0 UI：成就页、总览联赛/杯赛分色、友谊赛五星实�
     expect(peak).not.toContain('目标 CA')
     const stage1 = buildPeakTeam(1)
     expect(peak).toContain(String(Math.round(lineupRating(stage1.players, stage1.lineup))))
+  })
+})
+
+describe('50 项高难隐藏成就（未解锁显示 ？？？，奖励待配置）', () => {
+  it('共包含 24 项常规成就与 50 项隐藏挑战，未解锁时 UI 与对外视图均以 ？？？ 脱敏展示', () => {
+    const standard = ACHIEVEMENTS.filter((a) => !a.hidden)
+    const hidden = ACHIEVEMENTS.filter((a) => a.hidden)
+    expect(standard).toHaveLength(24)
+    expect(hidden).toHaveLength(50)
+    expect(ACHIEVEMENTS).toHaveLength(74)
+
+    const game = createWorldGame(1007)
+    const pub = publicAchievementSummary(game)
+    expect(pub.hiddenTotal).toBe(50)
+    expect(pub.hiddenUnlocked).toBe(0)
+    const tenGoalPub = pub.items.find((i) => i.id === 'feat_team_10_goals')!
+    expect(tenGoalPub.title).toBe('？？？')
+    expect(tenGoalPub.unlocked).toBe(false)
+    expect(tenGoalPub.claimable).toBe(false)
+    // 不败赛季不会在开季 0 场时误判解锁
+    expect(pub.items.find((i) => i.id === 'feat_season_invincible')!.unlocked).toBe(false)
+
+    setGame(game)
+    ui.achievementFilter = 'hidden'
+    const html = renderAchievements()
+    expect(html).toContain('？？？')
+    expect(html).toContain('奖励待定（后续更新）')
+    expect(html).not.toContain('十全十美')
+    expect(html).not.toContain('十二码心脏')
+    ui.achievementFilter = 'all'
+  })
+
+  it('单场 10 球、帽子戏法、大四喜、点球胜、门神、超级替补、红牌逆袭与赛季/豪门高难成就均可准确解锁且永久留档', () => {
+    const game = createWorldGame(1008)
+    const emptyTeamStats = {
+      possession: 72, passes: 260, passesCompleted: 240, shots: 28, shotsOnTarget: 16,
+      goals: 10, interceptions: 12, tackles: 14, fouls: 6, corners: 9, xg: 6.4, distance: 110,
+      yellowCards: 1, redCards: 1,
+    }
+    const oppStats = {
+      possession: 28, passes: 140, passesCompleted: 100, shots: 3, shotsOnTarget: 0,
+      goals: 0, interceptions: 5, tackles: 8, fouls: 12, corners: 1, xg: 0.2, distance: 102,
+      yellowCards: 2, redCards: 0,
+    }
+    game.matchHistory.unshift({
+      id: 'epic-10-0',
+      seed: 1,
+      createdAt: 1000,
+      isLeague: true,
+      round: 1,
+      homeId: 'player',
+      awayId: 'opp-1',
+      homeName: '我队',
+      awayName: '弱旅',
+      score: { home: 10, away: 0 },
+      result: 'win',
+      stats: { home: emptyTeamStats, away: oppStats },
+      playerStats: [
+        { playerId: 'p1', name: '神锋', side: 'home', minutes: 90, onMinute: 0, passes: 30, passesCompleted: 28, shots: 10, shotsOnTarget: 8, goals: 6, assists: 3, tackles: 1, interceptions: 1, distance: 10, staminaLeft: 50, touches: 60, rating: 10.0 },
+        { playerId: 'p2', name: '奇兵', side: 'home', minutes: 30, onMinute: 60, passes: 15, passesCompleted: 14, shots: 4, shotsOnTarget: 3, goals: 2, assists: 0, tackles: 0, interceptions: 0, distance: 4, staminaLeft: 80, touches: 22, rating: 8.5 },
+        { playerId: 'p3', name: '中核', side: 'home', minutes: 90, onMinute: 0, passes: 80, passesCompleted: 76, shots: 2, shotsOnTarget: 1, goals: 1, assists: 4, tackles: 9, interceptions: 9, distance: 12, staminaLeft: 45, touches: 95, rating: 9.6 },
+        { playerId: 'p4', name: '边锋', side: 'home', minutes: 90, onMinute: 0, passes: 35, passesCompleted: 30, shots: 2, shotsOnTarget: 1, goals: 1, assists: 0, tackles: 1, interceptions: 1, distance: 11, staminaLeft: 55, touches: 44, rating: 7.8 },
+        { playerId: 'p5', name: '门神', side: 'home', minutes: 90, onMinute: 0, passes: 20, passesCompleted: 19, shots: 0, shotsOnTarget: 0, goals: 0, assists: 0, saves: 12, tackles: 0, interceptions: 1, distance: 5, staminaLeft: 90, touches: 30, rating: 9.0 },
+      ],
+    } as MatchRecord)
+
+    // 点球大战胜利 + 少射 10 脚防反胜
+    game.challengeHistory.unshift({
+      id: 'epic-pen',
+      seed: 2,
+      createdAt: 2000,
+      isLeague: false,
+      mode: 'cup',
+      homeId: 'player',
+      awayId: 'opp-2',
+      homeName: '我队',
+      awayName: '强敌',
+      score: { home: 1, away: 1 },
+      shootout: { home: 5, away: 4 },
+      result: 'win',
+      stats: {
+        home: { ...emptyTeamStats, shots: 4, possession: 35, redCards: 0 },
+        away: { ...oppStats, shots: 18, shotsOnTarget: 6, goals: 1 },
+      },
+      playerStats: [],
+    } as unknown as MatchRecord)
+
+    // 豪门与赛季成就：5 连胜、S+ 传奇首胜、全部 7 座设施 5 级、5 本彩书、董事会 S 级
+    const playerFixtures = game.season.fixtures.filter((f) => f.isPlayer).slice(0, 5)
+    for (const f of playerFixtures) {
+      f.played = true
+      f.score = f.homeId === 'player' ? { home: 2, away: 0 } : { home: 0, away: 2 }
+    }
+    game.pve!.legends['barcelona-2010-11'] = { played: 1, won: 1, drawn: 0, lost: 0, goals: 2, conceded: 1 }
+    const eco = economyOf(game)
+    eco.stadium = eco.academy = eco.medical = eco.shop = eco.sponsor = eco.psychology = eco.tactics = 25
+    game.legendBooks = [
+      { id: 'lg_tiki_taka', tier: 'rainbow' },
+      { id: 'lg_counter', tier: 'rainbow' },
+      { id: 'lg_high_press', tier: 'rainbow' },
+      { id: 'lg_long_shot', tier: 'rainbow' },
+      { id: 'lg_finisher', tier: 'rainbow' },
+    ] as any
+    game.board = { version: 1, confidence: 90, lastGrade: 'S', history: [] }
+
+    expect(syncUnlockedAchievements(game, 99_000)).toBe(true)
+    const summary = achievementSummary(game)
+    const byId = new Map(summary.items.map((i) => [i.id, i]))
+
+    const mustBeUnlocked = [
+      'feat_hat_trick', 'feat_poker', 'feat_five_goals_player', 'feat_six_goals_player',
+      'feat_team_5_goals', 'feat_team_8_goals', 'feat_team_10_goals',
+      'feat_margin_5', 'feat_margin_8', 'feat_assist_3', 'feat_assist_4', 'feat_goal_assist_double',
+      'feat_shootout_win', 'feat_rating_95', 'feat_rating_10',
+      'feat_gk_saves_8', 'feat_gk_saves_12', 'feat_gk_clean_saves_6',
+      'feat_sub_hero', 'feat_tackle_8', 'feat_intercept_8',
+      'feat_possession_70', 'feat_shots_25_win', 'feat_underdog_shot_win',
+      'feat_red_card_win', 'feat_clean_sheet_zero_shots', 'feat_goal_fest_draw', 'feat_pass_accuracy_90',
+      'feat_league_streak_5', 'feat_league_clean_streak_5',
+      'feat_legend_splus_win', 'feat_all_facilities_max', 'feat_rainbow_books_5', 'feat_board_grade_s',
+    ]
+    for (const id of mustBeUnlocked) {
+      expect(byId.get(id)?.unlocked, id).toBe(true)
+      // 尚未配置奖励的隐藏成就不进入 claimed，方便后续加奖励后直接可领
+      expect(byId.get(id)?.claimed, id).toBe(false)
+      expect(byId.get(id)?.claimable, id).toBe(false)
+      expect(claimAchievement(game, id).ok, id).toBe(false)
+    }
+
+    // 即使清空历史战报，已永久记账的 unlocked 仍保持揭晓状态
+    game.matchHistory = []
+    game.challengeHistory = []
+    const pubAfterPrune = publicAchievementSummary(game)
+    expect(pubAfterPrune.items.find((i) => i.id === 'feat_team_10_goals')?.title).toBe('十全十美')
+    expect(pubAfterPrune.items.find((i) => i.id === 'feat_shootout_win')?.title).toBe('十二码心脏')
+
+    setGame(game)
+    const rendered = renderAchievements()
+    expect(rendered).toContain('十全十美')
+    expect(rendered).toContain('大四喜')
+    expect(rendered).toContain('十二码心脏')
+    expect(rendered).toContain('隐藏已揭晓')
   })
 })

@@ -1350,6 +1350,8 @@ export type AchievementClaim = {
 
 export type AchievementState = {
   version: 1
+  /** 已永久解锁的成就 ID -> 首次解锁时间戳（保留历史战绩高光，且不占用领取状态以便后续补发新奖励）。 */
+  unlocked?: Record<string, number>
   /** 已领取成就 ID -> 领取记录（防重复领取）。 */
   claimed: Record<string, AchievementClaim>
   /** 是否已完成 1.0 上线老存档的巅峰首胜 100 万福利检查（确保幂等）。 */
