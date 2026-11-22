@@ -92,6 +92,10 @@ export interface ContactModel {
   loose(m: PesMatch, claimants: PesPlayer[]): number
   /** 专属特性“躲越位” */
   beatsOffside(m: PesMatch, receiver: PesPlayer): boolean
+  /** simV2：定位球（直接任意球 / 任意球传中 / 角球）主罚人专家优先分。 */
+  setPiecePreference?(m: PesMatch, player: PesPlayer, mode: 'fk_shot' | 'fk_cross' | 'corner'): number
+  /** simV2：直接任意球专家额外射程（米，默认 0；如电梯球 +6m、任意球大师 +3m）。 */
+  freeKickExtraRange?(m: PesMatch, player: PesPlayer): number
   /** 存档（纯数据） */
   toJSON(): unknown
 }

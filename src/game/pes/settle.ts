@@ -347,6 +347,35 @@ export class PesSettlement implements ContactModel {
     return runner?.kind === 'onside' && this.ratings.traitRoll(player, 'onside', runner.chance)
   }
 
+  /** simV2：定位球专家主罚优先权（保证任意球/角球技能与球星特性稳定触发）。 */
+  setPiecePreference(_m: PesMatch, player: PesPlayer, mode: 'fk_shot' | 'fk_cross' | 'corner'): number {
+    const mp = this.mp[player.pid]
+    if (!mp) return 0
+    const trait = STAR_TRAITS[mp.traitId]
+    if (mode === 'fk_shot') {
+      let score = this.ratings.eff(mp, 'shooting') * 0.6 + this.ratings.eff(mp, 'composure') * 0.4
+      if (trait?.kind === 'shot' && trait.scope === 'freeKick') score += 300
+      if (mp.skills.includes('lg_knuckleball')) score += 260
+      if (mp.skills.includes('sh_free_kick')) score += 220
+      return score
+    }
+    let score = this.ratings.eff(mp, 'passing') * 0.7 + this.ratings.eff(mp, 'vision') * 0.3
+    if (trait?.kind === 'pass' && trait.scope === 'freeKick') score += 300
+    if (mp.skills.includes('lg_set_piece_iq')) score += 260
+    if (mp.skills.includes('sh_dead_ball')) score += 220
+    return score
+  }
+
+  /** simV2：直接任意球专家额外射程（电梯球 +6m、任意球大师/球星任意球特性 +3m）。 */
+  freeKickExtraRange(_m: PesMatch, player: PesPlayer): number {
+    const mp = this.mp[player.pid]
+    if (!mp) return 0
+    if (mp.skills.includes('lg_knuckleball')) return 6
+    const trait = STAR_TRAITS[mp.traitId]
+    if (mp.skills.includes('sh_free_kick') || (trait?.kind === 'shot' && trait.scope === 'freeKick')) return 3
+    return 0
+  }
+
   /* ---------- 射门 ---------- */
   shot(m: PesMatch, shooter: PesPlayer, req: ShotRequest): ShotVerdict {
     this.begin(m)
@@ -468,7 +497,8 @@ export class PesSettlement implements ContactModel {
     this.begin(m)
     const attacking = this.view(this.teamOf(attackingTi), attackers.map((q) => q.pid))
     const defending = this.view(this.teamOf(1 - attackingTi), defenders.map((q) => q.pid))
-    const contestants = this.kernel.aerialContestants(attacking, defending, this.toGame(m, point), sideOf(attackingTi), () => m.rng.float())
+    const setPieceTaker = m.ball.meta?.setPiece && m.ball.meta.from >= 0 ? this.mp[m.ball.meta.from] : null
+    const contestants = this.kernel.aerialContestants(attacking, defending, this.toGame(m, point), sideOf(attackingTi), () => m.rng.float(), setPieceTaker)
     if (!contestants.length) return -1
     const roll = m.rng.float() * totalWeight(contestants)
     return this.pidOf(pickByWeight(contestants, roll).player)

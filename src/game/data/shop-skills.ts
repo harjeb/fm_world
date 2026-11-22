@@ -76,14 +76,14 @@ export const SHOP_SKILLS: Record<ShopSkillId, ShopSkillDef> = {
   // 边路（4）
   sh_cut_inside: shopSkill('sh_cut_inside', '内切突破', 'field', 'wing', 'dribbling', '中', '在前场边路受到贴身逼抢时更擅长盘带强突。', '前场边路受压盘带'),
   sh_cutback: shopSkill('sh_cutback', '倒三角回敲', 'field', 'wing', 'passing', '中', '从前场边路或底线向中路禁区回敲时更精准。', '前场边路向中路传球'),
-  sh_dead_ball: shopSkill('sh_dead_ball', '定位球弧线', 'field', 'wing', 'passing', '低', '主罚前场任意球传中时落点更具威胁。', '前场任意球传中'),
+  sh_dead_ball: shopSkill('sh_dead_ball', '定位球弧线', 'field', 'wing', 'passing', '低', '优先主罚任意球传中与角球，显著提升落点精度与禁区队友争顶优势。', '任意球传中 / 角球'),
   sh_cut_in_shot: shopSkill('sh_cut_in_shot', '内切兜射', 'field', 'wing', 'shooting', '中', '从肋部中远距离偏侧位置起脚兜射时更准更致命。', '肋部 14–24 米偏侧起脚'),
 
   // 锋线（8）
   sh_clinical_1v1: shopSkill('sh_clinical_1v1', '单刀杀手', 'field', 'forward', 'composure', '高', '获得单刀或禁区空位良机时终结更加冷静致命。', '单刀 / 禁区空位起脚'),
   sh_target_header: shopSkill('sh_target_header', '头球抢点', 'field', 'forward', 'heading', '中', '进攻端争抢高空球与传中落点时更有统治力。', '进攻方参与高空球争顶'),
   sh_power_header: shopSkill('sh_power_header', '强力头槌', 'field', 'forward', 'heading', '中', '头球攻门时射正与破门威胁同步提升。', '头球射门'),
-  sh_free_kick: shopSkill('sh_free_kick', '任意球大师', 'field', 'forward', 'shooting', '中', '主罚直接任意球攻门时弧线与落点更具威胁。', '直接任意球射门'),
+  sh_free_kick: shopSkill('sh_free_kick', '任意球大师', 'field', 'forward', 'shooting', '中', '优先主罚直接任意球并拓展射程，弧线与落点极具破门威胁。', '直接任意球（射程 +3m）'),
   sh_poised_finish: shopSkill('sh_poised_finish', '抗压终结', 'field', 'forward', 'strength', '中', '在防守球员贴身干扰下依然能稳定完成射门。', '受贴身压迫时起脚'),
   sh_target_link: shopSkill('sh_target_link', '支点做球', 'field', 'forward', 'strength', '低', '在前场作为进攻支点接应传球时更容易护住并衔接成功。', '前场接应队友传球'),
   sh_tight_angle: shopSkill('sh_tight_angle', '小角度巧射', 'field', 'forward', 'shooting', '中', '在射门角度狭小时仍能打向门框范围之内。', '小角度（< 22°）起脚'),

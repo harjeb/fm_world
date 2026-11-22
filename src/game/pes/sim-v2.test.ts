@@ -324,8 +324,35 @@ describe('simV2 2D 动画与 AI 演进回归', () => {
     v2.taker.skills = ['sh_free_kick']
     v2.taker.skillTiers = { sh_free_kick: 'gold' }
     const fkSkill = v2.k.shotModel(v2.taker, v2.hTeam, v2.aTeam, fkOpts)
-    expect(fkSkill.pGoal).toBeGreaterThan(fkPlain.pGoal + 0.02)
-    expect(fkSkill.pGoal).toBeLessThan(0.13)
+    expect(fkSkill.pGoal).toBeGreaterThan(fkPlain.pGoal + 0.05)
+    expect(fkSkill.pGoal).toBeLessThan(0.17)
+
+    v2.taker.skills = ['lg_knuckleball']
+    v2.taker.skillTiers = { lg_knuckleball: 'gold' }
+    const fkKnuckle = v2.k.shotModel(v2.taker, v2.hTeam, v2.aTeam, fkOpts)
+    expect(fkKnuckle.pGoal).toBeGreaterThan(fkSkill.pGoal)
+    expect(fkKnuckle.pGoal).toBeLessThan(0.19)
+
+    // 6) simV2 定位球专家自动优先主罚（直接任意球 / 任意球传中 / 角球），且电梯球拓展超远射程
+    const fkSpec = m.teams[0].players[6]
+    const deadSpec = m.teams[0].players[5]
+    const fkSpecMp = v2.g.settlement.gamePlayer(fkSpec.pid)!
+    const deadSpecMp = v2.g.settlement.gamePlayer(deadSpec.pid)!
+    for (const q of m.teams[0].players) {
+      const mp = v2.g.settlement.gamePlayer(q.pid)
+      if (mp) { mp.skills = []; mp.traitId = 'star_none' }
+    }
+    fkSpecMp.skills = ['lg_knuckleball']
+    deadSpecMp.skills = ['sh_dead_ball']
+    const setRestart = (m as unknown as { setRestart(type: string, pos: { x: number; y: number }, team: typeof m.teams[0]): void }).setRestart.bind(m)
+    // 32 米前场任意球：电梯球专家具备 +6m 超远射程，被选为直接任意球主罚手
+    setRestart('fk', { x: m.spec.HL - 32 * (m.spec.L / 100), y: 0 }, m.teams[0])
+    expect(m.restart?.taker).toBe(fkSpec.pid)
+    // 角球与 40 米远距离定位球传中：定位球弧线专家优先主罚
+    setRestart('corner', { x: m.spec.HL - 0.5, y: m.spec.HW - 0.5 }, m.teams[0])
+    expect(m.restart?.taker).toBe(deadSpec.pid)
+    setRestart('fk', { x: m.spec.HL - 40 * (m.spec.L / 100), y: 12 }, m.teams[0])
+    expect(m.restart?.taker).toBe(deadSpec.pid)
   })
 
   it('力量与盘带强化：对抗护球、高空二点球权重对比、防封堵起脚与带球速度均显著受益', () => {

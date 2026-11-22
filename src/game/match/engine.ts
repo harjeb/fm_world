@@ -2483,10 +2483,12 @@ export class MatchEngine {
       let score = mode === 'shoot' ? player.attrs.shooting * 0.6 + player.attrs.composure * 0.4 : player.attrs.passing * 0.7 + player.attrs.vision * 0.3
       if (mode === 'cross') score += player.attrs.passing * 0.2
       score -= distance(player, { x, y }) * 0.2
-      // 带任意球特性的人优先主罚，否则特性可能一直用不上。
+      // 带任意球特性或技能的人优先主罚，否则特性/技能可能一直用不上。
       if (freeKick) {
         const trait = STAR_TRAITS[player.traitId]
         if ((mode === 'shoot' && trait?.kind === 'shot' && trait.scope === 'freeKick') || (mode === 'cross' && trait?.kind === 'pass' && trait.scope === 'freeKick')) score += 3000
+        if (mode === 'shoot' && (player.skills.includes('lg_knuckleball') || player.skills.includes('sh_free_kick'))) score += 2500
+        if (mode === 'cross' && (player.skills.includes('lg_set_piece_iq') || player.skills.includes('sh_dead_ball'))) score += 2500
       }
       return { player, score }
     })

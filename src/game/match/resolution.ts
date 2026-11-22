@@ -791,8 +791,8 @@ export class SettlementKernel {
       }
       if (opts.freeKick && shooter.skills.includes('lg_knuckleball')) {
         const m = legendMultiplier(shooter, 'lg_knuckleball')
-        onTarget += 0.06 * m
-        goalGiven += 0.04 * m
+        onTarget += 0.14 * m
+        goalGiven += 0.10 * m
         if (markSkills) this.hooks.markSkill(shooter, 'lg_knuckleball', true, true)
       }
       if (dist >= 20 && !(simV2 && opts.freeKick) && shooter.skills.includes('lg_rising_shot')) {
@@ -836,8 +836,8 @@ export class SettlementKernel {
       if (shooter.skills.includes('sh_free_kick')) {
         if (opts.freeKick) {
           const m = skillTierMultiplier(shooter, 'sh_free_kick')
-          onTarget += 0.05 * m
-          goalGiven += 0.03 * m
+          onTarget += 0.11 * m
+          goalGiven += 0.07 * m
           if (markSkills) this.hooks.markSkill(shooter, 'sh_free_kick', true, true)
         } else if (markSkills) this.hooks.markSkill(shooter, 'sh_free_kick', false, false)
       }
@@ -982,10 +982,12 @@ export class SettlementKernel {
       : this.ratings.eff(taker, 'passing', { passing: true, crossing: true })
     const deadBall = !this.hooks.legacyRules && taker.skills.includes('sh_dead_ball')
     if (deadBall) this.hooks.markSkill(taker, 'sh_dead_ball', true, true)
+    const setPieceIq = !this.hooks.legacyRules && taker.skills.includes('lg_set_piece_iq')
+    if (setPieceIq) this.hooks.markSkill(taker, 'lg_set_piece_iq', true, true)
     const quality = 0.6 + (passBase - 50) * 0.006
-      + (taker.skills.includes('lg_set_piece_iq') && !this.hooks.legacyRules ? 0.06 * legendMultiplier(taker, 'lg_set_piece_iq') : 0)
-      + (deadBall ? 0.05 * skillTierMultiplier(taker, 'sh_dead_ball') : 0)
-    return clamp(quality + this.passTraitDelta(taker, null, 'cross', 0, distance(taker, point), true), 0.3, 0.95)
+      + (setPieceIq ? 0.15 * legendMultiplier(taker, 'lg_set_piece_iq') : 0)
+      + (deadBall ? 0.12 * skillTierMultiplier(taker, 'sh_dead_ball') : 0)
+    return clamp(quality + this.passTraitDelta(taker, null, 'cross', 0, distance(taker, point), true), 0.3, 0.96)
   }
 
   /**
@@ -1196,9 +1198,27 @@ export class SettlementKernel {
    * 高空球 / 传中落点的争顶参与者：落点 13 米内的进攻方（不含门将）和防守方（门将 11 米内），各自按头球、对抗、
    * 预判、身高、技能得分，再乘一个 0.85–1.15 的随机扰动。扰动由调用方提供（jitter），先进攻方后防守方各抽一次。
    */
-  aerialContestants(attacking: MatchTeamState, defending: MatchTeamState, point: { x: number; y: number }, attackingSide: MatchSide, jitter: () => number): AerialContestant[] {
+  aerialContestants(
+    attacking: MatchTeamState,
+    defending: MatchTeamState,
+    point: { x: number; y: number },
+    attackingSide: MatchSide,
+    jitter: () => number,
+    setPieceTaker?: MatchPlayerState | null,
+  ): AerialContestant[] {
     const contestants: AerialContestant[] = []
     const simV2 = !!this.hooks.simV2
+    let setPieceAerialBonus = 0
+    if (setPieceTaker && !this.hooks.legacyRules) {
+      if (setPieceTaker.skills.includes('sh_dead_ball')) {
+        setPieceAerialBonus += 8 * skillTierMultiplier(setPieceTaker, 'sh_dead_ball')
+        this.hooks.markSkill(setPieceTaker, 'sh_dead_ball', true, true)
+      }
+      if (setPieceTaker.skills.includes('lg_set_piece_iq')) {
+        setPieceAerialBonus += 12 * legendMultiplier(setPieceTaker, 'lg_set_piece_iq')
+        this.hooks.markSkill(setPieceTaker, 'lg_set_piece_iq', true, true)
+      }
+    }
     for (const player of attacking.players) {
       if (!player.onPitch || player.position === 'GK') continue
       const dist = distance(player, point)
@@ -1209,6 +1229,7 @@ export class SettlementKernel {
           (simV2 ? 0.15 : 0.2) * this.ratings.eff(player, 'anticipation') +
           0.1 * this.ratings.eff(player, 'offBall') +
           Math.max(0, player.height - 175) * 0.2 +
+          setPieceAerialBonus +
           (player.skills.includes('aerial') ? 5 * skillTierMultiplier(player, 'aerial') : 0) +
           (player.skills.includes('sh_target_header') && !this.hooks.legacyRules ? 6 * skillTierMultiplier(player, 'sh_target_header') : 0) +
           (player.skills.includes('lg_off_ball_iq') && !this.hooks.legacyRules ? 6 * legendMultiplier(player, 'lg_off_ball_iq') : 0)

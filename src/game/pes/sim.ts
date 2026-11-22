@@ -799,8 +799,10 @@ export class PesMatch {
     if (r.type === 'fk') {
       const units = dist({ x: r.x, y: r.y }, this.oppGoalOf(att)) * (100 / P.L)
       const lateralUnits = Math.abs(r.y) * (64 / P.W)
-      const directShot = units < (this.v2 ? FREE_KICK_SHOT_RANGE_V2 : FREE_KICK_SHOT_RANGE)
-        && lateralUnits < (this.v2 ? FREE_KICK_SHOT_LATERAL_V2 : 22)
+      const taker = r.taker >= 0 ? this.players[r.taker] : undefined
+      const extra = this.v2 && taker ? (this.contact?.freeKickExtraRange?.(this, taker) ?? 0) : 0
+      const directShot = units < (this.v2 ? FREE_KICK_SHOT_RANGE_V2 + extra : FREE_KICK_SHOT_RANGE)
+        && lateralUnits < (this.v2 ? FREE_KICK_SHOT_LATERAL_V2 + extra * 0.5 : 22)
       if (directShot || units >= FREE_KICK_DELIVERY_RANGE) return null
     } else if (r.type !== 'corner') return null
     const g = this.oppGoalOf(att)
@@ -852,7 +854,7 @@ export class PesMatch {
       q.runUntil = this.time + 3.2
       q.mode = 'run'
     }
-    this.launchCross(taker, spot, target ? target.pid : -1, 'ok', false)
+    this.launchCross(taker, spot, target ? target.pid : -1, 'ok', false, -1, true)
     this.phase = 'play'
     this.restart = null
   }
@@ -861,7 +863,7 @@ export class PesMatch {
    * 传中 / 角球 / 任意球传中的出球：高球飞向 `spot`，落点触发争顶。
    * 结果是 ok 时落点就在禁区里；icpt / miss / out 时球飞向拦截者 / 偏离 / 出界（由调用方改 spot）。
    */
-  private launchCross(taker: PesPlayer, spot: Vec2, intended: number, result: 'ok' | 'icpt' | 'miss' | 'out' | null, setResult: boolean, interceptor = -1): void {
+  private launchCross(taker: PesPlayer, spot: Vec2, intended: number, result: 'ok' | 'icpt' | 'miss' | 'out' | null, setResult: boolean, interceptor = -1, setPiece = false): void {
     this.noteOpenKick(taker)
     const t = this.teams[taker.ti]
     const b = this.ball
@@ -879,7 +881,7 @@ export class PesMatch {
     b.spin = 0
     b.lastTouch = taker.pid
     b.looseT = 0
-    const meta: BallMeta = { type: 'pass', from: taker.pid, intended, offside: false, loft: true, cross: result === 'ok' || result === null }
+    const meta: BallMeta = { type: 'pass', from: taker.pid, intended, offside: false, loft: true, cross: result === 'ok' || result === null, ...(setPiece ? { setPiece: true } : {}) }
     if (setResult && result) meta.result = result
     if (interceptor >= 0) meta.icpt = interceptor
     b.meta = meta
@@ -904,8 +906,26 @@ export class PesMatch {
     const cands = team.players.filter((p) => p.role !== 'GK')
     let taker: PesPlayer | undefined
     if (type === 'corner' || type === 'fk') {
-      const passW = this.v2 ? 4 : 8
-      cands.sort((a, c) => (dist(a.pos, pos) - a.ab.passing * passW) - (dist(c.pos, pos) - c.ab.passing * passW))
+      if (this.v2 && this.contact?.setPiecePreference) {
+        const g = this.oppGoalOf(team)
+        const toGoalUnits = dist(pos, g) * (100 / this.spec.L)
+        const lateralUnits = Math.abs(pos.y) * (64 / this.spec.W)
+        if (type === 'corner') {
+          cands.sort((a, c) => (this.contact!.setPiecePreference!(this, c, 'corner') - this.contact!.setPiecePreference!(this, a, 'corner')) || (dist(a.pos, pos) - dist(c.pos, pos)))
+        } else if (toGoalUnits < FREE_KICK_DELIVERY_RANGE) {
+          const canShootDirectly = (q: PesPlayer) => {
+            const extra = this.contact?.freeKickExtraRange?.(this, q) ?? 0
+            return toGoalUnits < FREE_KICK_SHOT_RANGE_V2 + extra && lateralUnits < FREE_KICK_SHOT_LATERAL_V2 + extra * 0.5
+          }
+          const mode: 'fk_shot' | 'fk_cross' = cands.some(canShootDirectly) ? 'fk_shot' : 'fk_cross'
+          cands.sort((a, c) => (this.contact!.setPiecePreference!(this, c, mode) - this.contact!.setPiecePreference!(this, a, mode)) || (dist(a.pos, pos) - dist(c.pos, pos)))
+        } else {
+          cands.sort((a, c) => (dist(a.pos, pos) - a.ab.passing * 4) - (dist(c.pos, pos) - c.ab.passing * 4))
+        }
+      } else {
+        const passW = this.v2 ? 4 : 8
+        cands.sort((a, c) => (dist(a.pos, pos) - a.ab.passing * passW) - (dist(c.pos, pos) - c.ab.passing * passW))
+      }
       taker = cands[0]
     } else if (type === 'penalty') {
       if (this.v2) {
@@ -1318,7 +1338,7 @@ export class PesMatch {
     const verdict = this.contact!.pass(this, p, mate, spot, 'cross', setPiece)
     if (!setPiece && this.tacticalMechanics && this.openPlay.phase === 'open') this.metrics?.cross(p.ti, verdict.result === 'ok')
     const aim = this.stagePassAim(p, spot.x, spot.y, verdict)
-    this.launchCross(p, aim, mate.pid, verdict.result, true, verdict.interceptor)
+    this.launchCross(p, aim, mate.pid, verdict.result, true, verdict.interceptor, setPiece)
     if (verdict.result === 'ok') this.sendRunners(p, spot, 3)
     this.event('pass', p.ti, [p.pid, mate.pid], undefined, {
       kind: 'cross', result: verdict.result, p: Math.round(verdict.p * 1000) / 1000, ...(verdict.interceptor >= 0 ? { icpt: verdict.interceptor } : {}), ...(setPiece ? { setPiece: true } : {}),
@@ -1344,8 +1364,9 @@ export class PesMatch {
     const t = this.teams[p.ti]
     const toGoalUnits = dist(p.pos, this.oppGoalOf(t)) * (100 / P.L)
     const lateralUnits = Math.abs(p.pos.y) * (64 / P.W)
-    const shotRange = this.v2 ? FREE_KICK_SHOT_RANGE_V2 : FREE_KICK_SHOT_RANGE
-    const lateralLimit = this.v2 ? FREE_KICK_SHOT_LATERAL_V2 : 22
+    const extra = this.v2 ? (this.contact?.freeKickExtraRange?.(this, p) ?? 0) : 0
+    const shotRange = this.v2 ? FREE_KICK_SHOT_RANGE_V2 + extra : FREE_KICK_SHOT_RANGE
+    const lateralLimit = this.v2 ? FREE_KICK_SHOT_LATERAL_V2 + extra * 0.5 : 22
     if (toGoalUnits < shotRange && lateralUnits < lateralLimit) {
       this.execShot(p, 0, { header: false, penalty: false, freeKick: true })
       return true

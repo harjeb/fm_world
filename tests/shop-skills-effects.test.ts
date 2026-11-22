@@ -114,7 +114,7 @@ describe('30 个商店技能在比赛结算内核的实效与档位倍率', () =
   })
 
   it('盘带、犯规、接球半径、任意球传中与封堵类商店技能（8 项）全部生效', () => {
-    const { kernel, away, field, opponents, marks } = setup()
+    const { kernel, home, away, field, opponents, marks } = setup()
     const [carrier] = field
     const [defender] = opponents
     for (const opp of away.players) if (opp !== defender) opp.onPitch = false
@@ -174,10 +174,15 @@ describe('30 个商店技能在比赛结算内核的实效与档位倍率', () =
     equip(carrier)
     verified.add('sh_ball_magnet')
 
-    // 15. sh_dead_ball: 任意球传中质量 +0.05 * 1.2 = +0.06
+    // 15. sh_dead_ball: 任意球传中质量 +0.12 * 1.2 = +0.144，且定位球落点争顶攻方 +8 * 1.2 = +9.6
     const fkBefore = kernel.freeKickDeliveryChance(carrier, { x: 88, y: 32 })
     equip(carrier, 'sh_dead_ball', 'gold')
-    expect(kernel.freeKickDeliveryChance(carrier, { x: 88, y: 32 }) - fkBefore).toBeCloseTo(0.06)
+    expect(kernel.freeKickDeliveryChance(carrier, { x: 88, y: 32 }) - fkBefore).toBeCloseTo(0.144)
+    const aerPt = { x: 90, y: 32 }
+    home.players[1].x = 90; home.players[1].y = 32
+    const aerPlain = kernel.aerialContestants(home, away, aerPt, 'home', () => 0.5, null).find((c) => c.player.id === home.players[1].id)!.weight
+    const aerDead = kernel.aerialContestants(home, away, aerPt, 'home', () => 0.5, carrier).find((c) => c.player.id === home.players[1].id)!.weight
+    expect(aerDead - aerPlain).toBeCloseTo(8 * 1.2)
     equip(carrier)
     verified.add('sh_dead_ball')
 
@@ -222,13 +227,13 @@ describe('30 个商店技能在比赛结算内核的实效与档位倍率', () =
     equip(shooter)
     verified.add('sh_power_header')
 
-    // 19. sh_free_kick: freeKick
+    // 19. sh_free_kick: freeKick (+0.11 * 1.2 / +0.07 * 1.2)
     const fkPt = { x: 78, y: 32 }
     const s4 = kernel.shotModel(shooter, home, away, { point: fkPt, header: false, penalty: false, freeKick: true }, true)
     equip(shooter, 'sh_free_kick', 'gold')
     const s4After = kernel.shotModel(shooter, home, away, { point: fkPt, header: false, penalty: false, freeKick: true }, true)
-    expect(s4After.onTarget - s4.onTarget).toBeCloseTo(0.05 * 1.2)
-    expect(s4After.goalGivenOnTarget - s4.goalGivenOnTarget).toBeCloseTo(0.03 * 1.2)
+    expect(s4After.onTarget - s4.onTarget).toBeCloseTo(0.11 * 1.2)
+    expect(s4After.goalGivenOnTarget - s4.goalGivenOnTarget).toBeCloseTo(0.07 * 1.2)
     equip(shooter)
     verified.add('sh_free_kick')
 

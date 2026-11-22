@@ -270,6 +270,8 @@ export interface BallMeta {
   loft?: boolean
   /** 传中 / 角球 / 任意球传中：落点争顶后攻方赢了直接头球攻门 */
   cross?: boolean
+  /** 定位球开出的高球（角球或任意球传中），用于落点争顶结算定位球传中技能加成。 */
+  setPiece?: boolean
   /** 争顶已经结算过 */
   aerialDone?: boolean
   /** 身后传球的计划目标与类型；实际轨迹可因结算结果偏离。 */
