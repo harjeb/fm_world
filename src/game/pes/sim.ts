@@ -59,6 +59,9 @@ import {
 
 /** 任意球离球门多远（现有引擎的 100 长球场单位）以内直接射门 / 传中禁区，同 match/resolution.ts。 */
 const FREE_KICK_SHOT_RANGE = 35
+/** simV2 收紧直接任意球射门射程与偏心角度，29–50 米及边路任意球改走传中入禁区。 */
+const FREE_KICK_SHOT_RANGE_V2 = 29
+const FREE_KICK_SHOT_LATERAL_V2 = 15
 const FREE_KICK_DELIVERY_RANGE = 50
 
 /* ------------------------------ 工具 ------------------------------ */
@@ -795,7 +798,10 @@ export class PesMatch {
     const defTeam = this.other(att)
     if (r.type === 'fk') {
       const units = dist({ x: r.x, y: r.y }, this.oppGoalOf(att)) * (100 / P.L)
-      if (units < FREE_KICK_SHOT_RANGE || units >= FREE_KICK_DELIVERY_RANGE) return null
+      const lateralUnits = Math.abs(r.y) * (64 / P.W)
+      const directShot = units < (this.v2 ? FREE_KICK_SHOT_RANGE_V2 : FREE_KICK_SHOT_RANGE)
+        && lateralUnits < (this.v2 ? FREE_KICK_SHOT_LATERAL_V2 : 22)
+      if (directShot || units >= FREE_KICK_DELIVERY_RANGE) return null
     } else if (r.type !== 'corner') return null
     const g = this.oppGoalOf(att)
     const side = Math.sign(r.y) || 1
@@ -1338,7 +1344,9 @@ export class PesMatch {
     const t = this.teams[p.ti]
     const toGoalUnits = dist(p.pos, this.oppGoalOf(t)) * (100 / P.L)
     const lateralUnits = Math.abs(p.pos.y) * (64 / P.W)
-    if (toGoalUnits < FREE_KICK_SHOT_RANGE && lateralUnits < 22) {
+    const shotRange = this.v2 ? FREE_KICK_SHOT_RANGE_V2 : FREE_KICK_SHOT_RANGE
+    const lateralLimit = this.v2 ? FREE_KICK_SHOT_LATERAL_V2 : 22
+    if (toGoalUnits < shotRange && lateralUnits < lateralLimit) {
       this.execShot(p, 0, { header: false, penalty: false, freeKick: true })
       return true
     }

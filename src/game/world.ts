@@ -1137,6 +1137,8 @@ export {
   CONTRACT_RENEWAL_MIN_YEARS,
   RENEWAL_WAGE_CAP,
   SQUAD_WAGE_SCALE,
+  STAR_WAGE_FLOOR,
+  STAR_WAGE_MULTIPLIER,
   WAGE_CAP,
   preferredRenewalYears,
   previewContractRenewal,

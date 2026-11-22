@@ -303,6 +303,29 @@ describe('simV2 2D 动画与 AI 演进回归', () => {
     calmTaker.ab.composure = 0.95
     ;(m as unknown as { setRestart(type: string, pos: { x: number; y: number }, team: typeof m.teams[0]): void }).setRestart('penalty', { x: 40, y: 0 }, m.teams[0])
     expect(m.restart?.taker).toBe(calmTaker.pid)
+
+    // 5) 常规点球与直接任意球转化率校准：55v55 点球 ~74%–82%，22 米直接任意球 ~5.5%–8.5%，且远射技能不叠加到直接任意球
+    v2.taker.attrs.shooting = 55; v2.taker.attrs.composure = 55; v2.taker.age = 26
+    v2.gk.attrs.reflexes = 55; v2.gk.attrs.oneOnOne = 55; v2.gk.attrs.composure = 55; v2.gk.age = 26
+    for (const p of v2.aTeam.players) if (p !== v2.gk) { p.x = 5; p.y = 5 }
+    const pen55 = v2.k.shotModel(v2.taker, v2.hTeam, v2.aTeam, penOpts)
+    expect(pen55.pGoal).toBeGreaterThan(0.73)
+    expect(pen55.pGoal).toBeLessThan(0.83)
+
+    const fkOpts = { point: { x: 78, y: 32 }, header: false, penalty: false, freeKick: true, foot: 'right' as const }
+    const fkPlain = v2.k.shotModel(v2.taker, v2.hTeam, v2.aTeam, fkOpts)
+    expect(fkPlain.pGoal).toBeGreaterThan(0.05)
+    expect(fkPlain.pGoal).toBeLessThan(0.085)
+
+    v2.taker.skills = ['long_shot']
+    v2.taker.skillTiers = { long_shot: 'gold' }
+    expect(v2.k.shotModel(v2.taker, v2.hTeam, v2.aTeam, fkOpts).pGoal).toBeCloseTo(fkPlain.pGoal, 6)
+
+    v2.taker.skills = ['sh_free_kick']
+    v2.taker.skillTiers = { sh_free_kick: 'gold' }
+    const fkSkill = v2.k.shotModel(v2.taker, v2.hTeam, v2.aTeam, fkOpts)
+    expect(fkSkill.pGoal).toBeGreaterThan(fkPlain.pGoal + 0.02)
+    expect(fkSkill.pGoal).toBeLessThan(0.13)
   })
 
   it('力量与盘带强化：对抗护球、高空二点球权重对比、防封堵起脚与带球速度均显著受益', () => {

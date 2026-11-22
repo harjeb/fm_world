@@ -288,7 +288,7 @@ export function creditTransferSale(game: GameState, proceeds: number): number {
 /** 签约新援前的每轮工资帽校验；青训球员或阵容不足最低人数时豁免。 */
 export function checkWageCapForSigning(
   game: GameState,
-  player: Pick<Player, 'attrs' | 'baseAttrs' | 'positions' | 'basePositions' | 'youthOrigin'>,
+  player: Pick<Player, 'attrs' | 'baseAttrs' | 'positions' | 'basePositions' | 'youthOrigin' | 'starKey'>,
 ): { ok: true } | { ok: false; error: string } {
   const cap = boardEffectiveWageCap(game)
   if (cap === null) return { ok: true }

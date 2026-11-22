@@ -10,8 +10,12 @@ export const SQUAD_WAGE_SCALE = 18 / 25
 /** 单名球员每轮初始工资封顶（与身价封顶 2000 万对齐，覆盖原始 CA ~300 顶级巨星并杜绝指数爆炸）。 */
 export const WAGE_CAP = 25_000
 
-/** 续约后允许的单人每轮工资封顶（支持多次真实加薪同时防止指数爆炸）。 */
-export const RENEWAL_WAGE_CAP = 35_000
+/** 续约后允许的单人每轮工资封顶（支持顶级球星多次真实加薪同时防止指数爆炸）。 */
+export const RENEWAL_WAGE_CAP = 45_000
+
+/** 真实球星（带 starKey）的默认签约工资溢价与保底（避免 220–245 CA 球星只拿 1,000–2,000/轮）。 */
+export const STAR_WAGE_MULTIPLIER = 1.8
+export const STAR_WAGE_FLOOR = 4_000
 
 /** 球员续约可接受的新合同年限区间（从当前赛季起算）。 */
 export const CONTRACT_RENEWAL_MIN_YEARS = 3
@@ -25,7 +29,8 @@ export function wageForPlayer(player: Player): number {
   const attrs = player.baseAttrs ?? player.attrs
   const positions = player.basePositions ?? player.positions
   const ca = caOf(attrs, positions.GK > 0)
-  const raw = 800 * SQUAD_WAGE_SCALE * Math.pow(1.035, ca - 200)
+  const baseRaw = 800 * SQUAD_WAGE_SCALE * Math.pow(1.035, ca - 200)
+  const raw = player.starKey ? Math.max(STAR_WAGE_FLOOR, baseRaw * STAR_WAGE_MULTIPLIER) : baseRaw
   return Math.min(WAGE_CAP, roundWage(raw))
 }
 

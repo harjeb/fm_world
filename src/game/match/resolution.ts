@@ -534,10 +534,15 @@ export class SettlementKernel {
     })
     if (opts.penalty) {
       return this.hooks.simV2
-        ? mk('penalty', '点球', 0.86, 0.56, 0.97, 0.78, '点球，仅门将和主罚者')
+        ? mk('penalty', '点球', 0.91, 0.64, 0.98, 0.84, '点球，仅门将和主罚者')
         : mk('penalty', '点球', 0.7, 0.68, 0.95, 0.5, '点球，仅门将和主罚者')
     }
     if (opts.freeKick) {
+      if (this.hooks.simV2) {
+        // 19 米以内最好罚，越远射正和破门都越难；校准至真实足球 ~5.5%–7% 常规直接任意球转化率。
+        const far = Math.max(0, dist - 19)
+        return mk('free_kick', '任意球', clamp(0.36 - far * 0.011, 0.22, 0.36), 0.1, 0.72, clamp(0.24 - far * 0.005, 0.16, 0.24), '直接任意球，有人墙和距离影响')
+      }
       // 20 米以内最好罚，越远射正和破门都越难。
       const far = Math.max(0, dist - 20)
       return mk('free_kick', '任意球', clamp(0.46 - far * 0.008, 0.3, 0.46), 0.1, 0.75, clamp(0.3 - far * 0.003, 0.24, 0.3), '直接任意球，有人墙和距离影响')
@@ -635,7 +640,7 @@ export class SettlementKernel {
     if (weak) finishScore -= clamp(11 - this.ratings.eff(shooter, 'firstTouch') * 0.07 - (shooter.skills.includes('weak_foot') ? 3 * skillTierMultiplier(shooter, 'weak_foot') : 0), 2, 10)
     const attributeAdjust = simV2
       ? (opts.penalty
-        ? clamp((precision - 50) * 0.0045, -0.22, 0.14)
+        ? clamp((precision - 50) * 0.0042, -0.20, 0.12)
         : clamp((precision - 50) * 0.002 + (nearestDef ? (effComp - (0.5 * this.ratings.eff(nearestDef, 'tackling') + 0.5 * this.ratings.eff(nearestDef, 'composure'))) * 0.0014 * chance.pressure : 0), -0.1, 0.1))
       : clamp((precision - 50) * 0.002, -0.1, 0.1)
     const weakAdjust = weak ? -0.02 : 0
@@ -743,7 +748,7 @@ export class SettlementKernel {
     } else if (shooter.skills.includes('box_hunter')) {
       if (markSkills) this.hooks.markSkill(shooter, 'box_hunter', false, false)
     }
-    if (shooter.skills.includes('long_shot') && !inBoxShot) {
+    if (shooter.skills.includes('long_shot') && !inBoxShot && !(simV2 && opts.freeKick)) {
       onTarget += 0.035 * skillTierMultiplier(shooter, 'long_shot')
       goalGiven += 0.02 * skillTierMultiplier(shooter, 'long_shot')
       if (markSkills) this.hooks.markSkill(shooter, 'long_shot', true, true)
@@ -790,7 +795,7 @@ export class SettlementKernel {
         goalGiven += 0.04 * m
         if (markSkills) this.hooks.markSkill(shooter, 'lg_knuckleball', true, true)
       }
-      if (dist >= 20 && shooter.skills.includes('lg_rising_shot')) {
+      if (dist >= 20 && !(simV2 && opts.freeKick) && shooter.skills.includes('lg_rising_shot')) {
         const m = legendMultiplier(shooter, 'lg_rising_shot')
         goalGiven += 0.03 * m
         if (markSkills) this.hooks.markSkill(shooter, 'lg_rising_shot', true, true)
@@ -800,7 +805,7 @@ export class SettlementKernel {
         onTarget += 0.05 * m
         if (markSkills) this.hooks.markSkill(shooter, 'lg_volley', true, true)
       }
-      if (!inBoxShot && shooter.skills.includes('lg_super_long_shot')) {
+      if (!inBoxShot && !(simV2 && opts.freeKick) && shooter.skills.includes('lg_super_long_shot')) {
         const m = legendMultiplier(shooter, 'lg_super_long_shot')
         onTarget += 0.02 * m
         goalGiven += 0.02 * m
@@ -910,7 +915,7 @@ export class SettlementKernel {
           block *= clamp(1 - (this.ratings.eff(shooter, 'dribbling') - blkSkill) * 0.0055, 0.72, 1.28)
         }
       }
-      if (opts.freeKick) block += 0.05
+      if (opts.freeKick) block += simV2 ? 0.08 : 0.05
     }
     block = clamp(block, 0, 0.45)
     const pGoal = (1 - block) * onTarget * goalGiven
@@ -1163,7 +1168,7 @@ export class SettlementKernel {
       if (gk?.skills.includes('sh_aux_penalty_calm')) this.hooks.markSkill(gk, 'sh_aux_penalty_calm', true, true)
     }
     let p = simV2
-      ? clamp(0.7 + (takerScore - 55) / 165 - (gkScore - 55) / 240, 0.40, 0.94)
+      ? clamp(0.74 + (takerScore - 55) / 165 - (gkScore - 55) / 240, 0.42, 0.94)
       : clamp(0.7 + (takerScore - 60) / 250 - (gkScore - 55) / 400, 0.5, 0.9)
     if (taker.skills.includes('penalty_specialist')) p += 0.06 * skillTierMultiplier(taker, 'penalty_specialist')
     const takerTrait = STAR_TRAITS[taker.traitId]

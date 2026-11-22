@@ -5,7 +5,8 @@ import { UNPAID_PERFORMANCE, economyOf, matchPerformanceOf, payWageArrears, payW
 import { buildMatchEngineForGame } from '../src/game/match/setup.ts'
 import type { MatchEngine } from '../src/game/match/engine.ts'
 import { attrRating, attrStorage } from '../src/game/scale.ts'
-import { RENEWAL_WAGE_CAP, WAGE_CAP, createWorldGame, previewContractRenewal, repairInflatedContractWages, wageForPlayer } from '../src/game/world.ts'
+import { RENEWAL_WAGE_CAP, STAR_WAGE_FLOOR, WAGE_CAP, createWorldGame, previewContractRenewal, repairInflatedContractWages, wageForPlayer } from '../src/game/world.ts'
+import { PLAYER_SEEDS, createPlayerFromSeed } from '../src/game/data/players.ts'
 import { renewContract } from '../src/game/market.ts'
 
 describe('欠薪', () => {
@@ -108,6 +109,31 @@ describe('工资口径与存量天价合同修复', () => {
       player.baseAttrs[key] = attrStorage(key, 95, false)
     }
     expect(wageForPlayer(player)).toBe(WAGE_CAP)
+  })
+
+  it('真实球星默认签约工资不低于保底 STAR_WAGE_FLOOR，且显著高于同 CA 随机球员', () => {
+    const lowTierStar = createPlayerFromSeed(PLAYER_SEEDS.find((seed) => seed.tier === 3)!)
+    const topLegend = PLAYER_SEEDS
+      .filter((seed) => seed.tier === 5)
+      .map((seed) => createPlayerFromSeed(seed))
+      .sort((a, b) => wageForPlayer(b) - wageForPlayer(a))[0]!
+    const cloneAsRandom = structuredClone(lowTierStar)
+    delete cloneAsRandom.starKey
+
+    const starWage = wageForPlayer(lowTierStar)
+    const randomWage = wageForPlayer(cloneAsRandom)
+    expect(starWage).toBeGreaterThanOrEqual(STAR_WAGE_FLOOR)
+    expect(starWage).toBeGreaterThan(randomWage * 1.4)
+    expect(wageForPlayer(topLegend)).toBeGreaterThanOrEqual(20_000)
+    expect(wageForPlayer(topLegend)).toBeLessThanOrEqual(WAGE_CAP)
+
+    // 顶级球星在 WAGE_CAP 签约后，续约仍有空间涨薪（上限 RENEWAL_WAGE_CAP）
+    const game = createWorldGame(6105)
+    topLegend.contract = { clubId: 'player', wage: WAGE_CAP, expiresSeason: 2 }
+    game.roster.push(topLegend)
+    const preview = previewContractRenewal(game, topLegend, 4)
+    expect(preview.demandedWage).toBeGreaterThan(WAGE_CAP)
+    expect(preview.demandedWage).toBeLessThanOrEqual(RENEWAL_WAGE_CAP)
   })
 
   it('repairInflatedContractWages 修复天价存量合同且不伤及正常签约、渐进加薪续约与青训合同', () => {
