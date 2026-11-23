@@ -1,4 +1,4 @@
-import { createAppServer, type RegistrationMode } from './app.ts'
+import { createAppServer, PROTECTED_USERNAMES, type RegistrationMode } from './app.ts'
 import { loadPveContent } from '../src/game/pve-content.ts'
 
 const port = Number(process.env.PORT ?? 8787)
@@ -14,6 +14,11 @@ function readRegistration(): RegistrationMode {
 
 const registration = readRegistration()
 const inviteCode = process.env.FM_INVITE_CODE?.trim() ?? ''
+const extraProtectedUsers = (process.env.FM_PROTECTED_USERS ?? '')
+  .split(/[,，\s]+/)
+  .map((item) => item.trim())
+  .filter(Boolean)
+const allProtectedUsers = [...new Set([...PROTECTED_USERNAMES, ...extraProtectedUsers].map((u) => u.toLowerCase()))]
 
 if (registration === 'invite' && !inviteCode) {
   console.error('FM_REGISTRATION=invite 但缺少 FM_INVITE_CODE，已改为 closed（只允许登录）。')
@@ -32,6 +37,7 @@ const app = createAppServer({
   turnstileSecret: process.env.FM_TURNSTILE_SECRET?.trim(),
   turnstileSiteKey: process.env.FM_TURNSTILE_SITEKEY?.trim(),
   registerLimitPerHour: Number(process.env.FM_REGISTER_LIMIT_PER_HOUR ?? 5),
+  protectedUsernames: extraProtectedUsers,
 })
 
 const { server } = app
@@ -59,6 +65,7 @@ server.listen(port, '0.0.0.0', () => {
   console.log(
     `注册入口: ${registration === 'invite' && !inviteCode ? 'closed（缺少 FM_INVITE_CODE）' : registration}`
       + `${process.env.FM_TURNSTILE_SECRET ? ' · Turnstile 已启用' : ''}`
-      + ` · 单 IP 每小时 ${process.env.FM_REGISTER_LIMIT_PER_HOUR ?? 5} 次`,
+      + ` · 单 IP 每小时 ${process.env.FM_REGISTER_LIMIT_PER_HOUR ?? 5} 次`
+      + (allProtectedUsers.length ? ` · 永久保留名单: ${allProtectedUsers.join(', ')}` : ''),
   )
 })

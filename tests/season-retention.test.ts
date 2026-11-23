@@ -4,7 +4,7 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { expect, it, vi } from 'vitest'
 import { AccountStore } from '../server/account-store.ts'
-import { createAppServer, IDLE_COACH_RELEASE_MS, type AppServer } from '../server/app.ts'
+import { createAppServer, IDLE_COACH_RELEASE_MS, PROTECTED_USERNAMES, type AppServer } from '../server/app.ts'
 import { seasonEndAt } from '../src/game/calendar.ts'
 import { computeWorldTable } from '../src/game/world.ts'
 import type { GameState, WorldState } from '../src/game/types.ts'
@@ -139,3 +139,50 @@ it('连续 7 天未上线自动清理教练账号并释放球队（保留进度�
     expect((await request('/api/game', undefined, active.token)).status).toBe(200)
   } finally { if (app) await stop(); fs.rmSync(dir, { recursive: true, force: true }) }
 }, 180_000)
+
+it('保留名单内的用户（默认含 harjeb，且支持额外配置）离线再久也永不被清理或释放球队', async () => {
+  expect(PROTECTED_USERNAMES[0]).toBe('harjeb')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-protected-'))
+  let clock = Date.UTC(2026, 10, 9, 8, 15)
+  let app: AppServer | undefined
+  let base = ''
+  const open = async () => {
+    app = createAppServer({ dataDir: dir, tickMs: 0, now: () => clock, protectedUsernames: ['VipCoach'] })
+    await new Promise<void>(resolve => app!.server.listen(0, '127.0.0.1', resolve))
+    const addr = app.server.address()
+    if (!addr || typeof addr === 'string') throw new Error('missing address')
+    base = `http://127.0.0.1:${addr.port}`
+  }
+  const stop = async () => { await app!.shutdown(); app = undefined }
+  const request = (url: string, body?: object, token?: string) => fetch(base + url, {
+    method: body ? 'POST' : 'GET',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: body && JSON.stringify(body),
+  })
+  const register = async (username: string, clubId: string, password: string) => {
+    const res = await request('/api/register', { username, password, clubId })
+    expect(res.status).toBe(201)
+    return await res.json() as { user: { id: string }; token: string }
+  }
+  try {
+    await open()
+    const harjeb = await register('Harjeb', 'd2n_01', 'pass-1234')
+    const vip = await register('vipcoach', 'd2n_02', 'pass-1234')
+    const regular = await register('regular_idle', 'd2n_03', 'pass-1234')
+    expect(app!.accountCount()).toBe(3)
+
+    // 推进 30 天（远超 7 天清理阈值），重启触发 sweepIdleCoaches
+    await stop()
+    clock += 30 * 24 * 60 * 60_000
+    await open()
+
+    // regular_idle 被清理，但 harjeb 与 vipcoach 永久保留
+    expect(app!.accountCount()).toBe(2)
+    expect((await request('/api/game', undefined, regular.token)).status).toBe(401)
+    expect((await request('/api/game', undefined, harjeb.token)).status).toBe(200)
+    expect((await request('/api/game', undefined, vip.token)).status).toBe(200)
+  } finally {
+    if (app) await stop()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+}, 60_000)

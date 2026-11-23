@@ -98,6 +98,8 @@ import {
 export const AI_TAKEOVER_INACTIVE_MS = 3 * 24 * 60 * 60_000
 /** AI 临时接管最长维持至连续 7 天未上线（1 周）；满 7 天未上线即清理教练账号并释放球队席位（保留进度）。 */
 export const IDLE_COACH_RELEASE_MS = 7 * 24 * 60 * 60_000
+/** 永久保留名单（忽略大小写）：名单内用户永远不会被 7 天未上线清理或回收球队席位；可通过 FM_PROTECTED_USERS 追加。 */
+export const PROTECTED_USERNAMES: readonly string[] = ['harjeb']
 const IDLE_SWEEP_INTERVAL_MS = 5 * 60_000
 const ONLINE_PERSIST_INTERVAL_MS = 5 * 60_000
 
@@ -156,6 +158,8 @@ export type AppServerOptions = {
   turnstileSiteKey?: string
   /** 单 IP 每小时注册次数上限；0 或不填表示不限。 */
   registerLimitPerHour?: number
+  /** 额外永久保留用户名单（与 PROTECTED_USERNAMES 合并，忽略大小写，永不因离线被清理）。 */
+  protectedUsernames?: readonly string[]
   /** 测试用内存压力钩子；省略时按 RSS / 堆占比 / 可用物理内存自动判定。 */
   memoryPressure?: () => boolean
 }
@@ -186,6 +190,13 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   const turnstileSecret = options.turnstileSecret?.trim() ?? ''
   const turnstileSiteKey = options.turnstileSiteKey?.trim() ?? ''
   const registerLimitPerHour = Math.max(0, Math.trunc(options.registerLimitPerHour ?? 0))
+  const protectedUsernameKeys = new Set(
+    [...PROTECTED_USERNAMES, ...(options.protectedUsernames ?? [])]
+      .map((name) => name.trim().toLowerCase())
+      .filter(Boolean),
+  )
+  const isProtectedAccount = (account: Pick<Account, 'username'>): boolean =>
+    protectedUsernameKeys.has(account.username.trim().toLowerCase())
   /* 邀请码模式没配邀请码会锁死注册，直接报错，避免部署后没人能注册。 */
   if (registrationMode === 'invite' && !inviteCode) throw new Error('registration=invite 需要配置 inviteCode')
   fs.mkdirSync(dataDir, { recursive: true })
@@ -2321,7 +2332,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   const expandedNames = new Map(pickExpandedZoneClubs(3, new Set(), Infinity).map(([name, en]) => [en, name]))
 
   function releaseIdleCoach(account: Account, clubId: string, at = now()): boolean {
-    if (isVacantSeat(account.id) || isAccountOnlineNow(account)) return false
+    if (isVacantSeat(account.id) || isProtectedAccount(account) || isAccountOnlineNow(account)) return false
     const lastOnline = account.lastOnlineAt ?? account.createdAt
     if (at - lastOnline < IDLE_COACH_RELEASE_MS) return false
     const club = sharedWorld.world.clubs.find(item => item.id === clubId)
@@ -2347,12 +2358,12 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     return true
   }
 
-  /** 清理连续 7 天未上线的教练账号：有球队者交接为空缺托管席（保留球队进度并恢复原名），无球队孤儿账号直接删除。 */
+  /** 清理连续 7 天未上线的教练账号：有球队者交接为空缺托管席（保留球队进度并恢复原名），无球队孤儿账号直接删除；保留名单内用户永不清理。 */
   function sweepIdleCoaches(at = now()): number {
     let released = 0
     let worldDirty = false
     for (const account of [...db.accounts]) {
-      if (isVacantSeat(account.id) || isAccountOnlineNow(account)) continue
+      if (isVacantSeat(account.id) || isProtectedAccount(account) || isAccountOnlineNow(account)) continue
       const lastOnline = account.lastOnlineAt ?? account.createdAt
       if (at - lastOnline < IDLE_COACH_RELEASE_MS) continue
       const clubId = ownedClubId(account)
