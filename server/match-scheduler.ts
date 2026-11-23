@@ -142,7 +142,7 @@ export class MatchScheduler {
       if (this.cupPendingBefore(seasonRoundKickoff(world.divisions[0], round))) break
       const pending = world.divisions.flatMap((division) => division.fixtures.filter((fixture) => fixture.round === round && !fixture.played).map((fixture) => ({ division, fixture, id: matchJobId(world.seasonIndex, division.divisionId!, fixture) })))
       // 同轮全部准备好后一次发布，绝不提前泄露某一场结果，也不让后续轮次越过未完成的轮次。
-      if (!pending.every((item) => this.queue.ready(item.id))) break
+      if (!pending.every((item) => this.queue.publishReady(item.id))) break
       for (const { fixture, id } of pending) {
         const { input, result } = this.queue.read(id)
         this.applyEffects(input, result)
@@ -242,7 +242,7 @@ export class MatchScheduler {
         const round = cup.rounds[index]
         return round ? [{ cup, round }] : []
       })
-      if (scheduled.some(({ round }) => round.fixtures.some(fixture => !fixture.played && !this.queue.ready(seasonCupJobId(world.seasonIndex, fixture.cupId, fixture.id))))) break
+      if (scheduled.some(({ round }) => round.fixtures.some(fixture => !fixture.played && !this.queue.publishReady(seasonCupJobId(world.seasonIndex, fixture.cupId, fixture.id))))) break
       const ready: { fixture: SeasonCupFixture; job: MatchJob; result: MatchJobResult; winner?: string }[] = []
       for (const { round } of scheduled) for (const fixture of round.fixtures) {
         if (fixture.played) continue

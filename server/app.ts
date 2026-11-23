@@ -33,7 +33,7 @@ import { lineupLockState } from '../src/game/season.ts'
 import { completedWorldRound, paysSeasonCupAppearanceGold, seasonRoundKickoff, worldRoundsKickedOff } from '../src/game/season-cups.ts'
 import { legendCupTeamById } from '../src/game/data/legend-cup-teams.ts'
 import { LEGEND_STAR_BOOK_ID } from '../src/game/data/legend-cup-skill.ts'
-import type { AIClubState, AITeam, Player, WorldClub, WorldState } from '../src/game/types.ts'
+import type { AIClubState, AITeam, Player, ScheduledMatchShout, WorldClub, WorldState } from '../src/game/types.ts'
 import { caOf } from '../src/game/ca.ts'
 import { MIN_SQUAD, refreshAILineup, refreshAILineups, repairLineup } from '../src/game/squad.ts'
 import { displayCA, mainAttrsFor } from '../src/game/rating.ts'
@@ -50,6 +50,15 @@ import { DEFAULT_PRE_MATCH_STAMINA_BELOW, DEFAULT_STAMINA_BELOW, emptyAutoSubs, 
 import type { ActiveMatchSave, GameState, PlayerCard } from '../src/game/types.ts'
 import { publishRoundNews } from './round-news.ts'
 import { LEAGUE_REALTIME_MS, LOGIC_MATCH_SECONDS } from '../src/game/match/time.ts'
+import { leagueMatchClock } from '../src/game/realtime.ts'
+import {
+  SHOUT_LIVE_CUTOFF_MINUTE,
+  SHOUT_MAX_PER_MATCH,
+  isShoutKind,
+  matchMinuteOf,
+  shoutCooldownSeconds,
+  shoutLiveCutoffSeconds,
+} from '../src/game/match/shouts.ts'
 import { absorbFreeAgents, aiClubIdOf, committedFunds, leadingBid, minimumBid, placeBid, settleAuctions, type AIBidder, type Auction, type AuctionResult, type BidResult, type FreeMarket } from '../src/game/auction.ts'
 import { isOnMarketToday } from '../src/game/market-window.ts'
 import { lineupRating } from '../src/game/club-rating.ts'
@@ -717,7 +726,13 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       }
     }
   }
-  const matchQueue = new MatchQueue(path.join(dataDir, 'match-jobs'), options.matchQueue)
+  const matchQueue = new MatchQueue(path.join(dataDir, 'match-jobs'), {
+    ...options.matchQueue,
+    onResultUpdated: (id) => {
+      liveStates.delete(id)
+      options.matchQueue?.onResultUpdated?.(id)
+    },
+  })
   // 升级前已公布的杯赛可以从已保存的任务补齐榜单；绝不读取未公开比赛。
   {
     let changed = false, complete = true
@@ -1887,6 +1902,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         startedAt: live.input.kickoffAt,
         coachPausesLeft: 0,
         preplayed: true,
+        liveJobId: id,
+        liveShouts: [...(live.input.liveShouts ?? [])],
       }
     }
     for (const cup of sharedWorld.world.seasonCups?.cups ?? []) for (const round of cup.rounds) for (const fixture of round.fixtures) {
@@ -1901,9 +1918,89 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return {
         context: { isLeague: false, mode: 'cup', cupId: `season-${cup.id}`, cupFixtureId: fixture.id, round: fixture.round, opponentId: theirs.team.id, opponentName: theirs.team.name, seed: live.input.seed, homeAway: home ? 'home' : 'away', durationSeconds: LOGIC_MATCH_SECONDS, offside: true },
         engineState: live.state, instructions: [], lineup: structuredClone(mine.team.lineup), startedAt: live.input.kickoffAt, coachPausesLeft: 0, preplayed: true,
+        liveJobId: id,
+        liveShouts: [...(live.input.liveShouts ?? [])],
       }
     }
     return undefined
+  }
+
+  /**
+   * 联机 10 分钟正式赛（联赛/赛季杯）直播临场喊话（方向 2）：
+   * 校验时间窗、85 分钟截止、冷却与目标球员后，把带逻辑时钟戳的喊话写入 MatchJob 并触发后台 worker
+   * 高优先单场重算；SSE 广播给对战双方，直播时间线无缝顺延并与 10 分钟后公布的最终战报 100% 一致。
+   */
+  function applyLivePreplayedShout(
+    account: Account,
+    kind: unknown,
+    rawTargetPlayerId?: unknown,
+    excludeClient?: string,
+  ): { ok: true; scheduled: true; shout: ScheduledMatchShout; liveShouts: ScheduledMatchShout[] } | { ok: false; error: string } {
+    if (!isShoutKind(kind)) return { ok: false, error: '无效的喊话类型' }
+    const live = liveMatchFor(account)
+    if (!live || !live.liveJobId) return { ok: false, error: '当前没有正在直播的正式比赛' }
+    const jobId = live.liveJobId
+    const { input } = matchQueue.read(jobId)
+    const t = now()
+    if (t >= input.kickoffAt + LEAGUE_REALTIME_MS) return { ok: false, error: '直播已结束，正在公布赛果' }
+    const currentClock = leagueMatchClock(live, t)
+    const minute = matchMinuteOf(currentClock, LOGIC_MATCH_SECONDS)
+    if (minute >= SHOUT_LIVE_CUTOFF_MINUTE) {
+      return { ok: false, error: `${SHOUT_LIVE_CUTOFF_MINUTE} 分钟后已锁止喊话（等待终场结算）` }
+    }
+    const side = live.context.homeAway
+    const existing = (input.liveShouts ?? []).filter((item) => item.side === side)
+    if (existing.length >= SHOUT_MAX_PER_MATCH) {
+      return { ok: false, error: `本场 ${SHOUT_MAX_PER_MATCH} 次喊话已用完` }
+    }
+    const cutoffClock = Math.max(1, shoutLiveCutoffSeconds(LOGIC_MATCH_SECONDS) - 1)
+    const atClock = Math.min(cutoffClock, Math.max(1, Math.ceil(currentClock) + 1))
+    const cooldownSec = shoutCooldownSeconds(LOGIC_MATCH_SECONDS)
+    const last = existing.at(-1)
+    if (last && atClock < last.atClock + cooldownSec) {
+      const remainMin = Math.max(1, Math.ceil(((last.atClock + cooldownSec - atClock) / LOGIC_MATCH_SECONDS) * 90))
+      return { ok: false, error: `冷却中（约 ${remainMin} 分钟后可用）` }
+    }
+    let targetPlayerId: string | undefined
+    if (rawTargetPlayerId !== undefined && rawTargetPlayerId !== null && String(rawTargetPlayerId).trim() !== '') {
+      const raw = String(rawTargetPlayerId).trim()
+      const normalized = raw.startsWith(`${side}:`) ? raw.slice(side.length + 1) : raw
+      const locked = side === 'home' ? input.home : input.away
+      const squadIds = new Set([
+        ...locked.team.lineup.starters.map((s) => s.playerId),
+        ...locked.team.lineup.bench,
+      ])
+      if (!squadIds.has(normalized)) return { ok: false, error: '指定喊话的球员不在本场大名单中' }
+      targetPlayerId = normalized
+    }
+    const shout: ScheduledMatchShout = {
+      id: `sh-${side}-${atClock}-${existing.length + 1}-${crypto.randomBytes(3).toString('hex')}`,
+      side,
+      kind,
+      atClock,
+      ...(targetPlayerId ? { targetPlayerId } : {}),
+    }
+    let updated: MatchJob
+    try {
+      updated = matchQueue.recomputeLive(jobId, (job) => {
+        job.liveShouts = [...(job.liveShouts ?? []), shout]
+      })
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : '无法提交直播喊话' }
+    }
+    const cached = liveStates.get(jobId)
+    if (cached) cached.input = updated
+    // 通知对阵双方的在线教练，双方直播时间线同步注入同一条带时间戳喊话。
+    const coachIds = new Set<string>([account.id])
+    if (updated.home.coachId) coachIds.add(updated.home.coachId)
+    if (updated.away.coachId) coachIds.add(updated.away.coachId)
+    for (const cid of coachIds) {
+      const targetAccount = db.accounts.find((item) => item.id === cid)
+      if (!targetAccount) continue
+      targetAccount.revision++
+      broadcast(targetAccount, cid === account.id ? excludeClient : undefined)
+    }
+    return { ok: true, scheduled: true, shout, liveShouts: [...(updated.liveShouts ?? [])] }
   }
 
   /** 对手的实时体能只存在服务器；账号存档的公开副本不能带回这些字段。零全量克隆投影，slim 模式进一步瘦身。 */
@@ -3017,7 +3114,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         teamsById: () => sharedWorld.teams,
         resolveMatchRecord: (record) => hydrateAccountMatchRecord(agentAccount.id, record),
       }
-      const agentState = () => withSharedMarket(agentView(agentAccount.game, now(), agentOptions), agentAccount)
+      const agentState = () => {
+        const live = !agentAccount.game.activeMatch ? liveMatchFor(agentAccount) : undefined
+        const source = live ? { ...agentAccount.game, activeMatch: live } : agentAccount.game
+        return withSharedMarket(agentView(source, now(), agentOptions), agentAccount)
+      }
       if (url.pathname === '/api/agent/state' && req.method === 'GET') {
         advanceAccount(agentAccount)
         settleDueAuctions()
@@ -3039,7 +3140,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
           return
         }
         if (body.action === 'start_league' || body.action === 'simulate_round') return json(res, 400, { error: '联赛由服务器提前排队计算、开球 10 分钟后统一公布，不能手动开赛或模拟' })
-        if (['auto_lineup', 'set_lineup', 'apply_lineup_preset', 'set_auto_subs'].includes(String(body.action)) && officialLineupLocked(agentAccount, now())) {
+        if (['auto_lineup', 'set_lineup', 'apply_lineup_preset', 'set_auto_subs', 'set_auto_shout'].includes(String(body.action)) && officialLineupLocked(agentAccount, now())) {
           await sendJson(400, { ok: false, error: '阵容已锁定：开赛前 30 分钟内不能修改，比赛由服务器自动结算', revision: agentAccount.revision, game: agentState() }, true)
           return
         }
@@ -3104,6 +3205,13 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
           // 和世界页“约战”一样：对手名单由服务器给出，可以约全服任意一支球队（含别的教练执教的）。
           const found = friendlyTeamFor(agentAccount, String(body.clubId ?? ''))
           outcome = 'error' in found ? { ok: false, error: found.error } : startChallengeWithOpponent(agentAccount.game, found.team, now())
+        } else if (body.action === 'match_shout' && !agentAccount.game.activeMatch && liveMatchFor(agentAccount)) {
+          const liveRes = applyLivePreplayedShout(agentAccount, body.kind, body.targetPlayerId)
+          await sendJson(liveRes.ok ? 200 : 400, { ...liveRes, ...(liveRes.ok ? { result: liveRes } : {}), revision: agentAccount.revision, game: agentState() }, true)
+          return
+        } else if (body.action === 'get_match' && !body.matchId && !agentAccount.game.activeMatch && liveMatchFor(agentAccount)) {
+          const liveGame = { ...agentAccount.game, activeMatch: liveMatchFor(agentAccount) }
+          outcome = applyAgentAction(liveGame, body, now(), agentOptions)
         } else {
           outcome = applyAgentAction(body.action === 'preview_signing' ? transferSnapshot(agentAccount) : agentAccount.game, body, now(), agentOptions)
         }
@@ -3529,10 +3637,18 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
     if (url.pathname === '/api/match/action' && req.method === 'POST') {
       const body = await readJsonBody(req)
-      if (!['start_league', 'set_match_tactics', 'set_match_auto_subs', 'substitute'].includes(String(body.action))) return json(res, 400, { error: '不支持的比赛操作' })
+      if (!['start_league', 'set_match_tactics', 'set_match_auto_subs', 'substitute', 'match_shout'].includes(String(body.action))) return json(res, 400, { error: '不支持的比赛操作' })
       if (body.action === 'start_league') return json(res, 400, { error: '联赛由服务器提前排队计算、开球 10 分钟后统一公布，不需要手动开赛' })
       advanceAccount(account)
-      if (body.action !== 'start_league' && !account.game.activeMatch?.context.isLeague) return json(res, 400, { error: '当前没有进行中的联赛' })
+      if (body.action === 'match_shout' && !account.game.activeMatch && liveMatchFor(account)) {
+        const clientId = String(req.headers['x-fm-client'] ?? '').slice(0, 128)
+        const outcome = applyLivePreplayedShout(account, body.kind, body.targetPlayerId, clientId)
+        await sendJson(outcome.ok ? 200 : 400, { ...outcome, revision: account.revision, game: publicGame(account), serverTime: now() }, true)
+        return
+      }
+      if (body.action !== 'start_league' && !account.game.activeMatch?.context.isLeague && !(body.action === 'match_shout' && account.game.activeMatch)) {
+        return json(res, 400, { error: '当前没有进行中的比赛' })
+      }
       const outcome = applyAgentAction(account.game, body, now())
       if (outcome.ok) {
         account.revision++
@@ -3540,7 +3656,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         persistAccount(account)
         broadcast(account, String(req.headers['x-fm-client'] ?? '').slice(0, 128))
       }
-      await sendJson(outcome.ok ? 200 : 400, { ...outcome, revision: account.revision, game: publicGame(account) }, true)
+      await sendJson(outcome.ok ? 200 : 400, { ...outcome, revision: account.revision, game: publicGame(account), serverTime: now() }, true)
       return
     }
 

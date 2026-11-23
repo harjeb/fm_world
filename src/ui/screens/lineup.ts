@@ -265,6 +265,7 @@ function matchPlanBar(draft: Lineup, disabled: boolean): string {
       </select>
       ${customNote || `${categoryBadge}${staminaBadge}`}
       ${resetBtn}
+      <label class="field-inline check-field shout-auto-toggle" for="lineup-auto-shout" ${tipAttrs('赛前自动喊话兜底', '开启后，离线或未观赛的联赛/杯赛会在落后、领先守胜果或球员吃黄牌等关键时机自动触发最稳妥的情绪喊话。')}><input type="checkbox" id="lineup-auto-shout" data-auto-shout ${draft.autoShout ? 'checked' : ''} ${disabled ? 'disabled' : ''}><span>自动情绪喊话</span></label>
     </div>
     <div class="tac-style-meta" ${tipAttrs(`比赛计划 · ${plan.name}`, tipBody)}>
       ${enabledCustom > 0
@@ -917,6 +918,7 @@ function lineupFingerprint(lineup: Lineup): string {
     lineup.matchPlan && lineup.matchPlan !== 'standard' ? lineup.matchPlan : null,
     lineup.backupTactics ?? null,
     lineup.matchPlanRules ?? null,
+    lineup.autoShout ? 1 : 0,
     Object.entries(lineup.customPositions ?? {}).sort(([a], [b]) => a.localeCompare(b)),
     (lineup.presets ?? []).map((preset) => [preset.id, preset.name, preset.createdAt, lineupFingerprint({ ...preset.lineup })]),
   ])

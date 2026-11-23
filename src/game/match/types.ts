@@ -11,11 +11,15 @@ import type {
   MatchInstruction,
   MatchLogEntry,
   MatchMentality,
+  MatchShoutRecord,
   MatchTeamStats,
+  Personality,
   Player,
   PlayerMatchStats,
+  PlayerShoutState,
   Position,
   RoleId,
+  ScheduledMatchShout,
   SkillId,
   Tactics,
   TraitId,
@@ -64,6 +68,10 @@ export type MatchPlayerState = {
   subbedOn?: boolean
   /** “每场一次”的专属特性已经用过。 */
   traitUsed?: boolean
+  /** 球员性格（影响场边喊话正负反应）；旧存档可缺省。 */
+  personality?: Personality
+  /** 当前生效的场边喊话情绪状态（到 expiresAt 自动失效）。 */
+  shoutState?: PlayerShoutState
   /** v3 连续仿真的速度/朝向；v2 存档没有这一项。 */
   motion?: PlayerMotionState
 }
@@ -121,6 +129,14 @@ export type MatchTeamState = {
   players: MatchPlayerState[]
   bench: MatchPlayerState[]
   autoSubs?: AutoSubPlan
+  /** 是否开启离线/未观赛自动喊话兜底。 */
+  autoShout?: boolean
+  /** 本场已使用的喊话次数。 */
+  shoutsUsed?: number
+  /** 下次可喊话的比赛逻辑时钟（秒）。 */
+  shoutCooldownUntil?: number
+  /** 本场喊话与助教反馈记录。 */
+  shoutHistory?: MatchShoutRecord[]
   subsUsed: number
   chemistry?: Record<string, number>
 }
@@ -305,6 +321,10 @@ export type MatchState = {
   decisionRng: RngState
   resultRng: RngState
   lastGoalBy: MatchSide | null
+  /** 按比赛逻辑时钟安排的联机直播喊话列表，确保服务端重算与双端回放逐帧一致。 */
+  scheduledShouts?: ScheduledMatchShout[]
+  /** 已触发过的 scheduledShouts ID 列表，防止重复执行。 */
+  appliedShoutIds?: string[]
   /** 新引擎（rulesVersion 4）的物理比赛存档；现有引擎没有这一项。 */
   pes?: unknown
 }
@@ -335,6 +355,7 @@ export type MatchTeamInput = {
   stadiumStage?: number
   /** 是否启用 AI 主教练临场战术调度与智能换人。 */
   aiCoach?: boolean
+  autoShout?: boolean
   autoSubs?: AutoSubPlan
   chemistry?: Record<string, number>
   starters: { player: Player; role: RoleId; slotId: string }[]

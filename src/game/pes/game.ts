@@ -15,8 +15,17 @@ import { inBox, progressOf, wideZone } from '../match/pitch.ts'
 import { opponentSide, PITCH_LENGTH, PITCH_WIDTH } from '../match/team.ts'
 import { LOGIC_MATCH_SECONDS } from '../match/time.ts'
 import { needsShootout } from '../match/knockout.ts'
-import type { AutoSubPlan, MatchMentality, Tactics } from '../types.ts'
+import type { AutoSubPlan, MatchMentality, MatchShoutRecord, ScheduledMatchShout, ShoutKind, Tactics } from '../types.ts'
 import type { MatchPlayerState, MatchSide, MatchState, MatchTeamInput, MatchTeamState } from '../match/types.ts'
+import {
+  evaluateShoutReactions,
+  isShoutKind,
+  normalizeScheduledShouts,
+  pickAutoShout,
+  resolveShoutTarget,
+  shoutCooldownSeconds,
+  shoutStatusOf,
+} from '../match/shouts.ts'
 import { MotionRatings } from './ability.ts'
 import { formationRows } from './formation.ts'
 import { PesSettlement, type PesSettlementJSON } from './settle.ts'
@@ -264,6 +273,7 @@ export class PesGame {
       this.applyAutoSubs()
       this.syncLive()
       this.applyMatchPlans(false)
+      this.applyShouts()
       refreshMotionAbilities(m, this.settlement)
     }
     if (m.finished) this.afterRegulation()
@@ -443,6 +453,116 @@ export class PesGame {
     team.autoSubs = structuredClone(plan)
     this.settlement.note('tactic', side, '教练更新了比赛自动换人设置。', {}, at ?? this.match.time)
     return { ok: true }
+  }
+
+  /** 安排带逻辑时钟戳的联机直播喊话（合并去重，不重复触发已执行条目）。 */
+  scheduleShouts(shouts: ScheduledMatchShout[]): void {
+    const g = this.state
+    const merged = normalizeScheduledShouts([...(g.scheduledShouts ?? []), ...shouts])
+    g.scheduledShouts = merged
+  }
+
+  /** 场边情绪喊话：支持全队或单个场上球员，按性格/比分/评分结算有正有负的 FM27 情绪状态。 */
+  shout(
+    kind: ShoutKind,
+    side: MatchSide = 'home',
+    targetPlayerId?: string,
+    at?: number,
+    auto = false,
+  ): { ok: true; record: MatchShoutRecord } | { ok: false; error: string } {
+    const g = this.state
+    if (g.finished) return { ok: false, error: '比赛已经结束' }
+    if (!isShoutKind(kind)) return { ok: false, error: '无效的喊话类型' }
+    const team = g.teams[side === 'home' ? 0 : 1]
+    const clock = at ?? this.match.time
+    const status = shoutStatusOf(team, clock, g.durationSeconds, { finished: g.finished })
+    if (!status.canShout) return { ok: false, error: status.reason ?? '当前无法喊话' }
+    const target = targetPlayerId ? resolveShoutTarget(team, targetPlayerId) : undefined
+    if (targetPlayerId && !target) return { ok: false, error: '指定喊话的球员不在场上' }
+
+    const { record, states } = evaluateShoutReactions({
+      seed: g.seed,
+      clock,
+      durationSeconds: g.durationSeconds,
+      score: g.score,
+      log: g.log,
+      side,
+      kind,
+      team,
+      targetPlayerId: target?.id,
+      knockout: this.settlement.knockout,
+      auto,
+    })
+    for (const player of team.players) {
+      const next = states.get(player.id)
+      if (next) player.shoutState = next
+    }
+    team.shoutsUsed = (team.shoutsUsed ?? 0) + 1
+    team.shoutCooldownUntil = clock + shoutCooldownSeconds(g.durationSeconds)
+    ;(team.shoutHistory ??= []).push(record)
+    g.instructions.push({
+      step: g.step,
+      kind: 'shout',
+      side,
+      shoutKind: kind,
+      ...(target ? { targetPlayerId: target.sourceId } : {}),
+      ...(auto ? { autoReason: 'auto_shout' } : {}),
+    })
+    refreshMotionAbilities(this.match, this.settlement)
+    this.settlement.note(
+      'shout',
+      side,
+      record.dugoutFeedback,
+      {
+        ...(target ? { playerId: target.id } : {}),
+        shout: {
+          kind,
+          ...(record.targetPlayerId ? { targetPlayerId: record.targetPlayerId } : {}),
+          ...(record.targetName ? { targetName: record.targetName } : {}),
+          positiveCount: record.positiveCount,
+          neutralCount: record.neutralCount,
+          negativeCount: record.negativeCount,
+          reactions: record.reactions,
+        },
+      },
+      clock,
+    )
+    return { ok: true, record }
+  }
+
+  /** 每个模拟秒检查：清理过期情绪、执行已安排的联机喊话、按需触发赛前自动喊话。 */
+  private applyShouts(): void {
+    const g = this.state
+    const clock = this.match.time
+    for (const team of g.teams) {
+      for (const player of team.players) {
+        if (player.shoutState && clock >= player.shoutState.expiresAt) {
+          delete player.shoutState
+        }
+      }
+    }
+    if (g.scheduledShouts?.length) {
+      const applied = (g.appliedShoutIds ??= [])
+      const appliedSet = new Set(applied)
+      for (const item of g.scheduledShouts) {
+        if (appliedSet.has(item.id)) continue
+        if (item.atClock > Math.floor(clock)) continue
+        applied.push(item.id)
+        appliedSet.add(item.id)
+        this.shout(item.kind, item.side, item.targetPlayerId, clock, !!item.auto)
+      }
+    }
+    for (const team of g.teams) {
+      if (!team.autoShout) continue
+      const pick = pickAutoShout({
+        team,
+        clock,
+        durationSeconds: g.durationSeconds,
+        score: g.score,
+        log: g.log,
+      })
+      if (pick) this.shout(pick.kind, team.side, pick.targetPlayerId, clock, true)
+    }
   }
 
   /** 按比赛计划或 AI 主教练临场判断，随实时分钟/净胜球自动切换战术阶段。 */

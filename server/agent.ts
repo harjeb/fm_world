@@ -77,7 +77,19 @@ import {
 import { emptyAutoSubs, validateAutoSubPlan } from '../src/game/match/management.ts'
 import { positionMultiplier } from '../src/game/ca.ts'
 import { displayClock } from '../src/game/match/time.ts'
-import { leagueDisplayClock } from '../src/game/realtime.ts'
+import { leagueDisplayClock, leagueMatchClock } from '../src/game/realtime.ts'
+import {
+  SHOUT_LIST,
+  SHOUT_LIVE_CUTOFF_MINUTE,
+  SHOUT_MAX_PER_MATCH,
+  SHOUT_MOOD_META,
+  activeShoutStateOf,
+  isShoutKind,
+  livePlayerRating,
+  matchMinuteOf,
+  shoutCooldownSeconds,
+  shoutStatusOf,
+} from '../src/game/match/shouts.ts'
 import { injuryUntil } from '../src/game/injury.ts'
 import { buildReview } from '../src/game/review.ts'
 import { cardRecyclePoints, cardsOf, playerCards, recyclePlayerCards, setCardRecycleLock, untrainedPlayer } from '../src/game/cards.ts'
@@ -105,6 +117,7 @@ import {
   discardTraining,
   equipPlayerCard,
   finishMatch,
+  issueMatchShout,
   keepTraining,
   makeSubstitution,
   previewTraining,
@@ -318,26 +331,63 @@ function fixtureView(game: GameState, fixture: ReturnType<typeof playerFixture>)
   }
 }
 
-function matchPlayerView(player: { id: string; name: string; number: number; position: Position; role: RoleId; stamina: number; maxStamina: number; injured?: boolean }) {
+function matchPlayerView(
+  player: {
+    id: string
+    sourceId: string
+    name: string
+    number: number
+    position: Position
+    role: RoleId
+    stamina: number
+    maxStamina: number
+    injured?: boolean
+    yellowCards?: number
+    shoutState?: import('../src/game/types.ts').PlayerShoutState
+    stats?: import('../src/game/types.ts').PlayerMatchStats
+  },
+  clock = 0,
+  durationSeconds = 900,
+) {
+  const activeMood = player.shoutState && clock >= player.shoutState.appliedAt && clock < player.shoutState.expiresAt
+    ? player.shoutState
+    : null
+  const minute = matchMinuteOf(clock, durationSeconds)
   return {
     id: player.id,
+    sourceId: player.sourceId,
     name: player.name,
     number: player.number,
     position: player.position,
     role: player.role,
     stamina: player.maxStamina > 0 ? Math.round((player.stamina / player.maxStamina) * 1000) / 10 : 0,
     injured: !!player.injured,
+    yellowCards: player.yellowCards ?? 0,
+    rating: player.stats ? livePlayerRating(player as import('../src/game/match/types.ts').MatchPlayerState, Math.max(1, minute)) : null,
+    mood: activeMood
+      ? {
+          kind: activeMood.kind,
+          mood: activeMood.mood,
+          label: SHOUT_MOOD_META[activeMood.mood].label,
+          shortLabel: SHOUT_MOOD_META[activeMood.mood].shortLabel,
+          tone: SHOUT_MOOD_META[activeMood.mood].tone,
+          delta: activeMood.delta,
+          expiresMinute: matchMinuteOf(activeMood.expiresAt, durationSeconds),
+        }
+      : null,
   }
 }
 
 /** 比赛中的可见信息，和手动比赛页 + 教练面板基本一致。 */
-function matchView(game: GameState) {
+function matchView(game: GameState, now = Date.now()) {
   const active = game.activeMatch
   if (!active) return null
   const engine = restoreActiveEngine(game)
   if (!engine) return null
   const state = engine.state
-  const matchClock = active.context.isLeague ? leagueDisplayClock(active) : displayClock(state.clock, state.durationSeconds)
+  const preplayed = !!active.preplayed
+  const liveClock = preplayed ? leagueMatchClock(active, now) : state.clock
+  const matchClock = active.context.isLeague || preplayed ? leagueDisplayClock(active, now) : displayClock(state.clock, state.durationSeconds)
   const playerSide = active.context.homeAway
   const playerIndex = playerSide === 'home' ? 0 : 1
   const opponentIndex = playerIndex === 0 ? 1 : 0
@@ -346,10 +396,27 @@ function matchView(game: GameState) {
   const homePoss = state.stats.home.possession + state.stats.away.possession > 0
     ? (state.stats.home.possession / (state.stats.home.possession + state.stats.away.possession)) * 100
     : 50
+  const liveShouts = active.liveShouts ?? []
+  const shoutStatus = (() => {
+    if (!preplayed) {
+      return shoutStatusOf(playerTeam, state.clock, state.durationSeconds, { finished: state.finished, preplayed: false })
+    }
+    const mineShouts = liveShouts.filter((s) => s.side === playerSide)
+    const last = mineShouts.at(-1)
+    const cooldownUntil = last ? last.atClock + shoutCooldownSeconds(state.durationSeconds) : 0
+    return shoutStatusOf(
+      { shoutsUsed: mineShouts.length, shoutCooldownUntil: cooldownUntil },
+      liveClock,
+      state.durationSeconds,
+      { finished: state.finished, preplayed: true },
+    )
+  })()
   return {
     opponentId: active.context.opponentId,
     opponentName: active.context.opponentName,
     isLeague: active.context.isLeague,
+    preplayed,
+    liveJobId: active.liveJobId ?? null,
     mode: active.context.mode ?? null,
     stage: active.context.stage ?? null,
     round: active.context.round ?? null,
@@ -377,9 +444,17 @@ function matchView(game: GameState) {
     activePlanPhaseLabel: playerTeam.activeRuleName ?? (matchPlanPhaseName(playerTeam.activePlanPhase) || null),
     planConditionFactor: playerTeam.planConditionFactor ?? null,
     autoSubs: playerTeam.autoSubs ?? emptyAutoSubs(),
-    onPitch: playerTeam.players.filter((player) => player.onPitch).map(matchPlayerView),
-    bench: playerTeam.bench.map(matchPlayerView),
-    availableBench: engine.availableBench(playerSide).map(matchPlayerView),
+    autoShout: !!playerTeam.autoShout,
+    shouts: {
+      ...shoutStatus,
+      liveCutoffMinute: preplayed ? SHOUT_LIVE_CUTOFF_MINUTE : null,
+      history: playerTeam.shoutHistory ?? [],
+      liveShouts,
+      availableKinds: SHOUT_LIST.map((item) => ({ id: item.id, label: item.label, shortDesc: item.shortDesc, hint: item.hint })),
+    },
+    onPitch: playerTeam.players.filter((player) => player.onPitch).map((p) => matchPlayerView(p, state.clock, state.durationSeconds)),
+    bench: playerTeam.bench.map((p) => matchPlayerView(p, state.clock, state.durationSeconds)),
+    availableBench: engine.availableBench(playerSide).map((p) => matchPlayerView(p, state.clock, state.durationSeconds)),
     commentary: (state.commentary ?? []).map((entry) => ({ ...entry, clock: displayClock(entry.clock, state.durationSeconds) })),
     recentLog: state.log.slice(-12).map((entry) => ({
       seq: entry.seq,
@@ -392,6 +467,7 @@ function matchView(game: GameState) {
       skill: entry.skill,
       goal: entry.goal ? { ...entry.goal, clock: displayClock(entry.goal.clock, state.durationSeconds) } : undefined,
       shotChance: entry.shotChance,
+      shout: entry.shout,
     })),
     instructions: state.instructions,
     snapshot: { ...engine.snapshot(), clock: displayClock(engine.snapshot().clock, state.durationSeconds) },
@@ -704,6 +780,7 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
       instructions: style.instructions,
     })),
     matchPlans: MATCH_PLAN_LIST,
+    shoutKinds: SHOUT_LIST.map((item) => ({ id: item.id, label: item.label, enLabel: item.enLabel, shortDesc: item.shortDesc, hint: item.hint, tone: item.tone })),
     backupTacticTemplates: BACKUP_TACTIC_TEMPLATES.map((tpl) => ({
       id: tpl.id,
       label: tpl.label,
@@ -737,7 +814,7 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
     trainingBooksByPlayer: Object.fromEntries(game.roster.map((player) => [player.id, trainingBookLoadout(game, player.id)])),
     candidates: Object.values(game.candidates).map((player) => playerView(player, game, now)),
     cards: cardsOf(game).map((card) => cardView(card, game)),
-    activeMatch: matchView(game),
+    activeMatch: matchView(game, now),
     matchHistory: game.matchHistory.map(matchSummary),
     challengeHistory: game.challengeHistory.map(matchSummary),
     recentMatches: game.matchHistory.slice(0, 5).map(matchSummary),
@@ -930,6 +1007,12 @@ function parseLineup(game: GameState, value: unknown): { lineup?: Lineup; error?
     if (errors.length) return { error: `自定义比赛计划与新备选战术槽不兼容：${errors.join('；')}` }
   }
 
+  let autoShout: boolean | undefined = game.lineup.autoShout
+  if (raw.autoShout !== undefined) {
+    if (typeof raw.autoShout !== 'boolean') return { error: 'autoShout 必须是布尔值' }
+    autoShout = raw.autoShout || undefined
+  }
+
   const next: Lineup = {
     formationId,
     starters,
@@ -940,6 +1023,7 @@ function parseLineup(game: GameState, value: unknown): { lineup?: Lineup; error?
     ...(matchPlan ? { matchPlan } : {}),
     ...(backupTactics?.length ? { backupTactics } : {}),
     ...(matchPlanRules?.length ? { matchPlanRules } : {}),
+    ...(autoShout ? { autoShout: true } : {}),
   }
   if (raw.customPositions !== undefined) {
     if (raw.customPositions !== null) {
@@ -1393,13 +1477,32 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       syncActiveEngine(game, engine, now)
       return { ok: true, result: { finished: false, record: null, match: matchView(game) } }
     }
+    case 'set_auto_shout': {
+      if (typeof body.enabled !== 'boolean') return { ok: false, error: 'enabled 必须是布尔值' }
+      const next = structuredClone(game.lineup)
+      if (body.enabled) next.autoShout = true
+      else delete next.autoShout
+      const result = setLineup(game, next, game.autoSubs ?? emptyAutoSubs())
+      return result.ok ? { ok: true, result: { autoShout: !!game.lineup.autoShout } } : { ok: false, error: result.errors.join('；') }
+    }
     case 'set_match_tactics': {
       if (!game.activeMatch) return { ok: false, error: '当前没有进行中的比赛' }
       if (body.mentality !== 'attack' && body.mentality !== 'balanced' && body.mentality !== 'defend') return { ok: false, error: '比赛中只能选择全体进攻、均衡或全体防守' }
       const engine = restoreActiveEngine(game)
       if (!engine) return { ok: false, error: '无法恢复比赛引擎' }
       const result = changeMatchTactics(game, engine, body.mentality)
-      return { ...result, result: result.ok ? matchView(game) : undefined }
+      return { ...result, result: result.ok ? matchView(game, now) : undefined }
+    }
+    case 'match_shout': {
+      if (!game.activeMatch) return { ok: false, error: '当前没有进行中的比赛' }
+      if (!isShoutKind(body.kind)) return { ok: false, error: `无效的喊话类型：可选 ${SHOUT_LIST.map((item) => item.id).join(' / ')}` }
+      const engine = restoreActiveEngine(game)
+      if (!engine) return { ok: false, error: '无法恢复比赛引擎' }
+      const targetPlayerId = body.targetPlayerId === undefined || body.targetPlayerId === null || text(body.targetPlayerId) === ''
+        ? undefined
+        : text(body.targetPlayerId)
+      const result = issueMatchShout(game, engine, body.kind, targetPlayerId)
+      return result.ok ? { ok: true, result: { record: result.record, match: matchView(game, now) } } : result
     }
     case 'set_match_auto_subs': {
       if (!game.activeMatch) return { ok: false, error: '当前没有进行中的比赛' }

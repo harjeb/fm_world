@@ -2337,3 +2337,33 @@ circle.pm-5 { fill: var(--h6); }
 .ach-card.is-hidden-locked .ach-mystery-title { letter-spacing: 2px; color: var(--text-2); }
 .ach-card.is-hidden-unlocked { border-color: rgba(79, 208, 138, 0.55); background: linear-gradient(135deg, rgba(79, 208, 138, 0.09), var(--panel-2) 60%); }
 .ach-bar.is-mystery { background: rgba(148, 163, 184, 0.12); }
+
+/* FM27 场边情绪喊话系统 */
+.shout-bar { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.shout-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.shout-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.shout-target-wrap { display: inline-flex; align-items: center; gap: 6px; }
+.shout-target-select { min-width: 190px; max-width: 300px; }
+.shout-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+.shout-btn { justify-content: center; padding: 6px 8px; font-weight: 600; white-space: nowrap; }
+.shout-btn.tone-positive:not(:disabled) { border-color: rgba(79, 208, 138, 0.45); }
+.shout-btn.tone-positive:not(:disabled):hover { border-color: var(--good); background: rgba(79, 208, 138, 0.14); }
+.shout-btn.tone-aggressive:not(:disabled) { border-color: rgba(242, 184, 75, 0.48); }
+.shout-btn.tone-aggressive:not(:disabled):hover { border-color: var(--warn); background: rgba(242, 184, 75, 0.14); }
+.shout-btn.tone-calm:not(:disabled) { border-color: rgba(92, 179, 255, 0.45); }
+.shout-btn.tone-calm:not(:disabled):hover { border-color: var(--info); background: rgba(92, 179, 255, 0.14); }
+.shout-dugout { padding-top: 4px; border-top: 1px dashed var(--line); line-height: 1.45; }
+.shout-auto-toggle { margin-left: auto; }
+.mark.mood-positive { background: rgba(54, 201, 127, 0.2); color: #6ef0ad; border: 1px solid rgba(54, 201, 127, 0.45); }
+.mark.mood-neutral { background: rgba(141, 153, 166, 0.18); color: #c4cfd9; border: 1px solid rgba(141, 153, 166, 0.35); }
+.mark.mood-negative { background: rgba(229, 107, 91, 0.22); color: #ff9c8f; border: 1px solid rgba(229, 107, 91, 0.5); }
+.event-line.shout { background: rgba(54, 201, 127, 0.08); box-shadow: inset 3px 0 #36c97f; }
+.event-line.shout .type { color: #6ef0ad; font-weight: 600; }
+.event-line.shout p { color: var(--text); }
+@media (max-width: 960px) {
+  .shout-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .shout-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shout-target-select { min-width: 0; width: 100%; }
+}

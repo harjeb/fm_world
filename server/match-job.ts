@@ -1,5 +1,5 @@
 import crypto from 'node:crypto'
-import type { AITeam, AutoSubPlan, Chemistry, Fixture, MatchRecord, Suspension } from '../src/game/types.ts'
+import type { AITeam, AutoSubPlan, Chemistry, Fixture, MatchRecord, ScheduledMatchShout, Suspension } from '../src/game/types.ts'
 import { MatchEngine } from '../src/game/match/engine.ts'
 import { PesEngine, type GameEngine } from '../src/game/pes/engine.ts'
 import type { MatchState } from '../src/game/match/types.ts'
@@ -61,6 +61,8 @@ export type MatchJob = {
   gameDayMs: number
   home: LockedTeam
   away: LockedTeam
+  /** 10 分钟联机直播期间由双方教练发起的带时间戳喊话列表，重算后同步回赛果与赛后 2D 回放。 */
+  liveShouts?: ScheduledMatchShout[]
 }
 export type MatchJobResult = {
   id: string
@@ -117,6 +119,7 @@ export function computeMatchJob(job: MatchJob): MatchJobResult {
     ? new PesEngine({ seed: job.seed, home, away, knockout, ...(shootoutOffset ? { shootoutOffset } : {}), durationSeconds: LOGIC_MATCH_SECONDS, offside: true })
     : new MatchEngine({ seed: job.seed, home, away, knockout, ...(shootoutOffset ? { shootoutOffset } : {}), durationSeconds: LOGIC_MATCH_SECONDS, offside: true, recordPlayback: false, rulesVersion: 2 })
   prepareMatchInjuries(engine.state, { ...job.home.injuries, ...job.away.injuries }, job.kickoffAt)
+  if (live && job.liveShouts?.length) engine.scheduleShouts(job.liveShouts)
   const initialState = live ? engine.serialize() : undefined
   const state = engine.simulate()
   const injuries: Record<string, number> = {}

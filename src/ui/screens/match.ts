@@ -3,15 +3,26 @@ import { restoreActiveEngine } from '../../game/actions.ts'
 import { FORMATIONS } from '../../game/data/formations.ts'
 import type { GameEngine } from '../../game/pes/engine.ts'
 import { emptyAutoSubs, MATCH_MENTALITY_LABELS } from '../../game/match/management.ts'
+import {
+  SHOUT_LIST,
+  SHOUT_LIVE_CUTOFF_MINUTE,
+  SHOUT_MOOD_META,
+  activeShoutStateOf,
+  livePlayerRating,
+  matchMinuteOf,
+  shoutCooldownSeconds,
+  shoutStatusOf,
+} from '../../game/match/shouts.ts'
 import { displayClock, MATCH_DISPLAY_SECONDS } from '../../game/match/time.ts'
 import type { MatchPlayerState, MatchTeamState } from '../../game/match/types.ts'
-import { leagueDisplayClock } from '../../game/realtime.ts'
+import { leagueDisplayClock, leagueMatchClock } from '../../game/realtime.ts'
 import { lineupLockState, PLAYER_TEAM_ID } from '../../game/season.ts'
 import { MAX_SUBS } from '../../game/squad.ts'
 import { isOnlineMode } from '../../online.ts'
 import { renderAutoSubEditor } from '../auto-sub-editor.ts'
-import { clubLook, compareRow, crest, distinctKit, emptyState, icon, meter, ownName, panel, posBadge, primaryPosition } from '../components.ts'
+import { clubLook, compareRow, crest, distinctKit, emptyState, icon, meter, ownName, panel, posBadge, primaryPosition, tag } from '../components.ts'
 import { clockText, esc, positionLabel, teamStatusTacticBadge, teamTacticSummary } from '../format.ts'
+import { tipAttrs } from '../tooltip.ts'
 import { matchPlanLabel, matchPlanPhaseName } from '../../game/pes/match-plan.ts'
 import { game, ui } from '../state.ts'
 import { renderCommentary, renderEvent } from './review.ts'
@@ -46,16 +57,88 @@ function avgStamina(team: MatchTeamState): number {
   return Math.round((players.reduce((sum, player) => sum + staminaOf(player), 0) / players.length) * 10) / 10
 }
 
-function playerStatusTable(team: MatchTeamState, title: string, color: string, own = false): string {
+function playerStatusTable(team: MatchTeamState, title: string, color: string, own = false, clock = 0): string {
   const rows = onPitch(team).map((player) => {
+    const moodState = activeShoutStateOf(player, clock)
+    const moodMeta = moodState ? SHOUT_MOOD_META[moodState.mood] : null
+    const moodMark = moodMeta
+      ? `<span class="mark mood-${moodMeta.tone}" ${tipAttrs(`情绪：${moodMeta.label}`, moodState!.delta > 0 ? `关键状态 +${moodState!.delta.toFixed(1)}` : moodState!.delta < 0 ? `关键状态 ${moodState!.delta.toFixed(1)}` : '无属性变化')}>${moodMeta.icon}${esc(moodMeta.shortLabel)}</span>`
+      : ''
     const marks = [
       player.stats.goals ? `<span class="mark goal">${player.stats.goals} 球</span>` : '',
       player.sentOff ? '<span class="mark red">红</span>' : player.yellowCards ? '<span class="mark yellow">黄</span>' : '',
       player.injured ? '<span class="mark injured">伤</span>' : '',
+      moodMark,
     ].join('')
     return `<tr data-key="${esc(player.id)}"><td>${posBadge(player.position)}</td><td class="name-cell"><span class="name-plain">${esc(player.name)}</span>${marks}</td><td class="meter-cell">${meter(staminaOf(player))}</td></tr>`
   }).join('')
   return `<div class="status-team"><div class="status-head"><i class="swatch" style="background:${esc(color)}"></i><b${own ? ' class="own-name"' : ''}>${esc(title)}</b><span class="muted small">换人 ${team.subsUsed} / ${MAX_SUBS}</span></div><div class="status-sub">${esc(teamStatusTacticBadge(team))}</div><table class="dt plain status-table"><tbody>${rows}</tbody></table></div>`
+}
+
+/** FM27 风格场边情绪喊话栏：全模式可用（含联机 10 分钟直播 85 分钟前实时重算），不消耗教练暂停。 */
+function dugoutShoutPanel(engine: GameEngine): string {
+  const active = game.activeMatch!
+  const state = engine.state
+  const side = active.context.homeAway
+  const team = engine.getTeam(side)
+  const preplayed = !!active.preplayed
+  const liveClock = preplayed ? leagueMatchClock(active) : state.clock
+  const minute = matchMinuteOf(liveClock, state.durationSeconds)
+  const status = (() => {
+    if (!preplayed) {
+      return shoutStatusOf(team, state.clock, state.durationSeconds, { finished: state.finished, preplayed: false })
+    }
+    const scheduledMine = (active.liveShouts ?? []).filter((item) => item.side === side)
+    const used = Math.max(team.shoutsUsed ?? 0, scheduledMine.length)
+    const lastScheduled = scheduledMine.at(-1)
+    const cooldownUntil = Math.max(
+      team.shoutCooldownUntil ?? 0,
+      lastScheduled ? lastScheduled.atClock + shoutCooldownSeconds(state.durationSeconds) : 0,
+    )
+    return shoutStatusOf({ shoutsUsed: used, shoutCooldownUntil: cooldownUntil }, liveClock, state.durationSeconds, {
+      finished: state.finished,
+      preplayed: true,
+    })
+  })()
+  const players = onPitch(team)
+  const selectedTarget = players.some((p) => p.sourceId === ui.matchShoutTarget) ? ui.matchShoutTarget : ''
+  const lastFeedback = team.shoutHistory?.at(-1)?.dugoutFeedback
+  const pendingNote = preplayed && (active.liveShouts ?? []).some((item) => item.side === side && item.atClock > Math.floor(state.clock))
+    ? '（最新喊话已同步至服务器重算，画面即将生效）'
+    : ''
+  const statusBadge = ui.matchShoutPending
+    ? tag('提交中…', 'info')
+    : status.canShout
+      ? tag(`可用 · 剩余 ${status.max - status.used}/${status.max}`, 'good')
+      : tag(status.reason ?? '暂不可用', status.cooldownRemainingMinutes > 0 ? 'warn' : '')
+  const buttons = SHOUT_LIST.map((def) => {
+    const disabled = !status.canShout || ui.matchShoutPending
+    return `<button class="btn small shout-btn tone-${def.tone}" data-action="match-shout" data-shout="${def.id}" ${disabled ? 'disabled' : ''} ${tipAttrs(`喊话 · ${def.label}（${def.enLabel}）`, `${def.shortDesc}。${def.hint}`)}>${esc(def.label)}</button>`
+  }).join('')
+  return `<section class="panel shout-bar">
+    <div class="shout-head">
+      <div class="shout-title">
+        <b>📢 场边喊话</b>
+        ${statusBadge}
+        ${preplayed ? `<span class="muted small">联机直播 ${SHOUT_LIVE_CUTOFF_MINUTE} 分钟前实时生效并重算后半场</span>` : '<span class="muted small">不消耗暂停 · 全队或单人点名 · 按局势/性格有正负反馈</span>'}
+      </div>
+      <div class="shout-target-wrap">
+        <label class="muted small" for="match-shout-target">对象</label>
+        <select id="match-shout-target" class="compact shout-target-select" aria-label="喊话对象">
+          <option value="" ${selectedTarget === '' ? 'selected' : ''}>全队（${players.length} 人）</option>
+          ${players.map((p) => {
+            const rating = livePlayerRating(p, Math.max(1, minute))
+            const mood = activeShoutStateOf(p, state.clock)
+            const moodText = mood ? ` · ${SHOUT_MOOD_META[mood.mood].icon}${SHOUT_MOOD_META[mood.mood].shortLabel}` : ''
+            const cardText = p.yellowCards ? ' · 黄牌' : ''
+            return `<option value="${esc(p.sourceId)}" ${selectedTarget === p.sourceId ? 'selected' : ''}>#${p.number} ${esc(p.name)}（${positionLabel(p.position)} · ${rating.toFixed(1)}分${cardText}${moodText}）</option>`
+          }).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="shout-grid">${buttons}</div>
+    <div class="shout-dugout muted small">${lastFeedback ? esc(`${lastFeedback}${pendingNote}`) : `助教：随时可向全队或单名球员喊话激励，注意比分、评分、黄牌与性格（喊错时机可能产生反效果）。${pendingNote}`}</div>
+  </section>`
 }
 
 function coachPanel(engine: GameEngine): string {
@@ -150,7 +233,7 @@ export function renderMatch(): string {
             ? `<span class="tag gold">计划：${esc(matchPlanLabel(mine.matchPlan))}${matchPlanPhaseName(mine.activePlanPhase) ? ` · ${esc(matchPlanPhaseName(mine.activePlanPhase))}` : ''}</span>`
             : ''}
         ${active.preplayed
-          ? `<span class="muted small">${active.context.mode === 'cup' ? '杯赛' : '联赛'}直播：阵容已在开赛前 30 分钟锁定，按现实时间回放整场（约 10 分钟），不可暂停、加速或跳过；结束后才公布比分和战报。</span>`
+          ? `<span class="muted small">${active.context.mode === 'cup' ? '杯赛' : '联赛'}直播：阵容已在开赛前 30 分钟锁定，按现实时间直播整场（约 10 分钟）；${SHOUT_LIVE_CUTOFF_MINUTE} 分钟前可在下方场边喊话实时影响战局，结束后统一公布比分和战报。</span>`
           : active.context.isLeague
           ? `<span class="muted small">联赛按现实时间进行，不可暂停、加速或跳过。</span><button class="btn small ${ui.coachPanel ? 'active' : ''}" data-action="match-coach">${icon('coach', 13)}教练调整</button>`
           : `<span class="muted small steps">${state.step} ${isPesEngine(engine) ? '次判定' : '步'} · 种子 ${active.context.seed}</span>
@@ -160,6 +243,7 @@ export function renderMatch(): string {
             <button class="btn small ${ui.coachPanel ? 'active' : ''}" data-action="match-coach" ${ui.coachPanel || active.coachPausesLeft > 0 ? '' : 'disabled'}>${icon('coach', 13)}${ui.coachPanel ? '收起调整' : `教练暂停（${active.coachPausesLeft}）`}</button>`}
         ${active.context.isLeague ? `<span class="muted small steps">${state.step} ${isPesEngine(engine) ? '次判定' : '步'} · 种子 ${active.context.seed}</span>` : ''}
       </div>
+      ${dugoutShoutPanel(engine)}
       ${ui.coachPanel && !active.preplayed ? coachPanel(engine) : ''}
       <div class="match-grid">
         <div class="match-main">
@@ -174,7 +258,7 @@ export function renderMatch(): string {
               ${compareRow('传球', homeStats.passesCompleted, awayStats.passesCompleted, `${homeStats.passesCompleted}/${homeStats.passes}`, `${awayStats.passesCompleted}/${awayStats.passes}`)}
               ${compareRow('平均体力', avgStamina(home), avgStamina(away), `${avgStamina(home)}%`, `${avgStamina(away)}%`)}
             `)}
-            ${panel('场上球员', `<div class="status-grid">${playerStatusTable(mine, mine.name, mineKit, true)}${playerStatusTable(theirs, theirs.name, theirKit)}</div>`)}
+            ${panel('场上球员', `<div class="status-grid">${playerStatusTable(mine, mine.name, mineKit, true, state.clock)}${playerStatusTable(theirs, theirs.name, theirKit, false, state.clock)}</div>`)}
           </div>
         </div>
         ${panel('文字直播', `<div class="event-log live commentary-log">${state.commentary ? state.commentary.slice().reverse().map((entry) => renderCommentary(entry, state.durationSeconds)).join('') : state.log.slice().reverse().map((entry) => renderEvent(entry, state.durationSeconds)).join('')}</div>`, { flush: true, className: 'live-panel', aside: `<span class="muted small">${state.commentary ? '全部已发生事件' : '旧存档 · 仅日志'}</span>` })}

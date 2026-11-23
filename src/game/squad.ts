@@ -300,9 +300,9 @@ function rotateTiredStarters(
 function preservedExtras(
   previous: LineupLike | undefined,
   formationId: FormationId,
-): Pick<Lineup, 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions' | 'matchPlan' | 'backupTactics' | 'matchPlanRules'> {
+): Pick<Lineup, 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions' | 'matchPlan' | 'backupTactics' | 'matchPlanRules' | 'autoShout'> {
   if (!previous) return {}
-  const extras: Pick<Lineup, 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions' | 'matchPlan' | 'backupTactics' | 'matchPlanRules'> = {}
+  const extras: Pick<Lineup, 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions' | 'matchPlan' | 'backupTactics' | 'matchPlanRules' | 'autoShout'> = {}
   if (previous.customPositions && previous.formationId === formationId) {
     const spots = Object.fromEntries(Object.entries(previous.customPositions).map(([slotId, spot]) => [slotId, { ...spot }]))
     if (Object.keys(spots).length) extras.customPositions = spots
@@ -312,12 +312,13 @@ function preservedExtras(
   if (previous.matchPlan) extras.matchPlan = previous.matchPlan
   if (previous.backupTactics?.length) extras.backupTactics = structuredClone(previous.backupTactics)
   if (previous.matchPlanRules?.length) extras.matchPlanRules = structuredClone(previous.matchPlanRules)
+  if (previous.autoShout) extras.autoShout = true
   if (previous.presets?.length) extras.presets = structuredClone(previous.presets)
   return extras
 }
 
 /** preservedExtras 只需要这几项，所以完整阵容和“记下的快照”都能传进来。 */
-type LineupLike = Pick<Lineup, 'formationId' | 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions' | 'matchPlan' | 'backupTactics' | 'matchPlanRules'>
+type LineupLike = Pick<Lineup, 'formationId' | 'customPositions' | 'presets' | 'tacticalStyle' | 'tacticalInstructions' | 'matchPlan' | 'backupTactics' | 'matchPlanRules' | 'autoShout'>
 
 /**
  * 最近一次被校验过的阵容里的“额外东西”（自定义摆位、预设、战术风格与指令、比赛计划）。
@@ -358,7 +359,7 @@ export function rememberLineupPositions(roster: Player[], lineup: Lineup): void 
     if (spot && Number.isFinite(spot.x) && Number.isFinite(spot.y)) customSpotByPlayer.set(player, { x: spot.x, y: spot.y })
     else customSpotByPlayer.delete(player)
   }
-  if (lineup.customPositions || lineup.presets?.length || lineup.tacticalStyle || lineup.tacticalInstructions || lineup.matchPlan || lineup.backupTactics?.length || lineup.matchPlanRules?.length) {
+  if (lineup.customPositions || lineup.presets?.length || lineup.tacticalStyle || lineup.tacticalInstructions || lineup.matchPlan || lineup.backupTactics?.length || lineup.matchPlanRules?.length || lineup.autoShout) {
     const players = lineup.starters.flatMap((starter) => playerById(roster, starter.playerId) ?? [])
     const entry: LineupLike & { players: Player[] } = {
       players,
@@ -369,6 +370,7 @@ export function rememberLineupPositions(roster: Player[], lineup: Lineup): void 
       matchPlan: lineup.matchPlan,
       backupTactics: lineup.backupTactics ? structuredClone(lineup.backupTactics) : undefined,
       matchPlanRules: lineup.matchPlanRules ? structuredClone(lineup.matchPlanRules) : undefined,
+      ...(lineup.autoShout ? { autoShout: true } : {}),
       presets: lineup.presets ? structuredClone(lineup.presets) : undefined,
     }
     for (const player of players) rememberedByStarter.set(player, entry)

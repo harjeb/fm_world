@@ -34,6 +34,10 @@ export class MotionRatings extends MatchRatings {
     if (player.skills.includes('lg_press_machine')) stamina += 0.15 * legendMultiplier(player, 'lg_press_machine')
     if (player.skills.includes('lg_wing_engine') && wideZone(player)) stamina += 0.2 * legendMultiplier(player, 'lg_wing_engine')
     if (player.skills.includes('lg_stamina_regen')) stamina += 0.1 * legendMultiplier(player, 'lg_stamina_regen')
+    const shout = this.activeShout(player)
+    if (shout?.staminaDrainMul && shout.staminaDrainMul > 1) {
+      stamina -= 0.04
+    }
     abilities.stamina = clamp01(stamina)
     return abilities
   }

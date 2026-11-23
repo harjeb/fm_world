@@ -258,6 +258,13 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 - `get_match` — 不传 `matchId` 读取当前比赛（比分、90 分钟显示时钟、统计、场上球员、替补、战术、最近事件和截至当前的 `commentary`）；传 `matchId` 读取完整记录和复盘建议。
 - `advance_match` — 适用于友谊赛、巅峰之路与传奇挑战：按步推进（默认 1 步），终场时自动结算。联赛调用会报错。新引擎（`rulesVersion = 4`）一步约等于 1 个模拟秒（整场 900 步）；旧存档里进行中的 v3 比赛一步是一个动作。
   - `steps?`
+- `set_auto_shout` — 开关赛前「自动喊话」兜底：`{ "action": "set_auto_shout", "enabled": true }`（也可在 `set_lineup` 的 `lineup.autoShout` 中一并设置；赛前 30 分钟锁阵容后不可改）。开启后，离线或未观赛的联赛/杯赛会在关键节点自动按局势触发最稳妥的情绪喊话。
+- `match_shout` — **场边情绪喊话（FM27 8 种情绪喊话，全模式可用：含友谊赛 / 巅峰之路 / 传奇挑战 / 离线联赛，以及联机 10 分钟直播中的联赛与赛季杯赛）**：
+  - 请求体：`{ "action": "match_shout", "kind": "encourage", "targetPlayerId": "p001" }`（省略 `targetPlayerId` 为全队喊话；传入球员 ID 或带主客前缀的 `onPitch[].id` 为单人点名喊话）。
+  - 8 种 `kind`（详见 `state.shoutKinds` 与 `activeMatch.shouts.availableKinds`）：`encourage`（鼓励）、`praise`（表扬）、`demand_more`（要求更多）、`fire_up`（点燃斗志）、`focus`（保持专注）、`calm_down`（冷静下来）、`no_pressure`（卸下包袱）、`berate`（严厉斥责）。
+  - 规则：全场最多 6 次、12 比赛分钟冷却、单次情绪持续 15 比赛分钟、**不消耗教练暂停**；按球员性格、实时评分、比分、黄牌与当前情绪产生**有正有负**的真实反馈（喊对明显提振关键状态，喊错可能困惑/受压/低落）。
+  - **联机正式赛直播实时重算**：联赛与赛季杯赛在 10 分钟直播的第 85 分钟前均可调用 `match_shout`，服务器把带逻辑时间戳的指令写入该场比赛并立即高优重算后半场，通过 SSE 同步双方观战时间线，保证与 10 分钟后公布的最终比分、战报和积分榜 100% 一致；85 分钟后锁止。
+  - 状态查看：`activeMatch.shouts` 返回剩余次数、冷却时间、`canShout`、历史助教反馈 `history` 与联机 `liveShouts`；`activeMatch.onPitch[]` 返回每位球员的实时 `rating`、`yellowCards` 与当前情绪 `mood`。
 - `set_match_tactics` — 用于进行中的友谊赛 / 巅峰之路 / 传奇挑战或升级前仍在进行的旧版联赛；新的联机队列比赛不能在锁定后修改。比赛中选择战术心态：`{ "action": "set_match_tactics", "mentality": "attack" }`（全体进攻）、`"balanced"`（均衡）或 `"defend"`（全体防守）。赛中不接受任意五维战术对象；赛前仍可设置完整战术。全体进攻使用直传、快速、高防线、高压；均衡使用均衡方向、混合传球、正常节奏、中防线和中等逼抢；全体防守使用短传、慢节奏、低防线、低压，场上非门将球员的整体站位也会相应前压或后撤。均衡是固定预设，并非恢复自定义的赛前战术。`activeMatch.mentality` 为当前心态，`null` 表示还在使用赛前战术。
 - `set_match_auto_subs` — 在进行中的比赛里实时更新本场自动换人设置（`plan` 结构同 `set_auto_subs`，校验对象为当前场上球员与可用替补席；可选 `syncDefault: true` 同步更新 `state.autoSubs`）。
 - `substitute` — 进行中的友谊赛 / 巅峰之路 / 传奇挑战（以及升级前仍在进行的旧版联赛）手动换人，与自动换人共用 5 次；新的联机队列比赛请在锁定前设置自动换人。

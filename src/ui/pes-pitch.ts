@@ -11,6 +11,7 @@
  * 这里不判定任何比赛结果；只读状态、画图、推进到“该播到的时刻”。
  */
 import { displayClock, LEAGUE_REALTIME_SECONDS } from '../game/match/time.ts'
+import { SHOUT_META, SHOUT_MOOD_META } from '../game/match/shouts.ts'
 import { convexHull } from '../game/match/visualization.ts'
 import { PesEngine, type GameEngine } from '../game/pes/engine.ts'
 import type { PesMatch } from '../game/pes/sim.ts'
@@ -58,7 +59,16 @@ const RESTART_LABEL: Record<RestartType, string> = {
 
 interface Banner {
   text: string
-  tone: 'goal' | 'yellow' | 'red' | 'whistle'
+  tone: 'goal' | 'yellow' | 'red' | 'whistle' | 'shout'
+  since: number
+  until: number
+}
+
+interface ShoutBubble {
+  playerId: string
+  icon: string
+  label: string
+  color: string
   since: number
   until: number
 }
@@ -83,6 +93,7 @@ const pv = {
   /** 上一次和哪份权威存档核对过（引擎对象 + 指令数 + 事件数），没变就不用再核对 */
   authRef: null as PesEngine | null,
   authSig: '',
+  liveShoutsSig: '',
   frame: null as number | null,
   last: 0,
   /** 不足一个物理步的零头 */
@@ -95,6 +106,7 @@ const pv = {
   paintAt: 0,
   endAt: 0,
   banner: null as Banner | null,
+  bubbles: [] as ShoutBubble[],
   fx: [] as PitchFx[],
   trail: [] as { x: number; y: number; at: number }[],
   ground: null as HTMLCanvasElement | null,
@@ -127,6 +139,7 @@ function clearView(): void {
   pv.owned = false
   pv.authRef = null
   pv.authSig = ''
+  pv.liveShoutsSig = ''
   pv.last = 0
   pv.acc = 0
   pv.logSeen = 0
@@ -136,6 +149,7 @@ function clearView(): void {
   pv.saveAt = 0
   pv.endAt = 0
   pv.banner = null
+  pv.bubbles = []
   pv.fx = []
   pv.trail = []
 }
@@ -184,8 +198,16 @@ function inSync(view: PesEngine, auth: PesEngine): boolean {
 
 function copyOf(engine: PesEngine): PesEngine {
   const copy = PesEngine.restore(engine.serialize())
+  const liveShouts = game.activeMatch?.liveShouts
+  if (game.activeMatch?.preplayed && liveShouts?.length) {
+    copy.scheduleShouts(liveShouts)
+    pv.liveShoutsSig = liveShouts.map((item) => item.id).join(',')
+  } else {
+    pv.liveShoutsSig = ''
+  }
   pv.logSeen = copy.state.log.length
   pv.eventSeen = copy.game.match.events.length
+  pv.bubbles = []
   pv.fx = []
   pv.acc = 0
   return copy
@@ -207,6 +229,35 @@ function prepare(engine: PesEngine): PesEngine {
     pv.sim = engine
     pv.owned = false
     return engine
+  }
+  if (game.activeMatch?.preplayed) {
+    // 联机预模拟直播：engine 始终是开球初始快照，不能拿 commandCount 跟已推进的 pv.sim 比较，否则每次 SSE 都会重置画面。
+    if (!pv.sim || !pv.owned) {
+      pv.sim = copyOf(engine)
+      pv.owned = true
+    } else {
+      // 联机直播中途收到新喊话：若生效时钟尚未越过当前画面时刻，直接无缝注入，不倒带不跳帧。
+      const liveShouts = game.activeMatch.liveShouts ?? []
+      const nextSig = liveShouts.map((item) => item.id).join(',')
+      if (nextSig !== pv.liveShoutsSig) {
+        const known = new Set((pv.sim.state.scheduledShouts ?? []).map((item) => item.id))
+        const added = liveShouts.filter((item) => !known.has(item.id))
+        const nowClock = Math.floor(pv.sim.game.match.time)
+        if (added.every((item) => item.atClock >= nowClock)) {
+          pv.sim.scheduleShouts(liveShouts)
+          pv.liveShoutsSig = nextSig
+        } else {
+          const resumeTo = pv.sim.game.match.time
+          pv.sim = copyOf(engine)
+          pv.sim.advanceTo(resumeTo)
+          pv.logSeen = pv.sim.state.log.length
+          pv.eventSeen = pv.sim.game.match.events.length
+        }
+      }
+    }
+    pv.authRef = engine
+    pv.authSig = pv.liveShoutsSig
+    return pv.sim!
   }
   const sig = `${commandCount(engine)}:${engine.game.match.events.length}`
   if (!pv.sim || !pv.owned || ((pv.authRef !== engine || pv.authSig !== sig) && !inSync(pv.sim, engine))) {
@@ -287,6 +338,11 @@ function bannerOf(entry: MatchLogEntry): Pick<Banner, 'text' | 'tone'> | null {
   switch (entry.type) {
     case 'goal': return { text: `⚽ ${entry.text}`, tone: 'goal' }
     case 'foul': return entry.card ? { text: entry.text, tone: entry.card === 'yellow' ? 'yellow' : 'red' } : null
+    case 'shout': {
+      const label = entry.shout ? SHOUT_META[entry.shout.kind]?.label : '喊话'
+      const who = entry.shout?.targetName ? `→ ${entry.shout.targetName}` : '全队'
+      return { text: `📢 场边喊话「${label}」（${who}）`, tone: 'shout' }
+    }
     case 'half':
     case 'full': return { text: entry.text, tone: 'whistle' }
     default: return null
@@ -298,8 +354,23 @@ function noteEvents(sim: PesEngine, now: number): boolean {
   const log = sim.state.log
   const grew = log.length > pv.logSeen
   for (; pv.logSeen < log.length; pv.logSeen++) {
-    const banner = bannerOf(log[pv.logSeen])
+    const entry = log[pv.logSeen]
+    const banner = bannerOf(entry)
     if (banner) pv.banner = { ...banner, since: now, until: now + BANNER_MS }
+    if (entry.type === 'shout' && entry.shout?.reactions?.length) {
+      for (const reaction of entry.shout.reactions) {
+        const meta = SHOUT_MOOD_META[reaction.mood]
+        pv.bubbles = pv.bubbles.filter((item) => item.playerId !== reaction.playerId)
+        pv.bubbles.push({
+          playerId: reaction.playerId,
+          icon: meta.icon,
+          label: meta.shortLabel,
+          color: meta.bubbleColor,
+          since: now,
+          until: now + 3800,
+        })
+      }
+    }
   }
   const m = sim.game.match
   const evs = m.events
@@ -490,7 +561,7 @@ function drawBanner(ctx: CanvasRenderingContext2D, w: number, unit: number, now:
     return
   }
   const alpha = Math.min(1, (now - banner.since) / 140, (banner.until - now) / 420)
-  const tone = { goal: '#f2b84b', yellow: '#e8c53a', red: '#e5534b', whistle: '#9fb4c7' }[banner.tone]
+  const tone = { goal: '#f2b84b', yellow: '#e8c53a', red: '#e5534b', whistle: '#9fb4c7', shout: '#36c97f' }[banner.tone]
   ctx.save()
   ctx.globalAlpha = Math.max(0, alpha)
   ctx.font = `700 ${19 * unit}px ${fonts}`
@@ -676,6 +747,42 @@ function paint(canvas: HTMLCanvasElement, sim: PesEngine, now: number): void {
   ctx.lineWidth = 1.4 * unit
   ctx.stroke()
 
+  // 场边喊话头顶情绪气泡（3.8 秒平滑浮起淡出）
+  if (pv.bubbles.length) {
+    pv.bubbles = pv.bubbles.filter((bubble) => now < bubble.until)
+    if (pv.bubbles.length) {
+      const byRef = new Map(everyone.map((p) => [p.ref, p]))
+      ctx.save()
+      ctx.font = `700 ${11 * unit}px ${fonts}`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      for (const bubble of pv.bubbles) {
+        const p = byRef.get(bubble.playerId)
+        if (!p) continue
+        const age = now - bubble.since
+        const remain = bubble.until - now
+        const alpha = Math.min(1, age / 180, remain / 550)
+        const rise = Math.min(12 * unit, (age / 3800) * 14 * unit)
+        const bxPos = X(p.pos.x)
+        const byPos = Y(p.pos.y) - 24 * unit - rise
+        const text = `${bubble.icon} ${bubble.label}`
+        const bw = ctx.measureText(text).width + 12 * unit
+        const bh = 20 * unit
+        ctx.globalAlpha = Math.max(0, alpha)
+        ctx.beginPath()
+        ctx.roundRect(bxPos - bw / 2, byPos - bh / 2, bw, bh, 9 * unit)
+        ctx.fillStyle = 'rgba(10,16,20,.88)'
+        ctx.fill()
+        ctx.lineWidth = 1.5 * unit
+        ctx.strokeStyle = bubble.color
+        ctx.stroke()
+        ctx.fillStyle = '#f5f8fa'
+        ctx.fillText(text, bxPos, byPos + 0.5)
+      }
+      ctx.restore()
+    }
+  }
+
   drawBanner(ctx, w, unit, now)
   pv.frames++
 }
@@ -731,8 +838,11 @@ function frame(now: number): void {
       pv.refreshAt = now
       hooks.refresh()
     }
+  } else if (isLeague && hooks && grew && now - pv.refreshAt > 600) {
+    pv.refreshAt = now
+    hooks.refresh()
   }
-  if (pv.frame === null && (isLive() || pv.banner)) pv.frame = window.requestAnimationFrame(frame)
+  if (pv.frame === null && (isLive() || pv.banner || pv.bubbles.length > 0)) pv.frame = window.requestAnimationFrame(frame)
 }
 
 /** 画一帧；比赛在走的话顺带保证循环在跑。 */

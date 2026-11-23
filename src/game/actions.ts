@@ -1,4 +1,4 @@
-import { ALL_ATTRIBUTES, type AITeam, type AttrKey, type Attributes, type AutoSubPlan, type AutoTrainingPresetId, type EventDef, type EventEffect, type EventOption, type GameState, type Lineup, type MatchMentality, type MatchRecord, type Player, type Position, type TacticPreset, type TrainingAutoConfig, type TrainingExchange, type TrainingSession } from './types.ts'
+import { ALL_ATTRIBUTES, type AITeam, type AttrKey, type Attributes, type AutoSubPlan, type AutoTrainingPresetId, type EventDef, type EventEffect, type EventOption, type GameState, type Lineup, type MatchMentality, type MatchRecord, type MatchShoutRecord, type Player, type Position, type ShoutKind, type TacticPreset, type TrainingAutoConfig, type TrainingExchange, type TrainingSession } from './types.ts'
 import type { GameEngine } from './pes/engine.ts'
 import { restoreEngine } from './pes/engine.ts'
 import { MatchEngine as Engine } from './match/engine.ts'
@@ -1129,6 +1129,20 @@ export function makeSubstitution(game: GameState, engine: GameEngine, outId: str
   const active = game.activeMatch
   const eventClock = active?.context.isLeague && active ? leagueMatchClockAt(active, active.elapsedSeconds ?? 0) : undefined
   const result = engine.substitute(outId, inId, active?.context.homeAway, eventClock)
+  if (result.ok) syncActiveEngine(game, engine)
+  return result
+}
+
+/** 场边情绪喊话：无需消耗教练暂停，全队或单名场上球员均可触发。 */
+export function issueMatchShout(
+  game: GameState,
+  engine: GameEngine,
+  kind: ShoutKind,
+  targetPlayerId?: string,
+): { ok: true; record: MatchShoutRecord } | { ok: false; error: string } {
+  const active = game.activeMatch
+  const eventClock = active?.context.isLeague && active ? leagueMatchClockAt(active, active.elapsedSeconds ?? 0) : undefined
+  const result = engine.shout(kind, active?.context.homeAway, targetPlayerId, eventClock)
   if (result.ok) syncActiveEngine(game, engine)
   return result
 }

@@ -137,6 +137,10 @@ export type UIState = {
   /** 比赛中教练调整面板里的自动换人草稿与“同步保存为默认”勾选状态。 */
   matchAutoSubsDraft: AutoSubPlan | null
   matchAutoSubsSyncDefault: boolean
+  /** 比赛中场边喊话目标（'' 表示全队，否则为己方场上球员 sourceId）。 */
+  matchShoutTarget: string
+  /** 联机直播喊话请求进行中防重复提交。 */
+  matchShoutPending: boolean
   /** 版本更新说明弹窗是否打开。 */
   changelogOpen: boolean
   /** 全服聊天侧边抽屉是否打开。 */
@@ -262,6 +266,8 @@ export const ui: UIState = {
   autoSubsDraft: null,
   matchAutoSubsDraft: null,
   matchAutoSubsSyncDefault: false,
+  matchShoutTarget: '',
+  matchShoutPending: false,
   changelogOpen: false,
   chatOpen: false,
   chatError: '',

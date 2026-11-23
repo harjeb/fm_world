@@ -59,6 +59,7 @@ export function toMatchPlayer(player: Player, side: MatchSide, role: MatchPlayer
     skills: [...player.skills],
     skillTiers: { ...player.skillTiers },
     traitId: player.traitId,
+    ...(player.personality ? { personality: { ...player.personality } } : {}),
     foot: player.foot,
     height: player.height,
     role,
@@ -141,6 +142,7 @@ export function buildMatchTeam(input: MatchTeamInput, side: MatchSide): MatchTea
         }
       : {}),
     ...(input.aiCoach ? { aiCoach: true } : {}),
+    ...(input.autoShout ? { autoShout: true } : {}),
     players,
     bench,
     autoSubs: input.autoSubs ? structuredClone(input.autoSubs) : undefined,

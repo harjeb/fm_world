@@ -11,12 +11,16 @@ import type {
   FailureReason,
   MatchInstruction,
   MatchLogEntry,
+  MatchShoutRecord,
   PlayerMatchStats,
   RoleId,
+  ScheduledMatchShout,
+  ShoutKind,
   SkillId,
   MatchMentality,
   AutoSubPlan,
 } from '../types.ts'
+import { evaluateShoutReactions, isShoutKind, normalizeScheduledShouts, resolveShoutTarget, shoutCooldownSeconds, shoutStatusOf } from './shouts.ts'
 import { MATCH_TACTICS, MATCH_MENTALITY_LABELS, executeTeamAutoSubs, validateLiveAutoSubPlan } from './management.ts'
 import { evaluateAICoachTactics, executeAICoachSubs } from '../ai-tactics.ts'
 import { FORMATIONS } from '../data/formations.ts'
@@ -2887,6 +2891,55 @@ export class MatchEngine {
     this.log('tactic', side, '教练更新了比赛自动换人设置。', { clock: Math.floor(eventClock * 10) / 10 })
     this.syncRng()
     return { ok: true }
+  }
+
+  scheduleShouts(shouts: ScheduledMatchShout[]): void {
+    this.state.scheduledShouts = normalizeScheduledShouts([...(this.state.scheduledShouts ?? []), ...shouts])
+  }
+
+  shout(kind: ShoutKind, side: MatchSide = 'home', targetPlayerId?: string, eventClock = this.state.clock): { ok: true; record: MatchShoutRecord } | { ok: false; error: string } {
+    if (this.state.finished) return { ok: false, error: '比赛已经结束' }
+    if (!isShoutKind(kind)) return { ok: false, error: '无效的喊话类型' }
+    const team = this.getTeam(side)
+    const status = shoutStatusOf(team, eventClock, this.durationSeconds, { finished: this.state.finished })
+    if (!status.canShout) return { ok: false, error: status.reason ?? '当前无法喊话' }
+    const target = targetPlayerId ? resolveShoutTarget(team, targetPlayerId) : undefined
+    if (targetPlayerId && !target) return { ok: false, error: '指定喊话的球员不在场上' }
+    const { record, states } = evaluateShoutReactions({
+      seed: this.state.seed,
+      clock: eventClock,
+      durationSeconds: this.durationSeconds,
+      score: this.state.score,
+      log: this.state.log,
+      side,
+      kind,
+      team,
+      targetPlayerId: target?.id,
+      knockout: this.knockout,
+    })
+    for (const player of team.players) {
+      const next = states.get(player.id)
+      if (next) player.shoutState = next
+    }
+    team.shoutsUsed = (team.shoutsUsed ?? 0) + 1
+    team.shoutCooldownUntil = eventClock + shoutCooldownSeconds(this.durationSeconds)
+    ;(team.shoutHistory ??= []).push(record)
+    this.state.instructions.push({ step: this.state.step, kind: 'shout', side, shoutKind: kind, ...(target ? { targetPlayerId: target.sourceId } : {}) })
+    this.log('shout', side, record.dugoutFeedback, {
+      clock: Math.floor(eventClock * 10) / 10,
+      ...(target ? { playerId: target.id } : {}),
+      shout: {
+        kind,
+        ...(record.targetPlayerId ? { targetPlayerId: record.targetPlayerId } : {}),
+        ...(record.targetName ? { targetName: record.targetName } : {}),
+        positiveCount: record.positiveCount,
+        neutralCount: record.neutralCount,
+        negativeCount: record.negativeCount,
+        reactions: record.reactions,
+      },
+    })
+    this.syncRng()
+    return { ok: true, record }
   }
 
   substitute(outId: string, inId: string, side: MatchSide = 'home', eventClock = this.state.clock, autoReason?: 'injury' | 'timed' | 'stamina' | 'tactical'): { ok: boolean; error?: string } {

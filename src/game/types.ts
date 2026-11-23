@@ -564,6 +564,8 @@ export type Lineup = {
   matchPlanRules?: import('./pes/tactical-plan.ts').MatchPlanRule[]
   /** 玩家自己摆的位置（0–1 归一化坐标），key 是 starter.slotId。没摆过的位置用阵型默认值。 */
   customPositions?: Record<string, { x: number; y: number }>
+  /** 赛前开关：开启后离线/未看直播的比赛会按局势自动触发合理的情绪喊话。 */
+  autoShout?: boolean
   /** 玩家命名保存的战术配置。 */
   presets?: TacticPreset[]
 }
@@ -856,6 +858,69 @@ export type CommentaryEntry = {
   shootoutScore?: { home: number; away: number }
 }
 
+export type ShoutKind =
+  | 'encourage'
+  | 'praise'
+  | 'demand_more'
+  | 'fire_up'
+  | 'focus'
+  | 'calm_down'
+  | 'no_pressure'
+  | 'berate'
+
+export type ShoutMood =
+  | 'inspired'
+  | 'fired_up'
+  | 'focused'
+  | 'composed'
+  | 'unmoved'
+  | 'confused'
+  | 'pressured'
+  | 'frustrated'
+
+export type PlayerShoutState = {
+  kind: ShoutKind
+  mood: ShoutMood
+  delta: number
+  attrs: AttrKey[]
+  appliedAt: number
+  expiresAt: number
+  targeted?: boolean
+  staminaDrainMul?: number
+}
+
+export type ScheduledMatchShout = {
+  id: string
+  side: 'home' | 'away'
+  kind: ShoutKind
+  atClock: number
+  targetPlayerId?: string
+  auto?: boolean
+}
+
+export type MatchShoutReaction = {
+  playerId: string
+  sourceId: string
+  name: string
+  mood: ShoutMood
+  delta: number
+}
+
+export type MatchShoutRecord = {
+  clock: number
+  minute: number
+  side: 'home' | 'away'
+  kind: ShoutKind
+  targetPlayerId?: string
+  targetName?: string
+  auto?: boolean
+  positiveCount: number
+  neutralCount: number
+  negativeCount: number
+  dugoutFeedback: string
+  reactions: MatchShoutReaction[]
+}
+
 export type MatchLogEntry = {
   seq: number
   clock: number
@@ -880,6 +945,7 @@ export type MatchLogEntry = {
     | 'full'
     | 'sub'
     | 'tactic'
+    | 'shout'
     | 'info'
   team: 'home' | 'away' | 'none'
   playerId?: string
@@ -894,6 +960,16 @@ export type MatchLogEntry = {
   card?: 'yellow' | 'red'
   offside?: boolean
   goal?: GoalDetail
+  /** 场边喊话明细，供 2D 球场气泡与复盘展示。 */
+  shout?: {
+    kind: ShoutKind
+    targetPlayerId?: string
+    targetName?: string
+    positiveCount: number
+    neutralCount: number
+    negativeCount: number
+    reactions: MatchShoutReaction[]
+  }
   /** 射门落点（球门线上的具体位置），回放据此把球踢向角落而不是球门正中。 */
   shotAim?: { x: number; y: number }
   snapshot?: MatchSnapshot
@@ -966,8 +1042,8 @@ export type MatchRecord = {
 
 export type MatchInstruction = {
   step: number
-  kind: 'sub' | 'tactic'
-  autoReason?: 'injury' | 'timed' | 'stamina' | 'tactical' | 'plan' | 'ai'
+  kind: 'sub' | 'tactic' | 'shout'
+  autoReason?: 'injury' | 'timed' | 'stamina' | 'tactical' | 'plan' | 'ai' | 'auto_shout'
   side?: 'home' | 'away'
   outId?: string
   inId?: string
@@ -976,6 +1052,8 @@ export type MatchInstruction = {
   mentality?: MatchMentality
   formationId?: FormationId
   planRuleName?: string
+  shoutKind?: ShoutKind
+  targetPlayerId?: string
 }
 
 export type Fixture = {
@@ -1519,11 +1597,16 @@ export type ActiveMatchSave = {
   elapsedSeconds?: number
   coachPausesLeft: number
   /**
-   * 联机联赛的回放：比赛已经在开球前 30 分钟锁定阵容并由服务器算好，
-   * 这里的 engineState 是开球那一刻的初始状态，浏览器按现实时钟把它回放出来（约 10 分钟），不能干预。
-   * 只存在于服务器下发的存档副本里，不会保存回服务器，也不落本地缓存。
+   * 联机联赛/赛季杯的直播回放：比赛已在开球前 30 分钟锁定阵容并由服务器预计算，
+   * 这里的 engineState 是开球那一刻的初始状态，浏览器按现实时钟推演整场（约 10 分钟）。
+   * 若教练在 85 分钟前发起临场喊话，服务器会把带时间戳的指令写入 liveShouts 并实时重算后半场，
+   * 确保双方观战时间线与最终公布赛果逐帧一致。
    */
   preplayed?: boolean
+  /** 联机正式赛对应的队列任务 ID，供客户端与服务端对齐直播喊话。 */
+  liveJobId?: string
+  /** 联机正式赛中由双方教练在直播期间下达的带时间戳喊话列表。 */
+  liveShouts?: ScheduledMatchShout[]
 }
 
 export type ReviewRecommendation = {

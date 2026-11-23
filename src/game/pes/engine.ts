@@ -7,7 +7,7 @@
  * 状态里的时钟、比分、统计、文字直播（log / commentary）、球员体力每个模拟秒都会同步，所以比赛页的数据条和文字直播照常工作。
  */
 import { MatchEngine } from '../match/engine.ts'
-import type { AutoSubPlan, MatchLogEntry, MatchMentality } from '../types.ts'
+import type { AutoSubPlan, MatchLogEntry, MatchMentality, MatchShoutRecord, ScheduledMatchShout, ShoutKind } from '../types.ts'
 import type { MatchEngineOptions, MatchPlayerState, MatchSide, MatchState, MatchTeamState, StepResult } from '../match/types.ts'
 import { PesGame } from './game.ts'
 import type { PesSettlementJSON } from './settle.ts'
@@ -102,6 +102,14 @@ export class PesEngine {
 
   setAutoSubs(plan: AutoSubPlan, side: MatchSide = 'home', eventClock?: number): { ok: boolean; error?: string } {
     return this.game.setAutoSubs(plan, side, eventClock)
+  }
+
+  shout(kind: ShoutKind, side: MatchSide = 'home', targetPlayerId?: string, eventClock?: number): { ok: true; record: MatchShoutRecord } | { ok: false; error: string } {
+    return this.game.shout(kind, side, targetPlayerId, eventClock)
+  }
+
+  scheduleShouts(shouts: ScheduledMatchShout[]): void {
+    this.game.scheduleShouts(shouts)
   }
 
   substitute(outId: string, inId: string, side: MatchSide = 'home', eventClock?: number, autoReason?: 'injury' | 'timed' | 'stamina' | 'tactical'): { ok: boolean; error?: string } {

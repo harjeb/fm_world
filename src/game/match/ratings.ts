@@ -36,6 +36,12 @@ export class MatchRatings {
     return team.chemistry?.[chemistryKey(a.sourceId, b.sourceId)] ?? 0
   }
 
+  activeShout(player: MatchPlayerState): MatchPlayerState['shoutState'] | undefined {
+    const shout = player.shoutState
+    const clock = this.stateOf().clock
+    return shout && clock >= shout.appliedAt && clock < shout.expiresAt ? shout : undefined
+  }
+
   eff(player: MatchPlayerState, key: Parameters<typeof effectiveAttr>[3], ctx: MatchEventContext = {}): number {
     const ratio = player.stamina / Math.max(1, player.maxStamina)
     const gk = player.position === 'GK'
@@ -123,6 +129,14 @@ export class MatchRatings {
           break
         case 'stamina':
           break
+      }
+    }
+    const shout = player.shoutState
+    if (shout && shout.delta !== 0 && this.stateOf().clock >= shout.appliedAt && this.stateOf().clock < shout.expiresAt) {
+      if (shout.attrs.includes(key)) {
+        value += shout.delta
+      } else if (key === 'composure' || key === 'decisions' || key === 'teamwork') {
+        value += shout.delta * 0.55
       }
     }
     return clamp(value * (player.injured ? 0.7 : 1), 1, MAX_ATTR_RATING)

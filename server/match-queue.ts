@@ -9,11 +9,15 @@ export type JobEntry = Pick<MatchJob, 'id' | 'season' | 'divisionId' | 'round' |
   attempts: number
   retryAt?: number
   error?: string
+  /** 直播中途收到新喊话后置为 true：保持直播可读的同时优先重算，重算完成前阻止发布旧结果。 */
+  pendingRecompute?: boolean
 }
 export type MatchQueueOptions = {
   intervalMs?: number
   /** 测试用确定性执行器；生产默认由唯一的低优先级子进程计算。 */
   compute?: (job: MatchJob) => Promise<MatchJobResult>
+  /** 任务结果被写入/重算覆盖后触发，用于刷新服务器直播缓存。 */
+  onResultUpdated?: (id: string) => void
 }
 
 const atomicJson = (file: string, value: unknown) => {
@@ -26,6 +30,7 @@ export class MatchQueue {
   readonly entries = new Map<string, JobEntry>()
   private readonly indexPath: string
   private busy = false
+  private recomputingId: string | null = null
   private closed = false
   private nextRunAt = 0
   private child: ChildProcess | null = null
@@ -97,8 +102,30 @@ export class MatchQueue {
   }
 
   ready(id: string): boolean {
-    const status = this.entries.get(id)?.status
-    return status === 'ready' || status === 'published'
+    const entry = this.entries.get(id)
+    if (!entry) return false
+    if (entry.status === 'ready' || entry.status === 'published') return true
+    return !!entry.pendingRecompute && fs.existsSync(this.file(id, 'result'))
+  }
+  /** 可正式发布到积分榜/战报的判定：必须已完成全部直播重算，绝不发布过期赛果。 */
+  publishReady(id: string): boolean {
+    const entry = this.entries.get(id)
+    if (!entry || entry.pendingRecompute || this.recomputingId === id) return false
+    return entry.status === 'ready' || entry.status === 'published'
+  }
+  /** 直播中途更新任务输入（如写入带时间戳的喊话），立刻标记高优重算并保持当前直播不断流。 */
+  recomputeLive(id: string, mutate: (job: MatchJob) => void): MatchJob {
+    const entry = this.entries.get(id)
+    if (!entry) throw new Error('比赛任务不存在')
+    if (entry.status === 'published' || entry.status === 'pruning') throw new Error('比赛已公布赛果，无法再调整')
+    const input = JSON.parse(fs.readFileSync(this.file(id, 'input'), 'utf8')) as MatchJob
+    mutate(input)
+    atomicJson(this.file(id, 'input'), input)
+    entry.pendingRecompute = true
+    delete entry.retryAt
+    this.persist()
+    void this.pump(Date.now())
+    return input
   }
   read(id: string): { input: MatchJob; result: MatchJobResult } {
     return {
@@ -115,19 +142,33 @@ export class MatchQueue {
     if (changed) this.persist()
   }
 
-  /** 每次最多启动一场，任务之间留出空隙；HTTP 请求只负责入队/发布，绝不运行仿真。 */
+  /** 每次最多启动一场，任务之间留出空隙；直播重算任务（pendingRecompute）最高优先且不等空隙。 */
   async pump(now: number): Promise<void> {
-    if (this.busy || this.closed || performance.now() < this.nextRunAt) return
+    if (this.busy || this.closed) return
     let entry: JobEntry | undefined
     for (const item of this.entries.values()) {
+      if (item.pendingRecompute && item.status !== 'published' && item.status !== 'pruning' && (item.retryAt ?? -Infinity) <= now) {
+        if (!entry || !entry.pendingRecompute || item.kickoffAt < entry.kickoffAt || (item.kickoffAt === entry.kickoffAt && item.id.localeCompare(entry.id) < 0)) {
+          entry = item
+        }
+        continue
+      }
+      if (entry?.pendingRecompute) continue
       if (item.status !== 'queued' || (item.retryAt ?? -Infinity) > now) continue
       if (!entry || item.kickoffAt < entry.kickoffAt || (item.kickoffAt === entry.kickoffAt && item.id.localeCompare(entry.id) < 0)) {
         entry = item
       }
     }
     if (!entry) { this.stopWorker(); return }
+    if (!entry.pendingRecompute && performance.now() < this.nextRunAt) return
     this.busy = true
-    entry.status = 'running'
+    const wasRecompute = !!entry.pendingRecompute
+    if (wasRecompute) {
+      this.recomputingId = entry.id
+      entry.pendingRecompute = false
+    } else {
+      entry.status = 'running'
+    }
     entry.attempts++
     if (!this.options.compute) this.persist()
     try {
@@ -139,17 +180,23 @@ export class MatchQueue {
       entry.status = 'ready'
       delete entry.error
       delete entry.retryAt
+      this.options.onResultUpdated?.(entry.id)
     } catch (error) {
       if (this.closed) return
-      entry.status = 'queued'
+      if (wasRecompute) entry.pendingRecompute = true
+      else entry.status = 'queued'
       entry.error = error instanceof Error ? error.message : String(error)
       entry.retryAt = now + 10_000
       console.error(`比赛任务 ${entry.id} 计算失败，将使用原快照重试：${entry.error}`)
       this.stopWorker()
     } finally {
+      this.recomputingId = null
       this.busy = false
       this.nextRunAt = performance.now() + this.intervalMs
       if (!this.closed) this.persist()
+      if (!this.closed && [...this.entries.values()].some((item) => item.pendingRecompute)) {
+        void this.pump(Date.now())
+      }
     }
   }
 

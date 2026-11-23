@@ -17,6 +17,7 @@ import {
   discardTraining,
   equipPlayerCard,
   finishMatch,
+  issueMatchShout,
   keepTraining,
   makeSubstitution,
   removePlayerCard,
@@ -72,6 +73,7 @@ import { advanceLeagueRealtime, leagueDisplayClock, setLeagueClock } from '../ga
 import { displayClock } from '../game/match/time.ts'
 import { hasSeenLatestChangelog, markChangelogSeen } from '../game/changelog.ts'
 import { emptyAutoSubs } from '../game/match/management.ts'
+import { SHOUT_META, isShoutKind } from '../game/match/shouts.ts'
 import { economyOf, payWageArrears, upgradeFacility, type FacilityId } from '../game/economy.ts'
 import { BOARD_AMBITION_META, BOARD_WAGE_SLIDER_ROUNDS, adjustBoardBudgetSlider, chooseBoardAmbition, isBoardAmbition, isBoardTier } from '../game/board.ts'
 import { leadingBid, type Auction, type AuctionResult } from '../game/auction.ts'
@@ -2595,6 +2597,37 @@ document.addEventListener('click', async (event) => {
         : null
       render()
       break
+    case 'match-shout': {
+      const kind = actionEl.dataset.shout
+      if (!isShoutKind(kind) || !game.activeMatch || ui.matchShoutPending) break
+      const targetPlayerId = ui.matchShoutTarget ? ui.matchShoutTarget : undefined
+      if (game.activeMatch.preplayed || (game.activeMatch.context.isLeague && isOnlineMode())) {
+        if (sharedActionUnavailable()) { showNotice('联机连接已断开，请先重新连接服务器'); break }
+        ui.matchShoutPending = true
+        render()
+        try {
+          await leagueActionOnline({
+            action: 'match_shout',
+            kind,
+            ...(targetPlayerId ? { targetPlayerId } : {}),
+          })
+          ui.notice = `已发出场边喊话「${SHOUT_META[kind].label}」，直播时间线已同步并重算后半场。`
+        } catch (error) {
+          ui.notice = error instanceof Error ? error.message : '场边喊话失败'
+        } finally {
+          ui.matchShoutPending = false
+          render()
+        }
+        break
+      }
+      if (!ui.matchEngine) break
+      if (game.activeMatch.context.isLeague) tickRealtimeLeague()
+      if (!ui.matchEngine || !game.activeMatch) break
+      const result = issueMatchShout(game, ui.matchEngine, kind, targetPlayerId)
+      ui.notice = result.ok ? result.record.dugoutFeedback : result.error
+      render()
+      break
+    }
     case 'match-tactics-apply':
       if (game.activeMatch?.preplayed) break
       if (ui.matchEngine) {
@@ -2890,6 +2923,19 @@ document.addEventListener('change', (event) => {
         else draft.matchPlan = value
       })
     }
+    return
+  }
+  if (target.dataset.autoShout !== undefined) {
+    const checked = (target as HTMLInputElement).checked
+    updateLineupDraft((draft) => {
+      if (checked) draft.autoShout = true
+      else delete draft.autoShout
+    })
+    return
+  }
+  if (target.id === 'match-shout-target') {
+    ui.matchShoutTarget = target.value
+    render()
     return
   }
   if (target.id === 'academy-era') {

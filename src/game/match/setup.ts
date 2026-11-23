@@ -58,6 +58,7 @@ export function teamInputFromLineup(
     formationId: lineup.formationId,
     tactics,
     ...(activePlan ? { matchPlan: activePlan } : {}),
+    ...(lineup.autoShout ? { autoShout: true } : {}),
     ...(hasCustomRules
       ? {
           ...(lineup.backupTactics?.length ? { backupTactics: structuredClone(lineup.backupTactics) } : {}),

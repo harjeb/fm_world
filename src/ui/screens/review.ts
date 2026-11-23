@@ -12,7 +12,7 @@ import { game, replay, resetReplay, ui } from '../state.ts'
 import { renderReplay2D } from '../replay-2d.ts'
 
 export function eventTypeLabel(type: string): string {
-  const labels: Record<string, string> = { goal: '进球', shot: '射门', save: '扑救', block: '封堵', foul: '犯规', pass: '传球', dribble: '盘带', tackle: '抢断', contest: '争夺', setpiece: '定位球', penalty: '点球', kickoff: '开球', half: '半场', full: '终场', sub: '换人', injury: '受伤', tactic: '战术', miss: '偏出', info: '信息' }
+  const labels: Record<string, string> = { goal: '进球', shot: '射门', save: '扑救', block: '封堵', foul: '犯规', pass: '传球', dribble: '盘带', tackle: '抢断', contest: '争夺', setpiece: '定位球', penalty: '点球', kickoff: '开球', half: '半场', full: '终场', sub: '换人', injury: '受伤', tactic: '战术', shout: '喊话', miss: '偏出', info: '信息' }
   return labels[type] ?? type
 }
 
