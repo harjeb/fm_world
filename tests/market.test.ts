@@ -32,11 +32,14 @@ describe('local market', () => {
     e.balance = 0
     expect(buyFreeAgent(g, p.id).ok).toBe(false)
     expect(g.freeStars).toContain(p)
+    expect(g.transferNews).toBeUndefined()
     e.balance = playerMarketValue(p)
     expect(buyFreeAgent(g, p.id).ok).toBe(true)
     expect(e.balance).toBe(0)
     expect(g.roster).toContain(p)
     expect(buyFreeAgent(g, p.id).ok).toBe(false)
+    expect(g.transferNews).toHaveLength(1)
+    expect(g.transferNews![0]).toMatchObject({ kind: 'free', playerName: p.name, amount: playerMarketValue(p) })
   })
   it('settles once per increasing round and leaves overpriced listings', () => {
     const g = game(), p = g.roster[0], q = g.roster[1], e = economyOf(g)
@@ -51,6 +54,8 @@ describe('local market', () => {
     expect(settleMarket(g, 1)).toBe(0)
     expect(settleMarket(g, 2)).toBe(0)
     expect(cancelListing(g, q.id).ok).toBe(true)
+    expect(g.transferNews).toHaveLength(1)
+    expect(g.transferNews![0]).toMatchObject({ kind: 'listing', playerId: p.id, amount: price })
     e.balance = playerMarketValue(p)
     expect(buyFreeAgent(g, p.id).ok).toBe(true)
     expect(g.roster).toContain(p)

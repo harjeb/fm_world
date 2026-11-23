@@ -1,5 +1,5 @@
 import { UNPAID_PERFORMANCE, economyOf, wageArrearsOf } from '../../game/economy.ts'
-import { transferWindowOpen } from '../../game/market.ts'
+import { matchEdition, transferEdition, type Story } from '../../game/football-news.ts'
 import { FORMATIONS } from '../../game/data/formations.ts'
 import { PLAYER_TEAM_ID, inPostseason, nextSeasonCountdown, roundKickoffAt, shortCountdown, teamName } from '../../game/season.ts'
 import { validateLineup } from '../../game/squad.ts'
@@ -9,11 +9,11 @@ import { worldDivisionLabel, worldTierLabel } from '../../game/world.ts'
 import { BOARD_AMBITION_META, BOARD_CHOICE_MAX_ROUND, canSwitchCurrentBoardAmbition, ensureBoard, refreshOffseasonBoardPreview, syncBoardLockState } from '../../game/board.ts'
 import { achievementSummary } from '../../game/achievements.ts'
 import { legendCupMetaById } from '../../game/data/legend-cup-teams.ts'
-import { isOnlineMode, onlineKickoffPending, serverNow } from '../../online.ts'
+import { isOnlineMode, serverNow } from '../../online.ts'
 import { boardMarkings, boardSpot, caHeat, clubLook, crest, emptyState, formPills, humanMark, icon, injuryLabel, leagueTable, meter, ownName, pageHead, panel, recordResult, resultPill, tag, teamForm, tile } from '../components.ts'
 import { isHighOffer } from '../../game/transfers.ts'
 import { countdownText, cupRoundLabel, esc, kickoffTimeLabel, matchModeLabel, playerCA, pveModeLabel, shortName } from '../format.ts'
-import { game } from '../state.ts'
+import { game, ui } from '../state.ts'
 import type { IconName } from '../icons.ts'
 import type { MatchRecord } from '../../game/types.ts'
 
@@ -163,6 +163,34 @@ function tablePanel(): string {
     aside: `<button class="link" data-nav="season">完整榜单 ${icon('right', 12)}</button>`,
     className: 'span-4',
   })
+}
+
+function newsPanel(): string {
+  const world = game.world
+  const own = game.season.divisionId ?? world?.playerDivisionId
+  const selected = world?.divisions.find(d => d.divisionId === ui.newsDivision)
+  const season = selected && selected.divisionId !== own ? selected : game.season
+  const active = season.divisionId ?? own
+  const ids = [own, ...(world?.divisions.map(d => d.divisionId) ?? [])]
+  const selector = world ? `<select aria-label="新闻赛区" data-news-division>${[...new Set(ids)].map(id => id ? `<option value="${esc(id)}" ${id === active ? 'selected' : ''}>${esc(worldDivisionLabel(world, id))}${id === own ? '（我的赛区）' : ''}</option>` : '').join('')}</select>` : ''
+  const issue = active ? world?.newsEditions?.[active] : undefined
+  const fixed = issue?.season === season.index ? issue : undefined
+  const shared = !!game.shared && !!world
+  let matches = fixed?.matches ?? [], transfers = fixed?.transfers ?? []
+  if (!shared) {
+    const clubs = new Map(world?.clubs.map(c => [c.id, c.name]))
+    const names = new Map(season.table.map(({ teamId: id }) => [id, id === PLAYER_TEAM_ID ? game.clubName : clubs.get(id) ?? teamName(game, id)]))
+    const regionClubs = new Set(names.values())
+    const deals = transferEdition((game.transferNews ?? []).filter(d => !world || (d.club && regionClubs.has(d.club)) || (d.seller && regionClubs.has(d.seller))))
+    matches = matchEdition(season, names, true).slice(0, deals.length ? 3 : 4)
+    transfers = deals.slice(0, 4 - matches.length)
+  }
+  const article = (s: Story, date = '') => `<details data-key="${esc(s.title + s.detail)}">
+    <summary>${esc(s.title)}</summary>
+    <small class="muted">${esc(s.angle)}${date ? ' · ' + esc(date) : ''}</small>${s.detail.split('\n\n').map(paragraph => `<p>${esc(paragraph)}</p>`).join('')}
+    ${s.recordId && game.matchHistory.some(r => r.id === s.recordId) ? `<button class="link" data-action="open-review" data-record="${esc(s.recordId)}">查看战报</button>` : ''}
+  </details>`
+  return panel('足坛新闻' + (shared && fixed ? ` · 第 ${fixed.round} 轮` : ''), `<div class="news-columns"><section><h3>赛区战报</h3>${matches.map(s => article(s)).join('') || '<p class="muted">本赛区整轮结束后刊出战报。</p>'}</section><section><h3>转会动态</h3>${transfers.map(s => article(s, kickoffTimeLabel(s.at))).join('') || '<p class="muted">本期暂无转会新闻。</p>'}</section></div>`, { className: 'football-news', aside: selector })
 }
 
 function recentModeBadge(record: MatchRecord): string {
@@ -375,6 +403,7 @@ export function renderHome(): string {
     <div class="dash">
       ${nextMatchPanel()}
       ${clubStatusPanel()}
+      ${newsPanel()}
       ${tablePanel()}
       <div class="dash-col span-4">${recentPanel()}${trainingPanel()}</div>
       <div class="dash-col span-4">${inboxPanel()}${lineupPanel()}</div>

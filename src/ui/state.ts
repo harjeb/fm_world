@@ -82,6 +82,7 @@ export type UIState = {
   cupPreviewId: string | null
   /** 友谊赛页面选中的联赛分区（可以约世界任意球队）。 */
   challengeDivision: string | null
+  newsDivision: string | null
   worldDivision: string | null
   worldRound: number | null
   worldFixtureClubId: string
@@ -218,6 +219,7 @@ export const ui: UIState = {
   cupHistorySeason: null,
   cupPreviewId: null,
   challengeDivision: null,
+  newsDivision: null,
   worldDivision: null,
   worldRound: null,
   worldFixtureClubId: 'ALL',

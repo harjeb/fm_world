@@ -1,7 +1,7 @@
 import { joinRoster, transferWindowOpen } from './market.ts'
 import { basePlayerMarketValue } from './pricing.ts'
 import { checkTransferBudget, checkWageCapForSigning, spendTransferFunds } from './board.ts'
-import type { GameState, Player } from './types.ts'
+import type { GameState, MarketReport, Player } from './types.ts'
 
 /**
  * 联机的自由球员市场：全服共用一个球员池，靠竞拍签人。
@@ -35,7 +35,7 @@ export type Auction = {
   bids: AuctionBid[]
 }
 
-export type AuctionResult = { playerId: string; playerName: string; club: string | null; amount: number; at: number }
+export type AuctionResult = MarketReport
 
 export type FreeMarket = {
   pool: Player[]
@@ -183,7 +183,7 @@ export function settleAuctions(market: FreeMarket, gameOf: (accountId: string) =
       }
       market.pool = market.pool.filter((item) => item.id !== player.id)
       market.version += 1
-      result = { playerId: auction.playerId, playerName: auction.playerName, club: eligible.club, amount: eligible.amount, at: now }
+      result = { playerId: auction.playerId, playerName: auction.playerName, club: eligible.club, amount: eligible.amount, at: now, kind: 'auction', age: player.age, bidders: seen.size }
       settled.push({ result, winnerId: eligible.accountId })
     } else {
       result = { playerId: auction.playerId, playerName: auction.playerName, club: null, amount: 0, at: now }

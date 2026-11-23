@@ -131,12 +131,12 @@ describe('竞拍规则', () => {
     expect(squadLimitError(a)).toContain('超过')
   })
 
-  it('无效出价和不在市场的球员都被拒绝，转会窗关闭时也不能出价', () => {
+  it('无效出价和不在市场的球员都被拒绝，第15轮转会窗口仍然开放', () => {
     const { market, a, player, value } = setup()
     expect(placeBid(market, a, 'a', 'nobody', value, 0).ok).toBe(false)
     for (const amount of [Number.NaN, -5, 0, 1.5, Number.MAX_VALUE]) expect(placeBid(market, a, 'a', player.id, amount, 0).ok, String(amount)).toBe(false)
     a.season.round = 15
-    expect(placeBid(market, a, 'a', player.id, value, 0)).toMatchObject({ ok: false, error: '转会窗口已关闭' })
+    expect(placeBid(market, a, 'a', player.id, value, 0).ok).toBe(true)
   })
 
   it('时间到最高价者得：扣钱、进阵容、离开市场、记录成交', () => {
@@ -266,8 +266,9 @@ async function waitForEvent(base: string, token: string, match: (data: Record<st
       while ((index = buffer.indexOf('\n\n')) >= 0) {
         const chunk = buffer.slice(0, index)
         buffer = buffer.slice(index + 2)
-        if (!chunk.startsWith('data: ')) continue
-        const data = JSON.parse(chunk.slice(6)) as Record<string, unknown>
+        const payload = chunk.split('\n').filter(line => line.startsWith('data: ')).map(line => line.slice(6)).join('\n')
+        if (!payload) continue
+        const data = JSON.parse(payload) as Record<string, unknown>
         if (triggered && match(data)) return data
         if (!triggered && data.type === 'market') {
           triggered = true
@@ -351,9 +352,11 @@ describe('全服自由市场', () => {
     const one = await register(base, 'alpha')
     const { pool } = await getMarket(base)
     const target = [...pool].sort((a, b) => playerMarketValue(a) - playerMarketValue(b))[0]
-    await bid(base, one.headers, target.id, playerMarketValue(target))
-    clock += AUCTION_DURATION_MS + 1
-    const state = await waitForEvent(base, one.token, (data) => data.type === 'state', () => getMarket(base))
+    expect((await bid(base, one.headers, target.id, playerMarketValue(target))).status).toBe(200)
+    const state = await waitForEvent(base, one.token, (data) => data.type === 'state' && (data.game as GameState).roster.some(p => p.id === target.id), () => {
+      clock += AUCTION_DURATION_MS + 1
+      return getMarket(base)
+    })
     expect((state.game as GameState).roster.some((item) => item.id === target.id)).toBe(true)
 
     // 客户端把球员解约后保存，这名球员进全服市场，账号存档里不留。

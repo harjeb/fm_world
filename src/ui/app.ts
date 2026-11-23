@@ -251,6 +251,7 @@ function go(screen: Screen): void {
   ui.lineupSlot = null
   ui.screen = screen
   if (screen === 'youth' && !isOnlineMode() && !sharedActionUnavailable()) settleYouth(game, Date.now())
+  if (screen === 'home') ui.newsDivision = null
   if (screen === 'season') ui.seasonRound = null
   if (screen === 'world' || screen === 'cups') void refreshPublicWorld()
   if (screen === 'world' && ui.worldClubId) loadClubRoster(ui.worldClubId)
@@ -1846,7 +1847,7 @@ document.addEventListener('click', async (event) => {
       ui.newGamePreview = null
       setTeamPickPending(false)
       ui.newGameRequired = false
-      Object.assign(ui, { screen: 'home', trainingPlayerId: null, trainingPointSpend: 0, recycleSelectedIds: [], recycleConfirm: false, trainingBookIds: [], trainingTeammateIds: [], peakCardPlayerId: null, peakCardAttr: null, detailPlayerId: null, reviewId: null, lineupDraft: null, lineupSlot: null, autoSubsDraft: null, matchAutoSubsDraft: null, notice: '新游戏已创建。', matchEngine: null, matchPlaying: false, completing: false, coachPanel: false, seasonRound: null, worldDivision: null, worldRound: null, worldFixtureClubId: 'ALL', worldClubId: null, worldPlayerId: null, newGameOpen: false, newGameClubId: null })
+      Object.assign(ui, { screen: 'home', trainingPlayerId: null, trainingPointSpend: 0, recycleSelectedIds: [], recycleConfirm: false, trainingBookIds: [], trainingTeammateIds: [], peakCardPlayerId: null, peakCardAttr: null, detailPlayerId: null, reviewId: null, lineupDraft: null, lineupSlot: null, autoSubsDraft: null, matchAutoSubsDraft: null, notice: '新游戏已创建。', matchEngine: null, matchPlaying: false, completing: false, coachPanel: false, seasonRound: null, newsDivision: null, worldDivision: null, worldRound: null, worldFixtureClubId: 'ALL', worldClubId: null, worldPlayerId: null, newGameOpen: false, newGameClubId: null })
       maybeOpenChangelog()
       render()
       break
@@ -2811,6 +2812,11 @@ document.addEventListener('change', (event) => {
       ui.playerCompareId = target.value || null
       render()
     }
+    return
+  }
+  if (target.dataset.newsDivision !== undefined) {
+    ui.newsDivision = target.value || null
+    render()
     return
   }
   if (target.dataset.worldRound !== undefined) {

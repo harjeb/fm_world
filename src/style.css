@@ -502,6 +502,14 @@ h3:first-child { margin-top: 0; }
 .training-row .progress-mini { flex: 1; min-width: 40px; }
 
 /* ---------- 总览 ---------- */
+.football-news { grid-column: 1 / -1; }
+.news-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 1rem 2rem; }
+.news-columns h3 { font-size: 13px; color: var(--accent); margin: 0 0 .5rem; }
+.news-columns details { padding: .5rem 0; overflow-wrap: anywhere; }
+.news-columns details + details { border-top: 1px solid var(--line); }
+.news-columns summary { cursor: pointer; font-size: 15px; font-weight: 600; }
+.news-columns details[open] summary { margin-bottom: .4rem; }
+.news-columns p { margin: 0; color: var(--text-2); font-size: 12.5px; }
 .next-match .panel-body { padding: 0; }
 .dash > .next-match, .dash > .club-status { align-self: stretch; display: flex; flex-direction: column; }
 .next-match .panel-body, .club-status .panel-body { flex: 1; display: flex; }

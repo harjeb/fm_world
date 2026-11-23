@@ -1877,6 +1877,7 @@ export function advanceWorldSeason(game: GameState, now = Date.now(), protectedC
   }
   // 跨赛区卖方快照只代表上一赛季；新赛季按现有世界数据重新生成，已签走的球星不会留在原队。
   delete world.transferTeams
+  delete world.newsEditions
   world.seasonIndex++
   world.positionGenerationVersion = 1
   world.seasonStartedAt = Math.min(now, scheduledStart) > 0 ? scheduledStart : now

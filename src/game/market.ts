@@ -15,6 +15,8 @@ import { isLocalFreeAgentAvailable } from './free-market.ts'
 import { isYouthTrainee, youthTransferBlocked } from './youth.ts'
 import { checkTransferBudget, checkWageCapForRenewal, checkWageCapForSigning, creditTransferSale, spendTransferFunds } from './board.ts'
 
+import { recordTransfer } from './transfer-news.ts'
+
 type Market = NonNullable<GameState['market']>
 type Listing = Market['listings'][number]
 export type MarketOutcome = { ok: boolean; error?: string }
@@ -213,11 +215,12 @@ export type NegotiationOutcome = MarketOutcome & {
 
 export type { NegotiationAnswers, NegotiationDemands } from './negotiation.ts'
 
-function completeSigning(game: GameState, player: Player, fee: number): void {
+function completeSigning(game: GameState, player: Player, fee: number, seller?: string): void {
   spendTransferFunds(game, fee)
   arriveWithoutCards(player)
   game.roster.push(player)
   assignContract(game, player)
+  recordTransfer(game, player, game.clubName, fee, seller ? 'club' : 'free', seller)
 }
 
 function negotiate(
@@ -312,7 +315,7 @@ export function signClubPlayer(
   // 再过球员本人这关（他的诉求、想去的球队、联赛级别）。
   const result = negotiate(game, player, offer, answers, terms.asking, game.seed)
   if (!result.ok) return { ...result, club }
-  completeSigning(game, player, offer)
+  completeSigning(game, player, offer, team.name)
   // 卖人的钱进对方账本（单机；联机由服务器记到共享账本）。
   const seller = game.aiClubs?.[clubId]
   if (seller) {
@@ -448,6 +451,7 @@ export function settleMarket(game: GameState, round: number): number {
   creditTransferSale(game, proceeds)
   // 卖出去就是卖出去：他练出来的卡全部销毁，人回到原始属性，买回来也是白板。
   for (const listing of sold) {
+    recordTransfer(game, listing.player, '市场买家', listing.price, 'listing', game.clubName)
     listing.player.contract = undefined
     destroyPlayerCards(game, listing.player)
   }
@@ -472,7 +476,7 @@ export function buyFromClub(game: GameState, clubId: string, playerId: string): 
   if (!budgetCheck.ok) return fail(budgetCheck.error)
   const wageCheck = checkWageCapForSigning(game, player)
   if (!wageCheck.ok) return fail(wageCheck.error)
-  completeSigning(game, player, price)
+  completeSigning(game, player, price, team.name)
   team.players = team.players.filter((item) => item.id !== playerId)
   team.starPlayerIds = team.starPlayerIds.filter((id) => id !== playerId)
   team.playerNames = team.playerNames.filter((name) => name !== player.name)

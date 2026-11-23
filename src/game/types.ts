@@ -343,6 +343,16 @@ export type Player = {
 }
 
 /** AI 俱乐部给玩家球队的报价。4 个游戏日内不回复就算拒绝。 */
+/** 成交时的快照。旧市场日志没有 kind，club 为 null 表示流拍。 */
+export type MarketReport = {
+  playerId: string; playerName: string; club: string | null; amount: number; at: number
+  kind?: 'free' | 'club' | 'offer' | 'listing' | 'auction'
+  seller?: string
+  age?: number
+  value?: number
+  bidders?: number
+}
+
 export type TransferOffer = {
   id: string
   clubId: string
@@ -452,7 +462,9 @@ export type WorldSeasonSummary = {
   championsTop4?: string[]
 }
 
+export type RoundNewsEdition = { season: number; round: number; matches: import('./football-news.ts').Story[]; transfers: (import('./football-news.ts').Story & { at: number })[] }
 export type WorldState = {
+  newsEditions?: Record<string, RoundNewsEdition>
   /** Missing means legacy deterministic generation; only new worlds/seasons enable the new generator. */
   positionGenerationVersion?: 1
   version: 1
@@ -1400,6 +1412,7 @@ export type GameState = {
   appearances?: Record<string, number[]>
   /** AI 俱乐部发来的报价（收件箱）。 */
   transferOffers?: TransferOffer[]
+  transferNews?: MarketReport[]
   /** 联机账号：世界、电脑球队和自由市场由服务器维护，本地不另算。 */
   shared?: true
   /** 自由市场最近一次每日补充是第几个游戏日（单机）。 */

@@ -48,6 +48,7 @@ import { adjustBoardBudgetSlider, boardEffectiveWageCap, chooseBoardAmbition, is
 import { advanceLeagueRealtime } from '../src/game/realtime.ts'
 import { DEFAULT_PRE_MATCH_STAMINA_BELOW, DEFAULT_STAMINA_BELOW, emptyAutoSubs, validateAutoSubPlan } from '../src/game/match/management.ts'
 import type { ActiveMatchSave, GameState, PlayerCard } from '../src/game/types.ts'
+import { publishRoundNews } from './round-news.ts'
 import { LEAGUE_REALTIME_MS, LOGIC_MATCH_SECONDS } from '../src/game/match/time.ts'
 import { absorbFreeAgents, aiClubIdOf, auctionRaiseFee, committedFunds, leadingBid, minimumBid, placeAIBid, placeBid, settleAuctions, type AIBidder, type Auction, type AuctionResult, type BidResult, type FreeMarket } from '../src/game/auction.ts'
 import { isOnMarketToday } from '../src/game/market-window.ts'
@@ -762,10 +763,27 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     sharedWorld.marketVersion = market.version
     persistWorld({ world: false, teams: false, matchBook: false })
   }
+  // 市场日志也是总览的全服成交来源；与名册一起由调用方 persistWorld。
+  function publishDeal(report: AuctionResult): void {
+    sharedWorld.auctionLog = market.log = [{ ...report, at: now() }, ...market.log].slice(0, 30)
+    broadcastMarket()
+  }
+  function publishAccountDeal(account: Account): void {
+    const report = account.game.transferNews?.shift()
+    if (report) publishDeal(report)
+  }
+  let newsCheckedVersion = -1
+  function updateRoundNews(): boolean {
+    if (newsCheckedVersion === sharedWorldVersion) return false
+    const published = publishRoundNews(sharedWorld.world, market.log, now())
+    if (published) persistWorld({ world: true, teams: false, matchBook: false, immediate: true })
+    newsCheckedVersion = sharedWorldVersion
+    return published
+  }
   function advanceSharedWorld(): boolean {
     const changed = matchScheduler.refresh(now())
     advanceSharedAIClubs()
-    return changed
+    return updateRoundNews() || changed
   }
 
   /**
@@ -814,7 +832,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         onMove: (move) => {
           const seller = sharedWorld.world.clubs.find((club) => club.id === move.sellerId)
           if (seller) seller.starPlayerIds = seller.starPlayerIds.filter((id) => id !== move.playerId)
-          market.log = [{ playerId: move.playerId, playerName: move.playerName, club: sharedWorld.teams?.[move.buyerId]?.name ?? move.buyerId, amount: move.amount, at: now() }, ...market.log].slice(0, 30)
+          publishDeal({ playerId: move.playerId, playerName: move.playerName, club: sharedWorld.teams?.[move.buyerId]?.name ?? move.buyerId, amount: move.amount, at: now(), kind: 'club', seller: seller?.name })
           changed = true
         },
       })
@@ -1849,6 +1867,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         seller.economy.balance += offer
         seller.signings = seller.signings.filter((item) => item.id !== playerId)
       }
+      publishAccountDeal(account)
       persistWorld()
       publishClub(account)
       account.revision++
@@ -1868,7 +1887,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const buyer = offer ? sharedMarketClubs([offer.clubId])[0] : undefined
     const result = respondToOffer(account.game, offerId, accept, now(), buyer, serverSeason())
     if (result.ok) {
-      if (accept) persistWorld()
+      if (accept) {
+        publishAccountDeal(account)
+        persistWorld()
+      }
       publishClub(account)
       account.revision++
       account.lastUserRevision = account.revision
@@ -4038,7 +4060,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (closed) return
     const published = matchScheduler.refresh(now())
     // 空闲或仅在提前计算时，不必每秒复制所有账号的整份存档。
-    if (changed || published) {
+    if (updateRoundNews() || changed || published) {
       withDeferredWorldPersist(() => {
         for (const account of db.accounts) advanceAccount(account)
       })

@@ -9,6 +9,7 @@
  * 这里不碰存档的读写方式：单机传 game 里的球队和账本，服务器传共享名册和共享账本。
  */
 import type { AIClubState, AITeam, GameState, Player, TierId, TransferOffer } from './types.ts'
+import { recordTransfer } from './transfer-news.ts'
 import { AI_SQUAD_LIMIT, aiBidFor, aiTierProfile, recordAISigning } from './ai-club.ts'
 import { playerMarketValue } from './pricing.ts'
 import { MIN_SQUAD, refreshAILineup, repairLineup, validateLineup } from './squad.ts'
@@ -268,6 +269,7 @@ export function respondToOffer(game: GameState, offerId: string, accept: boolean
   joinAIClub(buyer, player, offer.amount, season)
   offer.status = 'accepted'
   offer.resolvedAt = now
+  recordTransfer(game, player, buyer.name, offer.amount, 'offer', game.clubName, now, offer.value)
   for (const other of pendingOffers(game)) {
     if (other.playerId !== player.id) continue
     other.status = 'withdrawn'
@@ -300,7 +302,10 @@ export function runLocalTransfers(game: GameState, round: number, now: number): 
   const season = game.season.index
   aiPoachRound({
     clubs, season, round, seed: game.seed, appearances: game.appearances, maxMoves: 1,
-    onMove: (move) => {
+    onMove: (move, player) => {
+      const buyerName = clubs.find(club => club.id === move.buyerId)!.name
+      const sellerName = clubs.find(club => club.id === move.sellerId)!.name
+      recordTransfer(game, player, buyerName, move.amount, 'club', sellerName, now)
       const seller = game.world?.clubs.find((club) => club.id === move.sellerId)
       if (seller) seller.starPlayerIds = seller.starPlayerIds.filter((id) => id !== move.playerId)
     },
