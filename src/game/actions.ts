@@ -23,7 +23,7 @@ import type { CupId } from './data/cup-config.ts'
 import { emptyAutoSubs, validateAutoSubPlan } from './match/management.ts'
 import { injuryUntil, recordMatchInjuries } from './injury.ts'
 import { economyOf } from './economy.ts'
-import { isCooperativeActivity, partnerAssignment, trainingDate, trainingOptions, type TrainingActivity } from './training-calendar.ts'
+import { isCooperativeActivity, isOverseasCampAction, partnerAssignment, trainingDate, trainingOptions, type TrainingActivity } from './training-calendar.ts'
 import { recordTrainingChemistry } from './chemistry.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 import { teamInputFromAI, teamInputFromLineup, withChemistry } from './match/setup.ts'
@@ -36,7 +36,7 @@ import { bookKey, bookLearnChance, canChooseTrainingBook, eventForSession, train
 import { canLearnSkill, skillCategory } from './data/skills.ts'
 import { getSkillTier } from './inheritance.ts'
 import { MAX_BOOKS } from './data/legend-skills.ts'
-import { cupCeilingBonus, effectiveTrainingCeilings } from './cup-rewards.ts'
+import { clubCeilingBonus, effectiveTrainingCeilings } from './cup-rewards.ts'
 import { MAIN_ATTR_HARD_MAX, mainAttrsFor } from './rating.ts'
 import { settleEnergy } from './energy.ts'
 import { isYouthTrainee } from './youth.ts'
@@ -94,13 +94,13 @@ export function startTraining(game: GameState, playerId: string, seed?: number, 
   player.energyAt = settledPlayer.energyAt
   player.energy = Math.max(0, energy - TRAINING_ENERGY_COST)
   const economy = economyOf(game)
-  // 每轮都从原始属性开始，和他现在装备哪张卡无关；第 2 赛季 +5 天（40 时段），第 3 赛季起再 +2 天（44 时段）。
+  // 每轮都从原始属性开始，和他现在装备哪张卡无关；第 2 赛季 +5 天（40 时段），第 3 赛季起再 +5 天（50 时段，第 3 周非比赛日国外特训 ×3）。
   const seasonIndex = Math.max(game.season?.index ?? 1, game.world?.seasonIndex ?? 1)
   const session = createTrainingSession(untrainedPlayer(player), seed ?? newTrainingSeed(game, playerId), { stadium: economy.stadium, academy: economy.academy, medical: economy.medical, shop: economy.shop, sponsor: economy.sponsor, psychology: economy.psychology, tactics: economy.tactics }, 1, books, trainingActionsForSeason(seasonIndex))
   session.qualityBonusPoints = points as 0 | 10 | 20 | 30
   game.trainingPoints = balance - points
   session.scheduleSeed = splitSeed(game.seed, 'training-calendar')
-  session.cupCeilingBonus = cupCeilingBonus(game)
+  session.cupCeilingBonus = clubCeilingBonus(game)
   session.matchRole = game.lineup.starters.find(starter => starter.playerId === playerId)?.role
   // 候选卡只是一份属性快照：精力时钟和不满属于球员本人，不跟着进卡。
   delete session.candidate.energyAt
@@ -621,6 +621,8 @@ export function shouldAutoRest(session: TrainingSession, options: TrainingActivi
       const cost = trainingFatigueCost(session, bestActivity.cost ?? 0)
       if (failureChance(stamina - cost) > 0 && stamina <= FAILURE_STAMINA + 16) return true
     }
+    // 即将进入第 3 周国外特训（×3）前的普通时段，体能偏低时先回满，避免在 3 倍收益时段浪费休息。
+    if (!isOverseasCampAction(session, session.action + 1) && isOverseasCampAction(session, nextAction) && stamina < 75) return true
   }
   if (stamina <= FAILURE_STAMINA + 6 && plainChance(stamina) >= 0.15 && session.partnerIds?.length) {
     const partners = partnerAssignment(session)
@@ -741,8 +743,8 @@ export function autoTrainingStep(game: GameState, playerId: string): AutoTrainin
   return { ok: true, completed: result.completed, kind: 'action', label: request.kind === 'drill' ? `专项训练 · ${attrLabel(request.attr)}` : '休息' }
 }
 
-/** 连续自动培养，直到本轮结束或用完步数（默认 90 步，足够跑完第 3 赛季 44 时段加事件）。 */
-export function runAutoTraining(game: GameState, playerId: string, maxSteps = 90): AutoTrainingRunResult {
+/** 连续自动培养，直到本轮结束或用完步数（默认 120 步，足够跑完第 3 赛季 50 时段加事件）。 */
+export function runAutoTraining(game: GameState, playerId: string, maxSteps = 120): AutoTrainingRunResult {
   let steps = 0
   for (let guard = 0; guard < maxSteps; guard++) {
     const step = autoTrainingStep(game, playerId)

@@ -21,6 +21,9 @@ function rewardPills(item: AchievementItemView): string {
   if (item.reward.fans) {
     parts.push(tag(`球迷 +${item.reward.fans.toLocaleString()}`, 'good'))
   }
+  if (item.reward.ceilingBonus) {
+    parts.push(tag(`主属性上限 +${item.reward.ceilingBonus}`, 'gold'))
+  }
   if (item.reward.skillBook) {
     parts.push(bookTitle(legendBookLabel(item.reward.skillBook), item.reward.skillBook.tier))
   }
@@ -104,6 +107,7 @@ export function renderAchievements(): string {
   const pendingParts: string[] = []
   if (summary.pendingMoney > 0) pendingParts.push(`+${summary.pendingMoney.toLocaleString()} 金币`)
   if (summary.pendingShopPoints > 0) pendingParts.push(`+${summary.pendingShopPoints} 商店点券`)
+  if (summary.pendingCeilingBonus > 0) pendingParts.push(`+${summary.pendingCeilingBonus} 主属性上限`)
   const claimAllBtn = summary.claimable > 0
     ? `<button class="btn primary" data-action="claim-achievement-all">${icon('star', 14)}一键领取全部（${summary.claimable}）</button>`
     : ''
@@ -147,13 +151,14 @@ export function renderAchievements(): string {
     ${pageHead({
       kicker: '经营 · 1.0 成就体系',
       title: '俱乐部成就',
-      sub: '常规成就奖励商店点券与 1.0 福利；另有 50 项高难隐藏挑战（未解锁前显示为「？？？」），达成后自动揭晓，后续将开放球迷、彩虹技能书等专属奖励。',
+      sub: `常规成就奖励商店点券、主属性上限（独立叠加）与 1.0 福利；另有 ${summary.hiddenTotal} 项高难隐藏挑战（未解锁前显示为「？？？」），达成后自动揭晓，后续将开放球迷、彩虹技能书等专属奖励。`,
       actions: `${claimAllBtn}<button class="btn ghost" data-nav="shop">前往技能书商店 ${icon('right', 13)}</button>`,
     })}
     ${backfillBanner}
-    <div class="kpi-row">
+    <div class="kpi-row club-kpis">
       ${tile('已解锁成就', `${summary.unlocked} / ${summary.total}`, `常规 ${summary.unlocked - summary.hiddenUnlocked}/${summary.standardTotal} · 隐藏 ${summary.hiddenUnlocked}/${summary.hiddenTotal}`)}
       ${tile('待领取奖励', String(summary.claimable), pendingParts.length ? pendingParts.join(' · ') : '暂无待领取')}
+      ${tile('成就上限加成', `+${summary.earnedCeilingBonus}`, `满额 +${summary.maxCeilingBonus} · 独立叠加`)}
       ${tile('已领成就点券', `${summary.earnedShopPoints} / ${summary.maxShopPoints}`, '跨赛季永久保留')}
       ${tile('当前商店点券', String(points), `可兑换 ${Math.floor(points / SHOP_BOOK_PRICE)} 本技能书`)}
     </div>

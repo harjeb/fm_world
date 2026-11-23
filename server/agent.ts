@@ -20,7 +20,7 @@ import { previewContractRenewal } from '../src/game/wages.ts'
 import { detailedPositionForSlot, isDetailedPosition, readDetailedPositions, slotPositionValue } from '../src/game/detailed-positions.ts'
 import { MAX_SCOUT_REPORTS, SCOUT_LEVELS, deleteScoutReport, startScouting, visibleScoutReports, type ScoutReport, type ScoutSource, type ScoutTarget, type VisibleScoutReport } from '../src/game/scouting.ts'
 import { preferredPositionRatings } from '../src/game/scout-rating.ts'
-import { cupCeilingBonus } from '../src/game/cup-rewards.ts'
+import { achievementCeilingBonus, clubCeilingBonus, cupCeilingBonus } from '../src/game/cup-rewards.ts'
 import { MAIN_ATTR_HARD_MAX } from '../src/game/scale.ts'
 import { PEAK_STAGES } from '../src/game/data/peak-stages.generated.ts'
 import { PEAK_STAGE_COUNT, buildPeakTeam } from '../src/game/peak.ts'
@@ -37,7 +37,7 @@ import { ensurePve, legendRecordOf } from '../src/game/pve.ts'
 import { youthView } from '../src/game/youth.ts'
 import { applyYouthAction } from '../src/game/youth-actions.ts'
 import type { TrainingRequest } from '../src/game/training.ts'
-import { trainingDate, trainingOptions, type TrainingActivityId } from '../src/game/training-calendar.ts'
+import { isOverseasCampAction, trainingDate, trainingOptions, type TrainingActivityId } from '../src/game/training-calendar.ts'
 import type { SkillId } from '../src/game/types.ts'
 import { SKILLS, canLearnSkill, skillCategory } from '../src/game/data/skills.ts'
 import { economyOf, payWageArrears, upgradeFacility, FACILITIES, facilityLevel, facilityRoundIncome, facilityStageChance, facilityStageInLevel, facilityUpgradeCost, homeAtmosphereBonus, type FacilityId } from '../src/game/economy.ts'
@@ -551,6 +551,7 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
       actionsTotal: trainingActionsTotal(session),
       scheduleVersion: session.scheduleVersion ?? null,
       date: session.scheduleVersion === 1 && session.action < trainingActionsTotal(session) ? trainingDate(session.action + 1) : null,
+      overseasCamp: session.scheduleVersion === 1 && session.action < trainingActionsTotal(session) ? isOverseasCampAction(session, session.action + 1) : false,
       options: session.scheduleVersion === 1 && session.action < trainingActionsTotal(session) ? trainingOptions(session).map(({ id, label, desc, stamina, group, parameters }) => ({ id, label, desc, stamina, group, ...(parameters ? { parameters } : {}) })) : [],
       lowMoodWeeks: session.lowMoodWeeks ?? [],
       exchangeMatches: session.exchangeMatches ?? [],
@@ -593,6 +594,8 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
     honors: {
       trophies: (game.pve?.trophies ?? []).map(trophy => ({ ...trophy })),
       cupCeilingBonus: cupCeilingBonus(game),
+      achievementCeilingBonus: achievementCeilingBonus(game),
+      clubCeilingBonus: clubCeilingBonus(game),
       cupCeilingClaims: { ...(game.pve?.cupCeilingClaims ?? {}) },
       seasonCupGoldClaims: { ...(game.pve?.seasonCupGoldClaims ?? {}) },
     },

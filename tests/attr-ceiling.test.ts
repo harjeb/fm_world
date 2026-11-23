@@ -7,8 +7,10 @@ import {
   profileFromWeights,
 } from '../src/game/data/attr-profile.ts'
 import { createPlayerFromSeed, PLAYER_SEEDS } from '../src/game/data/players.ts'
-import { attrMax } from '../src/game/scale.ts'
-import type { AttrKey, Attributes } from '../src/game/types.ts'
+import { effectiveClubCeilings } from '../src/game/cup-rewards.ts'
+import { attrMax, HIDDEN_ATTR_MAX, isMainAttr } from '../src/game/scale.ts'
+import { ALL_ATTRIBUTES, GK_ATTRIBUTES, type AttrKey, type Attributes } from '../src/game/types.ts'
+import { attrCeiling } from '../src/ui/format.ts'
 
 const blank = (value: number): Attributes => {
   const keys = Object.keys(createPlayerFromSeed(PLAYER_SEEDS[0]).attrs) as AttrKey[]
@@ -67,5 +69,57 @@ describe('属性上限映射', () => {
     expect(fixed.passing).toBe(300) // 上限低于当前属性时抬到当前值，避免无法成长/数值倒挂
     expect(fixed.shooting).toBe(1500)
     expect(fixed.speed).toBe(1500) // 非法值回退绝对上限
+  })
+
+  it('所有球员的隐藏属性上限统一为 20，不再设单独上限（外场门将属性仍为 0）', () => {
+    const players = PLAYER_SEEDS.map(createPlayerFromSeed)
+    const fieldPlayer = players.find((p) => p.positions.GK === 0)!
+    const gkPlayer = players.find((p) => p.positions.GK > 0)!
+    expect(fieldPlayer).toBeTruthy()
+    expect(gkPlayer).toBeTruthy()
+
+    for (const player of players) {
+      const isGk = player.positions.GK > 0
+      for (const key of ALL_ATTRIBUTES) {
+        if (!isGk && (GK_ATTRIBUTES as readonly string[]).includes(key)) {
+          expect(player.ceilings[key]).toBe(0)
+        } else if (!isMainAttr(key, isGk)) {
+          expect(player.ceilings[key]).toBe(HIDDEN_ATTR_MAX)
+        }
+      }
+    }
+
+    // ceilingsFromProfile 对外场与门将的隐藏属性也统一返回 20
+    for (const player of [fieldPlayer, gkPlayer]) {
+      const isGk = player.positions.GK > 0
+      const ceilings = ceilingsFromProfile(player.attrs, { passing: 0.2, vision: 0.1 }, { tier: 2, isGk })
+      for (const key of ALL_ATTRIBUTES) {
+        if (!isGk && (GK_ATTRIBUTES as readonly string[]).includes(key)) {
+          expect(ceilings[key]).toBe(0)
+        } else if (!isMainAttr(key, isGk)) {
+          expect(ceilings[key]).toBe(HIDDEN_ATTR_MAX)
+        }
+      }
+    }
+
+    // 旧存档中个人隐藏属性上限低于 20 时，培养计算与展示也统一抬升到 20
+    const legacyOutfield = structuredClone(fieldPlayer)
+    legacyOutfield.ceilings.vision = 13.4
+    legacyOutfield.ceilings.composure = 12.1
+    legacyOutfield.ceilings.reflexes = 15
+    const effOutfield = effectiveClubCeilings(legacyOutfield, 0)
+    expect(effOutfield.vision).toBe(20)
+    expect(effOutfield.composure).toBe(20)
+    expect(effOutfield.reflexes).toBe(0)
+    expect(attrCeiling(legacyOutfield, 'vision')).toBe(20)
+    expect(attrCeiling(legacyOutfield, 'reflexes')).toBe(0)
+
+    const legacyGk = structuredClone(gkPlayer)
+    legacyGk.ceilings.vision = 11.5
+    legacyGk.ceilings.heading = 9.2
+    const effGk = effectiveClubCeilings(legacyGk, 0)
+    expect(effGk.vision).toBe(20)
+    expect(effGk.heading).toBe(20)
+    expect(attrCeiling(legacyGk, 'vision')).toBe(20)
   })
 })

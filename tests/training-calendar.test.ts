@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
 import { autoTrainingStep, pickExchangeOpponent, previewTraining, startTraining, trainingAction, trainingEventChoice } from '../src/game/actions.ts'
 import { planTraining } from '../src/game/training.ts'
-import { trainingDate, trainingLowMood, trainingOptions, type TrainingActivityId } from '../src/game/training-calendar.ts'
+import { isOverseasCampAction, OVERSEAS_CAMP_MULTIPLIER, trainingDate, trainingLowMood, trainingOptions, type TrainingActivityId } from '../src/game/training-calendar.ts'
 import { EVENTS, eventById } from '../src/game/data/events.ts'
 import { derivedRng, splitSeed } from '../src/game/rng.ts'
 import { MatchEngine } from '../src/game/match/engine.ts'
@@ -336,5 +336,70 @@ describe('calendar training', () => {
       s.action = 2
       expect(trainingOptions(s).map(o => o.id)).not.toContain('inherit')
     }
+  })
+
+  it('第 3 赛季起（25 天 / 50 时段）第 3 周非比赛日为国外特训，仅常规训练属性成长 ×3，事件与比赛不翻倍', () => {
+    const game = createInitialGame(412)
+    game.season.index = 3
+    if (game.world) game.world.seasonIndex = 3
+    const id = game.roster.find(p => !p.positions.GK)!.id
+    expect(startTraining(game, id, 555).ok).toBe(true)
+    const s = game.training[id]
+    expect(s.actionsTotal).toBe(50)
+    // 1–2 赛季（30/40 时段）不启用国外特训；第 3 赛季 50 时段仅第 3 周周二~周四、周六~周日（共 10 个时段）生效。
+    expect(isOverseasCampAction({ scheduleVersion: 1, actionsTotal: 30 }, 31)).toBe(false)
+    expect(isOverseasCampAction({ scheduleVersion: 1, actionsTotal: 40 }, 31)).toBe(false)
+    const campSlots: number[] = []
+    for (let n = 1; n <= 50; n++) if (isOverseasCampAction(s, n)) campSlots.push(n)
+    expect(campSlots).toEqual([31, 32, 33, 34, 35, 36, 39, 40, 41, 42])
+
+    // 常规训练在国外特训时段严格 ×3（对比同种子下把 actionsTotal 降为 40 关闭特训的基准）
+    for (const key of Object.keys(s.candidate.attrs) as (keyof typeof s.candidate.attrs)[]) {
+      s.candidate.attrs[key] = 0
+      s.candidate.ceilings[key] = isMainAttr(key, false) ? 2000 : 20
+    }
+    s.action = 30 // 第 31 时段 = 第 3 周周二上午（国外特训）
+    const trainOpt = trainingOptions(s).find(o => !!o.gains)!
+    const base = structuredClone(s)
+    base.actionsTotal = 40
+    const campPlan = planTraining(structuredClone(s), activity(trainOpt.id), undefined, 2, true)
+    const basePlan = planTraining(base, activity(trainOpt.id), undefined, 2, true)
+    expect(Object.keys(basePlan.gains).length).toBeGreaterThan(0)
+    for (const [key, value] of Object.entries(basePlan.gains)) {
+      expect(campPlan.gains[key as keyof typeof campPlan.gains]).toBeCloseTo((value as number) * OVERSEAS_CAMP_MULTIPLIER)
+    }
+
+    // 实际执行与预览一致
+    const execGame = structuredClone(game)
+    execGame.training[id] = structuredClone(s)
+    const exactPlan = planTraining(structuredClone(s), activity(trainOpt.id), undefined, 0, false)
+    const res = trainingAction(execGame, id, activity(trainOpt.id))
+    expect(res.ok).toBe(true)
+    for (const [key, value] of Object.entries(exactPlan.gains)) {
+      expect(execGame.training[id].candidate.attrs[key as keyof typeof s.candidate.attrs]).toBeCloseTo(value as number)
+    }
+
+    // 第 3 周周一下午（比赛日）不触发 ×3
+    s.action = 29 // 第 30 时段 = 第 3 周周一下午
+    const monOpt = trainingOptions(s).find(o => !!o.gains)!
+    const monBase = structuredClone(s); monBase.actionsTotal = 40
+    expect(planTraining(structuredClone(s), activity(monOpt.id), undefined, 0, true).gains)
+      .toEqual(planTraining(monBase, activity(monOpt.id), undefined, 0, true).gains)
+
+    // 第 3 周国外特训期间触发的事件不翻倍（仅训练 ×3）
+    const evCamp = structuredClone(game)
+    const evBase = structuredClone(game)
+    evCamp.training[id] = structuredClone(s)
+    evBase.training[id] = structuredClone(s)
+    evBase.training[id].actionsTotal = 40
+    for (const g of [evCamp, evBase]) {
+      g.training[id].action = 31
+      g.training[id].pendingEventId = 'main_intake'
+      g.training[id].pendingEventAction = 31
+    }
+    const rCamp = trainingEventChoice(evCamp, id, 'passing')
+    const rBase = trainingEventChoice(evBase, id, 'passing')
+    expect(rCamp.ok && rBase.ok).toBe(true)
+    expect(rCamp.gains!.passing).toBeCloseTo(rBase.gains!.passing!)
   })
 })

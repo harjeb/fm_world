@@ -28,7 +28,7 @@ import {
 } from '../../game/board.ts'
 import { MAIN_ATTR_SCALE } from '../../game/scale.ts'
 import { CATEGORY_BONUS_PER_LEVEL, STADIUM_BONUS_PER_LEVEL } from '../../game/training.ts'
-import { cupCeilingBonus } from '../../game/cup-rewards.ts'
+import { achievementCeilingBonus, cupCeilingBonus } from '../../game/cup-rewards.ts'
 import { legendBookLabel } from '../../game/legend-books.ts'
 import { bestMarketValue, transferWindowOpen } from '../../game/market.ts'
 import { caHeat, icon, meter, ownName, pageHead, panel, posBadge, primaryPosition, tag, tile } from '../components.ts'
@@ -74,8 +74,17 @@ function seasonLeague(season: SeasonState): string {
 /** 杯赛冠军陈列：按杯赛汇总次数 + 最近夺冠记录。 */
 function trophyCabinet(): string {
   const trophies = [...(game.pve?.trophies ?? [])].sort((a, b) => b.seasonIndex - a.seasonIndex || b.wonAt - a.wonAt)
+  const cupBonus = cupCeilingBonus(game)
+  const achBonus = achievementCeilingBonus(game)
+  const totalBonus = cupBonus + achBonus
+  const bonusParts = [
+    cupBonus > 0 ? `<span class="tag gold">奖杯上限 +${cupBonus}（取最高）</span>` : '',
+    achBonus > 0 ? `<span class="tag gold">成就上限 +${achBonus}（独立叠加）</span>` : '',
+  ].filter(Boolean)
+  if (cupBonus > 0 && achBonus > 0) bonusParts.push(`<span class="tag info">总上限 +${totalBonus}</span>`)
+  const aside = bonusParts.join(' ')
   if (trophies.length === 0) {
-    return panel('荣誉橱窗', '<p class="muted pad">还没有奖杯。赢得杯赛冠军后，奖杯和决赛记录会陈列在这里。</p>', { flush: true })
+    return panel('荣誉橱窗', '<p class="muted pad">还没有奖杯。赢得杯赛冠军后，奖杯和决赛记录会陈列在这里。</p>', { flush: true, aside })
   }
   const counts = new Map<string, { name: string; count: number; last: number }>()
   for (const trophy of trophies) {
@@ -84,7 +93,6 @@ function trophyCabinet(): string {
     row.last = Math.max(row.last, trophy.seasonIndex)
     counts.set(trophy.cupId, row)
   }
-  const activeCeiling = cupCeilingBonus(game)
   return panel(`荣誉橱窗 <small>${trophies.length}</small>`, `
     <div class="trophy-grid">
       ${[...counts.values()].map((row) => `<div class="trophy-card">
@@ -99,7 +107,7 @@ function trophyCabinet(): string {
         <span class="num"><b>${trophy.finalScore.home}:${trophy.finalScore.away}</b>${trophy.finalShootout ? ` <small class="muted">点球 ${trophy.finalShootout.home}:${trophy.finalShootout.away}</small>` : ''}</span>
         ${trophy.matchId && game.challengeHistory.some((record) => record.id === trophy.matchId) ? `<button class="btn small ghost" data-action="open-review" data-record="${esc(trophy.matchId)}">决赛战报</button>` : ''}
       </div>`).join('')}
-    </div>`, { flush: true, aside: activeCeiling > 0 ? `<span class="tag gold">当前奖杯上限 +${activeCeiling}（取最高）</span>` : '' })
+    </div>`, { flush: true, aside })
 }
 
 /** 每个赛季一行：级别、名次、战绩、冠军，以及下赛季是升级还是降级。 */
@@ -490,7 +498,7 @@ function facilitiesTab(): string {
       <li>${icon('cap', 13)}设施提供额外成长，每项主属性各有自己的上限（由球员画像决定，通常不到 1500）。</li>
       <li>${icon('cross', 13)}每次行动或事件中，仅对基础成长为正的属性加成；例如医疗 3 级为每项符合条件的身体主属性额外 +${3 * CATEGORY_BONUS_PER_LEVEL}，球场另计。</li>
       <li>${icon('info', 13)}休息和位置训练不提供额外属性成长；属性达到上限后不再增长。</li>
-      <li>${icon('clock', 13)}第 1 赛季单轮培养 15 天（30 时段），第 2 赛季延长 5 天至 20 天（40 时段），第 3 赛季起再延长 2 天至 22 天（44 时段）；设施等级在开始培养时锁定，升级从下一次培养生效。</li>
+      <li>${icon('clock', 13)}第 1 赛季单轮培养 15 天（30 时段），第 2 赛季延长 5 天至 20 天（40 时段），第 3 赛季起再延长 5 天至 25 天（50 时段），且第 3 周非比赛日（周二至周四、周六至周日）为国外特训，仅常规训练属性成长 ×3；设施等级在开始培养时锁定，升级从下一次培养生效。</li>
     </ul>`)}
   </div>`
 }

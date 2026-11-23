@@ -6,9 +6,9 @@ import { SKILLS, basicSkillsFor, canLearnSkill, skillCategory } from '../../game
 import { autoPresetLabel, autoTrainingConfig, autoTrainingPresetsFor, autoTrainingRunnable, previewTraining, resolveAutoPresetId, trainingBookLoadout } from '../../game/actions.ts'
 import { displayCA, initialDisplayCA, mainAttrsFor } from '../../game/rating.ts'
 import { caCeilingOf } from '../../game/ca.ts'
-import { cupCeilingBonus, effectiveClubCeilings, effectiveTrainingCeilings } from '../../game/cup-rewards.ts'
+import { clubCeilingBonus, effectiveClubCeilings, effectiveTrainingCeilings } from '../../game/cup-rewards.ts'
 import { branchProbability, eventChance, eventGrowthScale, failureChance, planTraining, REST_PARTNER_RECOVERY, trainingActionsForSeason, trainingActionsTotal, trainingDaysForSeason, trainingQualityChances, TRAINING_ACTION_INFO, TRAINING_ENERGY_COST, TRAINING_POINT_TIERS, weekOfAction, type TrainingRequest } from '../../game/training.ts'
-import { partnerAssignment, trainingDate, trainingOptions, type TrainingActivityId } from '../../game/training-calendar.ts'
+import { isOverseasCampAction, OVERSEAS_CAMP_MIN_ACTIONS, OVERSEAS_CAMP_MULTIPLIER, partnerAssignment, trainingDate, trainingOptions, type TrainingActivityId } from '../../game/training-calendar.ts'
 import { baseBuild, playerCards, untrainedPlayer } from '../../game/cards.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
 import { getSkillTier } from '../../game/inheritance.ts'
@@ -351,11 +351,11 @@ function renderTrainingStart(player: Player): string {
   const enough = energy >= TRAINING_ENERGY_COST
   const base = { ...baseBuild(player) }
   const gk = player.positions.GK > 0
-  const ceilingCa = caCeilingOf(effectiveClubCeilings(player, cupCeilingBonus(game)), gk)
+  const ceilingCa = caCeilingOf(effectiveClubCeilings(player, clubCeilingBonus(game)), gk)
   const seasonIndex = Math.max(game.season?.index ?? 1, game.world?.seasonIndex ?? 1)
   const days = trainingDaysForSeason(seasonIndex)
   const slots = trainingActionsForSeason(seasonIndex)
-  const daysHint = seasonIndex >= 3 ? '含第2季+5天、第3季+2天' : seasonIndex === 2 ? '含第2季+5天（第3季再+2天）' : '第2季+5天 · 第3季再+2天'
+  const daysHint = seasonIndex >= 3 ? `含第2季+5天、第3季+5天 · 第3周非比赛日国外特训 ×${OVERSEAS_CAMP_MULTIPLIER}` : seasonIndex === 2 ? '含第2季+5天（第3季再+5天+国外特训）' : '第2季+5天 · 第3季再+5天+国外特训'
   return `<div class="grid two">
     ${panel(esc(player.name), `
       <div class="tile-grid">
@@ -418,15 +418,17 @@ function trainingHeader(current: Player, session: TrainingSession, cand: Player)
   const route = session.routeId ? `${ROUTE_LABELS[session.routeId]} · ${session.routePoints}/2` : '未选择路线'
   const eventP = eventChance(session, session.action + 1)
   const quality = trainingQualityChances(session)
+  const currentAction = Math.min(total, session.action + 1)
+  const campNow = !session.completed && isOverseasCampAction(session, currentAction)
   const when = session.scheduleVersion === 1
-    ? (() => { const date = trainingDate(Math.min(total, session.action + 1)); return `第 ${date.week} 周 · ${date.dayLabel} ${date.slot}` })()
+    ? (() => { const date = trainingDate(currentAction); return `第 ${date.week} 周 · ${date.dayLabel} ${date.slot}` })()
     : `第 ${weekOfAction(Math.max(1, session.action))} 周`
   return `<section class="train-head">
     <div class="train-lead">
       <div class="train-id">
         ${posBadge(primaryPosition(current))}
         <div>
-          <h2>${esc(current.name)} <small>${esc(current.enName)}</small></h2>
+          <h2>${esc(current.name)} <small>${esc(current.enName)}</small>${campNow ? ` ${tag(`国外特训 ×${OVERSEAS_CAMP_MULTIPLIER}`, 'gold')}` : ''}</h2>
           <p class="muted small">${when} · 行动 ${session.action}/${total} · ${traitLabel(current.traitId)} · ${esc(route)}</p>
         </div>
       </div>
@@ -437,7 +439,7 @@ function trainingHeader(current: Player, session: TrainingSession, cand: Player)
       <div class="stat-box"><span>当前 CA</span><b>${playerCA(current).toFixed(1)}</b></div>
       <div class="stat-box"><span>培养中 CA</span><b>${playerCA(cand).toFixed(1)}</b><small class="${playerCA(cand) >= playerCA(current) ? 'up' : 'down'}">${caDelta(current, cand)} · 上限 ${Math.round(caCeilingOf(effectiveTrainingCeilings(session), current.positions.GK > 0))}</small></div>
       <div class="stat-box"><span>训练体力</span>${meter(stamina)}</div>
-      ${(session.cupCeilingBonus ?? 0) > 0 ? `<div class="stat-box"><span>奖杯上限</span><b>+${session.cupCeilingBonus}</b></div>` : ''}
+      ${(session.cupCeilingBonus ?? 0) > 0 ? `<div class="stat-box"><span>上限加成</span><b>+${session.cupCeilingBonus}</b></div>` : ''}
       <div class="stat-box"><span>剩余精力</span>${meter(current.energy ?? 100)}</div>
       <div class="stat-box"><span>下次事件</span><b>${session.action >= total ? '—' : pct(eventP)}</b></div>
     </div>
@@ -445,9 +447,10 @@ function trainingHeader(current: Player, session: TrainingSession, cand: Player)
   </section>`
 }
 
-/** 培养日历（15 / 20 / 22 天）：一周 7 列，每天上午/下午两格；已完成格显示实际项目与品质。 */
+/** 培养日历（15 / 20 / 25 天）：一周 7 列，每天上午/下午两格；已完成格显示实际项目与品质。 */
 function trainingCalendar(session: TrainingSession): string {
   const total = trainingActionsTotal(session)
+  const hasCamp = total >= OVERSEAS_CAMP_MIN_ACTIONS
   const actionLog = new Map<number, TrainingLogEntry>()
   const eventActions = new Set<number>()
   for (const entry of session.log) {
@@ -455,17 +458,20 @@ function trainingCalendar(session: TrainingSession): string {
     if (entry.kind === 'event') eventActions.add(entry.action)
   }
   const weeks = Math.ceil(total / 14)
-  const fixedLabel = (day: number, slot: number) => (day === 1 && slot === 0 ? '交流赛' : day === 5 ? (slot === 0 ? '队内比赛' : '休整') : '')
+  const fixedLabel = (action: number, day: number, slot: number) => (day === 1 && slot === 0 ? '交流赛' : day === 5 ? (slot === 0 ? '队内比赛' : '休整') : isOverseasCampAction(session, action) ? '国外特训' : '')
   const cell = (action: number, day: number, slot: number) => {
     if (action > total) return '<div class="cal-slot none"></div>'
     const entry = actionLog.get(action)
     const done = action <= session.action
     const current = !session.completed && action === session.action + 1
+    const camp = isOverseasCampAction(session, action)
     const match = entry ? /^(.+?)（(.+)）$/.exec(entry.title) : null
-    const label = entry ? match?.[1] ?? entry.title : fixedLabel(day, slot)
+    const label = entry ? match?.[1] ?? entry.title : fixedLabel(action, day, slot)
     const quality = match?.[2] ?? ''
     const qualityClass = quality === '完美成功' ? 'q-perfect' : quality === '大成功' ? 'q-great' : quality === '一般' ? 'q-plain' : ''
-    return `<div class="cal-slot ${done ? 'done' : ''} ${current ? 'current' : ''} ${qualityClass}" title="${esc(entry ? entry.title : current ? '当前时段' : label)}">
+    const tipBase = entry ? entry.title : current ? '当前时段' : label
+    const tip = camp ? `${tipBase ? `${tipBase} · ` : ''}国外特训（仅训练属性 ×${OVERSEAS_CAMP_MULTIPLIER}）` : tipBase
+    return `<div class="cal-slot ${camp ? 'camp' : ''} ${done ? 'done' : ''} ${current ? 'current' : ''} ${qualityClass}" title="${esc(tip)}">
       <span>${esc(label) || (current ? '当前' : '')}</span>${eventActions.has(action) ? '<i class="cal-event" title="触发事件"></i>' : ''}
     </div>`
   }
@@ -485,6 +491,7 @@ function trainingCalendar(session: TrainingSession): string {
     </div>
     <div class="legend cal-legend">
       <span class="legend-item"><i class="swatch cal-swatch-done"></i>已完成</span>
+      ${hasCamp ? `<span class="legend-item"><i class="swatch cal-swatch-camp"></i>国外特训 ×${OVERSEAS_CAMP_MULTIPLIER}</span>` : ''}
       <span class="legend-item"><i class="swatch cal-swatch-great"></i>大成功</span>
       <span class="legend-item"><i class="swatch cal-swatch-perfect"></i>完美成功</span>
       <span class="legend-item"><i class="swatch cal-swatch-current"></i>当前时段</span>
@@ -590,14 +597,16 @@ function calendarActionPanel(session: TrainingSession): string {
   const preview = previewTraining(game, session.playerId, request, true)
   const plan = preview.plan
   const date = trainingDate(session.action + 1)
+  const camp = isOverseasCampAction(session, session.action + 1)
   const lowMood = date.day <= 3 && (session.lowMoodWeeks ?? []).includes(date.week)
   const teammates = eligibleTrainingTeammates(session)
-  return panel(`第 ${date.week} 周 · ${date.dayLabel} ${date.slot}`, `<div class="action-layout">
+  return panel(`第 ${date.week} 周 · ${date.dayLabel} ${date.slot}${camp ? ` · 国外特训 ×${OVERSEAS_CAMP_MULTIPLIER}` : ''}`, `<div class="action-layout">
       <div class="activity-list" role="group" aria-label="训练项目">
         ${options.map((item) => `<button class="activity ${item.id === selected.id ? 'active' : ''}" style="--act-color:${activityColor(isGk ? item.goalkeeperGains ?? item.gains : item.gains, isGk)}" data-training-activity="${esc(item.id)}"><b>${esc(item.label)}</b><span class="act-right">${activityMates(session, item.id)}<small class="${item.stamina.startsWith('+') ? 'up' : 'muted'}">${esc(activityStamina(session, item))}</small></span></button>`).join('')}
       </div>
       <div class="action-detail">
         <p class="action-desc small">${esc(selected.desc)}</p>
+        ${camp ? `<p class="camp-hint small">国外特训：本时段常规训练属性成长 ×${OVERSEAS_CAMP_MULTIPLIER}（事件不翻倍）。</p>` : ''}
         ${lowMood ? '<p class="warn-text small">低落情绪：本周一至周三成长 -50%。</p>' : ''}
         ${selected.parameters === 'position' ? positionField(session, isGk) : ''}
         ${session.partnerIds?.length ? optionPartnerList(session, selected.id) : selected.group ? teammatePicker(teammates) : ''}

@@ -26,14 +26,14 @@ import { bookLearnChance, canTriggerLegendStarEvent, canTriggerLegendStarInherit
 import { LEGEND_STAR_EVENT_CHANCE, LEGEND_STAR_EVENT_ID, LEGEND_STAR_INHERIT_CHANCE, LEGEND_STAR_INHERIT_EVENT_ID } from './data/legend-cup-skill.ts'
 import { effectiveTrainingCeilings } from './cup-rewards.ts'
 import { legendMultiplier, legendValue } from './legend-bonus.ts'
-import { partnerAssignment, trainingDate, trainingLowMood, trainingOptions, type TrainingActivityId } from './training-calendar.ts'
+import { isOverseasCampAction, OVERSEAS_CAMP_MIN_ACTIONS, OVERSEAS_CAMP_MULTIPLIER, partnerAssignment, trainingDate, trainingLowMood, trainingOptions, type TrainingActivityId } from './training-calendar.ts'
 import { ROLES } from './data/roles.ts'
 import { mainAttrsFor } from './scale.ts'
 import { DETAILED_TO_POSITION, POSITION_TO_DETAILED, detailedPositionValue, isDetailedPosition, readDetailedPositions } from './detailed-positions.ts'
 
 export const BASE_TRAINING_DAYS = 15
 export const SEASON2_BONUS_DAYS = 5
-export const SEASON3_BONUS_DAYS = 2
+export const SEASON3_BONUS_DAYS = 5
 export const ACTIONS_PER_ROUTE = BASE_TRAINING_DAYS * 2
 export const ACTIONS_PER_WEEK = 3
 
@@ -41,13 +41,13 @@ export const ACTIONS_PER_WEEK = 3
 export const STADIUM_BONUS_PER_LEVEL = 4
 export const CATEGORY_BONUS_PER_LEVEL = 10
 
-/** 按赛季返回单轮培养天数：第 1 赛季 15 天，第 2 赛季 +5 天（20 天），第 3 赛季起再 +2 天（22 天）。 */
+/** 按赛季返回单轮培养天数：第 1 赛季 15 天，第 2 赛季 +5 天（20 天），第 3 赛季起再 +5 天（25 天，含第 3 周非比赛日国外特训）。 */
 export function trainingDaysForSeason(seasonIndex = 1): number {
   const s = Number.isFinite(seasonIndex) ? Math.max(1, Math.floor(seasonIndex)) : 1
   return BASE_TRAINING_DAYS + (s >= 2 ? SEASON2_BONUS_DAYS : 0) + (s >= 3 ? SEASON3_BONUS_DAYS : 0)
 }
 
-/** 按赛季返回单轮培养总时段数（每天上/下午 2 个时段：30 / 40 / 44）。 */
+/** 按赛季返回单轮培养总时段数（每天上/下午 2 个时段：30 / 40 / 50）。 */
 export function trainingActionsForSeason(seasonIndex = 1): number {
   return trainingDaysForSeason(seasonIndex) * 2
 }
@@ -232,7 +232,7 @@ export function createTrainingSession(player: Player, seed: number, snapshot: Tr
         week: 1,
         kind: 'system',
         title: '开始新一轮培养',
-        text: `从原始属性开始培养。本轮 ${totalDays} 天，每天上午和下午各练一次；每周一上午交流赛，周五上午队内比赛、下午恢复。结束后产出一张新卡进入库存，和之前的卡互不影响。基础上限 1500，奖励/技能可把上限推到 2000。`,
+        text: `从原始属性开始培养。本轮 ${totalDays} 天，每天上午和下午各练一次；每周一上午交流赛，周五上午队内比赛、下午恢复${totalSlots >= OVERSEAS_CAMP_MIN_ACTIONS ? `；第 3 周非比赛日（周二至周四、周六至周日）为国外特训，常规训练属性成长 ×${OVERSEAS_CAMP_MULTIPLIER}` : ''}。结束后产出一张新卡进入库存，和之前的卡互不影响。基础上限 1500，奖励/技能可把上限推到 2000。`,
       },
     ],
     completed: false,
@@ -331,6 +331,12 @@ function applyTrainingGains(session: TrainingSession, gains: Partial<Record<Attr
 function moodGains(session: TrainingSession, gains: Partial<Record<AttrKey, number>>, action: number) {
   if (!trainingLowMood(session, action)) return gains
   return Object.fromEntries((Object.entries(gains) as [AttrKey, number][]).map(([key, value]) => [key, value > 0 ? value * 0.5 : value]))
+}
+
+/** 国外特训仅放大常规训练属性成长（×3），事件、导师复盘与比赛日不受影响。 */
+function campGains(session: TrainingSession, gains: Partial<Record<AttrKey, number>>, action: number, kind: string) {
+  if (kind === 'match' || !isOverseasCampAction(session, action)) return gains
+  return Object.fromEntries((Object.entries(gains) as [AttrKey, number][]).map(([key, value]) => [key, value > 0 ? value * OVERSEAS_CAMP_MULTIPLIER : value]))
 }
 
 /** 培养品质的倍数：只乘主属性/隐藏属性的基础值，不乘建筑和队友加成。 */
@@ -435,7 +441,7 @@ function actionGains(session: TrainingSession, gains: Partial<Record<AttrKey, nu
   // 主属性的基础值先浮动 ±10%，再乘品质，最后加队友；隐藏属性不浮动。
   const withTeam = Object.fromEntries((Object.entries(scaled) as [AttrKey, number][]).map(([key, value]) =>
     [key, value > 0 ? value * (isMainAttr(key, gk) ? gainSpread(session, key) : 1) * multiplier * legendGrowthMultiplier(session, key, kind) + partnerBonusPerMate(session) * teammates * attrMax(key, gk) / MAIN_ATTR_MAX : value]))
-  return applyTrainingGains(session, moodGains(session, facilityGains(session, withTeam), session.action + 1))
+  return applyTrainingGains(session, campGains(session, moodGains(session, facilityGains(session, withTeam), session.action + 1), session.action + 1, kind))
 }
 
 /** 站在“恢复”上的每名陪练额外恢复的训练体力（比练其他项目时每人带来的成长更大一些）。 */

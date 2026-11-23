@@ -380,6 +380,7 @@ function achievementAlert(): string {
   const rewards: string[] = []
   if (summary.pendingMoney > 0) rewards.push(`金币 +${summary.pendingMoney.toLocaleString()}`)
   if (summary.pendingShopPoints > 0) rewards.push(`商店点券 +${summary.pendingShopPoints}`)
+  if (summary.pendingCeilingBonus > 0) rewards.push(`主属性上限 +${summary.pendingCeilingBonus}`)
   return `<section class="offer-alert ach-alert" role="status">
     <div class="offer-alert-head">${icon('star', 18)}<b>有 ${summary.claimable} 项俱乐部成就已完成待领取</b>
       <span class="muted">可领取：${esc(rewards.join(' · '))}</span>

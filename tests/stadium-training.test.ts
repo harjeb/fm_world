@@ -130,14 +130,14 @@ describe('facility training growth', () => {
     expect(economy.balance).toBe(0)
   })
 
-  it('scales training days by season (15d -> 20d -> 22d) and reaches 80%~90% CA ceiling in season 3 with maxed facilities', () => {
+  it('scales training days by season (15d -> 20d -> 25d) and reaches high CA ceiling in season 3 with maxed facilities', () => {
     expect(trainingDaysForSeason(1)).toBe(15)
     expect(trainingDaysForSeason(2)).toBe(20)
-    expect(trainingDaysForSeason(3)).toBe(22)
-    expect(trainingDaysForSeason(5)).toBe(22)
+    expect(trainingDaysForSeason(3)).toBe(25)
+    expect(trainingDaysForSeason(5)).toBe(25)
     expect(trainingActionsForSeason(1)).toBe(30)
     expect(trainingActionsForSeason(2)).toBe(40)
-    expect(trainingActionsForSeason(3)).toBe(44)
+    expect(trainingActionsForSeason(3)).toBe(50)
 
     const game = createInitialGame(91)
     const [p1, p2, p3] = game.roster.filter(p => !p.positions.GK)
@@ -156,11 +156,11 @@ describe('facility training growth', () => {
     game.season.index = 3
     if (game.world) game.world.seasonIndex = 3
     expect(startTraining(game, p3.id, 103).ok).toBe(true)
-    expect(game.training[p3.id].actionsTotal).toBe(44)
-    expect(eligibleEvents(game.training[p3.id], 40).some(e => e.id === 'main_graduation')).toBe(false)
-    expect(eligibleEvents(game.training[p3.id], 44).some(e => e.id === 'main_graduation')).toBe(true)
+    expect(game.training[p3.id].actionsTotal).toBe(50)
+    expect(eligibleEvents(game.training[p3.id], 44).some(e => e.id === 'main_graduation')).toBe(false)
+    expect(eligibleEvents(game.training[p3.id], 50).some(e => e.id === 'main_graduation')).toBe(true)
 
-    // 第 3 赛季满级建筑 + 6 陪练培养 5 星球星：稳定达到个人 CA 上限的 80%~90%
+    // 第 3 赛季满级建筑 + 6 陪练 + 第 3 周国外特训（仅训练 ×3）培养 5 星球星：稳定逼近个人 CA 上限
     const s3 = createInitialGame(203)
     s3.season.index = 3
     if (s3.world) s3.world.seasonIndex = 3
@@ -177,13 +177,13 @@ describe('facility training growth', () => {
       expect(startTrainingWithSupport(s3, star.id, 500 + idx).ok).toBe(true)
       const run = runAutoTraining(s3, star.id)
       expect(run.ok && run.completed).toBe(true)
-      expect(s3.training[star.id].action).toBe(44)
+      expect(s3.training[star.id].action).toBe(50)
       const trainedCa = caOf(s3.training[star.id].candidate.attrs, false)
       const ceilingCa = caCeilingOf(star.ceilings, false)
       ratios.push(trainedCa / ceilingCa)
     }
     const avgRatio = ratios.reduce((a, b) => a + b, 0) / ratios.length
-    expect(avgRatio).toBeGreaterThanOrEqual(0.8)
-    expect(avgRatio).toBeLessThanOrEqual(0.92)
+    expect(avgRatio).toBeGreaterThanOrEqual(0.85)
+    expect(avgRatio).toBeLessThanOrEqual(1.0)
   })
 })

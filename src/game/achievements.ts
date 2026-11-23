@@ -1,4 +1,6 @@
 import { caOf } from './ca.ts'
+import { achievementCeilingBonus, syncCupCeilingSessions } from './cup-rewards.ts'
+import { ACHIEVEMENT_CEILING_BONUSES, achievementCeilingBonusFromClaims, MAX_ACHIEVEMENT_CEILING_BONUS } from './data/achievement-rewards.ts'
 import { LEGEND_TEAMS } from './data/legend-teams.ts'
 import { economyOf, FACILITIES, facilityLevel, MAX_FANS } from './economy.ts'
 import { addLegendBook, ensureLegendBooks } from './legend-books.ts'
@@ -14,6 +16,8 @@ import type {
   SkillTier,
   TierId,
 } from './types.ts'
+
+export { ACHIEVEMENT_CEILING_BONUSES, achievementCeilingBonus, MAX_ACHIEVEMENT_CEILING_BONUS }
 
 export type AchievementCategory =
   | 'welfare'
@@ -57,6 +61,7 @@ export type AchievementReward = {
   money?: number
   shopPoints?: number
   fans?: number
+  ceilingBonus?: number
   skillBook?: { id: SkillId; tier: SkillTier }
 }
 
@@ -64,6 +69,7 @@ export function hasAchievementReward(reward: AchievementReward): boolean {
   return (reward.money ?? 0) > 0
     || (reward.shopPoints ?? 0) > 0
     || (reward.fans ?? 0) > 0
+    || (reward.ceilingBonus ?? 0) > 0
     || !!reward.skillBook
 }
 
@@ -661,8 +667,28 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
     reward: { shopPoints: 80 },
     progressOf: (ctx) => ctx.trophies,
   },
+  {
+    id: 'feat_league_streak_5',
+    category: 'honors',
+    title: '五连胜起势',
+    desc: '在联赛中豪取 5 连胜（主属性上限与其他上限成就、奖杯独立叠加）',
+    target: 5,
+    unit: '连胜',
+    reward: { ceilingBonus: ACHIEVEMENT_CEILING_BONUSES.feat_league_streak_5 },
+    progressOf: (ctx) => ctx.season.maxWinStreak,
+  },
+  {
+    id: 'feat_league_streak_10',
+    category: 'honors',
+    title: '十连胜狂潮',
+    desc: '在联赛中豪取 10 连胜（主属性上限与其他上限成就、奖杯独立叠加）',
+    target: 10,
+    unit: '连胜',
+    reward: { ceilingBonus: ACHIEVEMENT_CEILING_BONUSES.feat_league_streak_10 },
+    progressOf: (ctx) => ctx.season.maxWinStreak,
+  },
 
-  /* ===================== 隐藏高难挑战成就（50 项，奖励待后续配置） ===================== */
+  /* ===================== 隐藏高难挑战成就（48 项，奖励待后续配置） ===================== */
 
   // 1. 单场进攻神迹（12 项）
   {
@@ -998,29 +1024,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
     progressOf: (ctx) => ctx.match.highPassAccuracyWins,
   },
 
-  // 3. 赛季霸业与连胜（12 项）
-  {
-    id: 'feat_league_streak_5',
-    category: 'season_mastery',
-    title: '五连胜起势',
-    desc: '在联赛中豪取 5 连胜',
-    target: 5,
-    unit: '连胜',
-    reward: {},
-    hidden: true,
-    progressOf: (ctx) => ctx.season.maxWinStreak,
-  },
-  {
-    id: 'feat_league_streak_10',
-    category: 'season_mastery',
-    title: '十连胜狂潮',
-    desc: '在联赛中豪取 10 连胜',
-    target: 10,
-    unit: '连胜',
-    reward: {},
-    hidden: true,
-    progressOf: (ctx) => ctx.season.maxWinStreak,
-  },
+  // 3. 赛季霸业与连胜（10 项）
   {
     id: 'feat_league_streak_15',
     category: 'season_mastery',
@@ -1259,14 +1263,27 @@ export type AchievementSummary = {
   claimable: number
   pendingMoney: number
   pendingShopPoints: number
+  pendingCeilingBonus: number
   earnedShopPoints: number
   maxShopPoints: number
+  earnedCeilingBonus: number
+  maxCeilingBonus: number
   welfareBackfillMoney: number
   items: AchievementItemView[]
 }
 
 export type AchievementClaimResult =
-  | { ok: true; claimedIds: string[]; money: number; shopPoints: number; fans: number; points: number; balance: number }
+  | {
+      ok: true
+      claimedIds: string[]
+      money: number
+      shopPoints: number
+      fans: number
+      ceilingBonus: number
+      totalCeilingBonus: number
+      points: number
+      balance: number
+    }
   | { ok: false; error: string }
 
 /**
@@ -1379,7 +1396,9 @@ export function achievementSummary(game: GameState): AchievementSummary {
   let claimable = 0
   let pendingMoney = 0
   let pendingShopPoints = 0
+  let pendingCeilingBonus = 0
   let earnedShopPoints = 0
+  let earnedCeilingBonus = 0
   for (const item of items) {
     if (item.hidden) {
       hiddenTotal++
@@ -1391,10 +1410,12 @@ export function achievementSummary(game: GameState): AchievementSummary {
     if (item.claimed) {
       claimed++
       earnedShopPoints += item.reward.shopPoints ?? 0
+      earnedCeilingBonus += item.reward.ceilingBonus ?? 0
     } else if (item.claimable) {
       claimable++
       pendingMoney += item.reward.money ?? 0
       pendingShopPoints += item.reward.shopPoints ?? 0
+      pendingCeilingBonus += item.reward.ceilingBonus ?? 0
     }
   }
   return {
@@ -1407,8 +1428,11 @@ export function achievementSummary(game: GameState): AchievementSummary {
     claimable,
     pendingMoney,
     pendingShopPoints,
+    pendingCeilingBonus,
     earnedShopPoints,
     maxShopPoints: MAX_ACHIEVEMENT_SHOP_POINTS,
+    earnedCeilingBonus,
+    maxCeilingBonus: MAX_ACHIEVEMENT_CEILING_BONUS,
     welfareBackfillMoney: game.achievements?.welfareBackfillMoney ?? 0,
     items,
   }
@@ -1440,10 +1464,11 @@ export function claimableAchievementCount(game: GameState): number {
   return count
 }
 
-function grantAchievement(game: GameState, def: AchievementDef, now: number): { money: number; shopPoints: number; fans: number } {
+function grantAchievement(game: GameState, def: AchievementDef, now: number): { money: number; shopPoints: number; fans: number; ceilingBonus: number } {
   const money = def.reward.money ?? 0
   const shopPoints = def.reward.shopPoints ?? 0
   const fans = def.reward.fans ?? 0
+  const ceilingBonus = def.reward.ceilingBonus ?? 0
   if (money > 0) economyOf(game).balance += money
   if (fans > 0) {
     const eco = economyOf(game)
@@ -1459,7 +1484,7 @@ function grantAchievement(game: GameState, def: AchievementDef, now: number): { 
   }
   game.achievements!.unlocked = { ...(game.achievements!.unlocked ?? {}), [def.id]: game.achievements!.unlocked?.[def.id] ?? now }
   game.achievements!.claimed[def.id] = { claimedAt: now }
-  return { money, shopPoints, fans }
+  return { money, shopPoints, fans, ceilingBonus }
 }
 
 /** 领取单个已解锁但尚未领取的成就奖励。 */
@@ -1472,13 +1497,16 @@ export function claimAchievement(game: GameState, id: string, now = Date.now()):
   const isUnlocked = game.achievements!.unlocked?.[id] !== undefined
     || def.progressOf(buildAchievementContext(game)) >= def.target
   if (!isUnlocked) return { ok: false, error: '该成就尚未达成，暂无法领取' }
-  const { money, shopPoints, fans } = grantAchievement(game, def, now)
+  const { money, shopPoints, fans, ceilingBonus } = grantAchievement(game, def, now)
+  if (ceilingBonus > 0) syncCupCeilingSessions(game)
   return {
     ok: true,
     claimedIds: [id],
     money,
     shopPoints,
     fans,
+    ceilingBonus,
+    totalCeilingBonus: achievementCeilingBonusFromClaims(game.achievements?.claimed),
     points: game.shop?.points ?? 0,
     balance: economyOf(game).balance,
   }
@@ -1492,6 +1520,7 @@ export function claimAllAchievements(game: GameState, now = Date.now()): Achieve
   let money = 0
   let shopPoints = 0
   let fans = 0
+  let ceilingBonus = 0
   for (const def of ACHIEVEMENTS) {
     if (!hasAchievementReward(def.reward)) continue
     if (game.achievements!.claimed[def.id]) continue
@@ -1502,14 +1531,18 @@ export function claimAllAchievements(game: GameState, now = Date.now()): Achieve
     money += got.money
     shopPoints += got.shopPoints
     fans += got.fans
+    ceilingBonus += got.ceilingBonus
   }
   if (claimedIds.length === 0) return { ok: false, error: '目前没有可领取的成就奖励' }
+  if (ceilingBonus > 0) syncCupCeilingSessions(game)
   return {
     ok: true,
     claimedIds,
     money,
     shopPoints,
     fans,
+    ceilingBonus,
+    totalCeilingBonus: achievementCeilingBonusFromClaims(game.achievements?.claimed),
     points: game.shop?.points ?? 0,
     balance: economyOf(game).balance,
   }

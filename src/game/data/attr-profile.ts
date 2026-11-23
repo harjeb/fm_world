@@ -1,6 +1,6 @@
 import type { AttrKey, Attributes } from '../types.ts'
 import { GK_ATTRIBUTES } from '../types.ts'
-import { attrRating, attrStorage } from '../scale.ts'
+import { attrRating, attrStorage, HIDDEN_ATTR_MAX, isMainAttr } from '../scale.ts'
 
 /**
  * 球员属性上限的映射层。
@@ -213,7 +213,10 @@ export function ceilingsFromProfile(current: Attributes, profile: AttrProfile, o
     }
     const rating = attrRating(key, current[key], isGk)
     const room = ceilingRoom(profile[key], tier) + (jitter ? jitter() * CEILING_JITTER : CEILING_JITTER / 2)
-    ceilings[key] = Math.round(attrStorage(key, clampRating(Math.min(99, rating + room)), isGk) * 10) / 10
+    // 隐藏属性统一上限 20，不再设单独上限；仍消耗一次 jitter 保持主属性随机序一致。
+    ceilings[key] = isMainAttr(key, isGk)
+      ? Math.round(attrStorage(key, clampRating(Math.min(99, rating + room)), isGk) * 10) / 10
+      : HIDDEN_ATTR_MAX
   }
   return ceilings
 }

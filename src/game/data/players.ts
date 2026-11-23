@@ -4,7 +4,7 @@ import { inferDetailedPositions } from '../detailed-positions.ts'
 import { backfillNaturalPlayer } from '../natural-positions.ts'
 import { ALL_ATTRIBUTES, GK_ATTRIBUTES, POSITIONS } from '../types.ts'
 import { caCeilingOf, caOf } from '../ca.ts'
-import { attrLimit, attrMax, attrStorage } from '../scale.ts'
+import { attrLimit, attrMax, attrStorage, HIDDEN_ATTR_MAX, isMainAttr } from '../scale.ts'
 import { CEILING_JITTER, ceilingRoom, normalizeCeilings, profileFromWeights } from './attr-profile.ts'
 import { fmProfileFor } from './fm-profiles.generated.ts'
 import { curatedProfileFor } from './profiles-curated.ts'
@@ -434,9 +434,10 @@ function makeAttributes(seed: PlayerSeed, rng: () => number): { attrs: Attribute
     if (key === 'composure') value += (seed.tier - 3) * 1.5
     const rating = clampRating(value)
     attrs[key] = storeAttr(key, rating, isGk)
-    // 上限：招牌维度更高、弱点维度更低。随机源消耗顺序与旧实现一致（先 noise 后一次 rng）。
+    // 主属性上限：招牌维度更高、弱点维度更低；隐藏属性统一为 20，不再设单独上限。
+    // 仍保持随机源消耗顺序与旧实现一致（先 noise 后一次 rng），避免扰动位置/性格/技能种子。
     const room = ceilingRoom(profile[key], seed.tier) + rng() * CEILING_JITTER
-    ceilings[key] = storeAttr(key, clampRating(rating + room), isGk)
+    ceilings[key] = isMainAttr(key, isGk) ? storeAttr(key, clampRating(rating + room), isGk) : HIDDEN_ATTR_MAX
   }
   return { attrs, ceilings }
 }

@@ -68,7 +68,7 @@ import { elevenFormationFor, isLegacyFormation } from '../src/game/data/formatio
 import { startChallengeWithOpponent, startPeakChallenge, startTrainingWithSupport } from '../src/game/actions.ts'
 import { awardAISeasonCup, awardSeasonCupChampion, awardSeasonCupMatch } from '../src/game/season-cup-rewards.ts'
 import { seasonCupPlayerStats } from '../src/game/season-cup-stats.ts'
-import { cupCeilingBonus, ensureCupCeilingClaims } from '../src/game/cup-rewards.ts'
+import { clubCeilingBonus, ensureCupCeilingClaims } from '../src/game/cup-rewards.ts'
 import { preservePeakAttempts, validatePeakSave } from './peak-guard.ts'
 import { validateLegacyCupSave } from './legacy-cup-guard.ts'
 import { MatchQueue, type MatchQueueOptions } from './match-queue.ts'
@@ -2134,7 +2134,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       target.energy = Math.max(0, (target.energy ?? 100) - TRAINING_ENERGY_COST)
       const economy = economyOf(game)
       const seed = splitSeed(sharedWorld.seed, `ai-takeover-train-${account.id}-${game.season.index}-${game.season.round}-${target.id}`)
-      const session = simulateAITrainingSession(target, seed, economy, game.season.index, cupCeilingBonus(game), game.roster)
+      const session = simulateAITrainingSession(target, seed, economy, game.season.index, clubCeilingBonus(game), game.roster)
       const gk = target.positions.GK > 0
       if (caOf(session.candidate.attrs, gk) > caOf(target.attrs, gk) + 0.5) {
         const card = addTrainedCard(game, session)

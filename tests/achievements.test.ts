@@ -7,6 +7,7 @@ import {
   ACHIEVEMENTS,
   PEAK_WELFARE_ACHIEVEMENT_ID,
   PEAK_WELFARE_MONEY,
+  achievementCeilingBonus,
   achievementSummary,
   claimAchievement,
   claimAllAchievements,
@@ -15,6 +16,8 @@ import {
   publicAchievementSummary,
   syncUnlockedAchievements,
 } from '../src/game/achievements.ts'
+import { startTraining } from '../src/game/actions.ts'
+import { applyCupCeilingReward, clubCeilingBonus, cupCeilingBonus, effectiveClubCeilings } from '../src/game/cup-rewards.ts'
 import { economyOf } from '../src/game/economy.ts'
 import { ensureShop, shopPointsOf } from '../src/game/shop.ts'
 import { createInitialGame } from '../src/game/state.ts'
@@ -324,17 +327,17 @@ describe('v1.0 UI：成就页、总览联赛/杯赛分色、友谊赛五星实�
   })
 })
 
-describe('50 项高难隐藏成就（未解锁显示 ？？？，奖励待配置）', () => {
-  it('共包含 24 项常规成就与 50 项隐藏挑战，未解锁时 UI 与对外视图均以 ？？？ 脱敏展示', () => {
+describe('48 项高难隐藏成就（未解锁显示 ？？？，奖励待配置）', () => {
+  it('共包含 26 项常规成就与 48 项隐藏挑战，未解锁时 UI 与对外视图均以 ？？？ 脱敏展示', () => {
     const standard = ACHIEVEMENTS.filter((a) => !a.hidden)
     const hidden = ACHIEVEMENTS.filter((a) => a.hidden)
-    expect(standard).toHaveLength(24)
-    expect(hidden).toHaveLength(50)
+    expect(standard).toHaveLength(26)
+    expect(hidden).toHaveLength(48)
     expect(ACHIEVEMENTS).toHaveLength(74)
 
     const game = createWorldGame(1007)
     const pub = publicAchievementSummary(game)
-    expect(pub.hiddenTotal).toBe(50)
+    expect(pub.hiddenTotal).toBe(48)
     expect(pub.hiddenUnlocked).toBe(0)
     const tenGoalPub = pub.items.find((i) => i.id === 'feat_team_10_goals')!
     expect(tenGoalPub.title).toBe('？？？')
@@ -439,7 +442,7 @@ describe('50 项高难隐藏成就（未解锁显示 ？？？，奖励待配置
       'feat_sub_hero', 'feat_tackle_8', 'feat_intercept_8',
       'feat_possession_70', 'feat_shots_25_win', 'feat_underdog_shot_win',
       'feat_red_card_win', 'feat_clean_sheet_zero_shots', 'feat_goal_fest_draw', 'feat_pass_accuracy_90',
-      'feat_league_streak_5', 'feat_league_clean_streak_5',
+      'feat_league_clean_streak_5',
       'feat_legend_splus_win', 'feat_all_facilities_max', 'feat_rainbow_books_5', 'feat_board_grade_s',
     ]
     for (const id of mustBeUnlocked) {
@@ -449,6 +452,10 @@ describe('50 项高难隐藏成就（未解锁显示 ？？？，奖励待配置
       expect(byId.get(id)?.claimable, id).toBe(false)
       expect(claimAchievement(game, id).ok, id).toBe(false)
     }
+    // 联赛 5 连胜已配置主属性上限 +50 奖励，达成后可直接领取
+    expect(byId.get('feat_league_streak_5')?.unlocked).toBe(true)
+    expect(byId.get('feat_league_streak_5')?.claimable).toBe(true)
+    expect(byId.get('feat_league_streak_5')?.reward.ceilingBonus).toBe(50)
 
     // 即使清空历史战报，已永久记账的 unlocked 仍保持揭晓状态
     game.matchHistory = []
@@ -463,5 +470,74 @@ describe('50 项高难隐藏成就（未解锁显示 ？？？，奖励待配置
     expect(rendered).toContain('大四喜')
     expect(rendered).toContain('十二码心脏')
     expect(rendered).toContain('隐藏已揭晓')
+  })
+
+  it('联赛 5 连胜 (+50) 与 10 连胜 (+100) 主属性上限独立叠加，并与奖杯上限叠加且实时同步培养', () => {
+    const game = createWorldGame(1009)
+    const player = game.roster.find((item) => item.positions.GK === 0)!
+    const basePassingCeiling = player.ceilings.passing
+
+    // 培养开始前无上限加成
+    expect(achievementCeilingBonus(game)).toBe(0)
+    expect(clubCeilingBonus(game)).toBe(0)
+    expect(startTraining(game, player.id, 17).ok).toBe(true)
+    expect(game.training[player.id].cupCeilingBonus).toBe(0)
+
+    // 豪取联赛 5 连胜 → 解锁并可领取 +50
+    const fixtures = game.season.fixtures.filter((f) => f.isPlayer)
+    for (const f of fixtures.slice(0, 5)) {
+      f.played = true
+      f.score = f.homeId === 'player' ? { home: 2, away: 0 } : { home: 0, away: 2 }
+    }
+    const beforeClaim5 = achievementSummary(game)
+    expect(beforeClaim5.pendingCeilingBonus).toBe(50)
+    expect(beforeClaim5.earnedCeilingBonus).toBe(0)
+    expect(beforeClaim5.maxCeilingBonus).toBe(150)
+
+    const claim5 = claimAchievement(game, 'feat_league_streak_5', 50_000)
+    expect(claim5.ok).toBe(true)
+    if (claim5.ok) {
+      expect(claim5.ceilingBonus).toBe(50)
+      expect(claim5.totalCeilingBonus).toBe(50)
+    }
+    expect(achievementCeilingBonus(game)).toBe(50)
+    expect(clubCeilingBonus(game)).toBe(50)
+    // 进行中的培养实时吃到 +50
+    expect(game.training[player.id].cupCeilingBonus).toBe(50)
+    expect(effectiveClubCeilings(player, clubCeilingBonus(game)).passing).toBe(Math.min(2000, basePassingCeiling + 50))
+
+    // 继续连胜至 10 连胜 → 领取 +100，独立叠加到 +150（不是取最大值 100）
+    for (const f of fixtures.slice(5, 10)) {
+      f.played = true
+      f.score = f.homeId === 'player' ? { home: 3, away: 1 } : { home: 1, away: 3 }
+    }
+    const claim10 = claimAchievement(game, 'feat_league_streak_10', 60_000)
+    expect(claim10.ok).toBe(true)
+    if (claim10.ok) {
+      expect(claim10.ceilingBonus).toBe(100)
+      expect(claim10.totalCeilingBonus).toBe(150)
+    }
+    expect(achievementCeilingBonus(game)).toBe(150)
+    expect(clubCeilingBonus(game)).toBe(150)
+    expect(game.training[player.id].cupCeilingBonus).toBe(150)
+
+    // 再拿星联杯 (+250) → 奖杯与成就上限独立叠加到 +400，奖杯函数本身仍保持纯奖杯口径 250
+    expect(applyCupCeilingReward(game, 'cross')).toBe(250)
+    expect(cupCeilingBonus(game)).toBe(250)
+    expect(achievementCeilingBonus(game)).toBe(150)
+    expect(clubCeilingBonus(game)).toBe(400)
+    expect(game.training[player.id].cupCeilingBonus).toBe(400)
+    expect(effectiveClubCeilings(player, clubCeilingBonus(game)).passing).toBe(Math.min(2000, basePassingCeiling + 400))
+
+    // Agent 视图与成就页面均展示上限奖励
+    const view = agentView(game)
+    expect(view.honors.cupCeilingBonus).toBe(250)
+    expect(view.honors.achievementCeilingBonus).toBe(150)
+    expect(view.honors.clubCeilingBonus).toBe(400)
+    setGame(game)
+    const html = renderAchievements()
+    expect(html).toContain('主属性上限 +50')
+    expect(html).toContain('主属性上限 +100')
+    expect(html).toContain('+150')
   })
 })

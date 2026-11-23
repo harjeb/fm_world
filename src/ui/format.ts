@@ -5,7 +5,7 @@ import { ALL_ATTRIBUTES } from '../game/types.ts'
 import { SKILLS } from '../game/data/skills.ts'
 import { traitNameOf } from '../game/data/star-traits.ts'
 import { caOf } from '../game/ca.ts'
-import { authoredGain, displayAttr, displayCA, displayGain, displayPA, isMainAttr } from '../game/rating.ts'
+import { attrHardLimit, authoredGain, displayAttr, displayCA, displayGain, displayPA, isMainAttr } from '../game/rating.ts'
 import { formatGains } from '../game/training.ts'
 import { STYLES_REV3, inferStyleForInstructions, type StyleId, type TacticalInstructionsV2 } from '../game/pes/tactics.ts'
 import { matchPlanLabel, matchPlanPhaseName, type MatchPlanId } from '../game/pes/match-plan.ts'
@@ -126,7 +126,9 @@ export function attrValue(player: Player, key: AttrKey): number {
 }
 
 export function attrCeiling(player: Player, key: AttrKey): number {
-  return displayAttr(key, player.ceilings[key], player.positions.GK > 0)
+  const gk = player.positions.GK > 0
+  const value = isMainAttr(key, gk) ? player.ceilings[key] : attrHardLimit(key, gk)
+  return displayAttr(key, value, gk)
 }
 
 export function isVisibleAttr(player: Player, key: AttrKey): boolean {

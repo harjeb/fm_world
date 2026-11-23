@@ -101,7 +101,7 @@ import type { CupId } from '../game/data/cup-config.ts'
 import { loadPveContent } from '../game/pve-content.ts'
 import { renderClub } from './screens/club.ts'
 import { renderAchievements } from './screens/achievements.ts'
-import { claimAchievement, claimAllAchievements } from '../game/achievements.ts'
+import { achievementCeilingBonus, claimAchievement, claimAllAchievements } from '../game/achievements.ts'
 import { renderShop } from './screens/shop.ts'
 import { buyShopBook } from '../game/shop.ts'
 import { SKILLS } from '../game/data/skills.ts'
@@ -1447,6 +1447,7 @@ document.addEventListener('click', async (event) => {
         const beforeBalance = economyOf(game).balance
         const beforeFans = economyOf(game).fans
         const beforePoints = game.shop?.points ?? 0
+        const beforeCeiling = achievementCeilingBonus(game)
         if (isOnlineMode()) {
           ui.notice = '正在领取成就奖励，请稍候…'
           render()
@@ -1458,10 +1459,12 @@ document.addEventListener('click', async (event) => {
         const gotMoney = Math.max(0, economyOf(game).balance - beforeBalance)
         const gotPoints = Math.max(0, (game.shop?.points ?? 0) - beforePoints)
         const gotFans = Math.max(0, economyOf(game).fans - beforeFans)
+        const gotCeiling = Math.max(0, achievementCeilingBonus(game) - beforeCeiling)
         const parts: string[] = []
         if (gotMoney > 0) parts.push(`金币 +${gotMoney.toLocaleString()}`)
         if (gotPoints > 0) parts.push(`商店点券 +${gotPoints}`)
         if (gotFans > 0) parts.push(`球迷 +${gotFans.toLocaleString()}`)
+        if (gotCeiling > 0) parts.push(`主属性上限 +${gotCeiling}`)
         ui.notice = parts.length ? `成就奖励已领取：${parts.join('，')}。` : '成就奖励已领取。'
       } catch (error) {
         ui.notice = error instanceof Error ? error.message : '领取成就奖励失败'

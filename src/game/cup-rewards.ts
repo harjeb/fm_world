@@ -1,12 +1,13 @@
 import type { CupId } from './data/cup-config.ts'
 import type { SeasonCupId } from './season-cups.ts'
 import { SEASON_CUP_REWARDS } from './data/season-cup-rewards.ts'
-import type { Attributes, GameState, Player, TrainingSession } from './types.ts'
+import { achievementCeilingBonusFromClaims } from './data/achievement-rewards.ts'
+import type { AttrKey, Attributes, GameState, Player, TrainingSession } from './types.ts'
 import { createPlayerFromSeed, seedById } from './data/players.ts'
 import { normalizeCeilings } from './data/attr-profile.ts'
 import { legendValue } from './legend-bonus.ts'
 import { addLegendBook } from './legend-books.ts'
-import { attrHardLimit, mainAttrsFor } from './scale.ts'
+import { attrHardLimit, isMainAttr, mainAttrsFor } from './scale.ts'
 
 /** 每种杯赛对应一个俱乐部主属性上限档位；多项冠军只取最高值，不叠加。传奇杯不给上限（改为专属彩书）。 */
 export const CUP_CEILING_BONUS: Record<SeasonCupId, number> = {
@@ -27,21 +28,35 @@ export function cupCeilingBonusFromClaims(claims?: Partial<Record<string, true>>
 }
 const CLUB_CEILING_VERSION = 3
 
-/** 当前俱乐部所有已解锁奖杯的上限加成，不依赖球员何时入队。 */
+/** 当前俱乐部所有已解锁奖杯的上限加成（取最高值），不依赖球员何时入队。 */
 export function cupCeilingBonus(game: Pick<GameState, 'pve'>): number {
   const pve = game.pve
   if (!pve) return 0
   return cupCeilingBonusFromClaims(pve.cupCeilingClaims)
 }
 
+/** 当前俱乐部所有已领取成就的主属性上限加成（各项成就独立叠加）。 */
+export function achievementCeilingBonus(game: Pick<GameState, 'achievements'>): number {
+  return achievementCeilingBonusFromClaims(game.achievements?.claimed)
+}
+
+/** 当前俱乐部生效的主属性总上限加成：奖杯上限（取最高） + 成就上限（各项独立叠加）。 */
+export function clubCeilingBonus(game: Pick<GameState, 'pve' | 'achievements'>): number {
+  return cupCeilingBonus(game) + achievementCeilingBonus(game)
+}
+
 /**
- * 计算培养使用的实际上限：球员个人上限 + 俱乐部奖杯 + 个人技能。
- * 不修改球员的个人上限；只作用于主属性，且最终不超过 2000。
- * 当前属性如果已超过计算出的上限则原样保留，不因此再额外叠加奖杯。
+ * 计算培养使用的实际上限：球员个人上限 + 俱乐部奖杯/成就 + 个人技能。
+ * 不修改球员的个人上限；主属性最终不超过 2000，隐藏属性统一为 20（外场门将属性为 0）。
+ * 当前属性如果已超过计算出的上限则原样保留，不因此再额外叠加加成。
  */
 export function effectiveClubCeilings(player: Pick<Player, 'attrs' | 'ceilings' | 'positions'>, clubBonus: number, skillBonus = 0): Attributes {
   const gk = player.positions.GK > 0
   const result = normalizeCeilings(player.attrs, player.ceilings, (key) => attrHardLimit(key, gk))
+  // 隐藏属性不再设个人单独上限，统一放开到 20（外场门将属性保持 0），兼容旧存档。
+  for (const key of Object.keys(result) as AttrKey[]) {
+    if (!isMainAttr(key, gk)) result[key] = attrHardLimit(key, gk)
+  }
   const bonus = Math.max(0, clubBonus) + Math.max(0, skillBonus)
   if (!bonus) return result
   for (const key of mainAttrsFor(gk)) {
@@ -53,10 +68,10 @@ export function effectiveClubCeilings(player: Pick<Player, 'attrs' | 'ceilings' 
   return result
 }
 
-/** 奖杯或阵容变化后同步进行中的培养；设施仍保持原有的开局快照规则。 */
+/** 奖杯、成就或阵容变化后同步进行中的培养；设施仍保持原有的开局快照规则。 */
 export function syncCupCeilingSessions(game: GameState): boolean {
   const activeIds = new Set(game.roster.map((player) => player.id))
-  const bonus = cupCeilingBonus(game)
+  const bonus = clubCeilingBonus(game)
   let changed = false
   for (const session of Object.values(game.training ?? {})) {
     if (!session || session.completed) continue

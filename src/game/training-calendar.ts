@@ -215,3 +215,14 @@ export function trainingLowMood(session: TrainingSession, action: number): boole
   const date = trainingDate(action)
   return session.scheduleVersion === 1 && date.day <= 3 && (session.lowMoodWeeks ?? []).includes(date.week)
 }
+
+/** 第 3 赛季起（单轮 25 天 / 50 时段）第 3 周的非比赛日（周二~周四、周六~周日）为国外特训，仅常规训练属性成长 ×3。 */
+export const OVERSEAS_CAMP_WEEK = 3
+export const OVERSEAS_CAMP_MIN_ACTIONS = 50
+export const OVERSEAS_CAMP_MULTIPLIER = 3
+
+export function isOverseasCampAction(session: Pick<TrainingSession, 'scheduleVersion' | 'actionsTotal'>, action: number): boolean {
+  if (session.scheduleVersion !== 1 || (session.actionsTotal ?? 18) < OVERSEAS_CAMP_MIN_ACTIONS) return false
+  const date = trainingDate(action)
+  return date.week === OVERSEAS_CAMP_WEEK && date.day !== 1 && date.day !== 5
+}
