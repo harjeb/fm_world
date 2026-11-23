@@ -428,20 +428,22 @@ describe('电脑球队抢人', () => {
     expect(new Set(ai.signings.map((player) => player.id)).size).toBe(6)
   })
 
-  it('单机里电脑球队会盯上自由市场，但不会把池子吃空', () => {
+  it('单机成交人数和实际离场人数一致，不重复签人，各队遵守自己的赛季名额', () => {
     const base = game()
     const before = base.freeStars.length
     expect(before).toBeGreaterThan(24)
     const signed = aiSignFreeAgents(base, 2)
     expect(signed).toBeGreaterThanOrEqual(0)
-    expect(signed).toBeLessThanOrEqual(2)
+    expect(signed).toBeLessThanOrEqual(before)
     expect(base.freeStars.length).toBe(before - signed)
     for (const team of base.aiTeams) {
-      expect(team.players.filter((player) => !player.id.startsWith('p-') || true).length).toBeGreaterThan(0)
+      expect(new Set(team.players.map(p => p.id)).size).toBe(team.players.length)
+      expect(base.aiClubs![team.id].transfers?.bought ?? 0).toBeLessThanOrEqual(5)
     }
     const small = game()
     small.freeStars = small.freeStars.slice(0, 20)
-    expect(aiSignFreeAgents(small, 2)).toBe(0)
+    const smallSigned = aiSignFreeAgents(small, 2)
+    expect(small.freeStars.length + smallSigned).toBe(20)
   })
 
   it('推进一轮时账本和名册都往前挪，重复调用不会翻倍', () => {

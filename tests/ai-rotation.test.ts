@@ -28,13 +28,14 @@ describe(`电脑球队体能低于 ${AI_REST_BELOW} 就轮换`, () => {
     expect(startersOf(team, teamInputFromAI(team))).toContain(tired.id)
   })
 
-  it('门将都累了也不会让外场球员去守门；实在没人可换时累的人照样上', () => {
+  it('健康达标阵容能凑齐时不例外启用疲劳门将；全员疲劳时仍可排齐', () => {
     const [team] = freshTeams(7101)
     for (const player of team.players) if (player.positions.GK > 0) player.condition = 20
     const lineup = aiRotatedLineup(team.players, team.lineup.formationId, team.lineup.tactics)
     expect(validateLineup(team.players, lineup).valid).toBe(true)
     const keeper = team.players.find((player) => player.id === lineup.starters.find((starter) => starter.slotId === lineup.starters[0].slotId)!.playerId)!
-    expect(keeper.positions.GK).toBeGreaterThan(0)
+    expect(keeper.positions.GK).toBe(0)
+    expect(lineup.starters.every(s => team.players.find(p => p.id === s.playerId)!.condition! >= AI_REST_BELOW)).toBe(true)
 
     // 全队都累：还是能排出 11 人
     for (const player of team.players) player.condition = 10

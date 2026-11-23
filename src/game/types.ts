@@ -340,6 +340,8 @@ export type Player = {
   unhappy?: { until: number; reason: string }
   /** 自由市场当天补进来的随机球员（第几个游戏日）；第二天没人买就销毁，签下后清掉。 */
   marketDay?: number
+  /** 解约球员持续公开可签，不使用随机球星挂牌日。 */
+  releasedToMarket?: true
 }
 
 /** AI 俱乐部给玩家球队的报价。4 个游戏日内不回复就算拒绝。 */
@@ -1467,6 +1469,7 @@ export type AIClubState = {
   cards: Record<string, AICard>
   /** 从转会市场签下、下一场比赛起可以出场的球员。 */
   signings: Player[]
+  lastDepthRelease?: string
   trained: number
   upgrades: number
   /** 电脑球队的正式杯赛金币和永久上限加成账本。 */

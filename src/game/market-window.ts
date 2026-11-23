@@ -26,9 +26,10 @@ export function marketDayOfMonth(game: MarketClockAnchor, now = Date.now()): num
 
 export function isOnMarketToday(
   game: MarketClockAnchor,
-  player: Pick<Player, 'id' | 'starKey'>,
+  player: Pick<Player, 'id' | 'starKey' | 'releasedToMarket'>,
   now = Date.now(),
 ): boolean {
+  if (player.releasedToMarket) return true
   const days = starMarketDays(player)
   if (!days) return true
   return days.includes(marketDayOfMonth(game, now))

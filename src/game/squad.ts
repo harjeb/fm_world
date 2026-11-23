@@ -939,23 +939,26 @@ export function aiNeedsRotation(players: Player[], lineup: Lineup, injured?: Rea
 }
 
 /**
- * 电脑球队这场比赛的阵容：体能低于 80 或受伤的先休息。每个位置按顺序找人：
- * 健康且体能够、会踢这个位置的 → 健康且会踢这个位置的 → 健康且体能够的任何人 → 健康的任何人 → 带伤替补兜底，
- * 同一档里和自动填充一样按职责适配 × 位置熟练度挑最强的。所以门将累了也不会让后卫去守门，
- * 实在没人可换时累的人照样上。替补也先用健康且体能够的。只用于这一场，不改存档里的阵容。
+ * 首发先限定体能池，再分位置：健康达标的人够十一名，不允许疲劳球员挤进首发（包括门将）。
+ * 不足十一人才按剩余体能从高到低放宽，伤员排在所有健康人之后。只用于这一场。
  */
 export function aiRotatedLineup(players: Player[], formationId: FormationId, tactics?: Tactics, previous?: LineupLike, injured?: ReadonlySet<string>): Lineup {
   const formation = FORMATIONS[formationId]
   const used = new Set<string>()
   const starters = [] as Lineup['starters']
   const orderedSlots = [...formation.slots].sort((a, b) => (a.position === 'GK' ? -1 : b.position === 'GK' ? 1 : 0))
+  const fitness = (p: Player) => Math.min(AI_REST_BELOW, p.condition ?? 100) - (injured?.has(p.id) ? 200 : 0)
+  const ranked = [...players].sort((a, b) => fitness(b) - fitness(a))
+  const cutoff = ranked.length >= orderedSlots.length ? fitness(ranked[orderedSlots.length - 1]) : -Infinity
+  const eligible = ranked.filter(p => fitness(p) >= cutoff)
   for (const slot of orderedSlots) {
-    const free = players.filter((player) => !used.has(player.id))
-    const healthy = injured?.size ? free.filter((player) => !injured.has(player.id)) : free
-    const freshHealthy = healthy.filter(restedEnough)
-    const fresh = free.filter(restedEnough)
-    const learned = (list: Player[]) => list.filter((player) => slotPositionValue(player, slot) >= PLAYABLE_PROFICIENCY)
-    const pool = [learned(freshHealthy), learned(healthy), freshHealthy, healthy, learned(fresh), learned(free), fresh, free].find((list) => list.length) ?? []
+    const free = eligible.filter(player => !used.has(player.id))
+    // 高于入围边界的球员不能被多个同分压线人挤掉。
+    const required = free.filter(p => fitness(p) > cutoff)
+    const choices = required.length === orderedSlots.length - starters.length ? required : free
+    const learned = choices.filter(p => slotPositionValue(p, slot) >= PLAYABLE_PROFICIENCY)
+    const sameKind = choices.filter(p => (p.positions.GK > 0) === (slot.position === 'GK'))
+    const pool = learned.length ? learned : sameKind.length ? sameKind : choices
     let bestPlayer: Player | null = null
     let bestRole: RoleId = slot.defaultRole
     let bestScore = -Infinity

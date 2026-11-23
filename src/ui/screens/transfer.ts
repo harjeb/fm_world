@@ -6,7 +6,7 @@ import { economyOf } from '../../game/economy.ts'
 import { AUCTION_DURATION_MS, AUCTION_EXTEND_MS, auctionRaiseFee, committedFunds, leadingBid, minimumBid } from '../../game/auction.ts'
 import { traitEffectText } from '../../game/data/skill-effects.ts'
 import { traitNameOf } from '../../game/data/star-traits.ts'
-import { SQUAD_LIMIT, aiTransferOffers, bestMarketValue, freeAgentAsking, saleChance, sellerSquadError, suggestedPrice, transferWindowOpen } from '../../game/market.ts'
+import { SQUAD_LIMIT, aiTransferOffers, bestMarketValue, freeAgentAsking, saleChance, suggestedPrice, transferWindowOpen } from '../../game/market.ts'
 import { worldTransferTeams, worldWageBill } from '../../game/world.ts'
 import { boardEffectiveWageCap, isBoardBudgetActive } from '../../game/board.ts'
 import { isLocalFreeAgentAvailable } from '../../game/free-market.ts'
@@ -66,7 +66,7 @@ function marketTab(): string {
           <li>${icon('swap', 13)}到「从 AI 球队买人」里找人谈判：先过俱乐部这关，再过球员本人这关。</li>
           <li>${icon('star', 13)}年轻主力（24 岁及以下）是非卖品，除非最近很少上场；当打之年的主力至少多给 50%，29 岁以上的主力至少多给 30%。</li>
           <li>${icon('clock', 13)}轮换球员按最近 20 场的出场时间要价（多给 10%–40%），冷板凳多给 5% 就能谈。达到要价后溢价越多越容易成交。</li>
-          <li>${icon('info', 13)}AI 俱乐部每赛季最多买进 ${AI_SEASON_BUY_LIMIT} 人（竞拍、挖人、给你报价都算）；你从它们手里买人不占这个名额。</li>
+          <li>${icon('info', 13)}所有 AI 可同时参与：未补齐两套阵容前先按剩余缺口均摊预算、在预算内优先买原始 CA 最强的补位球员，补齐后再逐步考虑补强。每队每赛季最多买进 ${AI_SEASON_BUY_LIMIT} 人（竞拍、挖人、给你报价都算）；你从它们手里买人不占这个名额。</li>
         </ul>`)}
       </div>
     </div>`
@@ -190,7 +190,7 @@ function aiTab(): string {
   const online = isOnlineMode()
   const all = online
     ? aiTransferMarket.offers.map((item) => ({ team: { id: item.teamId, name: item.teamName }, player: item.player, asking: item.asking, terms: item.terms, blocked: item.blocked, ca: item.player.ca }))
-    : aiTransferOffers({ ...game, aiTeams: worldTransferTeams(game) }).map((item) => ({ ...item, blocked: sellerSquadError(item.team, item.player), ca: initialDisplayCA(item.player) }))
+    : aiTransferOffers({ ...game, aiTeams: worldTransferTeams(game) }).map((item) => ({ ...item, ca: initialDisplayCA(item.player) }))
   const teams = [...new Map(all.map((item) => [item.team.id, item.team.name])).entries()]
   const search = ui.aiBuySearch.trim().toLowerCase()
   const rows = all
@@ -256,7 +256,7 @@ function offersTab(): string {
   const history = done.map((offer) => `<li><b>${esc(offer.clubName)}</b> 出价 ${offer.amount.toLocaleString()} 求购 <b>${esc(offer.playerName)}</b> · ${OFFER_STATUS[offer.status]}${offer.note ? ` · <span class="muted">${esc(offer.note)}</span>` : ''}</li>`).join('')
   return `${panel(`待回复的报价 <small>${pending.length}</small>`, rows
       ? `<div class="table-scroll"><table class="dt"><thead><tr><th>求购球队</th><th>位置</th><th>球员</th><th class="num">报价</th><th class="num">身价</th><th class="num">溢价</th><th></th><th class="num">剩余</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
-      : emptyState('暂时没有报价。转会窗口里，本联赛的 AI 俱乐部会按需给你的球员报价。'), { flush: true })}
+      : emptyState('暂时没有报价。转会窗口里，AI 俱乐部会按两套阵容的位置缺口给你的球员报价。'), { flush: true })}
     ${panel('规则', `<ul class="rule-list">
       <li>${icon('clock', 13)}报价 24 小时内有效，不回复算拒绝。</li>
       <li>${icon('alert', 13)}报价不低于身价 ${HIGH_OFFER_RATIO} 倍算高价。拒绝（或放过期）高价报价，这名球员会不满 ${UNHAPPY_HOURS} 小时：精力恢复只剩一成，很难开新的培养。</li>

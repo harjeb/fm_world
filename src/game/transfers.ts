@@ -10,7 +10,9 @@
  */
 import type { AIClubState, AITeam, GameState, Player, TierId, TransferOffer } from './types.ts'
 import { recordTransfer } from './transfer-news.ts'
-import { AI_SQUAD_LIMIT, aiBidFor, aiTierProfile, recordAISigning } from './ai-club.ts'
+import { analyzeAIDepth } from './ai-depth.ts'
+import { caOf } from './ca.ts'
+import { AI_SQUAD_LIMIT, aiBidFor, aiTransferCashBudget, recordAISigning, strongestFirst } from './ai-club.ts'
 import { playerMarketValue } from './pricing.ts'
 import { MIN_SQUAD, refreshAILineup, repairLineup, validateLineup } from './squad.ts'
 import { sellerSquadError, transferWindowOpen } from './market.ts'
@@ -32,11 +34,12 @@ import {
 } from './transfer-rules.ts'
 
 /** 参与转会的一家 AI 俱乐部：名单 + 账本。 */
-export type MarketClub = { id: string; name: string; tier: TierId; team: AITeam; state: AIClubState }
+export type MarketClub = { id: string; name: string; tier: TierId; team: AITeam; state: AIClubState; committed?: number; pendingSignings?: Player[] }
 
 const TIER_RANK: Record<TierId, number> = { division2: 1, division1: 2, champions: 3 }
 const roundPrice = (value: number): number => Math.round(value / 1000) * 1000
-const caOfPlayer = (player: Player): number => playerMarketValue(player)
+const caOfPlayer = (p: Player) => caOf(p.baseAttrs ?? p.attrs, p.positions.GK > 0)
+const plannedSquad = (club: MarketClub) => [...club.team.players, ...(club.pendingSignings ?? [])]
 
 function repairTeam(team: AITeam): void {
   const repaired = repairLineup(team.players, team.lineup)
@@ -67,7 +70,7 @@ export function leaveAIClub(seller: MarketClub, player: Player, amount: number):
 export type PoachMove = { buyerId: string; sellerId: string; playerId: string; playerName: string; amount: number }
 
 /**
- * AI 之间挖人（转会窗口内每轮调用一次）。每家有名额、有需要的 AI 有一定概率出手，
+ * AI 之间挖人（转会窗口内每轮调用一次）。每家有名额、有需要的 AI 独立选人，
  * 只挖同级或更低级别球队的人；卖方按放人规则掷骰。一轮最多 maxMoves 笔。
  */
 export function aiPoachRound(input: {
@@ -80,34 +83,32 @@ export function aiPoachRound(input: {
   onMove?: (move: PoachMove, player: Player) => void
 }): PoachMove[] {
   const { clubs, season, round } = input
-  const maxMoves = input.maxMoves ?? 2
-  const rng = derivedRng(splitSeed(input.seed, 'ai-poach-clubs'), season, round)
   const moves: PoachMove[] = []
   const buyers = [...clubs].sort((a, b) => a.id.localeCompare(b.id))
-  for (let index = buyers.length - 1; index > 0; index--) {
-    const swap = rng.int(index + 1)
-    ;[buyers[index], buyers[swap]] = [buyers[swap], buyers[index]]
-  }
-  for (const buyer of buyers) {
-    if (moves.length >= maxMoves) break
-    if (!rng.chance(0.25)) continue
-    const buysLeft = aiBuysLeft(buyer.state, season)
-    if (buysLeft <= 0 || buyer.team.players.length >= AI_SQUAD_LIMIT) continue
-    // 候选：同级或更低级别球队里、卖方肯谈的人，按 CA 从高到低看前 40 个。
-    const candidates = clubs
-      .filter((seller) => seller.id !== buyer.id && TIER_RANK[seller.tier] <= TIER_RANK[buyer.tier])
-      .flatMap((seller) => seller.team.players.map((player) => ({ seller, player })))
-      .sort((a, b) => caOfPlayer(b.player) - caOfPlayer(a.player))
-      .slice(0, 40)
-    for (const { seller, player } of candidates) {
-      if (sellerSquadError(seller.team, player)) continue
+  const rng = derivedRng(input.seed, 'poach-order', season, round)
+  for (let i = buyers.length - 1; i > 0; i--) { const j = rng.int(i + 1); [buyers[i], buyers[j]] = [buyers[j], buyers[i]] }
+  // 每轮对卖方计算一次；实际成交后再复核名册和位置深度。
+  const listed = clubs.flatMap(seller => {
+    const depth = analyzeAIDepth(seller.team)
+    return seller.team.players.flatMap(player => {
+      if (sellerSquadError(seller.team, player, depth)) return []
       const value = playerMarketValue(player)
       const terms = assessRelease({ player, lineup: seller.team.lineup, minutes: input.appearances?.[player.id], value })
-      if (terms.asking === null) continue
-      const amount = aiBidFor({ state: buyer.state, tier: buyer.tier, player, squad: buyer.team.players, value, minimum: terms.asking, buysLeft })
-      if (amount === null) continue
-      const chance = releaseChance(terms, amount)
-      if (!releaseRoll(splitSeed(input.seed, `poach-${season}-${round}-${buyer.id}`), player.id, amount, chance)) break
+      return terms.asking === null ? [] : [{ seller, player, price: terms.asking, value, terms, ca: caOfPlayer(player) }]
+    })
+  }).sort(strongestFirst)
+  for (const buyer of buyers) {
+    if (moves.length >= (input.maxMoves ?? Infinity)) break
+    const squad = plannedSquad(buyer), buysLeft = aiBuysLeft(buyer.state, season, buyer.pendingSignings?.length ?? 0)
+    if (!buysLeft || squad.length >= AI_SQUAD_LIMIT) continue
+    const depth = analyzeAIDepth({ ...buyer.team, players: squad })
+    // 补位报价/竞拍尚未落地时，不提前按已齐两套去挖补强目标。
+    if (!depth.missing && squad.length > buyer.team.players.length && analyzeAIDepth(buyer.team).missing > 0) continue
+    for (const { seller, player, price, value, terms } of listed) {
+      if (seller === buyer || TIER_RANK[seller.tier] > TIER_RANK[buyer.tier] || !seller.team.players.includes(player)) continue
+      const amount = price
+      if (!aiBidFor({ state: buyer.state, tier: buyer.tier, player, squad, depth, value, minimum: amount, buysLeft, committed: buyer.committed }) || sellerSquadError(seller.team, player)) continue
+      if (!releaseRoll(splitSeed(input.seed, `poach-${season}-${round}-${buyer.id}`), player.id, amount, releaseChance(terms, amount))) continue
       leaveAIClub(seller, player, amount)
       joinAIClub(buyer, player, amount, season)
       const move = { buyerId: buyer.id, sellerId: seller.id, playerId: player.id, playerName: player.name, amount }
@@ -139,56 +140,48 @@ function trimOffers(game: GameState): void {
 }
 
 /**
- * AI 给玩家球队报价（转会窗口内每轮调用一次）：约四成概率来一份新报价，同时最多 3 份待回复。
- * 出价 = 身价 × (1 + 玩家队里这名球员的要价溢价 + 0–20% 的诚意)，年轻主力按 60% 起出；钱不够就不报。
+ * 各买家在两套阵容未齐前按缺口均摊预算并优先求购预算内原始 CA 最强的缺位球员，齐整后再逐步考虑补强；多家可同时询问同一球员。
+ * 只返回第一份用于兼容调用方的变更检测，全部报价保存在收件箱。
  */
 export function generateAIOffers(input: { game: GameState; clubs: MarketClub[]; season: number; round: number; now: number; seed: number }): TransferOffer | null {
   const { game, clubs, season, round, now } = input
   if (!transferWindowOpen(game) || game.activeMatch) return null
   const pending = pendingOffers(game)
-  if (pending.length >= 3 || game.roster.length <= MIN_SQUAD) return null
-  const rng = derivedRng(splitSeed(input.seed, 'ai-offers'), season, round)
-  if (!rng.chance(0.4)) return null
-  const busy = new Set(pending.map((offer) => offer.playerId))
-  const targets = game.roster
-    .filter((player) => !youthTransferBlocked(player, now) && !busy.has(player.id) && !(game.training[player.id] && !game.training[player.id].completed))
-    .sort((a, b) => caOfPlayer(b) - caOfPlayer(a))
-  const buyers = [...clubs].sort((a, b) => a.id.localeCompare(b.id))
-  const start = rng.int(Math.max(1, buyers.length))
-  for (let step = 0; step < buyers.length; step++) {
-    const buyer = buyers[(start + step) % buyers.length]
-    const inFlight = pending.filter((offer) => offer.clubId === buyer.id).length
-    const buysLeft = aiBuysLeft(buyer.state, season, inFlight)
-    if (buysLeft <= 0 || buyer.team.players.length >= AI_SQUAD_LIMIT) continue
-    const spendable = buyer.state.economy.balance - aiTierProfile(buyer.tier).reserve
-    for (const player of targets) {
-      const value = playerMarketValue(player)
-      // 先看这支 AI 需不需要他（缺位置、同位置明显更强或人手不够）。
-      if (aiBidFor({ state: buyer.state, tier: buyer.tier, player, squad: buyer.team.players, value, minimum: value, buysLeft }) === null) continue
-      const terms = humanSaleTerms(game, player)
-      const premium = (terms.requiredPremium ?? 0.6) + rng.float() * 0.2
-      let amount = roundPrice(value * (1 + premium))
-      if (amount > spendable * 0.6) amount = roundPrice(spendable * 0.6)
-      if (amount < value * 1.05) continue
-      const offer: TransferOffer = {
-        id: `offer-${season}-${round}-${buyer.id}-${player.id}`,
-        clubId: buyer.id,
-        clubName: buyer.name,
-        tier: buyer.tier,
-        playerId: player.id,
-        playerName: player.name,
-        amount,
-        value,
-        createdAt: now,
-        expiresAt: now + OFFER_RESPONSE_MS,
-        status: 'pending',
-      }
-      game.transferOffers = [...(game.transferOffers ?? []), offer]
-      trimOffers(game)
-      return offer
+  if (game.roster.length <= MIN_SQUAD) return null
+  const seen = new Set((game.transferOffers ?? []).map(o => o.id))
+  const targets = game.roster.filter(player => !youthTransferBlocked(player, now) && !(game.training[player.id] && !game.training[player.id].completed))
+    .map(player => ({ player, terms: humanSaleTerms(game, player), value: playerMarketValue(player), ca: caOfPlayer(player) }))
+  let first: TransferOffer | null = null
+  for (const buyer of clubs) {
+    const orders = pending.filter(o => o.clubId === buyer.id)
+    const promised = orders.flatMap(o => game.roster.find(p => p.id === o.playerId) ?? [])
+    const squad = [...plannedSquad(buyer), ...promised]
+    const buysLeft = aiBuysLeft(buyer.state, season, squad.length - buyer.team.players.length)
+    if (!buysLeft || squad.length >= AI_SQUAD_LIMIT) continue
+    const committed = (buyer.committed ?? 0) + orders.reduce((s, o) => s + o.amount, 0)
+    const depth = analyzeAIDepth({ ...buyer.team, players: squad })
+    // 补位报价/竞拍尚未落地时，不提前按已齐两套去向玩家求购补强目标。
+    if (!depth.missing && squad.length > buyer.team.players.length && analyzeAIDepth(buyer.team).missing > 0) continue
+    const budget = aiTransferCashBudget(buyer.state, buyer.tier, committed, depth)
+    const ranked = targets.filter(t => !promised.includes(t.player) && (!depth.missing || depth.improves(t.player))).map(t => {
+      const price = Math.max(t.value, roundPrice(t.value * (1 + (t.terms.requiredPremium ?? 0.6))))
+      return { ...t, price }
+    }).sort(strongestFirst)
+    for (const { player, price, value } of ranked) {
+      const id = `offer-${season}-${round}-${buyer.id}-${player.id}`
+      if (seen.has(id)) continue
+      // 玩家决定是否放人：估值只用于衡量预算，不因其在玩家队里是主力而禁止询价。
+      if (price > budget) continue
+      if (!aiBidFor({ state: buyer.state, tier: buyer.tier, player, squad, depth, value, minimum: value, committed, buysLeft })) continue
+      const offer: TransferOffer = { id, clubId: buyer.id, clubName: buyer.name, tier: buyer.tier, playerId: player.id, playerName: player.name,
+        amount: price, value, createdAt: now, expiresAt: now + OFFER_RESPONSE_MS, status: 'pending' }
+      ;(game.transferOffers ??= []).push(offer)
+      first ??= offer
+      break
     }
   }
-  return null
+  if (first) trimOffers(game)
+  return first
 }
 
 export const isHighOffer = (offer: Pick<TransferOffer, 'amount' | 'value'>): boolean => offer.amount >= offer.value * HIGH_OFFER_RATIO
@@ -253,7 +246,8 @@ export function respondToOffer(game: GameState, offerId: string, accept: boolean
   if (game.training[player.id] && !game.training[player.id].completed) return { ok: false, error: `${player.name} 正在培养，培养结束后才能转会` }
   if (!buyer) return { ok: false, error: '对方球队不存在' }
   if (aiBuysLeft(buyer.state, season) <= 0) return { ok: false, error: `${buyer.name} 本赛季的买人名额已经用完` }
-  if (buyer.state.economy.balance < offer.amount) return { ok: false, error: `${buyer.name} 现在付不起这笔钱了` }
+  const otherCommitments = (buyer.committed ?? 0) + pendingOffers(game).filter(o => o.id !== offer.id && o.clubId === buyer.id).reduce((sum, o) => sum + o.amount, 0)
+  if (buyer.state.economy.balance - otherCommitments < offer.amount) return { ok: false, error: `${buyer.name} 现在付不起这笔钱了` }
   if (buyer.team.players.length >= AI_SQUAD_LIMIT) return { ok: false, error: `${buyer.name} 阵容已满` }
   const roster = game.roster.filter((item) => item.id !== player.id)
   if (roster.length < MIN_SQUAD) return { ok: false, error: `阵容必须保留至少 ${MIN_SQUAD} 人` }
@@ -301,7 +295,7 @@ export function runLocalTransfers(game: GameState, round: number, now: number): 
   if (!clubs.length) return
   const season = game.season.index
   aiPoachRound({
-    clubs, season, round, seed: game.seed, appearances: game.appearances, maxMoves: 1,
+    clubs, season, round, seed: game.seed, appearances: game.appearances,
     onMove: (move, player) => {
       const buyerName = clubs.find(club => club.id === move.buyerId)!.name
       const sellerName = clubs.find(club => club.id === move.sellerId)!.name

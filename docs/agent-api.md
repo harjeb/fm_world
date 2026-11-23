@@ -247,7 +247,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
   - `role?`：承诺的队内定位 `star` | `first-team`（默认）| `rotation`
   - 返回 `value`、`asking`、`forSale`、`balance`，俱乐部这关 `club`（`status`、`age`、`minutesShare`、`requiredPremium`、`chance`、`reasons`、`blocked`），球员这关的诉求 `demands`（想听的 `goal` / `role`、`wantsClubName` 想去的球队、`minTier` 最低联赛级别）、`playerChance` 和 `reasons`，以及两关相乘的总成功率 `chance`，和手动谈判框显示的一样。
 - `sign_club_player` — 按 `preview_signing` 的参数正式报价，转会窗口开放时可用；报价不能低于俱乐部要价。俱乐部和球员两关都过才成交：球员加盟、扣除报价，钱进对方账本（不占对方的买进名额）。失败返回 `error`、`club`（俱乐部的概率和理由）、`chance`、`reasons`。同一份报价 + 同一组承诺的结果固定，换报价或承诺才会重新判定。
-- `respond_offer` — `offerId`、`accept`（布尔）：回复 AI 俱乐部给你球员的报价（`state.transferOffers` 里 `status: "pending"` 的）。本联赛的 AI 俱乐部会按需给你的球员报价（每轮最多来一份，同时最多 3 份待回复）。接受：球员转走、钱立即到账，阵容至少保留 18 人，正在培养的球员要等培养结束。拒绝：普通报价没有影响；**高价报价**（`high: true`，报价不低于身价 1.3 倍）被拒绝或过期，这名球员会**不满** 16 小时，期间精力恢复只剩一成（球员的 `unhappy` 有截止时间和原因）。报价现实 24 小时内有效，`expiresAt` 之前不回复算拒绝。
+- `respond_offer` — `offerId`、`accept`（布尔）：回复 AI 俱乐部给你球员的报价（`state.transferOffers` 里 `status: "pending"` 的）。AI 俱乐部按实际阵型补足两套阵容；可同时参加竞拍或向玩家报价。未补齐前只补位置缺口，按可用资金均摊剩余缺口预算，在预算内优先买原始 CA 最强的球员（同 CA 价格低优先），补齐两套后再逐步考虑补强；预算、阵容上限和各队赛季名额仍有效。接受：球员转走、钱立即到账，阵容至少保留 18 人，正在培养的球员要等培养结束。拒绝：普通报价没有影响；**高价报价**（`high: true`，报价不低于身价 1.3 倍）被拒绝或过期，这名球员会**不满** 16 小时，期间精力恢复只剩一成（球员的 `unhappy` 有截止时间和原因）。报价现实 24 小时内有效，`expiresAt` 之前不回复算拒绝。
 - AI 俱乐部每赛季最多**买进** 5 人：竞拍赢下、直接签自由球员、从其他 AI 球队挖人、接受你的报价都算；你从 AI 手里买人、AI 被别人挖走不占名额。联机时 AI 也会按需对自由球员开拍，其他 AI 和玩家照常跟价。
 - `renew_contract` — `playerId`：续约 2 年（和俱乐部页一致），工资至少上调到身价工资的 110%；返回新合同。
 - `release_player` — `playerId`：解约，球员进入自由市场；阵容至少保留 18 人（一套完整的比赛名单），解约后必须还能组成合法阵容。挂牌出售同样要求至少保留 18 人。

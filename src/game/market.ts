@@ -1,13 +1,13 @@
 import { type AITeam, type GameState, type Player } from './types.ts'
 import { economyOf } from './economy.ts'
-import { caOf } from './ca.ts'
+import { analyzeAIDepth, type AIDepth } from './ai-depth.ts'
 import { basePlayerMarketValue, playerMarketValue } from './pricing.ts'
 export { VALUE_AT_CA_205, VALUE_GROWTH_PER_CA, VALUE_CAP, RANDOM_PLAYER_VALUE_SCALE, playerMarketValue } from './pricing.ts'
-import { FULL_SQUAD, MIN_SQUAD, autoFillLineup, repairLineup, validateLineup } from './squad.ts'
+import { FULL_SQUAD, MIN_SQUAD, repairLineup, validateLineup } from './squad.ts'
 import { assessRelease, releaseChance, releaseRoll, type ReleaseAssessment } from './transfer-rules.ts'
 import { wageForPlayer, worldTransferTeams } from './world.ts'
 import { CONTRACT_RENEWAL_MAX_YEARS, CONTRACT_RENEWAL_MIN_YEARS, previewContractRenewal } from './wages.ts'
-import { derivedRng, splitSeed } from './rng.ts'
+import { derivedRng } from './rng.ts'
 import { closeFinishedTraining, destroyPlayerCards, untrainedPlayer } from './cards.ts'
 import { sanitizeAutoSubPlan } from './match/management.ts'
 import { negotiationDemands, negotiationFailure, negotiationRoll, negotiationTerms, type NegotiationAnswers, type NegotiationDemands } from './negotiation.ts'
@@ -40,6 +40,7 @@ function arriveWithoutCards(player: Player): void {
   delete player.equippedCardId
   // 自由市场当天补进来的人一旦签下就是正式球员，不会再被销毁。
   delete player.marketDay
+  delete player.releasedToMarket
 }
 
 /** 本地 NPC 买家的预算上限：一轮最多花这么多，避免无脑倒卖把游戏刷成印钞机。 */
@@ -140,7 +141,7 @@ export function clubAsking(game: Pick<GameState, 'appearances' | 'cards'>, playe
   return clubSaleTerms(game, team, player).asking ?? 0
 }
 
-export type ClubTransferOffer = { team: GameState['aiTeams'][number]; player: Player; asking: number | null; terms: ReleaseAssessment }
+export type ClubTransferOffer = { team: GameState['aiTeams'][number]; player: Player; asking: number | null; terms: ReleaseAssessment; blocked: string | null }
 
 /**
  * 转会页“从 AI 球队买人”的名单：本联赛所有 AI 球队（联机时跳过有教练执教的）的全部球员，
@@ -152,10 +153,13 @@ export function aiTransferOffers(
 ): ClubTransferOffer[] {
   return game.aiTeams
     .filter((team) => !isManaged(team.id))
-    .flatMap((team) => team.players.map((player) => {
-      const terms = clubSaleTerms(game, team, player)
-      return { team, player, asking: terms.asking, terms }
-    }))
+    .flatMap(team => {
+      const depth = analyzeAIDepth(team)
+      return team.players.map(player => {
+        const terms = clubSaleTerms(game, team, player)
+        return { team, player, asking: terms.asking, terms, blocked: sellerSquadError(team, player, depth) }
+      })
+    })
 }
 
 export type ClubSigningPreview = {
@@ -192,10 +196,11 @@ export function previewClubSigning(game: GameState, team: AITeam, player: Player
 }
 
 /** 卖掉这名球员后对方还剩一套完整比赛名单、至少两个门将吗？ */
-export function sellerSquadError(team: Pick<AITeam, 'players'>, player: Player): string | null {
+export function sellerSquadError(team: Pick<AITeam, 'players' | 'lineup'>, player: Player, depth?: AIDepth): string | null {
   const rest = team.players.filter((item) => item.id !== player.id)
   if (rest.length < FULL_SQUAD) return `对方阵容只剩 ${team.players.length} 人，不再放人`
   if (player.positions.GK > 0 && rest.filter((item) => item.positions.GK > 0).length < 2) return '对方门将不够，不放门将'
+  if (!(depth ?? analyzeAIDepth(team)).expendable.has(player.id)) return '两套阵容需要这名球员，缺少可替代球员，属于非卖品'
   return null
 }
 
@@ -488,43 +493,6 @@ export function buyFromClub(game: GameState, clubId: string, playerId: string): 
   return { ok: true }
 }
 
-/**
- * 各队的随机球员也会进入市场：每轮从 AI 阵容里挑 1-3 名边缘球员挂牌，
- * 自由市场里的普通球员保持在 24 人以内，免得把真球星挤没。
- */
-export function refreshClubMarket(game: GameState, round: number): number {
-  if (!game.world || !game.aiTeams?.length) return 0
-  const listed = game.freeStars.filter((player) => !player.starKey).length
-  if (listed >= 24) return 0
-  const rng = derivedRng(splitSeed(game.seed, 'club-market'), round)
-  const candidates: { team: AITeam; player: Player; ca: number }[] = []
-  for (const team of game.aiTeams) {
-    if (team.players.length <= 16) continue
-    for (const player of team.players) {
-      if (player.starKey) continue
-      candidates.push({ team, player, ca: caOf(player.attrs, player.positions.GK > 0) })
-    }
-  }
-  if (!candidates.length) return 0
-  // 边缘球员先上：CA 低的更容易被摆上货架。
-  candidates.sort((a, b) => a.ca - b.ca || a.player.id.localeCompare(b.player.id))
-  const pool = candidates.slice(0, Math.max(6, Math.ceil(candidates.length * 0.35)))
-  const want = Math.min(1 + rng.int(3), 24 - listed)
-  let moved = 0
-  for (let guard = 0; guard < 12 && moved < want; guard++) {
-    const pick = pool.splice(rng.int(pool.length), 1)[0]
-    if (!pick) break
-    if (game.freeStars.some((item) => item.id === pick.player.id)) continue
-    pick.team.players = pick.team.players.filter((item) => item.id !== pick.player.id)
-    pick.player.contract = undefined
-    game.freeStars.push(pick.player)
-    const repaired = repairLineup(pick.team.players, pick.team.lineup)
-    if (validateLineup(pick.team.players, repaired.lineup).valid) pick.team.lineup = repaired.lineup
-    moved += 1
-  }
-  return moved
-}
-
 export function renewContract(game: GameState, playerId: string, years?: number): MarketOutcome {
   if (years !== undefined && (!Number.isSafeInteger(years) || years < CONTRACT_RENEWAL_MIN_YEARS || years > CONTRACT_RENEWAL_MAX_YEARS)) {
     return fail(`球员要求签订 ${CONTRACT_RENEWAL_MIN_YEARS}-${CONTRACT_RENEWAL_MAX_YEARS} 年合同`)
@@ -559,6 +527,8 @@ export function releasePlayer(game: GameState, playerId: string): MarketOutcome 
   game.roster = roster
   game.lineup = repaired.lineup
   player.contract = undefined
+  delete player.marketDay
+  player.releasedToMarket = true
   game.freeStars.push(player)
   return { ok: true }
 }

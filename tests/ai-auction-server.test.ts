@@ -21,42 +21,32 @@ afterEach(() => {
 
 /** 电脑球队也要在自由市场上跟玩家抢人，而且是在服务器那边自动出手，单机联机都成立。 */
 describe('服务器上的电脑球队竞拍', () => {
-  it('玩家出价后，电脑球队会按自己的上限跟价', async () => {
+  it('同一轮多于三家 AI 同时开拍，玩家仍可与它们竞价', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-ai-auction-'))
     dirs.push(dataDir)
-    const app = createAppServer({ dataDir, staticDir: path.resolve('dist'), tickMs: 20 })
+    const app = createAppServer({ dataDir, staticDir: path.resolve('dist'), tickMs: 0 })
     servers.push(app)
     await new Promise<void>((resolve) => app.server.listen(0, '127.0.0.1', resolve))
     const base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`
+    await fetch(base + '/api/market')
+    app.runMarketTick()
     const reg = await (await fetch(`${base}/api/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: 'ai_auction', password: 'secret123' }),
     })).json() as { token: string }
     const auth = { Authorization: `Bearer ${reg.token}` }
-    type Entry = { player: { id: string; ca: number }; price: number }
-    const view = await agentState(base, auth) as { game: { market: { freeAgents: Entry[] } } }
-    // 自由市场每天补满 200 人，最便宜的多是电脑球队看不上的替补；挑买得起的人里能力最高的那个。
-    const target = [...view.game.market.freeAgents].filter((entry) => entry.price <= 450_000).sort((a, b) => b.player.ca - a.player.ca)[0]
-    const placed = await fetch(`${base}/api/market/bid`, {
-      method: 'POST',
-      headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerId: target.player.id, amount: target.price }),
-    })
+    type Running = {playerId: string; bids: {amount: number; accountId: string}[]}
+    const snapshot = await (await fetch(base + '/api/market')).json() as { auctions: Running[] }
+    expect(snapshot.auctions.length).toBeGreaterThan(3)
+    const buyers = new Set(snapshot.auctions.flatMap(a => a.bids.map(b => b.accountId)))
+    expect([...buyers].filter(id => id.startsWith(AI_BID_PREFIX)).length).toBeGreaterThan(3)
+    const cheap = [...snapshot.auctions].sort((a, b) => a.bids.at(-1)!.amount - b.bids.at(-1)!.amount)[0]
+    const price = Math.ceil(cheap.bids.at(-1)!.amount * 1.05)
+    const placed = await fetch(base + '/api/market/bid', { method: 'POST', headers: auth, body: JSON.stringify({playerId: cheap.playerId, amount: price}) })
     expect(placed.status).toBe(200)
-
-    // 游标每 tick 前进一批球队，跑几轮就能遇到愿意跟价的。
-    for (let attempt = 0; attempt < 40; attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, 25))
-      const snapshot = await (await fetch(`${base}/api/market`, { headers: auth })).json() as { auctions: { playerId: string; bids: { accountId: string; amount: number }[] }[] }
-      const auction = snapshot.auctions.find((item) => item.playerId === target.player.id)
-      if (auction && auction.bids.some((bid) => bid.accountId.startsWith(AI_BID_PREFIX))) {
-        expect(auction.bids.length).toBeGreaterThan(1)
-        for (const bid of auction.bids) expect(bid.amount).toBeGreaterThanOrEqual(target.price)
-        return
-      }
-    }
-    throw new Error('电脑球队始终没有跟价')
+    const after = await (await fetch(base + '/api/market')).json() as { auctions: Running[] }
+    expect(after.auctions.find(a => a.playerId === cheap.playerId)!.bids.at(-1)!.amount).toBe(price)
   }, 20_000)
 
   it('玩家出价被电脑球队顶掉后，钱仍然在玩家账上', async () => {

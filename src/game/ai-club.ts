@@ -1,3 +1,4 @@
+import { analyzeAIDepth, type AIDepth } from './ai-depth.ts'
 import { recordTransfer } from './transfer-news.ts'
 import { caOf } from './ca.ts'
 import { MAX_FANS, STAGES_PER_LEVEL, facilityLevel, facilityUpgradeCost, projectedRoundIncome } from './economy.ts'
@@ -579,13 +580,23 @@ export type AIBidInput = {
   committed?: number
   /** 本赛季还能买几个人（每赛季最多 5 人）；不传按不限。 */
   buysLeft?: number
+  depth?: AIDepth
+}
+
+/** 单笔转会可用现金上限：两套阵容未齐时按剩余缺口均摊可用资金，补齐后单笔不超过可用资金的四成。 */
+export function aiTransferCashBudget(state: AIClubState, tier: TierId, committed = 0, depth?: AIDepth): number {
+  const profile = TIER_PROFILE[tier] ?? TIER_PROFILE.division2
+  const spendable = state.economy.balance - profile.reserve - Math.max(0, committed)
+  if (spendable <= 0) return 0
+  return depth?.missing ? Math.floor(spendable / depth.missing) : Math.floor(spendable * 0.4)
 }
 
 /**
  * 电脑球队的出价策略。
  *
- * 只在三种情况下出手：本队同位置明显不如他、性价比很高（远低于阵容均价）、人手不够。
- * 出价封顶是“估值 × 级别系数”，并且永远不动留底的钱、单笔不超过可用资金的四成；
+ * 两套阵容未齐前只给能填补空位的人出价，不设 CA 下限，并按「可用资金 ÷ 剩余缺口数」均摊单名额预算
+ * （配合 strongestFirst 在预算内挑原始 CA 最高的球员）；两套齐整后才按升级或性价比逐渐考虑补强。
+ * 出价封顶是“估值 × 级别系数”，永远不动留底的钱；齐整后单笔不超过可用资金的四成；
  * 对手已经出到自己出不起的价就不再跟，绝不为了抬价乱加。
  */
 export function aiBidFor(input: AIBidInput): number | null {
@@ -597,6 +608,18 @@ export function aiBidFor(input: AIBidInput): number | null {
   if (squad.length >= AI_SQUAD_LIMIT) return null
   const spendable = state.economy.balance - profile.reserve - Math.max(0, input.committed ?? 0)
   if (spendable < minimum) return null
+
+  const fillsGap = !!input.depth?.improves(player)
+  if (input.depth?.missing && !fillsGap) return null
+  // 补位按剩余缺口均摊可用资金；低 CA 不拦截，也不突破单名额预算或估值溢价上限。
+  if (fillsGap) {
+    const cap = Math.min(
+      aiTransferCashBudget(state, tier, input.committed, input.depth),
+      Math.round(value * profile.overpay * 1.1),
+    )
+    if (cap < minimum || (rival != null && rival >= cap)) return null
+    return minimum
+  }
 
   const gk = player.positions.GK > 0
   const ca = caOf(player.attrs, gk)
@@ -630,48 +653,85 @@ export function aiBidFor(input: AIBidInput): number | null {
 /** 电脑球队把签下的人记进账本，赛季重建时并进名单。 */
 export function recordAISigning(state: AIClubState, player: Player, amount: number): void {
   delete player.marketDay
+  delete player.releasedToMarket
   if (state.signings.some((item) => item.id === player.id)) return
   state.economy.balance = Math.max(0, state.economy.balance - amount)
   state.signings = [...state.signings, player].sort((a, b) => playerCa(b) - playerCa(a)).slice(0, AI_SIGNING_LIMIT)
+}
+
+/** 原始 CA 高优先，同 CA 价格低优先；id 仅让完全相同的候选排序可复现。 */
+export function strongestFirst(a: { price: number; ca: number; player: Player }, b: { price: number; ca: number; player: Player }): number {
+  return b.ca - a.ca || a.price - b.price || a.player.id.localeCompare(b.player.id)
+}
+
+/** 每队每轮最多释放一名冗员；绝不通过裁人减少两套阵容的实际覆盖数。 */
+export function releaseDepthSurplus(team: AITeam, state: AIClubState, club: WorldClub, pool: Player[], season: number, round: number): Player | undefined {
+  if (team.players.length <= 22 || state.lastDepthRelease === `${season}:${round}`) return
+  const depth = analyzeAIDepth(team)
+  if (!depth.missing) return
+  const starters = new Set(team.lineup.starters.map(s => s.playerId))
+  const p = team.players.filter(p => depth.expendable.has(p.id) && !starters.has(p.id) && !pool.some(f => f.id === p.id))
+    .sort((a, b) => Number(!!a.starKey) - Number(!!b.starKey) || originalCa(a) - originalCa(b) || a.id.localeCompare(b.id))[0]
+  if (!p) return
+  team.players = team.players.filter(x => x.id !== p.id)
+  team.starPlayerIds = team.starPlayerIds.filter(id => id !== p.id)
+  club.starPlayerIds = club.starPlayerIds.filter(id => id !== p.id)
+  team.playerNames = team.playerNames.filter(name => name !== p.name)
+  state.signings = state.signings.filter(x => x.id !== p.id)
+  state.lastDepthRelease = `${season}:${round}`
+  refreshAILineup(team)
+  const released = untrainedPlayer(p)
+  delete released.contract
+  delete released.marketDay
+  delete released.unhappy
+  released.releasedToMarket = true
+  pool.push(released)
+  return released
 }
 
 /* ------------------------------------------------------------------ 单机整合 */
 
 /**
  * 自由市场也会被电脑球队盯上：比本队同位置强、或者性价比高就签走。
- * 只在池子还厚的时候动手，免得玩家一进市场发现没人可签。
+ * 所有球队都可以签人，不因池内人数或其他球队已经成交而跳过。
  */
 export function aiSignFreeAgents(game: Pick<GameState, 'transferNews'> & { world?: WorldState; createdAt?: number; aiClubs?: Record<string, AIClubState>; aiTeams?: AITeam[]; freeStars: Player[]; seed: number; season?: { index: number } }, round: number, now = Date.now()): number {
   if (!game.world || !game.aiClubs || !game.aiTeams?.length) return 0
   if (Object.keys(game.aiClubs).length === 0) return 0
-  if (game.freeStars.length <= 24) return 0
-  const rng = derivedRng(splitSeed(game.seed, 'ai-poach'), round)
   const anchor = { world: game.world, createdAt: game.createdAt ?? now }
-  const targets = game.freeStars
-    .filter((player) => isOnMarketToday(anchor, player, now))
-    .sort((a, b) => originalCa(b) - originalCa(a))
-    .slice(0, 12)
+  const targets = game.freeStars.filter(p => isOnMarketToday(anchor, p, now)).map(p => {
+    const player = untrainedPlayer(p)
+    return { player, price: basePlayerMarketValue(player), ca: originalCa(player) }
+  }).sort(strongestFirst)
+  const taken = new Set<string>()
   let signed = 0
-  for (const candidate of targets) {
-    if (signed >= 2) break
-    const club = game.aiTeams![rng.int(game.aiTeams!.length)]
-    const state = game.aiClubs?.[club.id]
-    if (!state || club.players.length >= AI_SQUAD_LIMIT) continue
-    const value = basePlayerMarketValue(candidate)
-    if (value <= 0) continue
-    const player = untrainedPlayer(candidate)
+  // 轮换先选的球队，但不限制多少家可在同一轮签约。
+  const start = derivedRng(game.seed, 'free-buyers', round).int(game.aiTeams.length)
+  for (let i = 0; i < game.aiTeams.length; i++) {
+    const club = game.aiTeams[(start + i) % game.aiTeams.length], state = game.aiClubs[club.id]
+    if (!state) continue
     const season = game.season?.index ?? game.world.seasonIndex
-    const plan = aiBidFor({ state, tier: club.tier ?? 'division2', player, squad: club.players, value, minimum: value, buysLeft: aiBuysLeft(state, season) })
-    if (!plan) continue
-    recordAISigning(state, player, Math.min(plan, value))
-    recordTransfer(game, player, club.name, Math.min(plan, value), 'free', undefined, now)
-    noteAIBuy(state, season)
-    game.freeStars = game.freeStars.filter((item) => item.id !== player.id)
-    club.players = [...club.players, player]
-    // 签下的球星要能进首发：只修“不合法”的阵容会让他一直坐在名单外。
-    refreshAILineup(club)
-    signed += 1
+    let depth = analyzeAIDepth(club)
+    for (;;) {
+      const buysLeft = aiBuysLeft(state, season)
+      if (!buysLeft || club.players.length >= AI_SQUAD_LIMIT) break
+      const pick = targets.find(({ player, price }) =>
+        !taken.has(player.id)
+        && aiBidFor({ state, tier: club.tier ?? 'division2', player, squad: club.players, depth, value: price, minimum: price, buysLeft }) !== null,
+      )
+      if (!pick) break
+      const fillingGap = depth.missing > 0
+      recordAISigning(state, pick.player, pick.price)
+      recordTransfer(game, pick.player, club.name, pick.price, 'free', undefined, now)
+      noteAIBuy(state, season)
+      taken.add(pick.player.id); signed++
+      club.players = [...club.players, pick.player]
+      refreshAILineup(club)
+      depth = analyzeAIDepth(club)
+      if (fillingGap && !depth.missing) break
+    }
   }
+  if (taken.size) game.freeStars = game.freeStars.filter(p => !taken.has(p.id))
   return signed
 }
 
@@ -679,5 +739,9 @@ export function aiSignFreeAgents(game: Pick<GameState, 'transferNews'> & { world
 export function runAIClubs(game: GameState, round: number): void {
   if (!game.world) return
   advanceAIClubs(game, 1)
+  for (const team of game.aiTeams) {
+    const state = game.aiClubs?.[team.id], club = game.world.clubs.find(c => c.id === team.id)
+    if (state && club) releaseDepthSurplus(team, state, club, game.freeStars, game.season.index, round)
+  }
   aiSignFreeAgents(game, round)
 }

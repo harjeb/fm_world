@@ -75,7 +75,7 @@ import { emptyAutoSubs } from '../game/match/management.ts'
 import { economyOf, payWageArrears, upgradeFacility, type FacilityId } from '../game/economy.ts'
 import { BOARD_AMBITION_META, BOARD_WAGE_SLIDER_ROUNDS, adjustBoardBudgetSlider, chooseBoardAmbition, isBoardAmbition, isBoardTier } from '../game/board.ts'
 import { leadingBid, type Auction, type AuctionResult } from '../game/auction.ts'
-import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPlayer, refreshClubMarket, releasePlayer, renewContract, signWorldClubPlayer, signFreeAgent } from '../game/market.ts'
+import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPlayer, releasePlayer, renewContract, signWorldClubPlayer, signFreeAgent } from '../game/market.ts'
 import { minimumBid } from '../game/auction.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
 import { clubNameError, normalizeClubName } from '../game/club-name.ts'
@@ -486,8 +486,6 @@ function openFinishedLeague(previous: NonNullable<GameState['activeMatch']>): vo
   ui.screen = 'review'
   ui.matchEngine = null
   ui.coachPanel = false
-  // 单机：联赛比赛按现实时间走完，同样把这一轮的市场补充做掉。
-  if (record.isLeague && !isOnlineMode()) refreshClubMarket(game, record.round ?? game.season.round)
   ui.notice = previous.context.mode === 'cup' ? '杯赛比赛已结束。' : '联赛比赛已结束。'
 }
 
@@ -770,8 +768,6 @@ function completeMatch(): void {
   ui.coachPanel = false
   ui.matchAutoSubsDraft = null
   if (record) {
-    // 单机：一轮结束后，各队的边缘球员会进入自由市场（联机市场由服务器维护）。
-    if (record.isLeague && !isOnlineMode()) refreshClubMarket(game, record.round ?? game.season.round)
     if (!returnToChallengeAfterWin(ui, record)) {
       resetReplay(record.id)
       replay.index = (record.commentary ?? record.keyEvents).length
@@ -3152,7 +3148,6 @@ function autoAdvanceSeason(): void {
     if (result.rested) persist()
     return
   }
-  refreshClubMarket(game, Math.max(1, game.season.round - 1))
   ui.notice = `已自动结算 ${result.advanced} 轮比赛。`
   announceNewOffers(offersBefore)
   persist()

@@ -50,10 +50,11 @@ import { DEFAULT_PRE_MATCH_STAMINA_BELOW, DEFAULT_STAMINA_BELOW, emptyAutoSubs, 
 import type { ActiveMatchSave, GameState, PlayerCard } from '../src/game/types.ts'
 import { publishRoundNews } from './round-news.ts'
 import { LEAGUE_REALTIME_MS, LOGIC_MATCH_SECONDS } from '../src/game/match/time.ts'
-import { absorbFreeAgents, aiClubIdOf, auctionRaiseFee, committedFunds, leadingBid, minimumBid, placeAIBid, placeBid, settleAuctions, type AIBidder, type Auction, type AuctionResult, type BidResult, type FreeMarket } from '../src/game/auction.ts'
+import { absorbFreeAgents, aiClubIdOf, committedFunds, leadingBid, minimumBid, placeBid, settleAuctions, type AIBidder, type Auction, type AuctionResult, type BidResult, type FreeMarket } from '../src/game/auction.ts'
 import { isOnMarketToday } from '../src/game/market-window.ts'
 import { lineupRating } from '../src/game/club-rating.ts'
-import { AI_SQUAD_LIMIT, advanceAIClub, aiBidFor, backfillAICardSkills, createAIClub, recordAISigning, seedAIClubs } from '../src/game/ai-club.ts'
+import { runAIAuctionMarket } from '../src/game/ai-auction-market.ts'
+import { AI_SQUAD_LIMIT, advanceAIClub, releaseDepthSurplus, backfillAICardSkills, createAIClub, recordAISigning, seedAIClubs } from '../src/game/ai-club.ts'
 import { agentView, applyAgentAction, playerView, type AgentOptions } from './agent.ts'
 import { clubNameError, normalizeClubName } from '../src/game/club-name.ts'
 import { negotiationDemands, SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../src/game/negotiation.ts'
@@ -61,7 +62,7 @@ import { aiPoachRound, expireOffers, generateAIOffers, respondToOffer, type Mark
 import { marketDayOf, refreshFreeMarket } from '../src/game/free-market.ts'
 import { migrateGameSchedule, migrateWorldSchedule } from '../src/game/schedule.ts'
 import { aiBuysLeft, noteAIBuy } from '../src/game/transfer-rules.ts'
-import { aiTransferOffers, sellerSquadError, settleMarket, signClubPlayer } from '../src/game/market.ts'
+import { aiTransferOffers, settleMarket, signClubPlayer } from '../src/game/market.ts'
 import { elevenAITeam, upgradeElevenASide } from '../src/game/eleven.ts'
 import { elevenFormationFor, isLegacyFormation } from '../src/game/data/formations.ts'
 import { startChallengeWithOpponent, startPeakChallenge, startTrainingWithSupport } from '../src/game/actions.ts'
@@ -175,6 +176,8 @@ export type AppServer = {
   accountCount: () => number
   /** 运维 / 测试驱动一次后台队列，仍受服务器时间和统一公布规则约束。 */
   runMatchQueue: () => Promise<void>
+  /** 驱动与定时器相同的一轮市场决策（运维 / 隔离测试）。 */
+  runMarketTick: () => void
 }
 
 const WORLD_FILE = 'world.json'
@@ -795,18 +798,31 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   /** 转会窗口常开。 */
   const worldWindowOpen = () => true
   /** 没有教练执教的 AI 俱乐部：共享名册 + 共享账本。ids 给了就只取这几家。 */
-  function sharedMarketClubs(ids?: readonly string[]): MarketClub[] {
+  function sharedMarketClubs(ids?: readonly string[], exceptOffersFrom?: Account, countAuctions = true): MarketClub[] {
     const book = sharedWorld.aiClubs ?? {}
+    const reserved = new Map<string, { pendingSignings: Player[]; committed: number }>()
+    const hold = (id: string, player: Player, amount: number) => {
+      const r = reserved.get(id) ?? { pendingSignings: [], committed: 0 }
+      r.pendingSignings.push(player); r.committed += amount; reserved.set(id, r)
+    }
+    for (const a of db.accounts) if (a !== exceptOffersFrom) for (const o of a.game.transferOffers ?? []) {
+      if (o.status !== 'pending' || o.expiresAt <= now()) continue
+      const player = a.game.roster.find(p => p.id === o.playerId)
+      if (player) hold(o.clubId, player, o.amount)
+    }
+    if (countAuctions) for (const auction of market.auctions) {
+      const lead = leadingBid(auction), buyer = aiClubIdOf(lead.accountId)
+      const p = buyer && market.pool.find(p => p.id === auction.playerId)
+      if (p && buyer) hold(buyer, p, lead.amount)
+    }
     return sharedWorld.world.clubs
       .filter((club) => !club.isPlayer && !sharedWorld.owners[club.id] && (!ids || ids.includes(club.id)))
       .flatMap((club) => {
         const team = sharedWorld.teams?.[club.id]
         const state = book[club.id]
-        return team && state ? [{ id: club.id, name: team.name, tier: club.tier ?? 'division2', team, state }] : []
+        return team && state ? [{ id: club.id, name: team.name, tier: club.tier ?? 'division2', team, state, ...reserved.get(club.id) }] : []
       })
   }
-  /** 这家 AI 正领先的竞拍数：赢了就会占买进名额，所以先算在途。 */
-  const aiLeadingAuctions = (clubId: string) => market.auctions.filter((auction) => auction.bids.length > 0 && leadingBid(auction).accountId === `ai:${clubId}`).length
 
   function advanceSharedAIClubs(): void {
     const book = (sharedWorld.aiClubs ??= seedAIClubs(sharedWorld.world, sharedWorld.seed))
@@ -815,6 +831,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (previous >= round) return
     const rounds = Math.min(round - previous, 38)
     sharedWorld.aiRound = round
+    let releases = 0
     let changed = false
     for (const club of sharedWorld.world.clubs) {
       if (club.isPlayer || sharedWorld.owners[club.id]) continue
@@ -822,13 +839,15 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const team = sharedWorld.teams?.[club.id]
       const before = `${state.economy.balance}|${state.trained}|${state.upgrades}`
       advanceAIClub(state, club, team, rounds, splitSeed(sharedWorld.seed, `ai-advance-${club.id}-${round}`), true, sharedWorld.world.seasonIndex)
+      if (team && releaseDepthSurplus(team, state, club, market.pool, serverSeason(), round)) releases++
       if (syncClubLiveTactics(club, team)) changed = true
       if (`${state.economy.balance}|${state.trained}|${state.upgrades}` !== before) changed = true
     }
-    // 转会窗口里 AI 之间按需互相挖人（同级或更低级别），每轮全服最多 3 笔。
+    if (releases) { market.version++; persistMarket(); broadcastMarket() }
+    // 各家 AI 均可向同级或更低级别的俱乐部买人。
     if (worldWindowOpen()) {
       aiPoachRound({
-        clubs: sharedMarketClubs(), season: serverSeason(), round, seed: sharedWorld.seed, maxMoves: 3,
+        clubs: sharedMarketClubs(), season: serverSeason(), round, seed: sharedWorld.seed,
         onMove: (move) => {
           const seller = sharedWorld.world.clubs.find((club) => club.id === move.sellerId)
           if (seller) seller.starPlayerIds = seller.starPlayerIds.filter((id) => id !== move.playerId)
@@ -841,108 +860,14 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (changed || rounds > 0) persistWorld()
   }
 
-  let aiAuctionCursor = 0
-
-  /**
-   * 电脑球队在自由球员市场里跟玩家抢人：按“本队同位置是否明显更好/性价比/人手”决定，
-   * 出价封顶是估值乘级别系数，还留着自己的底钱，不会为了抬价乱加。
-   */
-  let aiOpenCursor = 0
-
-  /**
-   * 电脑球队按需开拍：缺位置、同位置明显更强或人手不够时，对今天在市场上的自由球员出第一口价。
-   * 每个 tick 最多一家、一个人；AI 开的竞拍同时最多 3 个，其他 AI 和玩家照常跟价。
-   */
-  function aiOpenAuctions(): boolean {
-    if (!worldWindowOpen() || !sharedWorld.aiClubs) return false
-    if (market.auctions.filter((auction) => auction.bids[0]?.accountId.startsWith('ai:')).length >= 3) return false
-    const clubs = sharedMarketClubs()
-    if (!clubs.length) return false
-    const club = clubs[aiOpenCursor++ % clubs.length]
-    const buysLeft = aiBuysLeft(club.state, serverSeason(), aiLeadingAuctions(club.id))
-    if (buysLeft <= 0 || club.team.players.length >= AI_SQUAD_LIMIT) return false
-    const nowMs = now()
-    const keptIds = collectScoutKeptIds(nowMs)
-    const committed = market.auctions.reduce((sum, item) => (item.bids.length && leadingBid(item).accountId === `ai:${club.id}` ? sum + leadingBid(item).amount : sum), 0)
-    const open = market.pool
-      .filter((player) => !market.auctions.some((auction) => auction.playerId === player.id) && sharedAvailable(player, nowMs, keptIds))
-      .map((player) => ({ player, value: minimumBid(player) }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 30)
-    for (const { player, value } of open) {
-      if (value <= 0 || club.state.economy.balance - committed < value) continue
-      const plan = aiBidFor({ state: club.state, tier: club.tier, player: untrainedPlayer(player), squad: club.team.players, value, minimum: value, committed, buysLeft })
-      if (!plan) continue
-      if (placeAIBid(market, { id: club.id, name: club.team.name }, player.id, value, nowMs).ok) return true
-    }
-    return false
-  }
-
   function aiAuctionTick(): void {
-    if (aiOpenAuctions()) {
-      persistMarket()
-      broadcastMarket()
-    }
-    if (!market.auctions.length || !sharedWorld.aiClubs) return
-    const nowMs = now()
-    const clubs = sharedWorld.world.clubs.filter((club) => !club.isPlayer && !sharedWorld.owners[club.id] && sharedWorld.aiClubs![club.id])
-    if (!clubs.length) return
-    let changed = false
-    let aiFeesChanged = false
-    // 每个 tick 只看一小批球队，但游标一直往前走，几次下来全联盟都会轮到。
-    const window = 10
-    const start = aiAuctionCursor++ % clubs.length
-    const candidates = Array.from({ length: Math.min(window, clubs.length) }, (_, index) => clubs[(start + index) % clubs.length])
-    for (const auction of [...market.auctions]) {
-      if (auction.endsAt <= nowMs || auction.bids.length === 0) continue
-      const player = market.pool.find((item) => item.id === auction.playerId)
-      if (!player) continue
-      const value = minimumBid(player)
-      if (value <= 0) continue
-      const base = untrainedPlayer(player)
-      const lead = leadingBid(auction)
-      const minimum = minimumBid(player, auction)
-      for (const club of candidates) {
-        const state = sharedWorld.aiClubs[club.id]
-        const squad = sharedWorld.teams?.[club.id]?.players
-        if (!state || !squad || squad.length >= AI_SQUAD_LIMIT) continue
-        if (squad.some((item) => item.id === player.id)) continue
-        const accountId = `ai:${club.id}`
-        if (lead.accountId === accountId) continue
-        const committed = market.auctions.reduce((sum, item) => {
-          if (!item.bids.length) return sum
-          const top = leadingBid(item)
-          return top.accountId === accountId ? sum + top.amount : sum
-        }, 0)
-        const plan = aiBidFor({
-          state,
-          tier: club.tier ?? 'division2',
-          player: base,
-          squad,
-          value,
-          minimum,
-          rival: lead.amount,
-          committed,
-          // 每赛季最多买 5 人：已经买的 + 正领先的竞拍都算。
-          buysLeft: aiBuysLeft(state, serverSeason(), aiLeadingAuctions(club.id)),
-        })
-        if (!plan) continue
-        // 电脑球队跟价也要交手续费：交完还得付得起这口价才跟。
-        if (state.economy.balance - committed < plan + auctionRaiseFee(plan)) continue
-        const bid = placeAIBid(market, { id: club.id, name: sharedWorld.teams![club.id].name }, player.id, plan, nowMs)
-        if (bid.ok) {
-          state.economy.balance -= bid.fee
-          aiFeesChanged = true
-          changed = true
-          break
-        }
-      }
-    }
-    if (aiFeesChanged) persistWorld({ world: false, teams: false, matchBook: false })
-    if (changed) {
-      persistMarket()
-      broadcastMarket()
-    }
+    if (!worldWindowOpen()) return
+    const t = now(), kept = collectScoutKeptIds(t)
+    const { bids, fees } = runAIAuctionMarket(market, sharedMarketClubs(undefined, undefined, false), serverSeason(), t, p => sharedAvailable(p, t, kept))
+    if (!bids) return
+    if (fees) persistWorld({ world: false, teams: false, matchBook: false })
+    persistMarket()
+    broadcastMarket()
   }
 
   function ownedClubId(account: Account): string | undefined {
@@ -1468,7 +1393,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   /** 电脑球队赢下竞拍：扣钱、把人记进账本，同时直接进当季名单。 */
   const aiBidder: AIBidder = {
     balance: (clubId) => sharedWorld.aiClubs?.[clubId]?.economy.balance ?? 0,
-    canSign: (clubId) => (sharedWorld.teams?.[clubId]?.players.length ?? AI_SQUAD_LIMIT) < AI_SQUAD_LIMIT,
+    canSign: (clubId) => !sharedWorld.owners[clubId] && aiBuysLeft(sharedWorld.aiClubs?.[clubId], serverSeason()) > 0 && (sharedWorld.teams?.[clubId]?.players.length ?? AI_SQUAD_LIMIT) < AI_SQUAD_LIMIT,
     sign: (clubId, player, amount) => {
       const state = sharedWorld.aiClubs?.[clubId]
       const team = sharedWorld.teams?.[clubId]
@@ -1809,9 +1734,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
   function transferOffers(account: Account) {
     const game = transferSnapshot(account)
-    return aiTransferOffers(game).map(({ team, player, asking, terms }) => ({
+    return aiTransferOffers(game).map(({ team, player, asking, terms, blocked }) => ({
       teamId: team.id, teamName: team.name, player: publicPlayer(untrainedPlayer(player)), asking, terms,
-      blocked: sellerSquadError(team, player), demands: negotiationDemands(game, player),
+      blocked, demands: negotiationDemands(game, player),
     }))
   }
 
@@ -1884,7 +1809,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const offerId = String(body.offerId ?? '')
     const accept = body.accept === true
     const offer = account.game.transferOffers?.find((item) => item.id === offerId)
-    const buyer = offer ? sharedMarketClubs([offer.clubId])[0] : undefined
+    const buyer = offer ? sharedMarketClubs([offer.clubId], account)[0] : undefined
     const result = respondToOffer(account.game, offerId, accept, now(), buyer, serverSeason())
     if (result.ok) {
       if (accept) {
@@ -2278,13 +2203,12 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const changed = progressingLeague ? advanceLeagueRealtime(account.game, now()) : false
       // 补算里卖给 NPC 或合同到期的球员，这一步进市场。
       if (absorbInto(account)) migrated = true
-      // 报价：过期的按拒绝处理；每轮最多来一份新报价（本联赛没有教练执教的 AI 俱乐部，按需出价）。
+      // 报价：过期的按拒绝处理；每轮各无主 AI 球队按缺位和可用资金独立报价。
       if (expireOffers(account.game, now())) migrated = true
       const offerKey = `${account.game.season.index}:${account.game.season.round}`
       if (account.offerKey !== offerKey) {
         account.offerKey = offerKey
-        const ids = (account.game.season.clubIds ?? []).filter((id) => id !== 'player')
-        if (generateAIOffers({ game: account.game, clubs: sharedMarketClubs(ids), season: serverSeason(), round: account.game.season.round, now: now(), seed: splitSeed(sharedWorld.seed, `offers-${account.id}`) })) migrated = true
+        if (generateAIOffers({ game: account.game, clubs: sharedMarketClubs(undefined, account), season: serverSeason(), round: account.game.season.round, now: now(), seed: splitSeed(sharedWorld.seed, `offers-${account.id}`) })) migrated = true
       }
       if (runAITakeoverUpkeep(account)) migrated = true
       if (!changed && !migrated && !economyAdded) return false
@@ -4140,6 +4064,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     },
     accountCount: () => aliveAccountIds().length,
     runMatchQueue,
+    runMarketTick: aiAuctionTick,
   }
 }
 

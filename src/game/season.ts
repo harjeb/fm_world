@@ -825,6 +825,7 @@ export function finishActiveMatch(game: GameState, engine: GameEngine, now = Dat
     if (isRoundComplete(game, round)) {
       awardRoundIncome(game, round)
       settleMarket(game, round)
+      if (!game.shared) runAIClubs(game, round)
       if (game.world) {
         payWorldWages(game, round)
         serveSuspensions(game, round)
@@ -840,6 +841,7 @@ export function finishActiveMatch(game: GameState, engine: GameEngine, now = Dat
     applyPveResult(game, record, active.context)
   }
   game.activeMatch = undefined
+  if (active.context.isLeague && !game.shared && record.round && isRoundComplete(game, record.round)) runLocalTransfers(game, record.round, now)
   syncUnlockedAchievements(game)
   return record
 }
