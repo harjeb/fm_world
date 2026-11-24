@@ -1,7 +1,7 @@
 import { analyzeAIDepth, type AIDepth } from './ai-depth.ts'
 import { recordTransfer } from './transfer-news.ts'
 import { caOf } from './ca.ts'
-import { MAX_FANS, STAGES_PER_LEVEL, facilityLevel, facilityUpgradeCost, projectedRoundIncome } from './economy.ts'
+import { MAX_FANS, STAGES_PER_LEVEL, TIER_ROUND_INCOME, facilityLevel, facilityUpgradeCost, projectedRoundIncome } from './economy.ts'
 import { AVERAGE_ROUND_GAME_DAYS } from './calendar.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 import { basePlayerMarketValue, playerMarketValue } from './pricing.ts'
@@ -83,7 +83,7 @@ export const AI_SQUAD_LIMIT = 29
 const AI_DEPTH_TARGET = FULL_SQUAD + 4
 /** 一个赛季最多攒下几个外来球员，免得存档越滚越大。 */
 const AI_SIGNING_LIMIT = 6
-const AI_BALANCE_CAP = 60_000_000
+export const AI_BALANCE_CAP = 60_000_000
 
 /** 电脑球队眼里的身价：和市场估值同一份曲线，出价才不会总是低于起拍价。 */
 export function playerValue(player: Pick<Player, 'attrs' | 'positions'>): number {
@@ -411,8 +411,8 @@ export type AIAdvanceResult = { trained: number; upgrades: number }
 export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | 'tier'>, team: AITeam | undefined, rounds: number, seed: number, applyToTeam = true, seasonIndex = 1): AIAdvanceResult {
   if (rounds <= 0) return { trained: 0, upgrades: 0 }
   const profile = TIER_PROFILE[club.tier] ?? TIER_PROFILE.division2
-  // 收入：和玩家同一套公式（基本收入 + 球迷 + 设施），按轮结算。
-  state.economy.balance = Math.min(AI_BALANCE_CAP, state.economy.balance + projectedRoundIncome(state.economy) * rounds)
+  // 收入：和玩家同一套公式（基本收入 + 球迷 + 设施 + 级别转播分成），按轮结算。
+  state.economy.balance = Math.min(AI_BALANCE_CAP, state.economy.balance + projectedRoundIncome(state.economy, club.tier) * rounds)
   state.economy.fans = Math.min(MAX_FANS, Math.round(state.economy.fans * (1 + 0.006 * rounds)))
   const players = team?.players
   // 练出来的卡装到球员身上后，首发要跟着重排：评分更高的人才会把原来的主力换下来。
@@ -529,6 +529,51 @@ export function backfillAICardSkills(
   }
   if (changed && team) refreshAILineup(team)
   return changed
+}
+
+/**
+ * 一次性历史补发：此前 advanceAIClub 调用 projectedRoundIncome 时未传入 club.tier，
+ * 导致顶级（60万/轮）与一级（15万/轮）无主 AI 球队每轮按二级（3万/轮）结算。
+ * 按 world.history 逆推每支球队历季真实级别，补齐全部漏发的转播分成差额（受 AI_BALANCE_CAP 封顶）。
+ */
+export function backfillAITierIncome(
+  world: Pick<WorldState, 'clubs' | 'seasonIndex' | 'history'>,
+  aiClubs: Record<string, AIClubState> | undefined,
+  aiRound: number,
+  owners: Readonly<Record<string, string>> = {},
+): { clubs: number; totalAmount: number } {
+  if (!aiClubs) return { clubs: 0, totalAmount: 0 }
+  const base = TIER_ROUND_INCOME.division2
+  const deltaFor = (tier: TierId | undefined): number => Math.max(0, (TIER_ROUND_INCOME[tier ?? 'division2'] ?? base) - base)
+  const currentRounds = Math.min(38, Math.max(0, Math.floor(aiRound)))
+  const history = [...(world.history ?? [])].sort((a, b) => b.seasonIndex - a.seasonIndex)
+  let clubs = 0
+  let totalAmount = 0
+  for (const club of world.clubs) {
+    if (club.isPlayer || owners[club.id]) continue
+    const state = aiClubs[club.id]
+    if (!state) continue
+    let tier: TierId = club.tier ?? 'division2'
+    let missed = deltaFor(tier) * currentRounds
+    for (const entry of history) {
+      if (entry.seasonIndex >= world.seasonIndex) continue
+      if (entry.promotions?.includes(club.id)) {
+        tier = tier === 'champions' ? 'division1' : 'division2'
+      } else if (entry.relegations?.includes(club.id)) {
+        tier = tier === 'division2' ? 'division1' : 'champions'
+      }
+      missed += deltaFor(tier) * 38
+    }
+    if (missed <= 0) continue
+    const before = state.economy.balance
+    state.economy.balance = Math.min(AI_BALANCE_CAP, before + missed)
+    const added = state.economy.balance - before
+    if (added > 0) {
+      clubs++
+      totalAmount += added
+    }
+  }
+  return { clubs, totalAmount }
 }
 
 /** 当前买得起的最便宜的那次升级要多少钱。 */

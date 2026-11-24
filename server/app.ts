@@ -63,7 +63,7 @@ import { absorbFreeAgents, aiClubIdOf, committedFunds, leadingBid, minimumBid, p
 import { isOnMarketToday } from '../src/game/market-window.ts'
 import { lineupRating } from '../src/game/club-rating.ts'
 import { runAIAuctionMarket } from '../src/game/ai-auction-market.ts'
-import { AI_SQUAD_LIMIT, advanceAIClub, releaseDepthSurplus, backfillAICardSkills, createAIClub, recordAISigning, seedAIClubs } from '../src/game/ai-club.ts'
+import { AI_SQUAD_LIMIT, advanceAIClub, releaseDepthSurplus, backfillAICardSkills, backfillAITierIncome, createAIClub, recordAISigning, seedAIClubs } from '../src/game/ai-club.ts'
 import { agentView, applyAgentAction, playerView, type AgentOptions } from './agent.ts'
 import { clubNameError, normalizeClubName } from '../src/game/club-name.ts'
 import { negotiationDemands, SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../src/game/negotiation.ts'
@@ -138,6 +138,8 @@ type SharedWorld = {
   marketRandomCaVersion?: 2
   /** AI 培养卡补齐技能版本（1 = 为历史已练卡但无技能字段的 AI 球员补齐培养技能）。 */
   aiCardSkillsVersion?: 1
+  /** AI 历史级别转播分成差额补发版本（1 = 按历季真实级别补齐漏发的顶级/一级转播分成）。 */
+  aiTierIncomeBackfillVersion?: 1
   /** 电脑球队的钱、设施和培养成果；全服一份，跟着赛季一起滚。 */
   aiClubs?: Record<string, AIClubState>
   /** 自由市场最近一次每日补充是第几个游戏日。 */
@@ -251,6 +253,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     randomBaseCaVersion: loadedWorld ? loadedWorld.randomBaseCaVersion : 1,
     marketRandomCaVersion: loadedWorld ? loadedWorld.marketRandomCaVersion : 2,
     aiCardSkillsVersion: loadedWorld ? loadedWorld.aiCardSkillsVersion : 1,
+    aiTierIncomeBackfillVersion: loadedWorld ? loadedWorld.aiTierIncomeBackfillVersion : 1,
     freeMarketDay: loadedWorld?.freeMarketDay,
     aiClubs: loadedWorld?.aiClubs,
     aiRound: loadedWorld?.aiRound,
@@ -453,6 +456,16 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
     sharedWorld.aiCardSkillsVersion = 1
   }
+  // 一次性历史补发：此前 AI 每轮收入未传 club.tier，按二级 3 万结算；按历季真实级别补齐顶级/一级差额。
+  let backfilledAITierIncome = false
+  if (sharedWorld.aiTierIncomeBackfillVersion !== 1) {
+    const result = backfillAITierIncome(sharedWorld.world, sharedWorld.aiClubs, sharedWorld.aiRound ?? 0, sharedWorld.owners)
+    if (result.clubs > 0) {
+      backfilledAITierIncome = true
+      console.info(`已为 ${result.clubs} 支无主 AI 球队补发历史级别转播分成，合计 ${result.totalAmount.toLocaleString()}`)
+    }
+    sharedWorld.aiTierIncomeBackfillVersion = 1
+  }
   // 以前 AI 买进来的球员没排进首发（只修“不合法”的阵容），一直坐在名单外：无主的 AI 球队按名单重排一次。
   // 有教练的球队阵容是教练自己排的，不动。
   refreshAILineups(Object.entries(sharedWorld.teams ?? {}).filter(([clubId]) => !sharedWorld.owners[clubId]).map(([, team]) => team))
@@ -469,7 +482,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   let sharedWorldVersion = 1
   let sharedTeamsPublicVersion = 1
   let sharedMatchBookVersion = 1
-  let worldDirty = rescaledLegacyRandoms || backfilledAICardSkills
+  let worldDirty = rescaledLegacyRandoms || backfilledAICardSkills || backfilledAITierIncome
   let worldWriteUrgent = false
   let worldWriteGen = 0
   let worldWriteTimer: ReturnType<typeof setTimeout> | null = null
