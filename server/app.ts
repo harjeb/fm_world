@@ -581,6 +581,17 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     migratedGame?: GameState
   }
   const accountSync = new WeakMap<Account, AccountSyncState>()
+  const accountYouthRevision = new WeakMap<Account, number>()
+  for (const account of db.accounts) accountYouthRevision.set(account, account.revision)
+  const youthRevisionOf = (account: Account): number => {
+    const existing = accountYouthRevision.get(account)
+    if (existing !== undefined) return existing
+    accountYouthRevision.set(account, account.revision)
+    return account.revision
+  }
+  const markYouthChanged = (account: Account): void => {
+    accountYouthRevision.set(account, account.revision)
+  }
   const syncOf = (account: Account): AccountSyncState => {
     let state = accountSync.get(account)
     if (!state) {
@@ -2330,6 +2341,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       pullSharedFixtures(account)
       pullSharedWorld(account)
       account.revision++
+      if (youthChanged) markYouthChanged(account)
       // 杯赛/商店/成就福利补发后，旧客户端基于奖励前的余额不能再覆盖该账号。
       if (publishedMatches.rewardChanged || seasonShopAwarded || achResult.backfilledMoney > 0) account.lastUserRevision = account.revision
       // lastUserRevision 通常只记录“玩家自己保存”的版本；AI / 共享世界 / 自动结算的改动不算，
@@ -2655,6 +2667,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         account.appliedMatchIds = []
         account.revision++
         account.lastUserRevision = account.revision
+        markYouthChanged(account)
         account.updatedAt = now()
         absorbInto(account)
       }
@@ -3035,6 +3048,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         createdAt: now(),
         updatedAt: now(),
       }
+      accountYouthRevision.set(account, account.revision)
       const initialTeam = sharedWorld.teams?.[club.id]
       if (initialTeam && !previous) {
         account.game.roster = structuredClone(initialTeam.players).map((player) => ({
@@ -3166,6 +3180,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
             accountSync.delete(agentAccount)
             agentAccount.revision++
             agentAccount.lastUserRevision = agentAccount.revision
+            markYouthChanged(agentAccount)
             agentAccount.updatedAt = now()
             pendingAccountCommits.set(agentAccount.id, Symbol('youth-agent-commit'))
             persistAccount(agentAccount)
@@ -3494,7 +3509,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const body = await readJsonBody(req)
       if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
       advanceAccount(account)
-      if (!Number.isSafeInteger(body.baseRevision) || body.baseRevision !== account.revision) { await sendJson(409, { error: '青训状态已变化，请刷新后重试', revision: account.revision, game: publicGame(account) }, true); return }
+      const baseRevision = body.baseRevision
+      if (typeof baseRevision !== 'number' || !Number.isSafeInteger(baseRevision) || baseRevision < 0 || baseRevision > account.revision || baseRevision < youthRevisionOf(account)) {
+        await sendJson(409, { error: '青训状态已变化，请刷新后重试', revision: account.revision, game: publicGame(account) }, true)
+        return
+      }
       const game = structuredClone(account.game)
       const outcome = applyYouthAction(game, body, now(), officialLineupLocked(account, now()) || !!liveMatchFor(account))
       if (!outcome.ok) { await sendJson(400, { error: outcome.error, revision: account.revision, game: publicGame(account) }, true); return }
@@ -3502,6 +3521,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       accountSync.delete(account)
       account.revision++
       account.lastUserRevision = account.revision
+      markYouthChanged(account)
       account.updatedAt = now()
       pendingAccountCommits.set(account.id, Symbol('youth-commit'))
       persistAccount(account)

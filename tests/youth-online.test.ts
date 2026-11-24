@@ -9,6 +9,7 @@ import { loadPveContent } from '../src/game/pve-content.ts'
 import type { GameState } from '../src/game/types.ts'
 import { YOUTH_DOWNTIME_COMPENSATION_ID, YOUTH_WEEK_MS, youthCA } from '../src/game/youth.ts'
 import { youthStars } from '../src/game/youth-rating.ts'
+import { trainingOptions } from '../src/game/training-calendar.ts'
 
 beforeAll(loadPveContent)
 const apps: AppServer[] = []
@@ -147,4 +148,53 @@ it('联机账号下期青训招募按「下期重点」一次性发放宕机补�
   clock += YOUTH_WEEK_MS
   state = await get()
   expect(state.game.youth!.intake.candidates.some(c => c.compensationId === YOUTH_DOWNTIME_COMPENSATION_ID)).toBe(false)
+})
+
+it('一线队培养或 Agent 非青训改动推进全局 revision 时不误拦青训操作，青训本身变化后仍触发 409 保护', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-youth-rev-'))
+  dirs.push(dir)
+  let clock = Date.UTC(2026, 10, 18, 1)
+  const app = createAppServer({ dataDir: dir, tickMs: 0, now: () => clock })
+  apps.push(app)
+  await new Promise<void>(resolve => app.server.listen(0, '127.0.0.1', resolve))
+  const base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`
+
+  const reg = await fetch(`${base}/api/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'rev-coach', password: 'secret123' }) })
+  expect(reg.status).toBe(201)
+  const { token } = await reg.json() as { token: string }
+  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+  const get = async () => await (await fetch(`${base}/api/game`, { headers })).json() as { game: GameState; revision: number }
+  const post = (url: string, body: unknown, h = headers) => fetch(`${base}${url}`, { method: 'POST', headers: h, body: JSON.stringify(body) })
+
+  const snap = await get()
+  const staleRev = snap.revision
+  const starterId = snap.game.roster.find(p => p.positions.GK === 0)!.id
+
+  // 模拟另一端/Agent 连续进行一线队培养（非青训操作）并推进全局 revision
+  const startedRes = await post('/api/training/start', { playerId: starterId, bookKeys: [], points: 0 })
+  expect(startedRes.status).toBe(200)
+  const started = await startedRes.json() as { game: GameState }
+  const firstActivity = trainingOptions(started.game.training[starterId])[0].id
+  const { token: agentToken } = await (await post('/api/agent/token', {})).json() as { token: string }
+  const agentHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${agentToken}` }
+  expect((await post('/api/agent/action', { action: 'training_action', playerId: starterId, request: { kind: 'activity', activityId: firstActivity } }, agentHeaders)).status).toBe(200)
+  const afterNonYouth = await get()
+  expect(afterNonYouth.revision).toBeGreaterThan(staleRev)
+
+  // 青训本身未变化：携带旧全局 revision 仍可正常保存招募方向，不再误报 409
+  const okRes = await post('/api/youth/action', { action: 'recruit_position', position: 'ST', baseRevision: staleRev })
+  expect(okRes.status).toBe(200)
+  const afterYouth = await okRes.json() as { revision: number; game: GameState }
+  expect(afterYouth.game.youth!.recruitPosition).toBe('ST')
+
+  // 若 Agent 直接改了青训，旧版本必须被 409 拦截
+  expect((await post('/api/agent/action', { action: 'youth_action', youth: { action: 'recruit_position', position: 'DM' } }, agentHeaders)).status).toBe(200)
+  const conflictAfterAgentYouth = await post('/api/youth/action', { action: 'recruit_position', position: 'GK', baseRevision: afterYouth.revision })
+  expect(conflictAfterAgentYouth.status).toBe(409)
+
+  // 同步到最新版本后，哪怕跨周 settleYouth 刷新了招募期，旧版本也必须被 409 拦截
+  const latest = await get()
+  clock += YOUTH_WEEK_MS + 1000
+  const conflictAfterIntake = await post('/api/youth/action', { action: 'recruit_position', position: 'GK', baseRevision: latest.revision })
+  expect(conflictAfterIntake.status).toBe(409)
 })
