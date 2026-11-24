@@ -1453,6 +1453,8 @@ export type AchievementState = {
 }
 
 export type GameState = {
+  /** S3 起的赛季活动状态（十二码之夜 / 任意球实验室 / 星秀轮抽杯）。 */
+  seasonEvents?: import('./events/season-events.ts').SeasonEventsState
   /** 独立青训营；缺省旧档首次进入时初始化一次。 */
   youth?: YouthState
   /** 技能书商店点数与领取账本；旧档首次进入时初始化并补发已通关巅峰关卡点数。 */

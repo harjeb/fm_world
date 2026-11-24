@@ -193,7 +193,7 @@ export function renderChallenge(): string {
   const loaded = mode === 'friendly' || (mode === 'cup' ? !game.pve?.cupSeasonDeferred || game.pve.cupSeason?.seasonIndex === game.season.index : pveContentReady())
   const body = !loaded ? '<p class="banner info" role="status">正在加载对手名单，请稍候；加载失败时可重新选择此模式。</p>' : mode === 'friendly' ? renderFriendly() : mode === 'legend' ? renderLegend() : mode === 'cup' ? renderCup() : renderPeak()
   return `${pageHead({ kicker: '挑战 · 纯 PvE', title: MODE_LABEL[mode], sub: MODE_SUB[mode] })}
-    <div class="toolbar"><strong>S3 · 十二码之夜</strong><button class="btn" data-action="penalty-training">进入 3D 点球训练场</button><small>自由练习 · 不扣次数</small></div>
+    <div class="toolbar"><strong>S3 · 赛季活动与 3D 训练场</strong><button class="btn" data-action="penalty-training">进入 3D 点球训练场</button><button class="btn" data-action="freekick-training">进入 3D 任意球实验室</button><button class="btn primary" data-nav="events">打开赛季活动中心</button><small>支持无门将空门与多环境自由练习</small></div>
     <div class="seg challenge-mode-tabs" aria-label="挑战模式">${(Object.keys(MODE_LABEL) as (keyof typeof MODE_LABEL)[]).filter(key => !seasonCupsEnabled || key !== 'cup').map((key) => `<button data-challenge-mode="${key}" class="${key === mode ? 'active' : ''}">${MODE_LABEL[key]}</button>`).join('')}</div>
     ${body}${loaded ? selectedRoster() : ''}`
 }

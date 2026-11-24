@@ -313,6 +313,8 @@ export function findAnyPlayer(id: string): Player | undefined {
   return game.roster.find((player) => player.id === id)
     ?? game.youth?.members.find(member => member.player.id === id)?.player
     ?? game.youth?.intake.candidates.find(member => member.player.id === id)?.player
+    ?? game.seasonEvents?.draft?.seats.flatMap((seat) => seat.players).find((player) => player.id === id)
+    ?? game.seasonEvents?.draft?.seatPacks.flat().find((player) => player.id === id)
     ?? game.market?.listings.find((listing) => listing.player.id === id)?.player
     ?? game.freeStars.find((player) => player.id === id)
     ?? marketState.pool.find((player) => player.id === id)

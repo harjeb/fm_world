@@ -2,6 +2,7 @@ import * as T from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import type { loadMatchday } from './matchday.ts'
 import { HALF, HEIGHT, SPOT } from '../../game/penalty/practice.ts'
+import type { SurfaceId } from '../../game/penalty/environment.ts'
 
 // A purpose-built penalty practice end: one goal, its box, one small stand. No full stadium.
 export function stadium(art: Awaited<ReturnType<typeof loadMatchday>>, maxAnisotropy: number) {
@@ -46,10 +47,11 @@ export function stadium(art: Awaited<ReturnType<typeof loadMatchday>>, maxAnisot
     tex.anisotropy = Math.min(8, maxAnisotropy)
     tex.needsUpdate = true
   }
+  const grassMap = turf.map!
   const pos: number[] = [],
     uv: number[] = [],
     colors: number[] = []
-  for (let iz = -2; iz < 6; iz++)
+  for (let iz = -2; iz < 8; iz++)
     for (let ix = -3; ix < 3; ix++) {
       const x = ix * 8,
         z = iz * 5,
@@ -74,17 +76,23 @@ export function stadium(art: Awaited<ReturnType<typeof loadMatchday>>, maxAnisot
   lawn.setAttribute('uv', new T.Float32BufferAttribute(uv, 2))
   lawn.setAttribute('color', new T.Float32BufferAttribute(colors, 3))
   lawn.computeVertexNormals()
-  put(lawn, turf).receiveShadow = true
+  const lawnMesh = put(lawn, turf)
+  lawnMesh.receiveShadow = true
+  lawnMesh.userData.dynamic = true
   // Subtle translucent worn patches in the keeper's landing zone and at the spot (no hard disc edge).
   const can = document.createElement('canvas')
   can.width = can.height = 128
-  const c = can.getContext('2d')!,
-    fade = c.createRadialGradient(64, 64, 3, 64, 64, 61)
-  fade.addColorStop(0, 'rgba(122,106,57,.58)')
-  fade.addColorStop(0.55, 'rgba(123,118,68,.32)')
-  fade.addColorStop(1, 'rgba(110,115,60,0)')
-  c.fillStyle = fade
-  c.fillRect(0, 0, 128, 128)
+  const c = can.getContext('2d')!
+  function paintWear(inner: string, mid: string, outer: string) {
+    c.clearRect(0, 0, 128, 128)
+    const fade = c.createRadialGradient(64, 64, 3, 64, 64, 61)
+    fade.addColorStop(0, inner)
+    fade.addColorStop(0.55, mid)
+    fade.addColorStop(1, outer)
+    c.fillStyle = fade
+    c.fillRect(0, 0, 128, 128)
+  }
+  paintWear('rgba(122,106,57,.58)', 'rgba(123,118,68,.32)', 'rgba(110,115,60,0)')
   const wear = new T.CanvasTexture(can)
   wear.colorSpace = T.SRGBColorSpace
   textures.push(wear)
@@ -95,6 +103,7 @@ export function stadium(art: Awaited<ReturnType<typeof loadMatchday>>, maxAnisot
   ]) {
     const a = put(new T.PlaneGeometry(w, h), wearMat, x, -0.005, z)
     a.rotation.x = -Math.PI / 2
+    a.userData.dynamic = true
   }
   const stripes: number[] = []
   function stroke(x: number, z: number, X: number, Z: number, width = 0.105) {
@@ -146,18 +155,21 @@ export function stadium(art: Awaited<ReturnType<typeof loadMatchday>>, maxAnisot
   board.width = 1024
   board.height = 96
   const led = board.getContext('2d')!
-  led.fillStyle = '#122b38'
-  led.fillRect(0, 0, 1024, 96)
-  led.fillStyle = art.club.color
-  led.fillRect(0, 0, 1024, 6)
-  led.drawImage(art.badge, 22, 10, 62, 72)
-  led.textBaseline = 'middle'
-  led.fillStyle = '#f0f6ee'
-  led.font = 'bold 44px sans-serif'
-  led.fillText(art.club.name, 108, 48, 420)
-  led.fillStyle = '#b2d8d4'
-  led.font = '600 25px sans-serif'
-  led.fillText('十二码之夜    /    MATCHDAY', 580, 48)
+  function drawBanner(eventLabel: string) {
+    led.fillStyle = '#122b38'
+    led.fillRect(0, 0, 1024, 96)
+    led.fillStyle = art.club.color
+    led.fillRect(0, 0, 1024, 6)
+    led.drawImage(art.badge, 22, 10, 62, 72)
+    led.textBaseline = 'middle'
+    led.fillStyle = '#f0f6ee'
+    led.font = 'bold 44px sans-serif'
+    led.fillText(art.club.name, 108, 48, 420)
+    led.fillStyle = '#b2d8d4'
+    led.font = '600 25px sans-serif'
+    led.fillText(`${eventLabel}    /    MATCHDAY`, 580, 48)
+  }
+  drawBanner('十二码之夜')
   const ledTex = new T.CanvasTexture(board)
   ledTex.colorSpace = T.SRGBColorSpace
   ledTex.wrapS = T.RepeatWrapping
@@ -246,7 +258,7 @@ export function stadium(art: Awaited<ReturnType<typeof loadMatchday>>, maxAnisot
   root.updateMatrixWorld(true)
   const batches = new Map<string, T.Mesh<T.BufferGeometry, T.Material>[]>()
   root.traverse((o) => {
-    if (o instanceof T.Mesh && !(o instanceof T.InstancedMesh)) {
+    if (o instanceof T.Mesh && !(o instanceof T.InstancedMesh) && !o.userData.dynamic) {
       const key = [o.material.uuid, ...Object.keys(o.geometry.attributes).sort(), !!o.geometry.index].join(':')
       const items = batches.get(key) ?? []
       items.push(o)
@@ -266,8 +278,73 @@ export function stadium(art: Awaited<ReturnType<typeof loadMatchday>>, maxAnisot
     batch.castShadow = m === pole
     root.add(batch)
   }
+
+  // Procedural noise swatch for snow & desert sand surfaces
+  const grainCanvas = document.createElement('canvas')
+  grainCanvas.width = grainCanvas.height = 128
+  const gctx = grainCanvas.getContext('2d')!
+  const grainTex = new T.CanvasTexture(grainCanvas)
+  grainTex.colorSpace = T.SRGBColorSpace
+  grainTex.wrapS = grainTex.wrapT = T.RepeatWrapping
+  grainTex.anisotropy = Math.min(4, maxAnisotropy)
+  textures.push(grainTex)
+
+  function fillGrain(baseHex: string, speckA: string, speckB: string) {
+    gctx.fillStyle = baseHex
+    gctx.fillRect(0, 0, 128, 128)
+    let s = 918273
+    for (let i = 0; i < 900; i++) {
+      s = (Math.imul(s, 1664525) + 1013904223) >>> 0
+      const x = s & 127
+      const y = (s >>> 7) & 127
+      gctx.fillStyle = (s & 1) === 0 ? speckA : speckB
+      gctx.fillRect(x, y, 2, 2)
+    }
+    grainTex.needsUpdate = true
+  }
+
+  let currentSurface: SurfaceId = 'grass'
+  function setSurface(surface: SurfaceId) {
+    if (surface === currentSurface) return
+    currentSurface = surface
+    if (surface === 'grass') {
+      turf.map = grassMap
+      turf.color.set('#ffffff')
+      turf.roughness = 0.95
+      paint.color.set(0xdde5d4)
+      paintWear('rgba(122,106,57,.58)', 'rgba(123,118,68,.32)', 'rgba(110,115,60,0)')
+    } else if (surface === 'mud') {
+      turf.map = grassMap
+      turf.color.set('#807352')
+      turf.roughness = 0.42
+      paint.color.set(0xb9bcae)
+      paintWear('rgba(52,38,22,.82)', 'rgba(66,51,30,.54)', 'rgba(66,51,30,0)')
+    } else if (surface === 'snow') {
+      fillGrain('#e8f0f7', '#d5e3ef', '#f7fbff')
+      turf.map = grainTex
+      turf.color.set('#ffffff')
+      turf.roughness = 0.78
+      paint.color.set(0x4a7066)
+      paintWear('rgba(168,195,216,.65)', 'rgba(185,208,225,.35)', 'rgba(200,220,235,0)')
+    } else {
+      fillGrain('#d7b176', '#c59c5e', '#e5c48c')
+      turf.map = grainTex
+      turf.color.set('#ffffff')
+      turf.roughness = 0.9
+      paint.color.set(0xf5efe2)
+      paintWear('rgba(168,122,64,.62)', 'rgba(182,138,78,.32)', 'rgba(182,138,78,0)')
+    }
+    turf.needsUpdate = true
+    wear.needsUpdate = true
+  }
+
   return {
     root,
+    setSurface,
+    setBanner(title: string) {
+      drawBanner(title)
+      ledTex.needsUpdate = true
+    },
     dispose() {
       seats.dispose()
       for (const m of mats) m.dispose()

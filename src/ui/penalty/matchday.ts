@@ -269,14 +269,114 @@ export async function loadMatchday(club: Team) {
     ball = part('Football'),
     objects = new T.Group()
   objects.add(kicker.root, keeper.root, ball, ...keeper.gloves)
+  const ballBaseColors = new Map<T.MeshStandardMaterial, T.Color>()
   ball.traverse((n) => {
-    if (n instanceof T.Mesh && n.material.name === 'print') {
-      n.material.color.set(club.color)
-      n.material.polygonOffset = true
-      n.material.polygonOffsetFactor = -1
-      n.material.polygonOffsetUnits = -1
+    if (n instanceof T.Mesh) {
+      const m = (n.material as T.MeshStandardMaterial).clone()
+      materials.add(m)
+      n.material = m
+      ballBaseColors.set(m, m.color.clone())
+      if (m.name === 'print') {
+        m.color.set(club.color)
+        ballBaseColors.set(m, m.color.clone())
+        m.polygonOffset = true
+        m.polygonOffsetFactor = -1
+        m.polygonOffsetUnits = -1
+      }
     }
   })
+  function setBallHiVis(hiVis: boolean) {
+    ball.traverse((n) => {
+      if (n instanceof T.Mesh) {
+        const m = n.material as T.MeshStandardMaterial
+        if (hiVis) {
+          if (m.name === 'print') m.color.set('#1f1520')
+          else m.color.set('#ff6f1a')
+        } else {
+          const orig = ballBaseColors.get(m)
+          if (orig) m.color.copy(orig)
+        }
+      }
+    })
+  }
+  function setKeeperVisible(visible: boolean) {
+    keeper.root.visible = visible
+    for (const g of keeper.gloves) g.visible = visible
+  }
+  async function spawnKitFigure(kitClub: Team, wearer?: Wearer) {
+    const kitBadge = kitClub.name === club.name && kitClub.color === club.color ? badge : await clubBadge(kitClub)
+    const root = part('Athlete'),
+      mats = new Map<string, T.MeshStandardMaterial>()
+    root.traverse((n) => {
+      if (n instanceof T.Mesh) {
+        const m = n.material as T.MeshStandardMaterial
+        if (!mats.has(m.name)) {
+          const copy = m.clone()
+          mats.set(m.name, copy)
+          materials.add(copy)
+        }
+        n.material = mats.get(m.name)!
+        n.castShadow = true
+        n.receiveShadow = true
+      }
+    })
+    const canvas = document.createElement('canvas')
+    canvas.width = 1024
+    canvas.height = 512
+    const ctx = canvas.getContext('2d')!,
+      fabric = new T.CanvasTexture(canvas)
+    fabric.colorSpace = T.SRGBColorSpace
+    textures.add(fabric)
+    mats.get('shirt')!.map = fabric
+    const tone = kitClub.color
+    mats.get('sleeve')!.color.set(tone)
+    mats.get('trim')!.color.set(inkOn(tone))
+    mats.get('sock')!.color.set(tone)
+    mats.get('shorts')!.color.set(tone).multiplyScalar(0.34)
+    tailor(ctx, kitClub, wearer, false, kitBadge)
+    fabric.needsUpdate = true
+
+    const head = root.getObjectByName('Head')!,
+      hairs = Array.from({ length: HAIR_COUNT }, (_, i) => root.getObjectByName('Hair' + i)!),
+      beard = root.getObjectByName('Beard')!,
+      legs = ['L', 'R'].map((s) => root.getObjectByName('Hip' + s)!),
+      knees = ['L', 'R'].map((s) => root.getObjectByName('Knee' + s)!),
+      ankles = ['L', 'R'].map((s) => root.getObjectByName('Ankle' + s)!),
+      arms = ['L', 'R'].map((s) => root.getObjectByName('Shoulder' + s)!),
+      elbows = ['L', 'R'].map((s) => root.getObjectByName('Elbow' + s)!)
+    let h = hashSeed(`${wearer?.id ?? 'extra'}|${wearer?.name ?? ''}`)
+    const skinIdx = h % SKIN_TONES.length
+    h = nextHash(h)
+    const hairStyle = h % HAIR_COUNT
+    h = nextHash(h)
+    const hairColorIdx = skinIdx >= 5 && h % 7 !== 0 ? h % 3 : h % HAIR_TONES.length
+    h = nextHash(h)
+    const headShape = HEAD_SHAPES[h % HEAD_SHAPES.length]
+    h = nextHash(h)
+    const hasBeard = h % 10 < 4
+    h = nextHash(h)
+    const bootStyle = BOOT_STYLES[h % BOOT_STYLES.length]
+    mats.get('skin')!.color.set(SKIN_TONES[skinIdx])
+    mats.get('hair')!.color.set(HAIR_TONES[hairColorIdx])
+    mats.get('boot')!.color.set(bootStyle.main)
+    mats.get('bootAccent')!.color.set(bootStyle.accent)
+    mats.get('bootSole')!.color.set(bootStyle.sole)
+    head.scale.set(headShape[0], headShape[1], headShape[2])
+    hairs.forEach((node, idx) => { node.visible = idx === hairStyle })
+    beard.visible = hasBeard
+    root.scale.setScalar(clamp((wearer?.height || 181) / 180, 0.93, 1.09))
+    return {
+      root,
+      legs,
+      knees,
+      ankles,
+      arms,
+      elbows,
+      gloves: [] as T.Object3D[],
+      dress: () => {},
+      plant: (lift = 0) => plantFeetOnTurf({ root, legs, knees, ankles, arms, elbows, gloves: [], dress: () => {} }, lift),
+    }
+  }
 
   const target = new T.Vector3(),
     axis = new T.Vector3(),
@@ -306,17 +406,18 @@ export async function loadMatchday(club: Team) {
     fig.root.updateMatrixWorld(true)
   }
 
-  function pose(k: ReturnType<typeof keeperAt>, run: number) {
+  function pose(k: ReturnType<typeof keeperAt>, run: number, spotX = 0, spotZ = SPOT) {
     // --- STRIKER ---
     const sc = kicker.root.scale.y
-    const approachX = -0.14 - 0.04 * clamp(run / 0.82)
-    const approachZ = SPOT + 0.22 + 1.66 * (1 - run)
+    const aimYaw = Math.atan2(-spotX, spotZ)
+    const approachX = spotX - 0.14 - 0.04 * clamp(run / 0.82)
+    const approachZ = spotZ + 0.22 + 1.66 * (1 - run)
     const runLift = run > 0 && run < 0.96 ? Math.abs(Math.sin(4 * Math.PI * run)) * 0.035 : 0
     kicker.root.position.set(approachX, 0.96 * sc, approachZ)
 
     if (run <= 0.001) {
       const rootX = -0.05
-      kicker.root.rotation.set(rootX, 0.12, 0, 'YXZ')
+      kicker.root.rotation.set(rootX, 0.12 + aimYaw * 0.65, 0, 'YXZ')
       kicker.legs[0].rotation.set(0.11, 0, -0.05)
       kicker.knees[0].rotation.set(-0.18, 0, 0)
       kicker.ankles[0].rotation.set(-(rootX + 0.11 - 0.18), 0, 0.05)
@@ -463,6 +564,9 @@ export async function loadMatchday(club: Team) {
     kicker: kicker.root,
     keeper: keeper.root,
     pose,
+    setBallHiVis,
+    setKeeperVisible,
+    spawnKitFigure,
     dress(s?: Wearer, g?: Wearer) {
       kicker.dress(s)
       keeper.dress(g)

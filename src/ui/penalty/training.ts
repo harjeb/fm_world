@@ -21,16 +21,42 @@ import {
   type Dive,
   type Kick,
   type Point,
+  type Result,
   type Shot,
 } from '../../game/penalty/practice.ts'
+import {
+  ENVIRONMENT_LIST,
+  ENVIRONMENT_PRESETS,
+  type PitchEnvironment,
+} from '../../game/penalty/environment.ts'
 import { createGround, type Inspection } from './scene.ts'
 import { loadMatchday, type Team } from './matchday.ts'
 import { finishBall, netImpact, SETTLE, type Impact } from '../../game/penalty/net.ts'
 
+export interface PenaltyStageContext {
+  title: string
+  eyebrow: string
+  env: PitchEnvironment
+  prompt: string
+  role: 'kick' | 'keep'
+  keeperless?: boolean
+  forcedKick?: Kick
+  forcedOutside?: boolean
+  keeperBias?: 'left' | 'right' | 'early' | 'mixed'
+  onAttempt(outcome: {
+    result: Result
+    defend: boolean
+    kick: Kick
+    outside: boolean
+    aim: Point
+    landing: Point
+  }): { finished: boolean; passed?: boolean; nextRole?: 'kick' | 'keep'; nextKeeperless?: boolean; message: string; buttonLabel?: string }
+}
+
 function options(select: HTMLSelectElement, rows: [string, string][]) {
   select.replaceChildren(...rows.map(([value, label]) => new Option(label, value)))
 }
-function ability(player?: Player): Ability {
+export function playerPenaltyAbility(player?: Player): Ability {
   if (!player) return STANDARD
   const a = { ...STANDARD }
   for (const key of Object.keys(a) as (keyof Ability)[])
@@ -51,18 +77,22 @@ function renderRatings(host: HTMLElement, rows: [string, number][]) {
       .join('')
 }
 
-export async function openPenaltyTraining(roster: readonly Player[], club: Team) {
+export async function openPenaltyTraining(
+  roster: readonly Player[],
+  club: Team,
+  stageCtx?: PenaltyStageContext,
+) {
   if (document.querySelector('.penalty-lab')) return
   const d = document.createElement('dialog')
   d.className = 'penalty-lab'
   d.setAttribute('aria-labelledby', 'penalty-title')
   d.innerHTML = `<header class="lab-head">
       <div class="lab-title">
-        <span class="lab-eyebrow">S3 · 自由训练</span>
-        <h2 id="penalty-title">十二码之夜</h2>
+        <span class="lab-eyebrow">${stageCtx ? stageCtx.eyebrow : 'S3 · 自由训练'}</span>
+        <h2 id="penalty-title">${stageCtx ? stageCtx.title : '十二码之夜'}</h2>
         <span class="lab-club"><i class="lab-club-dot"></i><span class="lab-club-name"></span></span>
       </div>
-      <button class="leave" type="button">退出训练</button>
+      <button class="leave" type="button">${stageCtx ? '返回活动页' : '退出训练'}</button>
     </header>
     <div class="pitch3">
       <div class="ground"></div>${shotHud}
@@ -72,7 +102,7 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
           <circle class="pad-deadzone" r="24" stroke-dasharray="3 3"/>
           <g class="pad-ticks">
             <path d="M0 -42v6 M0 42v-6 M-42 0h6 M42 0h-6"/>
-            <path class="pad-diag" d="M-29 -29l5 5 M29 -29l-5 5 M-29 29l5 -5 M29 29l-5 -5"/>
+            <path d="M-29 -29l5 5 M29 -29l-5 5 M-29 29l5 -5 M29 29l-5 -5" class="pad-diag"/>
           </g>
         </svg>
         <span class="pad-knob">扑</span>
@@ -81,11 +111,12 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
     <p class="call" role="status" data-tone="info"></p>
     <div class="ratings" aria-live="polite"></div>
     <div class="settings">
-      <label><span>视角</span><select class="role"><option value="kick">我来主罚</option><option value="keep">我来守门</option></select></label>
+      <label><span>视角</span><select class="role"><option value="kick">我来主罚</option><option value="open">无门将练习</option><option value="keep">我来守门</option></select></label>
       <label><span>主罚手</span><select class="striker"></select></label>
       <label><span>门将</span><select class="keeper"></select></label>
       <label><span>踢法</span><select class="kick"></select></label>
       <label><span>触球脚面</span><select class="foot"></select></label>
+      <label><span>球场环境</span><select class="env"></select></label>
       <label><span>装备特写</span><select class="inspect"><option value="play">返回训练镜头</option><option value="player">主罚手球衣</option><option value="keeper">门将球衣</option><option value="ball">比赛用球</option></select></label>
     </div>
     <footer class="lab-foot">
@@ -93,7 +124,7 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
         <button class="go" type="button" data-phase="ready"></button>
         <button class="repeat" type="button" hidden>重扑同一球</button>
       </div>
-      <small class="lab-note">不限次数 · 无奖励 · 不影响联赛</small>
+      <small class="lab-note">${stageCtx ? '活动关卡 · 体能伤病不带回联赛' : '不限次数 · 无奖励 · 不影响联赛'}</small>
     </footer>`
   document.body.append(d)
   const el = <E extends HTMLElement = HTMLElement>(s: string) => d.querySelector<E>(s)!
@@ -155,7 +186,7 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
   el('.ratings').hidden = false
   go.hidden = false
   try {
-    ground = createGround(stage, art)
+    ground = createGround(stage, art, '十二码之夜')
   } catch (error) {
     console.error('无法创建点球训练场', error)
     art.dispose()
@@ -169,7 +200,8 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
     ss = el<HTMLSelectElement>('.striker'),
     gs = el<HTMLSelectElement>('.keeper'),
     ks = el<HTMLSelectElement>('.kick'),
-    fs = el<HTMLSelectElement>('.foot')
+    fs = el<HTMLSelectElement>('.foot'),
+    envSelect = el<HTMLSelectElement>('.env')
   const strikers = roster.filter((p) => !p.positions.GK),
     keepers = roster.filter((p) => p.positions.GK > 0)
   for (const [sel, list, fallback] of [
@@ -181,15 +213,39 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
     ks,
     (Object.keys(KICKS) as Kick[]).map((k) => [k, KICKS[k].label]),
   )
+  options(
+    envSelect,
+    ENVIRONMENT_LIST.map((env) => [env.id, `${env.label}（${env.subtitle}）`]),
+  )
   const feet = () =>
     options(
       fs,
       KICKS[ks.value as Kick].feet.map((f) => [f, f]),
     )
   feet()
+
+  if (stageCtx) {
+    envSelect.value = stageCtx.env.id in ENVIRONMENT_PRESETS ? stageCtx.env.id : 'standard'
+    envSelect.disabled = true
+    role.value = stageCtx.keeperless ? 'open' : stageCtx.role
+    role.disabled = true
+    inspection.disabled = true
+    if (stageCtx.forcedKick) {
+      ks.value = stageCtx.forcedKick
+      feet()
+      ks.disabled = true
+      if (stageCtx.forcedOutside !== undefined) {
+        fs.value = stageCtx.forcedOutside ? '外脚背' : KICKS[stageCtx.forcedKick].feet[0]
+        fs.disabled = true
+      }
+    }
+  }
+
   type Phase = 'ready' | 'power' | 'flight' | 'done'
   let phase: Phase = 'ready',
     defend = false,
+    keeperless = false,
+    stageFinished = false,
     aim: Point = { x: 1.9, y: 1.15 },
     power = 0,
     shot: Shot | null = null,
@@ -202,7 +258,8 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
   let shooter = STANDARD,
     goalie = STANDARD,
     kick: Kick = 'push',
-    bounds = band(kick, shooter)
+    currentEnv: PitchEnvironment = stageCtx?.env ?? ENVIRONMENT_PRESETS.standard,
+    bounds = band(kick, shooter, currentEnv)
   function clock() {
     return ((paused ?? performance.now()) - origin) / 1000
   }
@@ -218,7 +275,7 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
   repeat.addEventListener(
     'click',
     () => {
-      if (lastOpponentShot && defend) {
+      if (lastOpponentShot && defend && !stageCtx) {
         const previous = lastOpponentShot
         reset()
         start(previous)
@@ -233,13 +290,15 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
     shot = null
     dive = null
     clearPad()
+    currentEnv = stageCtx?.env ?? (ENVIRONMENT_PRESETS[envSelect.value] ?? ENVIRONMENT_PRESETS.standard)
     defend = role.value === 'keep'
+    keeperless = role.value === 'open'
     const currentStriker = strikers[Number(ss.value)]
     const currentKeeper = keepers[Number(gs.value)]
-    shooter = ability(currentStriker)
-    goalie = ability(currentKeeper)
+    shooter = playerPenaltyAbility(currentStriker)
+    goalie = playerPenaltyAbility(currentKeeper)
     kick = ks.value as Kick
-    bounds = band(kick, shooter)
+    bounds = band(kick, shooter, currentEnv)
     const rating = (n: number) => Math.round(n * 100)
     renderRatings(
       el('.ratings'),
@@ -256,27 +315,36 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
           ],
     )
     view.dress(currentStriker, currentKeeper)
+    view.setEnvironment(currentEnv)
+    view.setKeeperless(keeperless)
     const inspecting = inspection.value !== 'play'
     view.inspect(inspection.value as Inspection)
     view.mode(defend)
     view.path([])
-    repeat.hidden = !defend || !lastOpponentShot
+    repeat.hidden = Boolean(stageCtx) || !defend || !lastOpponentShot
     pad.hidden = !defend || inspecting
+    gs.disabled = keeperless
     hud.reset(!inspecting, defend, bounds)
+    hud.environment(currentEnv)
     hud.meta(
-      defend ? '守门训练' : '主罚训练',
+      defend ? '守门训练' : keeperless ? '空门练习' : stageCtx ? '关卡挑战' : '主罚训练',
       defend
         ? currentKeeper?.name ?? '训练门将'
         : `${KICKS[kick].label} · ${fs.value}`,
     )
-    ks.disabled = fs.disabled = defend
+    if (!stageCtx?.forcedKick) ks.disabled = defend
+    if (stageCtx?.forcedOutside === undefined) fs.disabled = defend
     go.disabled = false
     go.dataset.phase = 'ready'
     go.textContent = defend ? '让对手主罚' : '瞄准好了 · 开始蓄力'
     setStatus(
-      defend
-        ? '点开始后观察助跑。推方向盘即扑，不推守中；也可用方向键。'
-        : '拖动球门内的瞄准准星，或用方向键微调落点。',
+      stageCtx
+        ? stageCtx.prompt
+        : defend
+          ? '点开始后观察助跑。推方向盘即扑，不推守中；也可用方向键。'
+          : keeperless
+            ? '无门将空门模式：专注感受脚法弧线、风向偏移与场地擦地效果。'
+            : '拖动球门内的瞄准准星，或用方向键微调落点。',
       'info',
     )
     if (inspecting) {
@@ -284,16 +352,23 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
       setStatus(`${club.name} · 装备特写。切回训练镜头即可继续。`, 'info')
     } else go.hidden = false
   }
-  for (const select of [role, ss, gs, ks, fs, inspection])
+  for (const select of [role, ss, gs, ks, fs, envSelect, inspection])
     select.addEventListener(
       'change',
       () => {
         if (select === ks) feet()
+        if (select === role && role.value === 'open' && inspection.value === 'keeper') {
+          inspection.value = 'play'
+        }
         reset()
       },
       opts,
     )
   function start(previous?: Shot) {
+    if (stageFinished) {
+      d.close()
+      return
+    }
     if (phase === 'done') {
       reset()
       return
@@ -312,7 +387,7 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
       rnd = () => Math.random()
     if (defend) {
       const k = (Object.keys(KICKS) as Kick[])[Math.floor(rnd() * 4)],
-        b = band(k, shooter)
+        b = band(k, shooter, currentEnv)
       const x = k === 'chip' ? (rnd() - 0.5) * 1.4 : (rnd() < 0.5 ? -1 : 1) * (0.8 + rnd() * 2.5)
       shot =
         previous ??
@@ -323,16 +398,27 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
           b.center + (rnd() - 0.5) * 0.24,
           shooter,
           seed,
+          currentEnv,
         )
       lastOpponentShot = shot
       dive = null
       pad.dataset.active = 'true'
     } else {
       power = meter(clock(), bounds.cycle)
-      shot = makeShot(kick, fs.value === '外脚背', aim, power, shooter, seed)
+      shot = makeShot(kick, fs.value === '外脚背', aim, power, shooter, seed, currentEnv)
       hud.lock(power, shot.zone)
-      dive =
-        rnd() < 0.17 ? null : { at: -0.09 + rnd() * 0.25, dir: fromKeeperPad(rnd() < 0.5 ? -1 : 1, rnd() - 0.5) }
+      if (keeperless) {
+        dive = null
+      } else if (stageCtx?.keeperBias === 'left') {
+        dive = { at: -0.05, dir: fromKeeperPad(1, rnd() * 0.3 - 0.1) }
+      } else if (stageCtx?.keeperBias === 'right') {
+        dive = { at: -0.05, dir: fromKeeperPad(-1, rnd() * 0.3 - 0.1) }
+      } else if (stageCtx?.keeperBias === 'early') {
+        dive = { at: -0.14, dir: fromKeeperPad(rnd() < 0.5 ? -1 : 1, 0.1) }
+      } else {
+        dive =
+          rnd() < 0.17 ? null : { at: -0.09 + rnd() * 0.25, dir: fromKeeperPad(rnd() < 0.5 ? -1 : 1, rnd() - 0.5) }
+      }
     }
     repeat.hidden = true
     origin = performance.now()
@@ -340,7 +426,7 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
     go.disabled = true
     go.dataset.phase = 'flight'
     go.textContent = defend ? '观察出脚…' : '射门中…'
-    setStatus(defend ? '对手开始助跑！看准球路，向那个方向推。' : '观察实际落点与门将的位置。', 'info')
+    setStatus(defend ? '对手开始助跑！看准球路，向那个方向推。' : '观察实际落点与球路变化。', 'info')
   }
   go.addEventListener('click', () => start(), opts)
   const lead = () => (defend ? 1.25 : 0.3)
@@ -424,7 +510,6 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
   window.addEventListener('blur', pause, opts)
   window.addEventListener('focus', resume, opts)
   document.addEventListener('visibilitychange', () => (document.hidden ? pause() : resume()), opts)
-  // Only redraw static poses when aim, layout or state changes. The power bar is a DOM overlay.
   let lastAim: Point | null = null,
     lastPhase: Phase | null = null,
     lastRevision = -1
@@ -435,7 +520,7 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
     if (phase === 'power') hud.value(meter(elapsed, bounds.cycle))
     let t = phase === 'done' ? stopAt : phase === 'flight' ? elapsed - lead() : -2
     if (phase === 'flight' && shot) {
-      const out = resolve(shot, dive, goalie)
+      const out = resolve(shot, dive, goalie, { keeperless, env: currentEnv })
       if (t >= out.at) {
         phase = 'done'
         delete pad.dataset.active
@@ -458,22 +543,47 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
                 : defend
                   ? 'good'
                   : 'bad'
-        setStatus(
-          `${out.result} · 力度${shot.zone}。${defend ? (dive ? '黄线是实际球路，可对照手套位置。' : '本球选择留在中路。') : '圆形准星是预期落点，黄线是实际球路。'}`,
-          tone,
-        )
-        go.disabled = false
-        go.dataset.phase = 'done'
-        go.textContent = '再练一球'
-        repeat.hidden = !defend
+        if (stageCtx) {
+          const step = stageCtx.onAttempt({
+            result: out.result,
+            defend,
+            kick,
+            outside: fs.value === '外脚背',
+            aim,
+            landing: shot.target,
+          })
+          stageCtx.prompt = step.message
+          setStatus(`${out.result} · 力度${shot.zone}。${step.message}`, step.finished ? (step.passed ? 'good' : 'bad') : tone)
+          if (step.nextRole) role.value = step.nextKeeperless ? 'open' : step.nextRole
+          if (step.finished) {
+            stageFinished = true
+            go.disabled = false
+            go.dataset.phase = 'done'
+            go.textContent = step.buttonLabel ?? '返回活动页'
+          } else {
+            go.disabled = false
+            go.dataset.phase = 'done'
+            go.textContent = step.buttonLabel ?? '下一脚'
+          }
+        } else {
+          setStatus(
+            `${out.result} · 力度${shot.zone}。${defend ? (dive ? '黄线是实际球路，可对照手套位置。' : '本球选择留在中路。') : '圆形准星是预期落点，黄线是实际球路。'}`,
+            tone,
+          )
+          go.disabled = false
+          go.dataset.phase = 'done'
+          go.textContent = '再练一球'
+          repeat.hidden = !defend
+        }
       }
     }
     const afterLine = phase === 'done' ? Math.max(0, elapsed - lead() - stopAt) : 0
     const sinceImpact = impact ? afterLine - impact.delay : 0
     const netMoving = !!impact && sinceImpact < SETTLE
-    // Render one final settled frame after the motion ends.
+    const weatherAnimating = currentEnv.weather !== 'clear'
     if (
       !netMoving &&
+      !weatherAnimating &&
       inspection.value === 'play' &&
       phase !== 'flight' &&
       lastPhase === phase &&
@@ -486,11 +596,12 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
     lastRevision = view.revision
     view.draw(
       shot && impact ? finishBall(shot, impact, afterLine) : shot ? ballAt(shot, t) : { x: 0, y: R, z: SPOT },
-      keeperAt(dive, goalie, t),
+      keeperAt(dive, goalie, t, currentEnv),
       phase === 'flight' || phase === 'done' ? clamp(1 + t / lead()) : 0,
       sinceImpact >= 0 && sinceImpact < SETTLE ? impact : null,
       sinceImpact,
       elapsed * 0.55,
+      performance.now() / 1000,
     )
     if (!defend && inspection.value === 'play') hud.locate(view.aimScreen(aim))
   }

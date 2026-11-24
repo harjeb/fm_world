@@ -78,6 +78,62 @@
   font-weight: 500;
 }
 
+/* Environment & wind compass broadcast pill */
+.pk-env {
+  position: absolute;
+  top: 40px;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(10, 17, 26, 0.82), rgba(14, 24, 36, 0.72));
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  font: 600 10.5px/1.2 var(--font, system-ui, sans-serif);
+  color: #cfe0ec;
+  user-select: none;
+}
+.pk-wind-icon {
+  width: 12px;
+  height: 12px;
+  color: #5bf5b3;
+  transition: transform 220ms ease;
+}
+.pk-env[data-wind='calm'] .pk-wind-icon {
+  opacity: 0.45;
+  color: #93acc0;
+}
+.pk-env-wind {
+  font-weight: 700;
+  color: #eef6fb;
+}
+.pk-env[data-weather='sandstorm'] {
+  border-color: rgba(235, 174, 92, 0.45);
+}
+.pk-env[data-weather='sandstorm'] .pk-wind-icon,
+.pk-env[data-weather='sandstorm'] .pk-env-wind {
+  color: #ffca72;
+}
+.pk-env[data-weather='snow'] {
+  border-color: rgba(168, 218, 255, 0.45);
+}
+.pk-env[data-weather='snow'] .pk-wind-icon,
+.pk-env[data-weather='snow'] .pk-env-wind {
+  color: #9ed9ff;
+}
+.pk-env[data-weather='rain'] {
+  border-color: rgba(112, 188, 255, 0.45);
+}
+.pk-env[data-weather='rain'] .pk-wind-icon,
+.pk-env[data-weather='rain'] .pk-env-wind {
+  color: #74c0ff;
+}
+.pk-env-detail {
+  color: #bfd1df;
+  font-weight: 500;
+}
+
 /* Shot outcome broadcast toast */
 .pk-toast {
   position: absolute;

@@ -1,4 +1,5 @@
 import { clamp, type band, type Result, type Zone, type Point } from '../../game/penalty/practice.ts'
+import { environmentHudSummary, type PitchEnvironment } from '../../game/penalty/environment.ts'
 import './hud.css'
 
 // Screen-space broadcast HUD. Never intercepts pointer input; target math stays on the 3D goal plane.
@@ -7,6 +8,12 @@ export const shotHud = `<div class="pk-hud" data-state="aim" data-mode="kick">
     <span class="pk-banner-tag"></span>
     <span class="pk-banner-sep"></span>
     <span class="pk-banner-detail"></span>
+  </div>
+  <div class="pk-env" aria-hidden="true" data-weather="clear">
+    <svg class="pk-wind-icon" viewBox="-10 -10 20 20"><path d="M0 -7L4.5 5 0 2.2 -4.5 5Z" fill="currentColor"/></svg>
+    <span class="pk-env-wind"></span>
+    <span class="pk-banner-sep"></span>
+    <span class="pk-env-detail"></span>
   </div>
   <div class="pk-toast" aria-hidden="true" hidden>
     <strong class="pk-toast-main"></strong>
@@ -66,6 +73,10 @@ export function createHud(parent: HTMLElement) {
     label = root.querySelector('.pk-label')!,
     bannerTag = root.querySelector('.pk-banner-tag')!,
     bannerDetail = root.querySelector('.pk-banner-detail')!,
+    envPill = root.querySelector<HTMLElement>('.pk-env')!,
+    windIcon = root.querySelector<SVGElement>('.pk-wind-icon')!,
+    envWind = root.querySelector('.pk-env-wind')!,
+    envDetail = root.querySelector('.pk-env-detail')!,
     toast = root.querySelector<HTMLElement>('.pk-toast')!,
     toastMain = root.querySelector('.pk-toast-main')!,
     toastSub = root.querySelector('.pk-toast-sub')!
@@ -102,6 +113,14 @@ export function createHud(parent: HTMLElement) {
     meta(tag: string, detail: string) {
       bannerTag.textContent = tag
       bannerDetail.textContent = detail
+    },
+    environment(env: PitchEnvironment) {
+      const info = environmentHudSummary(env)
+      envPill.dataset.weather = env.weather
+      envPill.dataset.wind = info.hasWind ? 'active' : 'calm'
+      windIcon.style.transform = `rotate(${info.screenDeg}deg)`
+      envWind.textContent = info.windText
+      envDetail.textContent = info.detailText
     },
     outcome(result: Result | null, defend: boolean, sub = '') {
       if (!result) {
