@@ -38,7 +38,7 @@ type TierProfile = {
   minStage: number
   /** 留底资金：低于这个数就不再买人。 */
   reserve: number
-  /** 升设施时最少留下的钱占 reserve 的比例。顶级球队优先升级，敢花到留底的一半。 */
+  /** 本赛季还有买人名额时，升设施前最少留下的钱占 reserve 的比例（>= 1，避免设施升级把转会预算抽干）。 */
   upgradeFloor: number
   /** 每轮最多升几次设施（小数按轮累计）：二级慢、一级积极、顶级最快。 */
   upgradePerRound: number
@@ -49,12 +49,28 @@ type TierProfile = {
 }
 
 const TIER_PROFILE: Record<TierId, TierProfile> = {
-  champions: { balance: 12_000_000, fans: 44_000, stage: [12, 18], minStage: 11, reserve: 3_000_000, upgradeFloor: 0.5, upgradePerRound: 4, overpay: 1.2, perDay: [3, 5] },
-  division1: { balance: 6_000_000, fans: 17_000, stage: [8, 13], minStage: 1, reserve: 1_500_000, upgradeFloor: 1, upgradePerRound: 2, overpay: 1.1, perDay: [2, 3] },
+  champions: { balance: 12_000_000, fans: 44_000, stage: [12, 18], minStage: 11, reserve: 3_000_000, upgradeFloor: 2.5, upgradePerRound: 4, overpay: 1.2, perDay: [3, 5] },
+  division1: { balance: 6_000_000, fans: 17_000, stage: [8, 13], minStage: 1, reserve: 1_500_000, upgradeFloor: 2, upgradePerRound: 2, overpay: 1.1, perDay: [2, 3] },
   division2: { balance: 2_500_000, fans: 6_000, stage: [3, 7], minStage: 1, reserve: 600_000, upgradeFloor: 1, upgradePerRound: 0.6, overpay: 1.0, perDay: [1, 1] },
 }
 
 export const aiTierProfile = (tier: TierId): TierProfile => TIER_PROFILE[tier]
+
+/**
+ * 设施升级留底：本赛季还有买人名额且未满员时，按 `reserve * upgradeFloor` 先给转会留足可用现金；
+ * 用完当季买人名额或阵容满员后，回落到 `reserve`（仍绝不低于买人留底线）。
+ */
+export function aiUpgradeFloor(
+  state: Pick<AIClubState, 'transfers'>,
+  tier: TierId,
+  seasonIndex: number,
+  squadSize = 0,
+): number {
+  const profile = TIER_PROFILE[tier] ?? TIER_PROFILE.division2
+  const canBuy = squadSize < AI_SQUAD_LIMIT && aiBuysLeft(state, seasonIndex) > 0
+  const multiplier = canBuy ? Math.max(1, profile.upgradeFloor) : 1
+  return Math.round(profile.reserve * multiplier)
+}
 
 /**
  * 一次训练 = 玩家的一整轮培养（30 个时段），直接调用玩家同一套训练规则。
@@ -458,16 +474,16 @@ export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | '
   if (equipped && team) refreshAILineup(team)
 
   // 设施升级按级别限速：二级慢（约两轮升一次）、一级积极、顶级最快；名额按轮累计，钱不够就作废。
-  // 升级前的留底比买人时更低：顶级球队优先升设施，宁可少留点钱。
+  // 当季还有买人名额且未满员时，先按 upgradeFloor 给转会留足预算，避免设施把现金抽干到买人留底以下。
   state.upgradeProgress = (state.upgradeProgress ?? 0) + profile.upgradePerRound * rounds
   const allowance = Math.floor(state.upgradeProgress)
   state.upgradeProgress -= allowance
-  const floor = Math.round(profile.reserve * profile.upgradeFloor)
+  const floor = aiUpgradeFloor(state, club.tier, seasonIndex, players?.length ?? 0)
   let upgrades = 0
   while (upgrades < allowance) {
     const cost = cheapestUpgrade(state, club.tier)
     if (cost == null || state.economy.balance - cost < floor) break
-    if (upgradeOneFacility(state, club.tier, seed) === 0) break
+    if (upgradeOneFacility(state, club.tier, seed, floor) === 0) break
     upgrades += 1
   }
   return { trained, upgrades }
@@ -524,9 +540,8 @@ function cheapestUpgrade(state: AIClubState, tier: TierId): number | null {
 }
 
 /** 升一次设施（挑阶段最低、优先级最高的那个），不会花到升级留底以下。 */
-function upgradeOneFacility(state: AIClubState, tier: TierId, seed: number): number {
-  const profile = TIER_PROFILE[tier] ?? TIER_PROFILE.division2
-  const budget = state.economy.balance - Math.round(profile.reserve * profile.upgradeFloor)
+function upgradeOneFacility(state: AIClubState, tier: TierId, seed: number, floor: number): number {
+  const budget = state.economy.balance - floor
   if (budget <= 0) return 0
   const options = AI_FACILITIES
     .map((id) => ({ id, stage: state.economy[id], cost: facilityUpgradeCost(id, state.economy[id]) }))
@@ -537,6 +552,7 @@ function upgradeOneFacility(state: AIClubState, tier: TierId, seed: number): num
   state.economy.balance -= chosen.cost!
   state.economy[chosen.id] = chosen.stage + 1
   state.upgrades += 1
+  void tier
   void seed
   return 1
 }

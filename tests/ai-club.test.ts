@@ -8,6 +8,7 @@ import {
   aiClubOf,
   aiSignFreeAgents,
   aiTierProfile,
+  aiUpgradeFloor,
   backfillAICardSkills,
   createAIClub,
   equipAICards,
@@ -264,6 +265,39 @@ describe('电脑球队的经营节奏', () => {
     expect(result.upgrades).toBeLessThanOrEqual(1)
     // 无论如何都不能把留底的钱花掉。
     expect(poor.economy.balance).toBeGreaterThanOrEqual(aiTierProfile('division2').reserve)
+  })
+
+  it('顶级与一级球队仍有买人名额时，设施升级先留足转会预算，不把现金抽干到买人留底以下', () => {
+    const base = game()
+    const team = structuredClone(base.aiTeams[0])
+
+    for (const tier of ['champions', 'division1'] as const) {
+      const profile = aiTierProfile(tier)
+      const ai = state(profile.balance, tier)
+      for (const id of ['stadium', 'academy', 'medical', 'shop', 'sponsor', 'psychology', 'tactics'] as const) ai.economy[id] = 15
+      const expectedFloor = aiUpgradeFloor(ai, tier, 2, team.players.length)
+      expect(expectedFloor).toBeGreaterThan(profile.reserve)
+
+      // 连续推进 10 轮：设施照常升级，但余额绝不跌破升级留底，始终留有可用转会预算。
+      const res = advanceAIClub(ai, { id: team.id, tier }, team, 10, 77, true, 2)
+      expect(res.upgrades).toBeGreaterThan(0)
+      expect(ai.economy.balance).toBeGreaterThanOrEqual(expectedFloor)
+      expect(ai.economy.balance - profile.reserve).toBeGreaterThanOrEqual(expectedFloor - profile.reserve)
+
+      // 余额低于升级留底但处于攒钱阶段时，暂停升设施直到蓄满转会预算。
+      ai.economy.balance = profile.reserve + 200_000
+      const paused = advanceAIClub(ai, { id: team.id, tier }, team, 1, 78, true, 2)
+      expect(paused.upgrades).toBe(0)
+      expect(ai.economy.balance).toBeGreaterThan(profile.reserve + 200_000)
+
+      // 当季买人名额用完后，升级留底自动回落到 reserve，释放多余现金继续升设施（仍不低于 reserve）。
+      ai.transfers = { season: 2, bought: 5 }
+      expect(aiUpgradeFloor(ai, tier, 2, team.players.length)).toBe(profile.reserve)
+      ai.economy.balance = expectedFloor - 100_000
+      const afterQuota = advanceAIClub(ai, { id: team.id, tier }, team, 2, 79, true, 2)
+      expect(afterQuota.upgrades).toBeGreaterThan(0)
+      expect(ai.economy.balance).toBeGreaterThanOrEqual(profile.reserve)
+    }
   })
 
   it('给服务器用时不改当季名单，只把成长记进卡片', () => {
