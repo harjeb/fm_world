@@ -1,9 +1,10 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createWorldGame } from '../src/game/world.ts'
-import type { GameState, MatchRecord, PlayerMatchStats } from '../src/game/types.ts'
+import { ALL_ATTRIBUTES, type GameState, type MatchRecord, type PlayerMatchStats } from '../src/game/types.ts'
 import { DAY_MS } from '../src/game/calendar.ts'
+import { attrLimit } from '../src/game/scale.ts'
 import { applyYouthAction } from '../src/game/youth-actions.ts'
-import { ensureYouth, growYouthAttributes, recordYouthMatch, settleYouth, shiftYouthClock, validYouthPlan, YOUTH_TIERS, YOUTH_WEEK_MS, youthCA, youthDailyRoll, youthMatchFactor, youthPerformanceBonus, youthPlayer, youthView } from '../src/game/youth.ts'
+import { ensureYouth, growYouthAttributes, pendingYouthDowntimeCompensation, recordYouthMatch, settleYouth, shiftYouthClock, validYouthPlan, YOUTH_DOWNTIME_COMPENSATION, YOUTH_DOWNTIME_COMPENSATION_ID, YOUTH_TIERS, YOUTH_WEEK_MS, youthCA, youthDailyRoll, youthMatchFactor, youthPerformanceBonus, youthPlayer, youthView } from '../src/game/youth.ts'
 import { youthStars } from '../src/game/youth-rating.ts'
 import { preserveYouthState } from '../src/game/youth-authority.ts'
 import { startTraining } from '../src/game/actions.ts'
@@ -188,6 +189,60 @@ describe('青训生成与招募', () => {
     expect(lv5.goldenAvgCeiling).toBeGreaterThan(268)
     expect(lv5.goldenAvgCeiling).toBeLessThan(272)
     expect(lv5.goldenYoungRate).toBeGreaterThan(0.70)
+  })
+
+  it('联机账号下期招募一次性发放服务器宕机 5★ 补偿（17岁、初始CA 230/4★、上限CA 268/5★、按「下期重点」给位置，一周满潜且不重复）', () => {
+    for (const focusPos of ['AMC', 'GK', 'ST'] as const) {
+      const game = fixture()
+      game.shared = true
+      game.economy!.academy = 1
+      expect(pendingYouthDowntimeCompensation(game)).toBe(true)
+      expect(applyYouthAction(game, { action: 'recruit_position', position: focusPos }, NOW).ok).toBe(true)
+
+      const intakeAt = NOW + YOUTH_WEEK_MS
+      settleYouth(game, intakeAt)
+      expect(pendingYouthDowntimeCompensation(game)).toBe(false)
+      expect(game.youth!.compensations?.[YOUTH_DOWNTIME_COMPENSATION_ID]).toBe(true)
+
+      const comp = game.youth!.intake.candidates[0]
+      expect(comp.compensationId).toBe(YOUTH_DOWNTIME_COMPENSATION_ID)
+      expect(comp.plan.position).toBe(focusPos)
+      expect(comp.player.age).toBe(YOUTH_DOWNTIME_COMPENSATION.age)
+      expect(comp.initialAge).toBe(17)
+      expect(comp.tier).toBe('genius')
+      expect(comp.initialCa).toBeCloseTo(230, 5)
+      expect(youthCA(comp.player)).toBeCloseTo(230, 5)
+      expect(youthStars(youthCA(comp.player))).toBe(4)
+      expect(comp.ceiling).toBe(268)
+      expect(youthStars(comp.ceiling)).toBe(5)
+      expect(comp.player.pa).toBeGreaterThanOrEqual(268)
+      const gk = focusPos === 'GK'
+      expect(comp.player.positions.GK > 0).toBe(gk)
+      for (const key of ALL_ATTRIBUTES) {
+        expect(comp.player.baseAttrs[key]).toBeLessThanOrEqual(attrLimit(key, gk) + 1e-9)
+      }
+
+      // 签入并测试无比赛 + LV1 设施下一周（含晚签 1 天仅剩 6 天场景）满潜到 268（5.0★）
+      expect(applyYouthAction(game, { action: 'sign', playerId: comp.player.id }, intakeAt).ok).toBe(true)
+      const signed = game.youth!.members.find(m => m.player.id === comp.player.id)!
+      expect(signed.compensationId).toBe(YOUTH_DOWNTIME_COMPENSATION_ID)
+      // 模拟下赛季完整 7 天与晚签 1 天（6 天）成长
+      signed.endsAt = intakeAt + 7 * DAY_MS
+      settleYouth(game, intakeAt + 7 * DAY_MS)
+      expect(youthCA(signed.player)).toBeCloseTo(268, 5)
+      expect(youthStars(youthCA(signed.player))).toBe(5)
+
+      // 下一周再次刷新招募：不再重复发放宕机补偿
+      settleYouth(game, intakeAt + 2 * YOUTH_WEEK_MS)
+      expect(game.youth!.intake.candidates.some(c => c.compensationId === YOUTH_DOWNTIME_COMPENSATION_ID)).toBe(false)
+    }
+
+    // 单机离线存档不触发联机宕机补偿
+    const offline = fixture()
+    expect(pendingYouthDowntimeCompensation(offline)).toBe(false)
+    settleYouth(offline, NOW + YOUTH_WEEK_MS)
+    expect(offline.youth!.compensations?.[YOUTH_DOWNTIME_COMPENSATION_ID]).toBeUndefined()
+    expect(offline.youth!.intake.candidates.some(c => c.compensationId === YOUTH_DOWNTIME_COMPENSATION_ID)).toBe(false)
   })
 })
 

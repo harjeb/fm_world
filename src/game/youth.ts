@@ -17,6 +17,14 @@ export const YOUTH_WEEK_MS = 7 * DAY_MS
 export const YOUTH_WAGE = 100
 /** Calibrated over the 1–5 remaining weekly seasons so academy prospects reliably approach potential before graduation. */
 export const YOUTH_BASE_GROWTH = 6.0
+/** 服务器宕机一次性青训补偿活动标识与数值配置（仅联机账号下一期招募生效一次）。 */
+export const YOUTH_DOWNTIME_COMPENSATION_ID = 'downtime-2026-11'
+export const YOUTH_DOWNTIME_COMPENSATION = {
+  age: 17,
+  initialCa: 230,
+  ceiling: 268,
+  minSpeed: 1.0,
+} as const
 export const YOUTH_TIERS = {
   ordinary: { label: '普通苗子', min: 190, max: 210 },
   promising: { label: '有前途', min: 190, max: 225 },
@@ -45,6 +53,8 @@ export type YouthGrowth = { at: number; caBefore: number; caAfter: number; minut
 export type YouthMember = {
   /** 2: ordinary potential raised to 190–210; legacy cohorts migrate only once. */
   balanceVersion?: 2
+  /** 特殊活动或补偿来源标识（如服务器宕机补偿），用于界面标记，不影响结算权限。 */
+  compensationId?: string
   player: Player
   initialCa: number
   ceiling: number
@@ -69,6 +79,8 @@ export type YouthState = {
   recruitPosition: DetailedPosition
   facilities: { at: number; stage: number }[]
   matches: YouthMatch[]
+  /** 已发放的一次性招募补偿活动 ID 账本（幂等防重发）。 */
+  compensations?: Record<string, true>
 }
 
 const POSITION_ATTRS: Record<DetailedPosition, AttrKey[]> = {
@@ -101,12 +113,35 @@ export function validYouthPlan(player: Player, plan: unknown): plan is YouthPlan
 
 /** CA is quadratic: scale real attributes, not just the number shown in the UI. */
 export function scaleYouthAttributes(player: Player, target: number): void {
-  const actual = caOf(player.attrs, player.positions.GK > 0)
+  const gk = player.positions.GK > 0
+  const actual = caOf(player.attrs, gk)
   const factor = actual > 0 ? Math.sqrt(target / actual) : 0
-  for (const key of ALL_ATTRIBUTES) player.attrs[key] *= factor
+  let clamped = false
+  for (const key of ALL_ATTRIBUTES) {
+    const raw = player.attrs[key] * factor
+    const limit = attrLimit(key, gk)
+    if (raw > limit) clamped = true
+  }
+  if (!clamped) {
+    for (const key of ALL_ATTRIBUTES) player.attrs[key] *= factor
+  } else {
+    const base = { ...player.attrs }
+    const scaled = (k: number): Attributes => Object.fromEntries(
+      ALL_ATTRIBUTES.map(key => [key, Math.min(attrLimit(key, gk), base[key] * k)]),
+    ) as Attributes
+    let lo = factor
+    let hi = Math.max(factor * 2, 2)
+    while (caOf(scaled(hi), gk) < target && hi < 64) hi *= 2
+    for (let step = 0; step < 60; step++) {
+      const mid = (lo + hi) / 2
+      if (caOf(scaled(mid), gk) <= target) lo = mid
+      else hi = mid
+    }
+    player.attrs = scaled(lo)
+  }
   player.baseAttrs = { ...player.attrs }
 }
-type IntakeStarTarget = 'regular' | 'star40' | 'star45' | 'star50'
+type IntakeStarTarget = 'regular' | 'star40' | 'star45' | 'star50' | 'compensation50'
 
 type AcademyIntakeProfile = {
   guaranteed45: boolean
@@ -183,7 +218,18 @@ function generateYouth(
   let tier: YouthTier
   let ceiling: number
   let age: number
-  if (target === 'star50') {
+  let initial: number | undefined
+  let speed: number | undefined
+  let compensationId: string | undefined
+  if (target === 'compensation50') {
+    // 服务器宕机一次性补偿：固定 17 岁、4.0★ 即战力起步（CA 230）、5.0★ 潜力上限（CA 268），保证一周内满潜。
+    tier = 'genius'
+    ceiling = YOUTH_DOWNTIME_COMPENSATION.ceiling
+    age = YOUTH_DOWNTIME_COMPENSATION.age
+    initial = YOUTH_DOWNTIME_COMPENSATION.initialCa
+    speed = YOUTH_DOWNTIME_COMPENSATION.minSpeed + rng.float() * 0.2
+    compensationId = YOUTH_DOWNTIME_COMPENSATION_ID
+  } else if (target === 'star50') {
     // 5.0★ 黄金苗子：潜力上限集中在 270 左右（266–274），必显 5.0★ 且位于 genius 区间内。
     tier = 'genius'
     ceiling = 266 + rng.float() * 8
@@ -214,9 +260,9 @@ function generateYouth(
     }
     age = rollYouthAge(rng)
   }
-  const initial = age <= 15 ? 75 + rng.float() * 35 : age <= 17 ? 105 + rng.float() * 30 : 125 + rng.float() * 20
+  const initialCa = initial ?? (age <= 15 ? 75 + rng.float() * 35 : age <= 17 ? 105 + rng.float() * 30 : 125 + rng.float() * 20)
   const player = createRandomPlayer({ seed: rng.int(0x7fffffff), position: DETAILED_TO_POSITION[position], detailedPosition: position, tier: 2, usedNames: used, idPrefix: `academy-${game.seed}-${slot}` })
-  scaleYouthAttributes(player, initial)
+  scaleYouthAttributes(player, initialCa)
   player.age = age
   player.number = 30 + rng.int(60)
   player.pa = Math.max(player.pa, ceiling)
@@ -230,7 +276,7 @@ function generateYouth(
   player.youthOrigin = { club: game.clubName, enrolledAt: at, transferAfter: at + YOUTH_WEEK_MS }
   const plan: YouthPlan = { position, focus: 'balanced' }
   const currentSeasonEnd = seasonEndAt(game.season.startedAt, game.season.clockShift ?? 0)
-  return { balanceVersion: 2, player, initialCa: youthCA(player), ceiling, tier, speed: 0.8 + rng.float() * 0.4, initialAge: age, joinedSeason: game.season.index, enrolledAt: at, endsAt: Math.max(at, currentSeasonEnd) + (18 - age) * YOUTH_WEEK_MS, settledAt: at, calledUp: false, plan, plans: [{ at, plan: { ...plan } }], growth: [] }
+  return { balanceVersion: 2, ...(compensationId ? { compensationId } : {}), player, initialCa: youthCA(player), ceiling, tier, speed: speed ?? (0.8 + rng.float() * 0.4), initialAge: age, joinedSeason: game.season.index, enrolledAt: at, endsAt: Math.max(at, currentSeasonEnd) + (18 - age) * YOUTH_WEEK_MS, settledAt: at, calledUp: false, plan, plans: [{ at, plan: { ...plan } }], growth: [] }
 }
 function generateYouthBatch(
   game: GameState,
@@ -239,12 +285,14 @@ function generateYouthBatch(
   positions: readonly DetailedPosition[],
   academyStage: number,
   preferSlotZero: boolean,
+  compensationSlot0 = false,
 ): YouthMember[] {
   const used = usedNames(game)
   const identity = `${game.createdAt}:${game.world?.clubs.find(c => c.id === 'player')?.squadKey ?? game.clubName}`
   const profile = ACADEMY_INTAKE_PROFILES[academyLevelForStage(academyStage)]
   const planRng = derivedRng(game.seed, 'youth-intake-plan-v2', identity, batchKey)
   const targets = planIntakeTargets(planRng, positions.length, profile, preferSlotZero)
+  if (compensationSlot0 && targets.length > 0) targets[0] = 'compensation50'
   return positions.map((pos, i) => generateYouth(game, at, `${batchKey}-${i}`, pos, used, targets[i], profile))
 }
 function usedNames(game: GameState): Set<string> {
@@ -400,7 +448,11 @@ export function settleYouth(game: GameState, now = Date.now()): boolean {
     const at = youth.startedAt + period * YOUTH_WEEK_MS
     const stageAtIntake = [...youth.facilities].reverse().find(f => f.at <= at)?.stage ?? game.economy?.academy ?? 1
     const positions = Array.from({ length: YOUTH_INTAKE_SIZE }, (_, i) => i === 0 ? youth.recruitPosition : INITIAL_POSITIONS[(period + i) % INITIAL_POSITIONS.length])
-    youth.intake = { period, signed: [], candidates: generateYouthBatch(game, now, `intake-${period}`, positions, stageAtIntake, true) }
+    const grantDowntimeComp = Boolean(game.shared && !youth.compensations?.[YOUTH_DOWNTIME_COMPENSATION_ID])
+    youth.intake = { period, signed: [], candidates: generateYouthBatch(game, now, `intake-${period}`, positions, stageAtIntake, true, grantDowntimeComp) }
+    if (grantDowntimeComp) {
+      youth.compensations = { ...youth.compensations, [YOUTH_DOWNTIME_COMPENSATION_ID]: true }
+    }
     // Candidates are generated once per period; appearance time doesn't change their identity or rolls.
     for (const candidate of youth.intake.candidates) {
       candidate.enrolledAt = at
@@ -436,13 +488,18 @@ export function shiftYouthClock(game: GameState, delta: number): void {
   }
 }
 
+/** 联机账号是否尚有待发放的一次性服务器宕机青训补偿（将在下一期招募生效）。 */
+export function pendingYouthDowntimeCompensation(game: GameState): boolean {
+  return Boolean(game.shared && game.youth && !game.youth.compensations?.[YOUTH_DOWNTIME_COMPENSATION_ID])
+}
+
 /** Public view omits facility probability mechanics and hidden daily rolls. */
 export function youthView(game: GameState, now = Date.now()) {
   const youth = game.youth
   if (!youth) return null
   const view = (member: YouthMember) => {
     const player = youthPlayer(game, member)
-    return { id: player.id, name: player.name, age: player.age, youthOrigin: player.youthOrigin, abilityStars: youthStars(youthCA(player)), potentialStars: youthStars(Math.max(youthCA(player), member.ceiling)), plan: member.plan, calledUp: member.calledUp, endsAt: member.endsAt, nextGrowthAt: member.settledAt < member.endsAt ? Math.min(member.settledAt + DAY_MS, member.endsAt) : null, completed: now >= member.endsAt, growth: member.growth.slice(-7).map(g => ({ at: g.at, abilityStars: youthStars(g.caAfter), improved: g.caAfter > g.caBefore + 1e-8, minutes: g.minutes, matchFactor: g.matchFactor, plan: g.plan })) }
+    return { id: player.id, name: player.name, age: player.age, youthOrigin: player.youthOrigin, ...(member.compensationId ? { compensation: true } : {}), abilityStars: youthStars(youthCA(player)), potentialStars: youthStars(Math.max(youthCA(player), member.ceiling)), plan: member.plan, calledUp: member.calledUp, endsAt: member.endsAt, nextGrowthAt: member.settledAt < member.endsAt ? Math.min(member.settledAt + DAY_MS, member.endsAt) : null, completed: now >= member.endsAt, growth: member.growth.slice(-7).map(g => ({ at: g.at, abilityStars: youthStars(g.caAfter), improved: g.caAfter > g.caBefore + 1e-8, minutes: g.minutes, matchFactor: g.matchFactor, plan: g.plan })) }
   }
-  return { capacity: YOUTH_CAPACITY, wage: YOUTH_WAGE, members: youth.members.map(view), intake: { period: youth.intake.period, remaining: Math.max(0, YOUTH_INTAKE_KEEP - youth.intake.signed.length), nextAt: youthNextIntakeAt(game), candidates: youth.intake.candidates.filter(m => !youth.intake.signed.includes(m.player.id)).map(view) }, recruitPosition: youth.recruitPosition }
+  return { capacity: YOUTH_CAPACITY, wage: YOUTH_WAGE, pendingCompensation: pendingYouthDowntimeCompensation(game), members: youth.members.map(view), intake: { period: youth.intake.period, remaining: Math.max(0, YOUTH_INTAKE_KEEP - youth.intake.signed.length), nextAt: youthNextIntakeAt(game), candidates: youth.intake.candidates.filter(m => !youth.intake.signed.includes(m.player.id)).map(view) }, recruitPosition: youth.recruitPosition }
 }

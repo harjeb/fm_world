@@ -71,6 +71,31 @@ it('独立页面、位置能力选择、成长记录和永久标记，不向玩�
   expect(renderDetailOverlay()).toContain('培养角色卡')
 })
 
+it('联机青训页面在待发补偿时展示提示，刷新后为补偿球员显示标签且不暴露精确 CA 数值', async () => {
+  const { setGame, ui } = await import('../src/ui/state.ts')
+  const { renderYouth } = await import('../src/ui/screens/youth.ts')
+  const { onlineState } = await import('../src/online.ts')
+  onlineState.status = 'offline'
+  const now = Date.UTC(2026, 10, 18, 1)
+  const game = createWorldGame(8099, undefined, '联机测试', now)
+  game.shared = true
+  game.season.fixtures.forEach(f => { f.played = true })
+  ensureYouth(game, now)
+  setGame(game)
+  ui.screen = 'youth'
+
+  const beforeHtml = renderYouth()
+  expect(beforeHtml).toContain('服务器宕机补偿')
+  expect(beforeHtml).not.toContain('230')
+  expect(beforeHtml).not.toContain('268')
+
+  settleYouth(game, now + YOUTH_WEEK_MS)
+  const afterHtml = renderYouth()
+  expect(afterHtml).not.toContain('服务器宕机补偿 · 下期青训保底')
+  expect(afterHtml).toContain('宕机补偿')
+  expect(afterHtml).not.toContain('268')
+})
+
 it('阵容锁定时说明名单按钮不可用的原因，培养方向仍可保存', async () => {
   const { setGame } = await import('../src/ui/state.ts')
   const { renderYouth } = await import('../src/ui/screens/youth.ts')

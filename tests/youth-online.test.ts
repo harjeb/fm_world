@@ -7,6 +7,8 @@ import { DatabaseSync } from 'node:sqlite'
 import { createAppServer, type AppServer } from '../server/app.ts'
 import { loadPveContent } from '../src/game/pve-content.ts'
 import type { GameState } from '../src/game/types.ts'
+import { YOUTH_DOWNTIME_COMPENSATION_ID, YOUTH_WEEK_MS, youthCA } from '../src/game/youth.ts'
+import { youthStars } from '../src/game/youth-rating.ts'
 
 beforeAll(loadPveContent)
 const apps: AppServer[] = []
@@ -91,4 +93,58 @@ it('authoritative academy actions, concurrent promotion, stale browser saves and
   state = await get()
   expect(state.game.training[ids[1]]).toBeTruthy()
   expect(state.game.training[ids[1]].candidate.baseAttrs).toEqual(original.baseAttrs)
+})
+
+it('联机账号下期青训招募按「下期重点」一次性发放宕机补偿 5★ 即战力，且客户端无法清空账本重领', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-youth-comp-'))
+  dirs.push(dir)
+  let clock = Date.UTC(2026, 10, 18, 1)
+  const app = createAppServer({ dataDir: dir, tickMs: 0, now: () => clock })
+  apps.push(app)
+  await new Promise<void>(resolve => app.server.listen(0, '127.0.0.1', resolve))
+  const base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`
+
+  const registration = await fetch(`${base}/api/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'comp-coach', password: 'secret123' }) })
+  expect(registration.status).toBe(201)
+  const { token } = await registration.json() as { token: string }
+  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+  const get = async () => await (await fetch(`${base}/api/game`, { headers })).json() as { game: GameState; revision: number }
+  const post = (url: string, body: unknown) => fetch(`${base}${url}`, { method: 'POST', headers, body: JSON.stringify(body) })
+  const save = (game: GameState, revision: number) => fetch(`${base}/api/game`, { method: 'PUT', headers, body: JSON.stringify({ game, baseRevision: revision }) })
+
+  let state = await get()
+  expect(state.game.shared).toBe(true)
+  expect((await post('/api/youth/action', { action: 'recruit_position', position: 'AMR', baseRevision: state.revision })).status).toBe(200)
+
+  // 一周后触发下一期招募：0 号位必出 17 岁、4★ 即战力、5★ 潜力的 AMR 补偿球员
+  clock += YOUTH_WEEK_MS + 1000
+  state = await get()
+  const comp = state.game.youth!.intake.candidates[0]
+  expect(comp.compensationId).toBe(YOUTH_DOWNTIME_COMPENSATION_ID)
+  expect(comp.plan.position).toBe('AMR')
+  expect(comp.player.age).toBe(17)
+  expect(youthCA(comp.player)).toBeCloseTo(230, 5)
+  expect(youthStars(youthCA(comp.player))).toBe(4)
+  expect(comp.ceiling).toBe(268)
+  expect(youthStars(comp.ceiling)).toBe(5)
+  expect(state.game.youth!.compensations?.[YOUTH_DOWNTIME_COMPENSATION_ID]).toBe(true)
+
+  // 客户端尝试篡改清除 compensations 账本：服务器 preserveYouthState 必须拦截保留
+  const tampered = structuredClone(state.game)
+  delete tampered.youth!.compensations
+  expect((await save(tampered, state.revision)).status).toBe(200)
+  state = await get()
+  expect(state.game.youth!.compensations?.[YOUTH_DOWNTIME_COMPENSATION_ID]).toBe(true)
+
+  // 免费签入并立刻临时征召进入一线队
+  expect((await post('/api/youth/action', { action: 'sign', playerId: comp.player.id, baseRevision: state.revision })).status).toBe(200)
+  state = await get()
+  expect((await post('/api/youth/action', { action: 'call_up', playerId: comp.player.id, baseRevision: state.revision })).status).toBe(200)
+  state = await get()
+  expect(state.game.roster.some(p => p.id === comp.player.id)).toBe(true)
+
+  // 再过一周刷新新招募期：不再重复发放宕机补偿
+  clock += YOUTH_WEEK_MS
+  state = await get()
+  expect(state.game.youth!.intake.candidates.some(c => c.compensationId === YOUTH_DOWNTIME_COMPENSATION_ID)).toBe(false)
 })
