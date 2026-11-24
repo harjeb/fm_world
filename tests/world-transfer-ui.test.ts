@@ -98,9 +98,21 @@ describe('世界 AI 转会界面', () => {
     expect(dialog).toContain(team.name)
     expect(dialog).toContain(`${chance.toFixed(1)}%`)
     quote.blocked = '卖方人数不足'
-    const blocked = renderTransfer().match(new RegExp(`<button[^>]*data-team="${team.id}"[^>]*>`))![0]
+    const blockedHtml = renderTransfer()
+    const blockedRow = blockedHtml.match(new RegExp(`<tr[^>]*data-key="${player.id}"[^>]*>[\\s\\S]*?</tr>`))![0]
+    expect(blockedRow).toContain('非卖品')
+    expect(blockedRow).not.toContain(`>${asking!.toLocaleString()}<`)
+    const blocked = blockedRow.match(new RegExp(`<button[^>]*data-team="${team.id}"[^>]*>`))![0]
     expect(blocked).toContain('disabled')
     expect(blocked).toContain('卖方人数不足')
     expect(game.aiTeams.some(item => item.id === team.id)).toBe(false)
+
+    quote.blocked = null
+    game.activeMatch = {} as typeof game.activeMatch
+    const matchHtml = renderTransfer()
+    expect(matchHtml).toContain('比赛进行中暂不可谈判')
+    const matchBtn = matchHtml.match(new RegExp(`<button[^>]*data-team="${team.id}"[^>]*>`))![0]
+    expect(matchBtn).toContain('disabled')
+    expect(matchBtn).toContain('比赛进行中暂不可谈判')
   })
 })

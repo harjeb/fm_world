@@ -124,19 +124,40 @@ export function freeAgentAsking(game: Pick<GameState, 'cards'>, player: Player):
   return bestMarketValue(game, player)
 }
 
+function isDepthShortageSub(
+  team: Pick<AITeam, 'lineup'> & { players?: Player[] },
+  player: Player,
+  depth?: AIDepth,
+): boolean {
+  if (!team.players?.length) return false
+  if (team.lineup.starters.some((starter) => starter.playerId === player.id)) return false
+  return !(depth ?? analyzeAIDepth(team as Pick<AITeam, 'players' | 'lineup'>)).expendable.has(player.id)
+}
+
 /**
  * AI 俱乐部对自家某名球员的态度（主力 / 轮换 / 冷板凳、要价、非卖品），见 transfer-rules.ts。
  * 出场时间用存档里记下的最近 20 场；没有记录就按他在阵容里的角色估算。
  */
-export function clubSaleTerms(game: Pick<GameState, 'appearances' | 'cards'>, team: Pick<AITeam, 'lineup'>, player: Player): ReleaseAssessment {
-  return assessRelease({ player, lineup: team.lineup, minutes: game.appearances?.[player.id], value: bestMarketValue(game, player) })
+export function clubSaleTerms(
+  game: Pick<GameState, 'appearances' | 'cards'>,
+  team: Pick<AITeam, 'lineup'> & { players?: Player[] },
+  player: Player,
+  depth?: AIDepth,
+): ReleaseAssessment {
+  return assessRelease({
+    player,
+    lineup: team.lineup,
+    minutes: game.appearances?.[player.id],
+    value: bestMarketValue(game, player),
+    depthShortage: isDepthShortageSub(team, player, depth),
+  })
 }
 
 /**
  * 俱乐部要价。传了球队就按放人规则（非卖品返回 0）；不传是旧的一口价（估值 1.5 倍，只看原始属性），
  * 只给内部的直接买断 buyFromClub 用。
  */
-export function clubAsking(game: Pick<GameState, 'appearances' | 'cards'>, player: Player, team?: Pick<AITeam, 'lineup'>): number {
+export function clubAsking(game: Pick<GameState, 'appearances' | 'cards'>, player: Player, team?: Pick<AITeam, 'lineup'> & { players?: Player[] }): number {
   if (!team) return Math.round(bestMarketValue(game, player) * CLUB_BUYOUT_RATIO)
   return clubSaleTerms(game, team, player).asking ?? 0
 }
@@ -156,7 +177,7 @@ export function aiTransferOffers(
     .flatMap(team => {
       const depth = analyzeAIDepth(team)
       return team.players.map(player => {
-        const terms = clubSaleTerms(game, team, player)
+        const terms = clubSaleTerms(game, team, player, depth)
         return { team, player, asking: terms.asking, terms, blocked: sellerSquadError(team, player, depth) }
       })
     })
@@ -177,8 +198,9 @@ export type ClubSigningPreview = {
 
 /** 向 AI 球队买人前预览：俱乐部和球员两关的概率和理由（手动谈判框和 Agent 共用），不写入存档。 */
 export function previewClubSigning(game: GameState, team: AITeam, player: Player, offer: number, answers: NegotiationAnswers): ClubSigningPreview {
-  const terms = clubSaleTerms(game, team, player)
-  const blocked = sellerSquadError(team, player)
+  const depth = analyzeAIDepth(team)
+  const terms = clubSaleTerms(game, team, player, depth)
+  const blocked = sellerSquadError(team, player, depth)
   const clubChance = blocked ? 0 : releaseChance(terms, offer)
   const value = bestMarketValue(game, player)
   const demands = negotiationDemands({ seed: game.seed, world: game.world, season: game.season }, player)
@@ -195,12 +217,18 @@ export function previewClubSigning(game: GameState, team: AITeam, player: Player
   }
 }
 
-/** 卖掉这名球员后对方还剩一套完整比赛名单、至少两个门将吗？ */
+/** 卖掉这名球员后对方还剩一套完整比赛名单、至少两个门将，且主力未被抽空？替补缺替代者允许高溢价谈判。 */
 export function sellerSquadError(team: Pick<AITeam, 'players' | 'lineup'>, player: Player, depth?: AIDepth): string | null {
   const rest = team.players.filter((item) => item.id !== player.id)
   if (rest.length < FULL_SQUAD) return `对方阵容只剩 ${team.players.length} 人，不再放人`
   if (player.positions.GK > 0 && rest.filter((item) => item.positions.GK > 0).length < 2) return '对方门将不够，不放门将'
-  if (!(depth ?? analyzeAIDepth(team)).expendable.has(player.id)) return '两套阵容需要这名球员，缺少可替代球员，属于非卖品'
+  const d = depth ?? analyzeAIDepth(team)
+  if (!d.expendable.has(player.id)) {
+    const isStarter = team.lineup.starters.some((starter) => starter.playerId === player.id)
+    if (isStarter) return '两套阵容需要这名主力，缺少可替代球员，属于非卖品'
+    const repaired = repairLineup(rest, team.lineup)
+    if (!validateLineup(rest, repaired.lineup).valid) return '卖掉后对方无法组成合法首发，属于非卖品'
+  }
   return null
 }
 
@@ -304,10 +332,11 @@ export function signClubPlayer(
   const team = game.aiTeams.find((item) => item.id === clubId)
   const player = team?.players.find((item) => item.id === playerId)
   if (!team || !player) return fail('球员不在该球队')
-  const squad = sellerSquadError(team, player)
+  const depth = analyzeAIDepth(team)
+  const squad = sellerSquadError(team, player, depth)
   if (squad) return fail(squad)
   // 先过俱乐部这关：主力 / 年龄 / 最近出场 / 溢价决定肯不肯放人，同一份报价结果固定。
-  const terms = clubSaleTerms(game, team, player)
+  const terms = clubSaleTerms(game, team, player, depth)
   if (terms.asking === null) return { ok: false, error: `${player.name} 是${team.name}的非卖品：${terms.reasons[0]}`, club: { chance: 0, reasons: terms.reasons, terms } }
   if (!Number.isSafeInteger(offer) || offer < terms.asking) {
     return { ok: false, error: `${team.name}要价 ${terms.asking.toLocaleString()}，这个报价不谈`, club: { chance: 0, reasons: terms.reasons, terms } }

@@ -93,8 +93,9 @@ export function aiPoachRound(input: {
     return seller.team.players.flatMap(player => {
       if (sellerSquadError(seller.team, player, depth)) return []
       const value = playerMarketValue(player)
-      const terms = assessRelease({ player, lineup: seller.team.lineup, minutes: input.appearances?.[player.id], value })
-      return terms.asking === null ? [] : [{ seller, player, price: terms.asking, value, terms, ca: caOfPlayer(player) }]
+      const depthShortage = !depth.expendable.has(player.id) && !seller.team.lineup.starters.some((starter) => starter.playerId === player.id)
+      const terms = assessRelease({ player, lineup: seller.team.lineup, minutes: input.appearances?.[player.id], value, depthShortage })
+      return terms.asking === null ? [] : [{ seller, player, price: terms.asking, value, terms, ca: caOfPlayer(player), depthShortage }]
     })
   }).sort(strongestFirst)
   for (const buyer of buyers) {
@@ -104,10 +105,12 @@ export function aiPoachRound(input: {
     const depth = analyzeAIDepth({ ...buyer.team, players: squad })
     // 补位报价/竞拍尚未落地时，不提前按已齐两套去挖补强目标。
     if (!depth.missing && squad.length > buyer.team.players.length && analyzeAIDepth(buyer.team).missing > 0) continue
-    for (const { seller, player, price, value, terms } of listed) {
+    for (const { seller, player, price, value, terms, depthShortage } of listed) {
       if (seller === buyer || TIER_RANK[seller.tier] > TIER_RANK[buyer.tier] || !seller.team.players.includes(player)) continue
       const amount = price
-      if (!aiBidFor({ state: buyer.state, tier: buyer.tier, player, squad, depth, value, minimum: amount, buysLeft, committed: buyer.committed }) || sellerSquadError(seller.team, player)) continue
+      if (!aiBidFor({ state: buyer.state, tier: buyer.tier, player, squad, depth, value, minimum: amount, buysLeft, committed: buyer.committed })) continue
+      const sellerDepth = analyzeAIDepth(seller.team)
+      if (sellerSquadError(seller.team, player, sellerDepth) || (!depthShortage && !sellerDepth.expendable.has(player.id))) continue
       if (!releaseRoll(splitSeed(input.seed, `poach-${season}-${round}-${buyer.id}`), player.id, amount, releaseChance(terms, amount))) continue
       leaveAIClub(seller, player, amount)
       joinAIClub(buyer, player, amount, season)

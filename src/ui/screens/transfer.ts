@@ -65,7 +65,7 @@ function marketTab(): string {
         ${panel('怎么买 AI 球队的人', `<ul class="rule-list">
           <li>${icon('swap', 13)}到「从 AI 球队买人」里找人谈判：先过俱乐部这关，再过球员本人这关。</li>
           <li>${icon('star', 13)}年轻主力（24 岁及以下）是非卖品，除非最近很少上场；当打之年的主力至少多给 50%，29 岁以上的主力至少多给 30%。</li>
-          <li>${icon('clock', 13)}轮换球员按最近 20 场的出场时间要价（多给 10%–40%），冷板凳多给 5% 就能谈。达到要价后溢价越多越容易成交。</li>
+          <li>${icon('clock', 13)}轮换球员按最近 20 场的出场时间要价（多给 10%–40%），冷板凳多给 5% 就能谈；若对方该位置缺少替补但仍保有一套首发，替补仍可谈判，但需额外支付 80% 高溢价。达到要价后溢价越多越容易成交。</li>
           <li>${icon('info', 13)}所有 AI 可同时参与：未补齐两套阵容前先按剩余缺口均摊预算、在预算内优先买原始 CA 最强的补位球员，补齐后再逐步考虑补强。每队每赛季最多买进 ${AI_SEASON_BUY_LIMIT} 人（竞拍、挖人、给你报价都算）；你从它们手里买人不占这个名额。</li>
         </ul>`)}
       </div>
@@ -209,12 +209,12 @@ function aiTab(): string {
       <td>${tag(SQUAD_STATUS_LABELS[terms.status], STATUS_TONE[terms.status])}</td>
       <td class="num" title="${terms.recorded >= 5 ? `最近 ${terms.recorded} 场的出场时间` : '记录不足 5 场，按阵容角色估算'}">${pctText(terms.minutesShare)}${terms.recorded >= 5 ? '' : '<small class="muted">*</small>'}</td>
       <td class="num dim">${terms.value.toLocaleString()}</td>
-      <td class="num">${asking === null ? tag('非卖品', 'bad') : asking.toLocaleString()}</td>
-      <td class="num"><button class="btn small" data-action="club-buy-ai" data-team="${esc(team.id)}" data-player="${esc(player.id)}" ${blocked ? `title="${esc(blocked)}"` : ''} ${!open || asking === null || blocked || game.activeMatch ? 'disabled' : ''}>谈判</button></td>
+      <td class="num"${blocked ? ` title="${esc(blocked)}"` : ''}>${asking === null || blocked ? tag('非卖品', 'bad') : asking.toLocaleString()}</td>
+      <td class="num"><button class="btn small" data-action="club-buy-ai" data-team="${esc(team.id)}" data-player="${esc(player.id)}" ${blocked ? `title="${esc(blocked)}"` : game.activeMatch ? 'title="比赛进行中暂不可谈判"' : ''} ${!open || asking === null || blocked || game.activeMatch ? 'disabled' : ''}>谈判</button></td>
     </tr>`).join('')
   const teamOptions = ['<option value="ALL">全部球队</option>', ...teams.map(([id, name]) => `<option value="${esc(id)}" ${ui.aiBuyTeam === id ? 'selected' : ''}>${esc(name)}</option>`)].join('')
   const posOptions = [['ALL', '全部位置'], ['GK', '门将'], ['CB', '中卫'], ['W', '边路'], ['CM', '中场'], ['ST', '前锋']].map(([id, label]) => `<option value="${id}" ${ui.aiBuyPos === id ? 'selected' : ''}>${label}</option>`).join('')
-  return `<div class="banner ${open ? 'good' : 'muted'}">${icon('swap', 16)}<b>转会窗口常开</b><span>俱乐部按主力 / 年龄 / 最近 20 场出场 / 你给的溢价决定放不放人，球员本人还要看你的承诺。</span></div>
+  return `<div class="banner ${game.activeMatch ? 'warn' : open ? 'good' : 'muted'}">${icon('swap', 16)}<b>${game.activeMatch ? '比赛进行中暂不可谈判' : '转会窗口常开'}</b><span>${game.activeMatch ? '当前有比赛正在进行，结束后即可恢复向 AI 球队发起谈判。' : '俱乐部按主力 / 年龄 / 最近 20 场出场 / 阵容替补深度决定要价与放人，球员本人还要看你的承诺。'}</span></div>
     ${panel(`全世界 AI 球队 <small>${rows.length} 人</small>`, `
       <div class="toolbar in-panel">
         <input id="ai-buy-search" class="compact" placeholder="搜索球员 / 球队 / 国家" value="${esc(ui.aiBuySearch)}">
