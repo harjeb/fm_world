@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { renderTraining } from '../src/ui/screens/training.ts'
-import { createTrainingSession } from '../src/game/training.ts'
+import { createTrainingSession, trainingActionsForSeason } from '../src/game/training.ts'
 import { game, ui } from '../src/ui/state.ts'
 import { basicSkillsFor } from '../src/game/data/skills.ts'
 import { trainingBookLoadout } from '../src/ui/training-books.ts'
@@ -105,5 +105,61 @@ describe('培养技能书槽 UI', () => {
     expect(html).toContain('skill-rainbow')
     expect(html).toContain('训练狂人')
     delete game.training[player.id]
+  })
+
+  it('第 3 赛季起装备技能卡与本轮书槽上限展示为 5，且允许勾选第 5 张卡', () => {
+    const prevSeason = game.season.index
+    const prevWorldSeason = game.world?.seasonIndex
+    const player = game.roster.find((item) => item.positions.GK === 0)!
+    const prevSkills = [...player.skills]
+    const prevBaseSkills = player.baseSkills ? [...player.baseSkills] : undefined
+    player.skills = []
+    player.baseSkills = []
+    const sixBooks = [
+      { id: 'lg_drill_master' as const, tier: 'rainbow' as const },
+      { id: 'lg_vision_master' as const, tier: 'rainbow' as const },
+      { id: 'lg_marathon' as const, tier: 'rainbow' as const },
+      { id: 'lg_low_drive' as const, tier: 'gold' as const },
+      { id: 'lg_leader' as const, tier: 'gold' as const },
+      { id: 'lg_calm_mind' as const, tier: 'gold' as const },
+    ]
+    game.legendBooks = sixBooks
+    ui.screen = 'training'
+    ui.trainingPlayerId = player.id
+    delete game.training[player.id]
+
+    try {
+      // S2：选满 4 张后，第 5 张被禁用
+      game.season.index = 2
+      if (game.world) game.world.seasonIndex = 2
+      ui.trainingBookIds = sixBooks.slice(0, 4).map(bookKey)
+      let html = renderTraining()
+      expect(html).toContain('装备技能卡 <small>4 / 4</small>')
+      expect(html).toContain('data-training-book="lg_leader:gold"  disabled')
+
+      // S3：上限变为 5，选 4 张时第 5 张可勾选，选满 5 张后第 6 张禁用
+      game.season.index = 3
+      if (game.world) game.world.seasonIndex = 3
+      html = renderTraining()
+      expect(html).toContain('装备技能卡 <small>4 / 5</small>')
+      expect(html).not.toContain('data-training-book="lg_leader:gold"  disabled')
+
+      ui.trainingBookIds = sixBooks.slice(0, 5).map(bookKey)
+      html = renderTraining()
+      expect(html).toContain('装备技能卡 <small>5 / 5</small>')
+      expect(html).toContain('data-training-book="lg_calm_mind:gold"  disabled')
+
+      // S3 进行中培养展示 5 / 5
+      const session = createTrainingSession(player, 456, undefined, 1, sixBooks.slice(0, 5), trainingActionsForSeason(3))
+      game.training[player.id] = session
+      html = renderTraining()
+      expect(html).toContain('本轮技能书槽 <small>5 / 5</small>')
+    } finally {
+      delete game.training[player.id]
+      player.skills = prevSkills
+      player.baseSkills = prevBaseSkills
+      game.season.index = prevSeason
+      if (game.world && prevWorldSeason !== undefined) game.world.seasonIndex = prevWorldSeason
+    }
   })
 })

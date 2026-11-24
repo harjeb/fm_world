@@ -2,7 +2,7 @@ import type { AttrKey, EventDef, LegendBook, LegendBookTier, PeakSkillId, Player
 import { SKILLS, basicSkillsFor, basicSkillScopeMatches, canLearnSkill, skillCategory } from './data/skills.ts'
 import { PLAYER_SEEDS, styleSkillFor, type PlayerSeed } from './data/players.ts'
 import { getSkillTier, inheritanceChances } from './inheritance.ts'
-import { LEGEND_SKILLS, MAX_BOOKS } from './data/legend-skills.ts'
+import { LEGEND_SKILLS, SEASON3_MAX_BOOKS } from './data/legend-skills.ts'
 import { PEAK_SKILLS } from './data/peak-skills.ts'
 import { SHOP_SKILLS } from './data/shop-skills.ts'
 import {
@@ -123,7 +123,7 @@ export function grantBookSkill(session: TrainingSession, book: LegendBook): { ok
 
 /** 兼容旧存档中已待处理的单书事件；不再参与新事件抽取。 */
 export function bookEvents(session: TrainingSession): EventDef[] {
-  const books = (session.books ?? []).slice(0, MAX_BOOKS)
+  const books = (session.books ?? []).slice(0, SEASON3_MAX_BOOKS)
   const total = session.actionsTotal ?? 18
   return books.flatMap((book, index) => {
     if (isPassiveTrainingBook(book.id)) return []

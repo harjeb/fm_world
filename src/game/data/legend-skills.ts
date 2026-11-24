@@ -103,3 +103,10 @@ export function legendSkillForTeam(teamId: string): LegendSkillDef | undefined {
 
 export const LEGEND_SKILL_IDS = Object.keys(LEGEND_SKILLS) as LegendSkillId[]
 export const MAX_BOOKS = 4
+export const SEASON3_MAX_BOOKS = 5
+
+/** 按赛季返回单轮培养可装备的技能卡上限：第 1–2 赛季 4 张，第 3 赛季起 5 张。 */
+export function maxBooksForSeason(seasonIndex = 1): number {
+  const s = Number.isFinite(seasonIndex) ? Math.max(1, Math.floor(seasonIndex)) : 1
+  return s >= 3 ? SEASON3_MAX_BOOKS : MAX_BOOKS
+}

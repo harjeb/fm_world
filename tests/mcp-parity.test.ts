@@ -136,6 +136,24 @@ describe('MCP 与 Agent API 完整同步校验', () => {
         mode: 'targets',
         targets: { shooting: 1850 },
       })
+
+      // 7. set_training_books 与 start_training 允许第 3 赛季起的 5 张技能卡
+      const fiveBooks = ['lg_drill_master:rainbow', 'lg_vision_master:rainbow', 'lg_marathon:rainbow', 'lg_low_drive:gold', 'lg_leader:gold']
+      const r7 = await client.callTool({ name: 'set_training_books', arguments: { playerId: 'p1', bookKeys: fiveBooks } })
+      expect(r7.isError).toBeFalsy()
+      expect(JSON.parse(String((fetchMock.mock.calls[6] as unknown as [string, RequestInit])[1].body))).toEqual({
+        action: 'set_training_books',
+        playerId: 'p1',
+        bookKeys: fiveBooks,
+      })
+
+      const r8 = await client.callTool({ name: 'start_training', arguments: { playerId: 'p1', bookKeys: fiveBooks } })
+      expect(r8.isError).toBeFalsy()
+      expect(JSON.parse(String((fetchMock.mock.calls[7] as unknown as [string, RequestInit])[1].body))).toEqual({
+        action: 'start_training',
+        playerId: 'p1',
+        bookKeys: fiveBooks,
+      })
     } finally {
       await close()
     }

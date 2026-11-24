@@ -235,9 +235,9 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     syncDefault: z.boolean().optional(),
   }, (args) => action('set_match_auto_subs', args))
 
-  register('set_training_books', '保存培养技能卡配置', '按球员保存最多 4 本技能书，key 来自 get_state 的 legendBooks。交流赛后从技能书、随机最多 5 名共同培养的队友和基础技能按 50:30:20 权重抽取三选一；已学技能不出现。', {
+  register('set_training_books', '保存培养技能卡配置', '按球员保存技能书配置（第 1–2 赛季最多 4 本，第 3 赛季起最多 5 本，见 get_state.trainingBookLimit），key 来自 get_state 的 legendBooks。交流赛后从技能书、随机最多 5 名共同培养的队友和基础技能按 50:30:20 权重抽取三选一；已学技能不出现。', {
     playerId: z.string(),
-    bookKeys: z.array(z.string()).max(4),
+    bookKeys: z.array(z.string()).max(5),
   }, (args) => action('set_training_books', args))
 
   register('buy_shop_book', '商店兑换金色技能书', '消耗商店点数购买当季上架的一本金色技能书（8 外场 + 2 门将 + 2 辅助共 12 本，每赛季轮换；skillId 来自 get_state.shop.catalog）。买后永久进入 legendBooks。', {
@@ -261,9 +261,9 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     }),
   }, (args) => action('youth_action', args))
 
-  register('start_training', '开始培养', '每轮从原始属性开始，产出球员卡（第 1 赛季 30 时段、第 2 赛季 40 时段、第 3 赛季起 50 时段且第 3 周非比赛日为国外特训 ×3）；省略 bookKeys 时使用保存的技能卡配置，传入时同时保存。可投入共享培养点提高品质。', {
+  register('start_training', '开始培养', '每轮从原始属性开始，产出球员卡（第 1 赛季 30 时段、第 2 赛季 40 时段、第 3 赛季起 50 时段且第 3 周非比赛日为国外特训 ×3；技能卡装备上限第 1–2 赛季 4 张、第 3 赛季起 5 张）；省略 bookKeys 时使用保存的技能卡配置，传入时同时保存。可投入共享培养点提高品质。', {
     playerId: z.string(),
-    bookKeys: z.array(z.string()).max(4).optional(),
+    bookKeys: z.array(z.string()).max(5).optional(),
     points: z.union([z.literal(0), z.literal(10), z.literal(20), z.literal(30)]).optional().describe('本轮投入的共享培养点；余额不足会失败'),
   }, (args) => action('start_training', args))
 

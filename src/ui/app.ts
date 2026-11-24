@@ -20,6 +20,7 @@ import {
   issueMatchShout,
   keepTraining,
   makeSubstitution,
+  maxTrainingBooks,
   removePlayerCard,
   restoreActiveEngine,
   setAutoTrainingConfig,
@@ -2883,7 +2884,8 @@ document.addEventListener('change', (event) => {
   if (target.dataset.trainingBook) {
     const key = target.dataset.trainingBook
     const checked = (target as HTMLInputElement).checked
-    ui.trainingBookIds = checked ? [...new Set([...ui.trainingBookIds, key])].slice(0, 4) : ui.trainingBookIds.filter((item) => item !== key)
+    const maxBooks = maxTrainingBooks(game)
+    ui.trainingBookIds = checked ? [...new Set([...ui.trainingBookIds, key])].slice(0, maxBooks) : ui.trainingBookIds.filter((item) => item !== key)
     render()
     return
   }

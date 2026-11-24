@@ -24,6 +24,7 @@ import { attrMax, attrRating, CA_MAX, MAIN_ATTR_MAX, displayGain, isMainAttr, sc
 import { inheritanceChances } from './inheritance.ts'
 import { bookLearnChance, canTriggerLegendStarEvent, canTriggerLegendStarInherit, drawTrainingSkills, eventForSession, grantBookSkill, grantRainbowInheritSkill, grantTrainingSkill, legendStarEventFor, legendStarInheritEventFor, rainbowInheritReplacementError, skillChoiceReplacementError, trainingSkillChance, bookTierLabel, MAX_SKILL_TEACHERS, MATCH_BOOK_EVENT_ID } from './legend-learning.ts'
 import { LEGEND_STAR_EVENT_CHANCE, LEGEND_STAR_EVENT_ID, LEGEND_STAR_INHERIT_CHANCE, LEGEND_STAR_INHERIT_EVENT_ID } from './data/legend-cup-skill.ts'
+import { MAX_BOOKS, SEASON3_MAX_BOOKS } from './data/legend-skills.ts'
 import { effectiveTrainingCeilings } from './cup-rewards.ts'
 import { legendMultiplier, legendValue } from './legend-bonus.ts'
 import { isOverseasCampAction, OVERSEAS_CAMP_MIN_ACTIONS, OVERSEAS_CAMP_MULTIPLIER, partnerAssignment, trainingDate, trainingLowMood, trainingOptions, type TrainingActivityId } from './training-calendar.ts'
@@ -54,6 +55,12 @@ export function trainingActionsForSeason(seasonIndex = 1): number {
 
 export function trainingActionsTotal(session: TrainingSession): number {
   return session.actionsTotal ?? 18
+}
+
+/** 返回本轮培养对应的技能卡装备上限（第 3 赛季 50 时段起为 5 张，其余为 4 张）。 */
+export function trainingMaxBooks(session: Pick<TrainingSession, 'actionsTotal' | 'books'>): number {
+  const total = session.actionsTotal ?? 18
+  return Math.max(total >= OVERSEAS_CAMP_MIN_ACTIONS ? SEASON3_MAX_BOOKS : MAX_BOOKS, session.books?.length ?? 0)
 }
 
 /** 事件给的属性成长是事件数据里写的数值乘这个系数：新培养曾是 ×0.5，现在整体放大 4 倍（×2）。旧课程不变。 */
@@ -184,6 +191,7 @@ export function createTrainingSession(player: Player, seed: number, snapshot: Tr
     : snapshot!
   const totalSlots = Number.isFinite(actionsTotal) && actionsTotal > 0 ? Math.round(actionsTotal) : ACTIONS_PER_ROUTE
   const totalDays = Math.round(totalSlots / 2)
+  const maxBooks = totalSlots >= OVERSEAS_CAMP_MIN_ACTIONS ? SEASON3_MAX_BOOKS : MAX_BOOKS
   const candidate: Player = {
     ...player,
     attrs: { ...player.attrs },
@@ -205,7 +213,7 @@ export function createTrainingSession(player: Player, seed: number, snapshot: Tr
     scheduleSeed: seed,
     playerId: player.id,
     seed,
-    ...(books?.length ? { books: books.slice(0, 4) } : {}),
+    ...(books?.length ? { books: books.slice(0, maxBooks) } : {}),
     candidate,
     facilityLevels: { ...levels },
     facilityStageVersion: FACILITY_STAGE_VERSION,
