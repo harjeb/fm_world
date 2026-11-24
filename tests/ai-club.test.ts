@@ -8,7 +8,10 @@ import {
   aiClubOf,
   aiSignFreeAgents,
   aiTierProfile,
+  aiUpgradeFloor,
+  AI_BALANCE_CAP,
   backfillAICardSkills,
+  backfillAITierIncome,
   createAIClub,
   equipAICards,
   playerCa,
@@ -264,6 +267,95 @@ describe('电脑球队的经营节奏', () => {
     expect(result.upgrades).toBeLessThanOrEqual(1)
     // 无论如何都不能把留底的钱花掉。
     expect(poor.economy.balance).toBeGreaterThanOrEqual(aiTierProfile('division2').reserve)
+  })
+
+  it('顶级与一级球队仍有买人名额时，设施升级先留足转会预算，不把现金抽干到买人留底以下', () => {
+    const base = game()
+    const team = structuredClone(base.aiTeams[0])
+
+    for (const tier of ['champions', 'division1'] as const) {
+      const profile = aiTierProfile(tier)
+      const ai = state(profile.balance, tier)
+      for (const id of ['stadium', 'academy', 'medical', 'shop', 'sponsor', 'psychology', 'tactics'] as const) ai.economy[id] = 15
+      const expectedFloor = aiUpgradeFloor(ai, tier, 2, team.players.length)
+      expect(expectedFloor).toBeGreaterThan(profile.reserve)
+
+      // 连续推进 10 轮：设施照常升级，但余额绝不跌破升级留底，始终留有可用转会预算。
+      const res = advanceAIClub(ai, { id: team.id, tier }, team, 10, 77, true, 2)
+      expect(res.upgrades).toBeGreaterThan(0)
+      expect(ai.economy.balance).toBeGreaterThanOrEqual(expectedFloor)
+      expect(ai.economy.balance - profile.reserve).toBeGreaterThanOrEqual(expectedFloor - profile.reserve)
+
+      // 余额低于升级留底但处于攒钱阶段时，暂停升设施直到蓄满转会预算。
+      ai.economy.balance = profile.reserve + 200_000
+      const paused = advanceAIClub(ai, { id: team.id, tier }, team, 1, 78, true, 2)
+      expect(paused.upgrades).toBe(0)
+      expect(ai.economy.balance).toBeGreaterThan(profile.reserve + 200_000)
+
+      // 当季买人名额用完后，升级留底自动回落到 reserve，释放多余现金继续升设施（仍不低于 reserve）。
+      ai.transfers = { season: 2, bought: 5 }
+      expect(aiUpgradeFloor(ai, tier, 2, team.players.length)).toBe(profile.reserve)
+      ai.economy.balance = expectedFloor - 100_000
+      const afterQuota = advanceAIClub(ai, { id: team.id, tier }, team, 2, 79, true, 2)
+      expect(afterQuota.upgrades).toBeGreaterThan(0)
+      expect(ai.economy.balance).toBeGreaterThanOrEqual(profile.reserve)
+    }
+  })
+
+  it('AI 每轮收入按所属联赛真实级别结算（顶级 60 万 / 一级 15 万 / 二级 3 万）', () => {
+    const base = game()
+    const team = structuredClone(base.aiTeams[0])
+    const gainFor = (tier: 'champions' | 'division1' | 'division2') => {
+      const ai = state(100_000, tier)
+      // 余额低于留底，确保不触发设施升级，纯看单轮收入
+      ai.economy.fans = 10_000
+      for (const id of ['stadium', 'academy', 'medical', 'shop', 'sponsor', 'psychology', 'tactics'] as const) ai.economy[id] = 10
+      const expected = projectedRoundIncome(ai.economy, tier)
+      const before = ai.economy.balance
+      advanceAIClub(ai, { id: team.id, tier }, undefined, 1, 12, false, 2)
+      expect(ai.economy.balance - before).toBe(expected)
+      return ai.economy.balance - before
+    }
+    const c = gainFor('champions')
+    const d1 = gainFor('division1')
+    const d2 = gainFor('division2')
+    expect(c - d2).toBe(570_000)
+    expect(d1 - d2).toBe(120_000)
+  })
+
+  it('backfillAITierIncome 按历季升降级历史准确补发漏发转播分成，跳过玩家执教球队并受余额上限封顶', () => {
+    const mk = (bal: number) => state(bal, 'champions')
+    const world = {
+      seasonIndex: 2,
+      clubs: [
+        { id: 'c_stay', tier: 'champions' as const },
+        { id: 'd1_up', tier: 'champions' as const },
+        { id: 'c_down', tier: 'division1' as const },
+        { id: 'd1_stay', tier: 'division1' as const },
+        { id: 'd2_stay', tier: 'division2' as const },
+        { id: 'owned_c', tier: 'champions' as const },
+        { id: 'rich_c', tier: 'champions' as const },
+      ] as any,
+      history: [{ seasonIndex: 1, champion: 'c_stay', promotions: ['d1_up'], relegations: ['c_down'], championsTop4: [] }],
+    }
+    const aiClubs: Record<string, AIClubState> = {
+      c_stay: mk(1_000_000),
+      d1_up: mk(1_000_000),
+      c_down: mk(1_000_000),
+      d1_stay: mk(1_000_000),
+      d2_stay: mk(1_000_000),
+      owned_c: mk(1_000_000),
+      rich_c: mk(AI_BALANCE_CAP - 500_000),
+    }
+    const res = backfillAITierIncome(world, aiClubs, 17, { owned_c: 'player-1' })
+    expect(res.clubs).toBe(5)
+    expect(aiClubs.c_stay.economy.balance).toBe(1_000_000 + (38 + 17) * 570_000)
+    expect(aiClubs.d1_up.economy.balance).toBe(1_000_000 + 38 * 120_000 + 17 * 570_000)
+    expect(aiClubs.c_down.economy.balance).toBe(1_000_000 + 38 * 570_000 + 17 * 120_000)
+    expect(aiClubs.d1_stay.economy.balance).toBe(1_000_000 + (38 + 17) * 120_000)
+    expect(aiClubs.d2_stay.economy.balance).toBe(1_000_000)
+    expect(aiClubs.owned_c.economy.balance).toBe(1_000_000)
+    expect(aiClubs.rich_c.economy.balance).toBe(AI_BALANCE_CAP)
   })
 
   it('给服务器用时不改当季名单，只把成长记进卡片', () => {
