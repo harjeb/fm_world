@@ -35,11 +35,21 @@ import { isGoalkeeper } from './ca.ts'
 import { bookKey, bookLearnChance, canChooseTrainingBook, eventForSession, trainingSkillChance } from './legend-learning.ts'
 import { canLearnSkill, skillCategory } from './data/skills.ts'
 import { getSkillTier } from './inheritance.ts'
-import { MAX_BOOKS } from './data/legend-skills.ts'
+import { maxBooksForSeason } from './data/legend-skills.ts'
 import { clubCeilingBonus, effectiveTrainingCeilings } from './cup-rewards.ts'
 import { MAIN_ATTR_HARD_MAX, mainAttrsFor } from './rating.ts'
 import { settleEnergy } from './energy.ts'
 import { isYouthTrainee } from './youth.ts'
+
+/** 当前培养规则对应的赛季编号（兼容单机 season 与联机 world.seasonIndex）。 */
+export function trainingSeasonIndex(game: Pick<GameState, 'season' | 'world'>): number {
+  return Math.max(game.season?.index ?? 1, game.world?.seasonIndex ?? 1)
+}
+
+/** 当前赛季单轮培养可装备的技能卡上限（第 1–2 赛季 4 张，第 3 赛季起 5 张）。 */
+export function maxTrainingBooks(game: Pick<GameState, 'season' | 'world'>): number {
+  return maxBooksForSeason(trainingSeasonIndex(game))
+}
 
 /** 保存的配置按球员区分；开始时再校验库存和本轮原始技能。 */
 export function trainingBookLoadout(game: GameState, playerId: string): string[] {
@@ -51,7 +61,8 @@ function validateTrainingBooks(game: GameState, playerId: string, keys: string[]
   const player = game.roster.find((item) => item.id === playerId)
   if (!player) return { error: '球员不存在' }
   if (!Array.isArray(keys) || keys.some((key) => typeof key !== 'string') || new Set(keys).size !== keys.length) return { error: '技能卡配置无效或有重复' }
-  if (keys.length > MAX_BOOKS) return { error: `一轮培养最多带 ${MAX_BOOKS} 本技能书` }
+  const maxBooks = maxTrainingBooks(game)
+  if (keys.length > maxBooks) return { error: `一轮培养最多带 ${maxBooks} 本技能书` }
   const books = keys.map((key) => game.legendBooks?.find((book) => bookKey(book) === key))
   if (books.some((book) => !book)) return { error: '技能书不在库存里，可能已被移除' }
   const selected = books as NonNullable<GameState['legendBooks']>
@@ -94,8 +105,8 @@ export function startTraining(game: GameState, playerId: string, seed?: number, 
   player.energyAt = settledPlayer.energyAt
   player.energy = Math.max(0, energy - TRAINING_ENERGY_COST)
   const economy = economyOf(game)
-  // 每轮都从原始属性开始，和他现在装备哪张卡无关；第 2 赛季 +5 天（40 时段），第 3 赛季起再 +5 天（50 时段，第 3 周非比赛日国外特训 ×3）。
-  const seasonIndex = Math.max(game.season?.index ?? 1, game.world?.seasonIndex ?? 1)
+  // 每轮都从原始属性开始，和他现在装备哪张卡无关；第 2 赛季 +5 天（40 时段），第 3 赛季起再 +5 天（50 时段，第 3 周非比赛日国外特训 ×3，技能卡上限 5 张）。
+  const seasonIndex = trainingSeasonIndex(game)
   const session = createTrainingSession(untrainedPlayer(player), seed ?? newTrainingSeed(game, playerId), { stadium: economy.stadium, academy: economy.academy, medical: economy.medical, shop: economy.shop, sponsor: economy.sponsor, psychology: economy.psychology, tactics: economy.tactics }, 1, books, trainingActionsForSeason(seasonIndex))
   session.qualityBonusPoints = points as 0 | 10 | 20 | 30
   game.trainingPoints = balance - points

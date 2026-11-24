@@ -50,7 +50,7 @@ import { mainAttrsFor } from '../src/game/scale.ts'
 import { FORMATIONS, FORMATION_LIST, isLegacyFormation } from '../src/game/data/formations.ts'
 import { ROLES, ROLES_BY_POSITION } from '../src/game/data/roles.ts'
 import { bookKey, bookLearnChance, bookName, bookRequirementText, eventForSession, trainingSkillChance } from '../src/game/legend-learning.ts'
-import { branchProbability, eventChance, trainingActionsTotal, eventGrowthScale, trainingQualityChances, TRAINING_ACTION_INFO, TRAINING_POINT_TIERS } from '../src/game/training.ts'
+import { branchProbability, eventChance, trainingActionsTotal, trainingMaxBooks, eventGrowthScale, trainingQualityChances, TRAINING_ACTION_INFO, TRAINING_POINT_TIERS } from '../src/game/training.ts'
 import { computeLineupFamiliarity, lineupSlots, setSlotPosition, validateLineup } from '../src/game/squad.ts'
 import { ageProfileOf, lineupAgeAnalysis } from '../src/game/age-profile.ts'
 import {
@@ -111,6 +111,7 @@ import {
   saveLineupPreset,
   setAutoTrainingConfig,
   setTrainingBookLoadout,
+  maxTrainingBooks,
   trainingBookLoadout,
   changeMatchAutoSubs,
   changeMatchTactics,
@@ -633,6 +634,7 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
       lowMoodWeeks: session.lowMoodWeeks ?? [],
       exchangeMatches: session.exchangeMatches ?? [],
       books: session.books ?? [],
+      maxBooks: trainingMaxBooks(session),
       skillTeacherIds: session.skillTeacherIds ?? [],
       facilityLevels: session.facilityLevels ?? null,
       fatigue: session.fatigue,
@@ -812,6 +814,7 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
       })),
     },
     legendBooks: (game.legendBooks ?? []).map((book) => ({ ...book, key: bookKey(book), name: bookName(book.id), requirements: bookRequirementText(book) })),
+    trainingBookLimit: maxTrainingBooks(game),
     trainingBooksByPlayer: Object.fromEntries(game.roster.map((player) => [player.id, trainingBookLoadout(game, player.id)])),
     candidates: Object.values(game.candidates).map((player) => playerView(player, game, now)),
     cards: cardsOf(game).map((card) => cardView(card, game)),

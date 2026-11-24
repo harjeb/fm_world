@@ -173,7 +173,7 @@ it.each(['PUT', 'POST'])('青训等待中的 %s 超时后取消请求，不自�
   }
   const operation = online.youthActionOnline({ action: 'recruit_position', position: 'DM' })
   const outcome = expect(operation).rejects.toThrow(stalledMethod === 'PUT' ? '服务器响应超时' : '操作结果尚未确认')
-  await vi.advanceTimersByTimeAsync(20_000)
+  await vi.advanceTimersByTimeAsync(25_000)
   await outcome
   expect(signal?.aborted).toBe(true)
   const youthRequests = fetchMock.mock.calls.filter(([url]) => url === '/api/youth/action')
@@ -185,4 +185,94 @@ it.each(['PUT', 'POST'])('青训等待中的 %s 超时后取消请求，不自�
     expect(handler).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ clubName: current.clubName }))
     expect(online.onlineState.revision).toBe(2)
   }
+})
+
+it('另一设备更新冲突拉回最新存档后清空错误、丢弃过期队列，并恢复青训招募位置保存', async () => {
+  vi.stubGlobal('window', { setTimeout, clearTimeout })
+  vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {} })
+  vi.stubGlobal('EventSource', FakeEvents)
+  const { createInitialGame, saveGame } = await import('../src/game/state.ts')
+  const game = createInitialGame(33)
+  const serverLatest = { ...structuredClone(game), clubName: '另一设备最新档' }
+  const afterYouth = { ...structuredClone(serverLatest), clubName: '已保存青训招募' }
+  let releasePut!: (response: Response) => void
+  let putCalls = 0
+  let youthBody: Record<string, unknown> | null = null
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/login') return Response.json({ token: 'tok', user: { id: '1', username: 'u' }, revision: 1, game })
+    if (url === '/api/game' && init?.method === 'PUT') {
+      putCalls++
+      return new Promise<Response>((resolve) => { releasePut = resolve })
+    }
+    if (url === '/api/game') return Response.json({ game: serverLatest, revision: 5 })
+    if (url === '/api/youth/action') {
+      youthBody = JSON.parse(String(init!.body)) as Record<string, unknown>
+      return Response.json({ ok: true, revision: 6, game: afterYouth })
+    }
+    return Response.json({})
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  const online = await import('../src/online.ts')
+  const handler = vi.fn()
+  online.setRemoteGameHandler(handler)
+  await online.loginOnline('u', 'password')
+
+  // 触发后台保存；在途期间再排队一份基于旧版本的修改。
+  saveGame({ ...game, clubName: '本地旧修改1' })
+  const flushing = online.flushOnlineNow()
+  await vi.waitFor(() => expect(releasePut).toBeDefined())
+  saveGame({ ...game, clubName: '本地旧修改2' })
+  releasePut(Response.json({ error: '存档已在另一设备更新' }, { status: 409 }))
+  await flushing
+
+  expect(online.onlineState.error).toBe('')
+  expect(online.onlineState.revision).toBe(5)
+  expect(putCalls).toBe(1)
+  expect(handler).toHaveBeenLastCalledWith(expect.objectContaining({ clubName: '另一设备最新档' }))
+
+  // 不刷新页面即可直接提交青训招募位置，且携带拉回后的最新版本号。
+  const saved = await online.youthActionOnline({ action: 'recruit_position', position: 'AMR' })
+  expect(youthBody).toEqual({ action: 'recruit_position', position: 'AMR', baseRevision: 5 })
+  expect(online.onlineState.revision).toBe(6)
+  expect(online.onlineState.error).toBe('')
+  expect(saved.clubName).toBe('已保存青训招募')
+})
+
+it('冲突即时恢复失败时保留错误提示，待后续 SSE 同步权威存档后再解除阻塞', async () => {
+  vi.stubGlobal('window', { setTimeout, clearTimeout })
+  vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {} })
+  vi.stubGlobal('EventSource', FakeEvents)
+  const { createInitialGame, saveGame } = await import('../src/game/state.ts')
+  const game = createInitialGame(44)
+  const serverLatest = { ...structuredClone(game), clubName: 'SSE恢复最新档' }
+  let youthCalls = 0
+  let lastYouthBaseRevision = 0
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/login') return Response.json({ token: 'tok', user: { id: '1', username: 'u' }, revision: 1, game })
+    if (url === '/api/game' && init?.method === 'PUT') return Response.json({ error: '存档已在另一设备更新' }, { status: 409 })
+    if (url === '/api/game') return Response.json({ error: '服务暂时不可用' }, { status: 503 })
+    if (url === '/api/youth/action') {
+      youthCalls++
+      lastYouthBaseRevision = (JSON.parse(String(init!.body)) as { baseRevision: number }).baseRevision
+      return Response.json({ ok: true, revision: 5, game: serverLatest })
+    }
+    return Response.json({})
+  }))
+  const online = await import('../src/online.ts')
+  await online.loginOnline('u', 'password')
+  saveGame(game)
+  await online.flushOnlineNow()
+
+  expect(online.onlineState.error).toBe('存档已在另一设备更新')
+  await expect(online.youthActionOnline({ action: 'recruit_position', position: 'DM' })).rejects.toThrow('存档已在另一设备更新')
+  expect(youthCalls).toBe(0)
+
+  // 后续 SSE 收到权威状态后自动清除冲突错误，恢复青训操作。
+  FakeEvents.current.emit({ type: 'state', revision: 4, game: serverLatest })
+  expect(online.onlineState.error).toBe('')
+  expect(online.onlineState.revision).toBe(4)
+  await online.youthActionOnline({ action: 'recruit_position', position: 'DM' })
+  expect(youthCalls).toBe(1)
+  expect(lastYouthBaseRevision).toBe(4)
+  expect(online.onlineState.revision).toBe(5)
 })

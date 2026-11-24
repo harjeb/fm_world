@@ -3,18 +3,17 @@ import { DETAILED_POSITIONS, DETAILED_POSITION_LABELS, detailedPositionValue, is
 import { eventById, ROUTE_LABELS } from '../../game/data/events.ts'
 import { POSITION_LABELS } from '../../game/data/attributes.ts'
 import { SKILLS, basicSkillsFor, canLearnSkill, skillCategory } from '../../game/data/skills.ts'
-import { autoPresetLabel, autoTrainingConfig, autoTrainingPresetsFor, autoTrainingRunnable, previewTraining, resolveAutoPresetId, trainingBookLoadout } from '../../game/actions.ts'
+import { autoPresetLabel, autoTrainingConfig, autoTrainingPresetsFor, autoTrainingRunnable, maxTrainingBooks, previewTraining, resolveAutoPresetId, trainingBookLoadout, trainingSeasonIndex } from '../../game/actions.ts'
 import { displayCA, initialDisplayCA, mainAttrsFor } from '../../game/rating.ts'
 import { caCeilingOf } from '../../game/ca.ts'
 import { clubCeilingBonus, effectiveClubCeilings, effectiveTrainingCeilings } from '../../game/cup-rewards.ts'
-import { branchProbability, eventChance, eventGrowthScale, failureChance, planTraining, REST_PARTNER_RECOVERY, trainingActionsForSeason, trainingActionsTotal, trainingDaysForSeason, trainingQualityChances, TRAINING_ACTION_INFO, TRAINING_ENERGY_COST, TRAINING_POINT_TIERS, weekOfAction, type TrainingRequest } from '../../game/training.ts'
+import { branchProbability, eventChance, eventGrowthScale, failureChance, planTraining, REST_PARTNER_RECOVERY, trainingActionsForSeason, trainingActionsTotal, trainingDaysForSeason, trainingMaxBooks, trainingQualityChances, TRAINING_ACTION_INFO, TRAINING_ENERGY_COST, TRAINING_POINT_TIERS, weekOfAction, type TrainingRequest } from '../../game/training.ts'
 import { isOverseasCampAction, OVERSEAS_CAMP_MIN_ACTIONS, OVERSEAS_CAMP_MULTIPLIER, partnerAssignment, trainingDate, trainingOptions, type TrainingActivityId } from '../../game/training-calendar.ts'
 import { baseBuild, playerCards, untrainedPlayer } from '../../game/cards.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
 import { getSkillTier } from '../../game/inheritance.ts'
 import { bookKey, bookLearnChance, bookName, bookRequirementText, canChooseTrainingBook, eventForSession, legendStarTriggersUsed, trainingSkillChance } from '../../game/legend-learning.ts'
 import { isPassiveTrainingBook, LEGEND_STAR_MAX_TRIGGERS } from '../../game/data/legend-cup-skill.ts'
-import { MAX_BOOKS } from '../../game/data/legend-skills.ts'
 import { keyAttrsOf } from '../../game/data/key-attrs.ts'
 import { activityColor, attrColor, attributeRadar, attrHeat, bookTitle, caHeat, cardName, cardSelect, icon, mainAttrs, meter, pageHead, panel, posBadge, primaryPosition, skillGroups, tag, tile, traitLabel } from '../components.ts'
 import { attrLabel, attrValue, caDelta, displayEventHint, esc, gainHtml, gainText, pct, playerCA, positionLabel, skillName, trainingLogText } from '../format.ts'
@@ -306,6 +305,7 @@ function bookPicker(player: Player): string {
   const basic = basicSkillsFor(base)
   const basicIds = new Set<string>(basic)
   const books = (game.legendBooks ?? []).filter((book) => !basicIds.has(book.id))
+  const maxBooks = maxTrainingBooks(game)
   ui.trainingBookIds = filterTrainingBookIds(player, ui.trainingBookIds)
   const selected = new Set(ui.trainingBookIds)
   const saved = trainingBookLoadout(game, player.id)
@@ -322,7 +322,7 @@ function bookPicker(player: Player): string {
       ? `培养期携带生效 · 不占实战技能槽${reason}`
       : `要求 ${bookRequirementText(book)} · 起点成功率 ${Math.round(bookLearnChance(base, book) * 100)}%${reason}`
     return `<label class="check-field training-book-option tier-${book.tier} ${check.ok && !duplicate ? '' : 'muted'}" title="${esc(reason)}">
-      <input type="checkbox" data-training-book="${esc(key)}" ${checked ? 'checked' : ''} ${!checked && (!check.ok || duplicate || selected.size >= MAX_BOOKS) ? 'disabled' : ''}>
+      <input type="checkbox" data-training-book="${esc(key)}" ${checked ? 'checked' : ''} ${!checked && (!check.ok || duplicate || selected.size >= maxBooks) ? 'disabled' : ''}>
       <span><span class="book-option-head">${bookTitle(bookName(book.id), book.tier)}</span><small>${esc(SKILLS[book.id]?.desc ?? '')} ${esc(skillEffectText(book.id, book.tier))}</small><small class="muted">${esc(metaText)}</small></span>
     </label>`
   }).join('')
@@ -330,13 +330,14 @@ function bookPicker(player: Player): string {
   const missing = [...selected].filter((key) => !books.some((book) => bookKey(book) === key)).map((key) => `<label class="check-field muted"><input type="checkbox" data-training-book="${esc(key)}" checked><span>已不在库存：${esc(key)}（请取消选择）</span></label>`).join('')
   const empty = (game.legendBooks ?? []).length ? '没有可显示的技能卡。' : `还没有技能书（支持银、金、彩多种稀有度）。联赛比赛场上球员会随机掉落技能书，传奇挑战与巅峰之路也能获得。 <button class="link" data-nav="challenge">前往挑战 ${icon('right', 12)}</button>`
   const body = `${hiddenSaved ? '<p class="hint pad" role="status">旧配置中的本位置基础技能卡已从选择中移除，库存不受影响；请保存配置，或开始培养时保存。</p>' : ''}${books.length || missing ? `<div class="check-grid">${rows}${missing}</div>` : `<p class="muted pad">${empty}</p>`}${books.length || missing || dirty ? `<div class="btn-row pad"><button class="btn small" data-action="training-books-save" data-player="${esc(player.id)}">保存当前配置</button><span class="muted small">${dirty ? '有未保存的修改；开始培养时也会保存' : '已保存，按球员分别记住'}</span></div>` : ''}`
-  return panel(`装备技能卡 <small>${selected.size} / ${MAX_BOOKS}</small>`, `${basicList}${body}`, { flush: true, className: 'book-slot-panel' })
+  return panel(`装备技能卡 <small>${selected.size} / ${maxBooks}</small>`, `${basicList}${body}`, { flush: true, className: 'book-slot-panel' })
 }
 
 function bookLoadout(session: TrainingSession): string {
+  const maxBooks = trainingMaxBooks(session)
   const names = (session.skillTeacherIds ?? []).map((id) => game.roster.find((player) => player.id === id)?.name).filter((name): name is string => !!name)
   const teachers = names.length ? `<p class="hint pad">本轮技能来源队友（随机最多 5 人）：${names.map(esc).join('、')}。只有当前仍参与培养的人可提供选项。</p>` : ''
-  if (!session.books?.length) return panel(`本轮技能书槽 <small>0 / ${MAX_BOOKS}</small>`, `<p class="hint pad">本轮未装备技能卡；交流赛后仍可学习共同培养的队友或位置基础技能。</p>${teachers}`, { flush: true, className: 'book-slot-panel' })
+  if (!session.books?.length) return panel(`本轮技能书槽 <small>0 / ${maxBooks}</small>`, `<p class="hint pad">本轮未装备技能卡；交流赛后仍可学习共同培养的队友或位置基础技能。</p>${teachers}`, { flush: true, className: 'book-slot-panel' })
   const rows = session.books.map((book) => {
     if (isPassiveTrainingBook(book.id)) {
       const used = legendStarTriggersUsed(session)
@@ -345,7 +346,7 @@ function bookLoadout(session: TrainingSession): string {
     const check = canChooseTrainingBook(session.candidate, book)
     return `<div class="row-line"><span>${bookTitle(bookName(book.id), book.tier)} <small class="muted">${check.ok ? esc(bookRequirementText(book)) : esc(check.reason ?? '')}</small></span><b>${check.ok ? `${Math.round(bookLearnChance(session.candidate, book) * 100)}%` : '—'}</b></div>`
   }).join('')
-  return panel(`本轮技能书槽 <small>${session.books.length} / ${MAX_BOOKS}</small>`, `<div class="rows">${rows}</div>${teachers}`, { flush: true, className: 'book-slot-panel' })
+  return panel(`本轮技能书槽 <small>${session.books.length} / ${maxBooks}</small>`, `<div class="rows">${rows}</div>${teachers}`, { flush: true, className: 'book-slot-panel' })
 }
 
 function renderTrainingStart(player: Player): string {
@@ -354,7 +355,7 @@ function renderTrainingStart(player: Player): string {
   const base = { ...baseBuild(player) }
   const gk = player.positions.GK > 0
   const ceilingCa = caCeilingOf(effectiveClubCeilings(player, clubCeilingBonus(game)), gk)
-  const seasonIndex = Math.max(game.season?.index ?? 1, game.world?.seasonIndex ?? 1)
+  const seasonIndex = trainingSeasonIndex(game)
   const days = trainingDaysForSeason(seasonIndex)
   const slots = trainingActionsForSeason(seasonIndex)
   const daysHint = seasonIndex >= 3 ? `含第2季+5天、第3季+5天 · 第3周非比赛日国外特训 ×${OVERSEAS_CAMP_MULTIPLIER}` : seasonIndex === 2 ? '含第2季+5天（第3季再+5天+国外特训）' : '第2季+5天 · 第3季再+5天+国外特训'

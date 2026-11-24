@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createInitialGame, loadGame } from '../src/game/state.ts'
-import { autoTrainingStep, setTrainingBookLoadout, startTraining, startTrainingWithSupport, trainingAction, trainingBookLoadout, trainingEventChoice } from '../src/game/actions.ts'
-import { createTrainingSession, performTrainingAction, resolveTrainingEvent } from '../src/game/training.ts'
-import { drawTrainingSkills, eventForSession, MATCH_BOOK_EVENT_ID, trainingSkillChoiceId } from '../src/game/legend-learning.ts'
+import { autoTrainingStep, maxTrainingBooks, setTrainingBookLoadout, startTraining, startTrainingWithSupport, trainingAction, trainingBookLoadout, trainingEventChoice } from '../src/game/actions.ts'
+import { createTrainingSession, performTrainingAction, resolveTrainingEvent, trainingMaxBooks } from '../src/game/training.ts'
+import { drawTrainingSkills, eventForSession, hasLegendStarBook, MATCH_BOOK_EVENT_ID, trainingSkillChoiceId } from '../src/game/legend-learning.ts'
+import { maxBooksForSeason } from '../src/game/data/legend-skills.ts'
 import { derivedRng } from '../src/game/rng.ts'
 import { EVENTS } from '../src/game/data/events.ts'
 import { canLearnSkill, skillCategory } from '../src/game/data/skills.ts'
@@ -320,5 +321,74 @@ describe('交流赛技能卡配置与学习', () => {
     expect(step.ok, step.error).toBe(true)
     expect(step.kind).toBe('event')
     expect(agentView(game).trainingSessions.find((item) => item.playerId === player.id)!.pendingEvent?.id).toBe('main_intake')
+  })
+
+  it('第 1–2 赛季技能卡装备上限为 4，第 3 赛季起提升至 5 且第 5 张卡可正常生效与抽取', () => {
+    expect(maxBooksForSeason(1)).toBe(4)
+    expect(maxBooksForSeason(2)).toBe(4)
+    expect(maxBooksForSeason(3)).toBe(5)
+    expect(maxBooksForSeason(5)).toBe(5)
+
+    const { game, player } = setup(215)
+    const sixBooks: LegendBook[] = [
+      ...books,
+      { id: 'lg_leader', tier: 'gold' },
+      { id: 'lg_legend_star', tier: 'rainbow' },
+    ]
+    const sixKeys = sixBooks.map((book) => `${book.id}:${book.tier}`)
+    game.legendBooks = structuredClone(sixBooks)
+
+    // S1 / S2：最多 4 张
+    for (const s of [1, 2]) {
+      game.season.index = s
+      if (game.world) game.world.seasonIndex = s
+      expect(maxTrainingBooks(game)).toBe(4)
+      expect(agentView(game).trainingBookLimit).toBe(4)
+      expect(setTrainingBookLoadout(game, player.id, sixKeys.slice(0, 4)).ok).toBe(true)
+      const over = setTrainingBookLoadout(game, player.id, sixKeys.slice(0, 5))
+      expect(over.ok).toBe(false)
+      expect(over.error).toContain('4')
+    }
+
+    // S3 起：提升至 5 张，超过 5 张仍拒绝
+    game.season.index = 3
+    if (game.world) game.world.seasonIndex = 3
+    expect(maxTrainingBooks(game)).toBe(5)
+    expect(agentView(game).trainingBookLimit).toBe(5)
+    const fiveKeys = sixKeys.slice(0, 5)
+    expect(applyAgentAction(game, { action: 'set_training_books', playerId: player.id, bookKeys: fiveKeys }).ok).toBe(true)
+    const overS3 = applyAgentAction(game, { action: 'set_training_books', playerId: player.id, bookKeys: sixKeys })
+    expect(overS3.ok).toBe(false)
+    expect(overS3.error).toContain('5')
+
+    // 开始 S3 培养：session 完整保留 5 张卡，不截断为 4
+    expect(applyAgentAction(game, { action: 'start_training', playerId: player.id }).ok).toBe(true)
+    const session = game.training[player.id]
+    expect(session.books).toHaveLength(5)
+    expect(session.books).toEqual(sixBooks.slice(0, 5))
+    expect(trainingMaxBooks(session)).toBe(5)
+    expect(agentView(game).trainingSessions.find((item) => item.playerId === player.id)?.maxBooks).toBe(5)
+
+    // 第 5 张主动书（lg_leader）也能在交流赛抽签中被抽到
+    let drewFifth = false
+    for (let seed = 1; seed <= 200; seed++) {
+      const copy = structuredClone(session)
+      copy.seed = seed
+      if (drawTrainingSkills(copy).some((choice) => choice.source === 'book' && choice.id === 'lg_leader')) {
+        drewFifth = true
+        break
+      }
+    }
+    expect(drewFifth).toBe(true)
+
+    // 第 5 张卡放被动彩书《传奇之星》同样生效
+    const other = game.roster.find((item) => item.id !== player.id && item.positions.GK === 0)!
+    other.skills = []
+    other.baseSkills = []
+    other.energy = 100
+    const withStarKeys = [...sixKeys.slice(0, 4), sixKeys[5]]
+    expect(startTrainingWithSupport(game, other.id, 303, withStarKeys).ok).toBe(true)
+    expect(game.training[other.id].books).toHaveLength(5)
+    expect(hasLegendStarBook(game.training[other.id])).toBe(true)
   })
 })
