@@ -58,6 +58,18 @@ const lineupInputSchema = z.object({
   backupTactics: z.array(z.record(z.string(), z.unknown())).max(3).nullable().optional().describe('可选 FM 备选战术槽数组（最多 3 套：{id,name,formationId,mentality,tacticalStyle?,tacticalInstructions,slotRoles?,customPositions?,preferredPlayers?}）；null 清空'),
   matchPlanRules: z.array(z.record(z.string(), z.unknown())).max(8).nullable().optional().describe('可选 FM 自定义条件比赛计划规则数组（最多 8 条：{id,name,enabled,once?,condition:{minMinute?,maxMinute?,score?,redCard?,avgStaminaBelow?},action:{tacticSlotId?,mentality?,tacticalStyle?,instructionPatch?,linkedSub?}}）；null 清空'),
   customPositions: z.record(z.string(), z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).nullable().optional().describe('可选槽位自定义坐标映射；null 清空'),
+  autoShout: z.boolean().optional().describe('可选：是否开启赛前自动情绪喊话兜底（离线或未观赛时由助教按局势自动喊话）'),
+})
+
+const positionSchema = z.enum(['GK', 'CB', 'W', 'CM', 'ST'])
+
+const autoSubConditionRuleSchema = z.object({
+  targetKind: z.enum(['any', 'position', 'slot', 'player']).describe('目标类型：any 任意首发 / position 指定位置 / slot 指定槽位 / player 指定首发球员'),
+  targetValue: z.string().optional().describe('targetKind 为 position/slot/player 时填写对应位置、槽位 ID 或球员 ID'),
+  staminaBelow: z.number().min(1).max(99).describe('体力低于此百分比时触发（1-99）'),
+  minMinute: z.number().min(0).lt(90).optional().describe('最早触发分钟（0-89）'),
+  scoreState: z.enum(['any', 'leading', 'drawing', 'trailing', 'not_leading']).optional().describe('比分条件：any/leading/drawing/trailing/not_leading'),
+  inId: z.string().optional().describe('可选指定替补球员 ID'),
 })
 
 const autoSubsSchema = z.object({
@@ -65,8 +77,23 @@ const autoSubsSchema = z.object({
     .describe('指定首发换下和替补换上的比赛分钟数（0-90），达到后在事件边界执行'),
   staminaBelow: z.number().min(1).max(99).nullable().describe('比赛中体力百分比低于此值时换人；null 为关闭'),
   preMatchStaminaBelow: z.number().min(1).max(99).nullable().optional().describe('赛前按预计开球体能轮换低于此值的首发；null 或省略为关闭，不消耗比赛换人次数'),
+  staminaPositions: z.array(positionSchema).optional().describe('可选：限制全局体力换人只替换指定位置（如 ["W","CM","ST"]）'),
+  staminaMinMinute: z.number().min(0).lt(90).optional().describe('可选：全局体力换人最早触发分钟（0-89）'),
+  preferBy: z.enum(['proficiency', 'stamina', 'ca']).optional().describe('可选：自动替补挑选策略（proficiency 位置熟练优先 / stamina 充沛体力优先 / ca 综合能力优先）'),
+  conditionRules: z.array(autoSubConditionRuleSchema).max(5).optional().describe('可选：最多 5 条按位置/槽位/球员/比分触发的条件换人规则'),
   onInjury: z.boolean().describe('发生比赛内伤病时自动换人'),
 })
+
+const shoutKindSchema = z.enum([
+  'encourage',
+  'praise',
+  'demand_more',
+  'fire_up',
+  'focus',
+  'calm_down',
+  'no_pressure',
+  'berate',
+])
 
 const trainingPositionSchema = z.enum(['GK', 'CB', 'W', 'CM', 'ST', 'DL', 'DC', 'DR', 'WBL', 'WBR', 'DM', 'ML', 'MC', 'MR', 'AML', 'AMC', 'AMR'])
 const trainingRequestSchema = z.discriminatedUnion('kind', [
@@ -111,7 +138,7 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     playerId: z.string().describe('球员 ID，来自 get_state 的 roster'),
   }, (args) => action('get_player', args))
 
-  register('upgrade_facility', '升级设施', '使用俱乐部余额（第 2 赛季起同时消耗董事会本季「独立设施预算」）升级设施。', {
+  register('upgrade_facility', '升级设施', '第 2 赛季起优先消耗董事会本季「独立设施预算」，不足或用完时自动使用俱乐部余额补足。', {
     facilityId: z.enum(['stadium', 'academy', 'medical', 'shop', 'sponsor', 'psychology', 'tactics']),
   }, (args) => action('upgrade_facility', args))
 
@@ -217,6 +244,11 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     skillId: z.string().min(1),
   }, (args) => action('buy_shop_book', args))
 
+  register('claim_achievement', '领取成就奖励', '领取已达成且未领取的成就奖励（含商店点数、金币福利及联赛 5 连胜 +50 / 10 连胜 +100 独立主属性上限加成等；领取上限加成后同步刷新进行中培养上限）。省略 id 或传 all=true 时一键领取全部可领成就。', {
+    id: z.string().min(1).optional().describe('成就 ID，来自 get_state.achievements.items[].id；省略时领取全部可领成就'),
+    all: z.boolean().optional().describe('传 true 一键领取当前所有已达成且有奖励的未领成就'),
+  }, (args) => action('claim_achievement', args))
+
   register('youth_action', '管理青训', '读取 get_state.youth 后操作青训：设置位置与能力方向、招募、临时征召、返回、正式提拔或解约。正式提拔永久停止基础成长；解约不返资源。', {
     youth: z.object({
       action: z.enum(['plan', 'recruit_position', 'sign', 'call_up', 'return', 'promote', 'release']),
@@ -229,7 +261,7 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     }),
   }, (args) => action('youth_action', args))
 
-  register('start_training', '开始培养', '每轮从原始属性开始，产出球员卡；省略 bookKeys 时使用保存的技能卡配置，传入时同时保存。可投入共享培养点提高品质。', {
+  register('start_training', '开始培养', '每轮从原始属性开始，产出球员卡（第 1 赛季 30 时段、第 2 赛季 40 时段、第 3 赛季起 50 时段且第 3 周非比赛日为国外特训 ×3）；省略 bookKeys 时使用保存的技能卡配置，传入时同时保存。可投入共享培养点提高品质。', {
     playerId: z.string(),
     bookKeys: z.array(z.string()).max(4).optional(),
     points: z.union([z.literal(0), z.literal(10), z.literal(20), z.literal(30)]).optional().describe('本轮投入的共享培养点；余额不足会失败'),
@@ -281,12 +313,12 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     mode: z.enum(['priority', 'targets', 'max']).optional(),
     priority: z.array(z.string()).optional().describe('属性英文名的优先顺序'),
     resetPriority: z.boolean().optional().describe('true 时恢复默认优先级（先练这名球员的 2 个主要属性）'),
-    targets: z.record(z.string(), z.number().min(0).max(1500)).optional().describe('targets 模式的目标值，如 { "passing": 1200 }'),
+    targets: z.record(z.string(), z.number().min(0).max(2000)).optional().describe('targets 模式的目标值（0–2000），如 { "passing": 1500 }'),
   }, (args) => action('set_auto_training', args))
 
   register('run_auto_training', '自动培养', '按自动培养策略连续推进进行中的一轮培养（自动挑训练、自动处理事件），直到本轮结束或用完 maxSteps。不会自己开始新一轮。', {
     playerId: z.string().min(1),
-    maxSteps: z.number().int().min(1).max(200).optional().describe('最多推进几步，默认 60'),
+    maxSteps: z.number().int().min(1).max(200).optional().describe('最多推进几步，默认 120（足够跑完第 3 赛季 50 时段及事件）'),
   }, (args) => action('run_auto_training', args))
 
   register('equip_card', '给球员换卡', '把球员自己的一张球员卡装备到他身上；cardId 为 null 换回原始属性。比赛进行中不能换；体能、精力、伤病和停赛不受换卡影响。', {
@@ -353,17 +385,22 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     name: z.string().min(1).max(8),
   }, (args) => action('rename_club', args))
 
-  register('choose_club', '选择执教球队', '新账号在本赛季还没踢过联赛时，可以换到另一支没人执教的二级联赛球队；会按共享世界重建存档。', {
-    clubId: z.string().describe('来自 get_world 的 clubs[].id，tier 为 division2 且 managed 为 false'),
-  }, (args) => action('choose_club', args))
-
-  register('get_match', '查看比赛', '不传 matchId 时读取当前进行中比赛的比分、时钟、统计、场上球员、替补、战术和最近事件；传 matchId 时读取完整比赛记录和复盘建议。', {
+  register('get_match', '查看比赛', '不传 matchId 时读取当前进行中比赛（含联机 10 分钟直播中的联赛与杯赛）的比分、时钟、统计、场上球员情绪 mood、喊话状态 shouts、替补、战术和最近事件；传 matchId 时读取完整比赛记录和复盘建议。', {
     matchId: z.string().optional().describe('比赛记录 ID；不填则读取当前比赛'),
   }, (args) => action('get_match', args))
 
   register('advance_match', '推进挑战赛 / 友谊赛', '适用于友谊赛、巅峰之路与传奇挑战：按步推进，默认 1 步；联赛只能等待现实时间。返回当前比赛或终场记录。', {
     steps: z.number().int().min(1).max(20000).optional(),
   }, (args) => action('advance_match', args))
+
+  register('set_auto_shout', '开关自动情绪喊话', '开关赛前「自动喊话」兜底（赛前 30 分钟锁阵容后不可改）。开启后，离线或未观赛的联赛/杯赛会在关键节点自动按局势触发最稳妥的情绪喊话。', {
+    enabled: z.boolean().describe('true 开启自动喊话，false 关闭'),
+  }, (args) => action('set_auto_shout', args))
+
+  register('match_shout', '场边情绪喊话', 'FM27 8 种场边情绪喊话（全模式可用：友谊赛/巅峰/传奇/离线联赛，及联机 10 分钟直播第 85 分钟前的联赛与赛季杯赛，联机直播会触发服务器实时重算后半场）。每场最多 6 次、12 分钟冷却、持续 15 分钟、不耗暂停；按性格/比分/评分/黄牌产生正负反馈。', {
+    kind: shoutKindSchema.describe('喊话类型：encourage 鼓励 / praise 表扬 / demand_more 要求更多 / fire_up 点燃斗志 / focus 保持专注 / calm_down 冷静下来 / no_pressure 卸下包袱 / berate 严厉斥责'),
+    targetPlayerId: z.string().min(1).nullable().optional().describe('可选单人点名目标（球员 ID 或 onPitch[].id）；省略或 null 为全队喊话'),
+  }, (args) => action('match_shout', args))
 
   register('set_match_tactics', '比赛中调整战术', '比赛中可选择全体进攻、均衡或全体防守；赛前仍可设置完整战术。', {
     mentality: z.enum(['attack', 'balanced', 'defend']).describe('attack=全体进攻，balanced=均衡，defend=全体防守'),

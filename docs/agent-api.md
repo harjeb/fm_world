@@ -24,7 +24,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 `/api/agent/action` 请求体统一为 `{ "action": "...", ...参数 }`。成功返回 `{ ok: true, revision, result, game }`；失败返回 HTTP 400、`{ ok: false, error, revision, game }`。`game` 是执行后的最新状态，可直接用于下一步决策。
 
-状态里和手动界面一致地公开：0–1500 原始主属性、位置与 `detailedPositions`、CA、年龄与年龄战术/动作曲线 `ageProfile`（不改动面板属性，仅影响个体战术执行度、受压出球、1v1 过人/抢断、终结与门将关键球扑救、吃牌控制及低体力稳定性；门将曲线延后 3 岁）、估值 `marketValue`、合同 `contract`（`wage`、`expiresSeason`）、技能、性格、训练日志（最近 24 条）、待处理事件及成功率、自动培养设置 `autoTraining`、共享培养点 `trainingPoints` 与档位 `trainingPointTiers`、阵容合法性/位置折损/年龄结构建议 `lineupAnalysis.ageSummary`、比赛历史、挑战历史、历年联赛成绩 `seasonHistory`（级别、名次、战绩、冠军）、前 5 轮赛程、转会窗口 `market.transferWindowOpen`、可谈判的 AI 球员 `market.clubOffers`、球探配置 `scouting` 和报告 `scoutReports`、奖杯与杯赛奖励 `honors`、以及巅峰之路与传奇挑战进度 `pve`（已通关数、今日剩余次数、属性突破卡、50 关奖励状态及传奇战绩）。全服其他球队和分区用 `get_world` 读取，巅峰 100 关与 50 支传奇队完整目录用 `get_pve` 读取。**球员的隐藏属性当前值不会返回给 Agent；事件提示、日志或球探估计可能提及相关成长。**
+状态里和手动界面一致地公开：0–1500 原始主属性、位置与 `detailedPositions`、CA、年龄与年龄战术/动作曲线 `ageProfile`（不改动面板属性，仅影响个体战术执行度、受压出球、1v1 过人/抢断、终结与门将关键球扑救、吃牌控制及低体力稳定性；门将曲线延后 3 岁）、估值 `marketValue`、合同 `contract`（`wage`、`expiresSeason`）与续约预览 `renewal`、技能、性格、训练日志（最近 24 条）、待处理事件及成功率、自动培养设置 `autoTraining`、共享培养点 `trainingPoints` 与档位 `trainingPointTiers`、阵容合法性/位置折损/年龄结构建议 `lineupAnalysis.ageSummary`、8 种场边情绪喊话目录 `shoutKinds`、比赛历史、挑战历史、历年联赛成绩 `seasonHistory`（级别、名次、战绩、冠军）、前 5 轮赛程、转会窗口 `market.transferWindowOpen`、可谈判的 AI 球员 `market.clubOffers`、球探配置 `scouting` 和报告 `scoutReports`、成就进度与可领奖励 `achievements`、奖杯与俱乐部上限奖励 `honors`（含 `cupCeilingBonus`、`achievementCeilingBonus`、`clubCeilingBonus`）、以及巅峰之路与传奇挑战进度 `pve`（已通关数、今日剩余次数、属性突破卡、50 关奖励状态及传奇战绩）。全服其他球队和分区用 `get_world` 读取，巅峰 100 关与 50 支传奇队完整目录用 `get_pve` 读取。**球员的隐藏属性当前值不会返回给 Agent；事件提示、日志或球探估计可能提及相关成长。**
 
 ## 3. 动作
 
@@ -57,7 +57,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
     }
   }
   ```
-  `slotId` 与可选职责见 `state.formations`、`state.roles`；全部可用战术风格模板（`blank / control / highPress / tikiTaka / verticalTiki / wingPlay / longBall / fluidCounter / directCounter / catenaccio / parkBus`）及展开指令见 `state.tacticalStyles`，全部可用下场比赛计划（`standard / allOutWin / parkTheBus / fastStart / protectLead / lateSiege / counterTrap / highPressBlitz / wingBombard / controlTempo / conserveStamina / underdogGrind / twoGoalCushion / cupHoldout`）见 `state.matchPlans`，当前阵容的战术执行度（0.50–1.00）见 `state.lineupAnalysis.tacticalFamiliarity`。仅传 `tacticalStyle` 时自动展开该风格模板指令；同时传 `tacticalInstructions` 时可逐项微调（`tactics` 五字段会自动同步）；传 `matchPlan`（或传 `"standard"` / `null` 恢复常规部署）时会在赛季联赛与挑战赛中按分钟和比分自动触发阶段变阵并影响联赛赛后体能消耗；**新增 FM 备选战术槽 `backupTactics`（最多 3 套）与自定义条件比赛计划 `matchPlanRules`（最多 8 条，见 `state.backupTacticTemplates`）**：支持按比赛时间窗、比分/总比分、红牌人数差与场上平均体能自动触发赛中实时变阵（匈牙利算法最优排位 + 少打一人自动 4-4-1/5-3-1）、心态/指令覆盖及变阵联动换人（先换人再排新阵），在联机后台预模拟与本地/挑战赛 2D 引擎中完全一致执行；可选 `customPositions`（`{ "st": { "x": 0.6, "y": 0.45 } }`，`x/y` 在 `0–1` 之间，传 `null` 恢复默认摆位）；旧调用只传 `tactics` 仍兼容。首发必须 11 人（占满阵型的 11 个位置）、1 名门将，替补最多 7 人。边路位置（`W`）同时包括边后卫、边前卫和边锋，站得靠后的是边后卫（默认职责 `w_back`）。也可在顶层同时传 `autoSubs`，以便一次保存新阵容和匹配的新换人计划。已有定时计划若与新阵容冲突，须修改或清除计划后才能保存。
+  `slotId` 与可选职责见 `state.formations`、`state.roles`；全部可用战术风格模板（`blank / control / highPress / tikiTaka / verticalTiki / wingPlay / longBall / fluidCounter / directCounter / catenaccio / parkBus`）及展开指令见 `state.tacticalStyles`，全部可用下场比赛计划（`standard / allOutWin / parkTheBus / fastStart / protectLead / lateSiege / counterTrap / highPressBlitz / wingBombard / controlTempo / conserveStamina / underdogGrind / twoGoalCushion / cupHoldout`）见 `state.matchPlans`，当前阵容的战术执行度（0.50–1.00）见 `state.lineupAnalysis.tacticalFamiliarity`。仅传 `tacticalStyle` 时自动展开该风格模板指令；同时传 `tacticalInstructions` 时可逐项微调（`tactics` 五字段会自动同步）；传 `matchPlan`（或传 `"standard"` / `null` 恢复常规部署）时会在赛季联赛与挑战赛中按分钟和比分自动触发阶段变阵并影响联赛赛后体能消耗；**新增 FM 备选战术槽 `backupTactics`（最多 3 套）与自定义条件比赛计划 `matchPlanRules`（最多 8 条，见 `state.backupTacticTemplates`）**：支持按比赛时间窗、比分/总比分、红牌人数差与场上平均体能自动触发赛中实时变阵（匈牙利算法最优排位 + 少打一人自动 4-4-1/5-3-1）、心态/指令覆盖及变阵联动换人（先换人再排新阵），在联机后台预模拟与本地/挑战赛 2D 引擎中完全一致执行；可选 `customPositions`（`{ "st": { "x": 0.6, "y": 0.45 } }`，`x/y` 在 `0–1` 之间，传 `null` 恢复默认摆位）与可选 `autoShout`（布尔值，是否开启赛前自动情绪喊话兜底）；旧调用只传 `tactics` 仍兼容。首发必须 11 人（占满阵型的 11 个位置）、1 名门将，替补最多 7 人。边路位置（`W`）同时包括边后卫、边前卫和边锋，站得靠后的是边后卫（默认职责 `w_back`）。也可在顶层同时传 `autoSubs`，以便一次保存新阵容和匹配的新换人计划。已有定时计划若与新阵容冲突，须修改或清除计划后才能保存。
 
 - `save_lineup_preset` — 保存新阵容预设或覆盖已有阵容预设（已保存预设列表见 `state.lineup.presets`，最多 30 套；每条含 `id`、`name`、`createdAt`、`lineup`）。
   ```json
@@ -124,7 +124,10 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 - `start_next_season` — 联机时由服务器全服统一结算；你的赛季结束且全服各队比赛都完成后，才能开始下一赛季。服务器到赛季结束时间也会自动推进，所有账号同步新赛程、升降级与 AI 名册；`state.season.index` 表示赛季编号。
 - `set_training_books` — 保存指定球员的技能书配置；`playerId`，`bookKeys` 为最多 4 个 `state.legendBooks[].key`（例如 `lg_drill_master:rainbow`），传空数组清空。位置不符、原始技能已掌握、同一技能重复选不同档位或库存不存在会被拒绝；技能槽满时可配置，成功学习时需替换同类技能。
 - `buy_shop_book` — 消耗商店点数（100 点/本）兑换当季商店上架的金技能书；参数 `{ skillId }`，来自 `state.shop.catalog[].id`（每赛季全服统一轮换 8 外场 + 2 门将 + 2 辅助共 12 本非传奇金书，永久入库不消耗；已有同技能金/彩书不可重复买）。商店点数来自赛季结束排名结算（按联赛级别与排名发放，二级上游约 4 本、顶级上游可全换 10 本）以及巅峰之路每关首通额外点数（1–100 关共 3660 点，历史已通关自动补发）。
-- `start_training` — 开始一轮 30 时段培养，消耗 30 精力（精力每个游戏日恢复 50 点，按经过的时间连续恢复，满 100 为止；不满的球员只恢复一成），不消耗金币；每轮都从原始属性开始，成长不跨轮累积。可投入共享培养点 `points`（0 / 10 / 20 / 30）提高品质概率，开始时立即扣除；`state.trainingPoints` 为余额，`trainingSessions[].qualityBonusPoints` 和 `qualityChances` 显示本轮投入与当前概率。无 `scheduleVersion` 的旧 18/30 次课程保留旧规则。陪练队友由系统自动选 6 名（按阵型其他位置，中卫、边路、中场、前锋轮流挑，练外场必带 1 名其他门将；整轮固定，下一轮重新随机）：每个时段这 6 人会随机分到当天的各个选项里（含 `rest`，合计 6 人，有的选项可能没有人）：选哪个选项拿哪个选项上的人，训练项目每名队友每项正成长主属性加 N 点（N = 开始这一轮时七座设施里最低的等级，1–5；没有设施快照的旧课程仍是 2），站在恢复上的每人多恢复 4 点训练体力；他们不消耗精力、不生成 session；交流赛/队内赛只有一个选项，6 人全在上面；交流赛用当前保存的 11 人首发，培养中的球员一定上场（不在首发时顶替同位置 CA 最低的人）。`partnerIds` 参数已不再生效。
+- `claim_achievement` — 领取已达成且未领取的成就奖励（成就列表与可领数见 `state.achievements`；未解锁的隐藏成就只公开 `？？？` 占位）。奖励包括商店点数、1.0 巅峰首胜 100 万金币福利、以及**独立叠加的联赛连胜俱乐部主属性上限加成**（`feat_league_streak_5` 联赛 5 连胜 +50、`feat_league_streak_10` 联赛 10 连胜 +100，各项独立叠加且与杯赛奖杯上限叠加，领取后立即同步刷新进行中培养的候选上限）。
+  - `id?`: 成就 ID（来自 `state.achievements.items[].id`）；省略或传 `all: true` 时一键领取全部可领成就。
+  - `all?`: 布尔值，`true` 表示一键领取全部可领成就。
+- `start_training` — 开始一轮培养（第 1 赛季 15 天 / 30 时段，第 2 赛季 20 天 / 40 时段，第 3 赛季起 25 天 / 50 时段且第 3 周非比赛日开启国外特训 ×3），消耗 30 精力（精力每个游戏日恢复 50 点，服务器与视图均按实时经过时间连续自动结算，满 100 为止；不满的球员只恢复一成），不消耗金币；每轮都从原始属性开始，成长不跨轮累积。可投入共享培养点 `points`（0 / 10 / 20 / 30）提高品质概率，开始时立即扣除；`state.trainingPoints` 为余额，`trainingSessions[].qualityBonusPoints` 和 `qualityChances` 显示本轮投入与当前概率。无 `scheduleVersion` 的旧 18/30 次课程保留旧规则。陪练队友由系统自动选 6 名（按阵型其他位置，中卫、边路、中场、前锋轮流挑，练外场必带 1 名其他门将；整轮固定，下一轮重新随机）：每个时段这 6 人会随机分到当天的各个选项里（含 `rest`，合计 6 人，有的选项可能没有人）：选哪个选项拿哪个选项上的人，训练项目每名队友每项正成长主属性加 N 点（N = 开始这一轮时七座设施里最低的等级，1–5；没有设施快照的旧课程仍是 2），站在恢复上的每人多恢复 4 点训练体力；他们不消耗精力、不生成 session；交流赛/队内赛只有一个选项，6 人全在上面；交流赛用当前保存的 11 人首发，培养中的球员一定上场（不在首发时顶替同位置 CA 最低的人）。`partnerIds` 参数已不再生效。
   - `playerId`
   - `bookKeys?`: 可选，指定并保存本轮配置；省略则使用该球员已保存的配置。配置在 `state.trainingBooksByPlayer`，本轮快照在 `state.trainingSessions[].books`。
   - `points?`: 0 / 10 / 20 / 30，默认 0；必须是 `state.trainingPointTiers[].points` 之一且余额足够。
@@ -152,10 +155,10 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
   - `mode?`: `"priority"`（按优先级依次练满）| `"targets"`（把主属性补到目标值）| `"max"`（每次选成长最多的一项）
   - `priority?`: 属性英文名数组；缺少的主属性会自动补在后面
   - `resetPriority?`: `true` 时恢复默认优先级（先练这名球员的 2 个主要属性）
-  - `targets?`: `{ "passing": 1200, ... }`，0–1500，和已有目标合并
+  - `targets?`: `{ "passing": 1500, ... }`，0–2000，和已有目标合并
 - `run_auto_training` — 按自动培养策略连续推进**进行中**的一轮（自动挑训练、自动处理事件），直到本轮结束、出错或用完步数；和培养页的「自动培养」开关一样，不会自己开始新一轮。返回每一步的 `kind` / `label`。
   - `playerId`
-  - `maxSteps?`: 1–200，默认 60
+  - `maxSteps?`: 1–200，默认 120（足够跑完第 3 赛季 50 时段及事件）
 
 ### 青训
 
@@ -199,7 +202,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 任何球员都能被安排到任何位置，`set_lineup`、`set_auto_subs` 的定时规则和 `substitute` 都不受位置限制；没学过的位置熟练度为 0，属性按 60% 发挥，`state.lineupAnalysis.validation.warnings` 会提示。外场球员没有门将属性，踢门将几乎扑不到球。受伤和体力自动换人只选学过该位置的替补。
 
-新课程的 `state.trainingSessions[]` 提供 `date`（下一时段的 week、day、dayLabel、slot）、`options`（id、label、desc、stamina、group 和可选 parameters）、`lowMoodWeeks` 和 `exchangeMatches`。15 天每周 7 天、每天两个时段；周一上午强制 AI 交流赛，周五上午强制队内赛、下午强制休整（选项 id 仍是 `rest`，但不恢复体力），其余时段从每日随机选项（含休息）中选择。交流赛和队内赛不消耗训练体力。交流赛使用当前的首发、替补及已装备的属性，不使用培养中的成果；仅在执行时模拟产生结果，不改变联赛体能、伤病或赛程，也不受赛季伤病限制。组队行动共享比分，单独培养各自模拟。失利使参与该行动的球员下周一至周三正向属性成长减少 50%，包括设施、队友和事件成长；事件提示为基础值。固定比赛消耗至多 25 训练体力，不足时耗尽剩余体力而不中断课程。
+新课程的 `state.trainingSessions[]` 提供 `date`（下一时段的 week、day、dayLabel、slot）、`overseasCamp`（当前时段是否处于国外特训）、`options`（id、label、desc、stamina、group 和可选 parameters）、`lowMoodWeeks` 和 `exchangeMatches`。每周 7 天、每天两个时段：第 1 赛季 15 天（30 时段）、第 2 赛季 20 天（40 时段）、第 3 赛季起 25 天（50 时段）；**第 3 赛季起的第 3 周非比赛日（周二~周四、周六~周日）自动进入「国外特训」（`overseasCamp: true`），常规训练行动的主属性与隐藏属性基础成长 ×3**（交流赛、队内赛、随机事件、位置训练与恢复不翻倍）。周一上午强制 AI 交流赛，周五上午强制队内赛、下午强制休整（选项 id 仍是 `rest`，但不恢复体力），其余时段从每日随机选项（含休息）中选择。交流赛和队内赛不消耗训练体力。交流赛使用当前的首发、替补及已装备的属性，不使用培养中的成果；仅在执行时模拟产生结果，不改变联赛体能、伤病或赛程，也不受赛季伤病限制。组队行动共享比分，单独培养各自模拟。失利使参与该行动的球员下周一至周三正向属性成长减少 50%，包括设施、队友和事件成长；事件提示为基础值。固定比赛消耗至多 25 训练体力，不足时耗尽剩余体力而不中断课程。
 
 旧课程训练请求：`{ "kind": "protection", "focus": "prevention" | "resilience" }` 用于伤病防护。独立 `inherit` 技能传承课已取消，新旧课程均不能执行；队友技能改为通过交流赛后的技能选择获取。预览不修改培养状态。
 
@@ -207,7 +210,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 事件提示按课程基础倍率换算，不包含设施或低落情绪影响。属性训练品质按球员与行动确定性判定：失败 ×0、一般 ×0.7、成功 ×1、大成功 ×1.3、完美成功 ×1.6。体力高于 30 时，投入共享培养点 0 / 10 / 20 / 30 点的大成功概率分别为 8% / 12% / 16% / 20%，完美概率分别为 1% / 2% / 3% / 5%；悟性金 / 彩各自对两项概率叠加 5 / 7 个百分点，只挤占普通成功。体力 ≥60 时一般概率为 0，低于 60 时随体力下降线性上升，至体力 0 时封顶 40%；体力 ≤30 时大成功和完美概率为 0，失败概率从体力 30 的 5% 升至体力 0 的 50%，其余为成功。每位其他队友提供每项原始主属性 +2，隐藏属性按比例缩放，设施加成另计。旧行动的 `drill`、`combo`、`match` 分别消耗 12、16、25 点课程体力；新课程每个选项公布消耗，固定比赛最多消耗 25，恢复加 30。课程体力与开始课程消耗的球员精力不同：`stamina = 100 - fatigue`。
 
-行动次数、实际 `actionsTotal`、`stamina`、疲劳、待处理事件都在 `state.trainingSessions` 中。事件未处理时不能继续训练。`facilityLevels` 是开始课程时的设施快照，数值是**阶段**（1–25，每个等级 5 个阶段）；旧课程若没有快照则没有建筑加成。升级从下一次培养生效。主属性及其收益返回原始数值，主属性范围 0–1500，但每名球员每项属性都有自己的上限（存档在 `player.ceilings`），培养到该项上限即停，不再统一到 1500；这改变了 API 的数值语义，调用方须调整。隐藏属性当前值不公开，范围为 0–20；比赛和 CA 仍使用内部 0–100 评分。事件选项提示列出未含设施加成的基础成长，实际成长还受上限影响。球场对所有属性提供额外成长，医疗对身体、青训对技术、心理辅导室对决断/团队合作/镇定、战术研究室对视野/预判/无球跑动/防守站位提供额外成长；球迷商店和赞助商只提高每轮余额收入，不再影响培养。每次行动或事件仅对基础成长为正的属性加成，并分两段独立判定：每个等级的第 5 阶段必定触发，等级内其余阶段的概率从该等级的下限线性上升（1 级 20%、2 级 50%、3 级 70%、4 级 80%、5 级 85% 起步，到该级第 5 阶段的 100%）。新球队从 1 级第 1 阶段开始，旧存档按原等级换算成阶段（1 级 = 第 5 阶段）。球场每级 +2，对应设施每级 +5；等级由阶段决定（第 1–5 阶段为 1 级，第 6–10 阶段为 2 级，以此类推）。例如医疗位于第 11 阶段（3 级第 1 阶段）时，有 70% 概率为每项符合条件的身体主属性额外 +15，球场另计；没触发就没有该设施加成。隐藏属性加成按 20/1500 缩放。休息、位置训练及无成长不加成；上限截断成长但不降低现有属性。已有快照的课程下一行动使用新规则。
+行动次数、实际 `actionsTotal`、`stamina`、疲劳、待处理事件都在 `state.trainingSessions` 中。事件未处理时不能继续训练。`facilityLevels` 是开始课程时的设施快照，数值是**阶段**（1–25，每个等级 5 个阶段）；旧课程若没有快照则没有建筑加成。升级从下一次培养生效。主属性及其收益返回原始数值，基础范围 0–1500，每名球员每项主属性都有个人上限（`player.ceilings`），叠加俱乐部上限加成 `honors.clubCeilingBonus`（= 杯赛奖杯最高值 `cupCeilingBonus` + 成就独立叠加 `achievementCeilingBonus`，如联赛 5 连胜 +50 / 10 连胜 +100）及巅峰属性突破卡（单项 +100），统一受 2000 硬上限约束；培养到该项有效上限即停。隐藏属性当前值不公开，范围为 0–20，且**所有球员的隐藏属性上限统一为 20**（外场球员的门将属性仍为 0）；比赛和 CA 仍使用内部 0–100 评分。事件选项提示列出未含设施加成的基础成长，实际成长还受上限影响。球场对所有属性提供额外成长，医疗对身体、青训对技术、心理辅导室对决断/团队合作/镇定、战术研究室对视野/预判/无球跑动/防守站位提供额外成长；球迷商店和赞助商只提高每轮余额收入，不再影响培养。每次行动或事件仅对基础成长为正的属性加成，并分两段独立判定：每个等级的第 5 阶段必定触发，等级内其余阶段的概率从该等级的下限线性上升（1 级 20%、2 级 50%、3 级 70%、4 级 80%、5 级 85% 起步，到该级第 5 阶段的 100%）。新球队从 1 级第 1 阶段开始，旧存档按原等级换算成阶段（1 级 = 第 5 阶段）。球场每级 +2，对应设施每级 +5；等级由阶段决定（第 1–5 阶段为 1 级，第 6–10 阶段为 2 级，以此类推）。例如医疗位于第 11 阶段（3 级第 1 阶段）时，有 70% 概率为每项符合条件的身体主属性额外 +15，球场另计；没触发就没有该设施加成。隐藏属性加成按 20/1500 缩放。休息、位置训练及无成长不加成；上限截断成长但不降低现有属性。已有快照的课程下一行动使用新规则。
 
 ### 球探
 
@@ -226,7 +229,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 `state.economy` 提供余额、球迷数、设施 `stage`（1–25）、`level`、`stageInLevel`、`growthChance`、`roundIncome` 及 `upgradeCost`（球场额外返回 `homeOnly: true` 与 `homeAtmosphereRating`）；`state.market.freeAgents` 和 `state.market.listings` 提供价格及经过可见字段过滤的球员信息。市场是**本地 NPC 市场，不是跨账号交易**；赛季结束后不能新挂牌。每轮收入 = 1500 + 联赛转播分成 + 球迷 × 2 + 各设施收入（按阶段比例并随球迷最多放大 4 倍；其中**球场门票仅联赛主场发放**），另有每球 500 和胜场奖金（1000 + 球迷数 35%）；友谊赛与 PvE 挑战赛不计常规轮次收入或涨粉。联赛与杯赛中，主队按球场阶段在 2D 引擎获得微弱主场氛围加成（LV1 约 +15 至 LV5 满级约 +45 主属性有效值）。
 
-- `upgrade_facility` — `facilityId`: `stadium`、`academy`、`medical`、`psychology`、`tactics`、`shop` 或 `sponsor`。第 2 赛季起同时消耗俱乐部余额与董事会本季独立发放的「设施预算」（设施预算不与转会预算/工资帽互通）。
+- `upgrade_facility` — `facilityId`: `stadium`、`academy`、`medical`、`psychology`、`tactics`、`shop` 或 `sponsor`。第 2 赛季起优先消耗董事会本季独立发放的「设施预算」，用完或不足时自动用俱乐部余额补足（设施预算不与转会预算/工资帽互通）。
 - `board_choose_ambition` — 选择或切换董事会赛季目标档位。`state.board` 包含 `confidence`（信任度 15–100）、`lastGrade`（上季评级 `S/A/B/C/D`）、`active`（第 2 赛季起激活）、`current`（当季目标、剩余转会/设施预算、有效工资帽、商业帽加成、滑块区间 `sliderBounds` 与 `canSwitchAmbition`）、`pendingChoice`、`offseasonPreview` 与历年 `history`。
   - `ambition`: `"safe"`（稳妥档，预算 0.85× / 工资帽 0.90×）| `"expected"`（基准推荐档，1.00×）| `"ambitious"`（野心档，预算 1.25× / 工资帽 1.12×，奖金更高但失利扣更多信任度）
   - `scope?`: `"offseason"`（休赛期预选下赛季）| `"current"`（开季第 1–3 轮切换本季档位，按差额补退预算与余额）
@@ -249,12 +252,12 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 - `sign_club_player` — 按 `preview_signing` 的参数正式报价，转会窗口开放时可用；报价不能低于俱乐部要价。俱乐部和球员两关都过才成交：球员加盟、扣除报价，钱进对方账本（不占对方的买进名额）。失败返回 `error`、`club`（俱乐部的概率和理由）、`chance`、`reasons`。同一份报价 + 同一组承诺的结果固定，换报价或承诺才会重新判定。
 - `respond_offer` — `offerId`、`accept`（布尔）：回复 AI 俱乐部给你球员的报价（`state.transferOffers` 里 `status: "pending"` 的）。AI 俱乐部按实际阵型补足两套阵容；可同时参加竞拍或向玩家报价。未补齐前只补位置缺口，按可用资金均摊剩余缺口预算，在预算内优先买原始 CA 最强的球员（同 CA 价格低优先），补齐两套后再逐步考虑补强；预算、阵容上限和各队赛季名额仍有效。接受：球员转走、钱立即到账，阵容至少保留 18 人，正在培养的球员要等培养结束。拒绝：普通报价没有影响；**高价报价**（`high: true`，报价不低于身价 1.3 倍）被拒绝或过期，这名球员会**不满** 16 小时，期间精力恢复只剩一成（球员的 `unhappy` 有截止时间和原因）。报价现实 24 小时内有效，`expiresAt` 之前不回复算拒绝。
 - AI 俱乐部每赛季最多**买进** 5 人：竞拍赢下、直接签自由球员、从其他 AI 球队挖人、接受你的报价都算；你从 AI 手里买人、AI 被别人挖走不占名额。联机时 AI 也会按需对自由球员开拍，其他 AI 和玩家照常跟价。
-- `renew_contract` — `playerId`：续约 2 年（和俱乐部页一致），工资至少上调到身价工资的 110%；返回新合同。
+- `renew_contract` — `playerId`、可选 `years`（3–5 年，从当前赛季起算且须晚于原到期赛季；省略时按球员要求年限续约）：续约或提前续约；每次续约按当前工资、能力成长与年限要求渐进加薪，可先查看球员 `renewal` 字段了解要求年限、薪资与涨幅；返回新合同。
 - `release_player` — `playerId`：解约，球员进入自由市场；阵容至少保留 18 人（一套完整的比赛名单），解约后必须还能组成合法阵容。挂牌出售同样要求至少保留 18 人。
 
 ### 比赛
 
-- `start_league` — 仅用于本地单机的手动开赛。联机接口始终拒绝：联赛开球前 30 分钟锁定完整快照，服务器逐场提前计算，开球后按现实时间“直播” 10 分钟，比分在开球 10 分钟后才统一公布，不创建可临场操作的新 `activeMatch`。
+- `start_league` — 仅用于本地单机的手动开赛。联机接口始终拒绝：联赛开球前 30 分钟锁定完整快照，服务器逐场提前计算，开球后按现实时间“直播” 10 分钟（期间 `state.activeMatch` 与 `get_match` 均返回该场直播状态，且在第 85 分钟前支持调用 `match_shout` 触发实时重算；换人与战术心态仍须赛前配置），比分在开球 10 分钟后统一公布。
 - `get_match` — 不传 `matchId` 读取当前比赛（比分、90 分钟显示时钟、统计、场上球员、替补、战术、最近事件和截至当前的 `commentary`）；传 `matchId` 读取完整记录和复盘建议。
 - `advance_match` — 适用于友谊赛、巅峰之路与传奇挑战：按步推进（默认 1 步），终场时自动结算。联赛调用会报错。新引擎（`rulesVersion = 4`）一步约等于 1 个模拟秒（整场 900 步）；旧存档里进行中的 v3 比赛一步是一个动作。
   - `steps?`
@@ -300,9 +303,9 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 `commentary` 是按 `seq` 排序的已发生播报，每条含 90 分钟显示时钟、类型、文字、该时刻常规比分，以及（进入点球大战后）`shootoutScore`。多次读取时可用 `seq` 去重。一次 `advance_match` 可能产生多条；比赛结束后从结果的 `record.commentary`，或用 `get_match(matchId)` 获取完整记录。`recentLog` 的射门事件包含 `shotChance`（机会类型、基础射正、保底、上限、距离/角度/压力/封堵），`ratings` 包含最终射正、射正后进球、终结和门将评分。`goalDetails` 记录常规比赛进球（含机会类型 `chance`）：射门位置 `origin`（主队进攻方向为 x 增大，客队相反）、距离、左右脚或头球、射门方式、比赛情境和入球区域 `target`；入球区域左/右以进攻方为视角，不包含点球大战。
 
-联赛每天固定 6 轮：北京时间（UTC+8）02:00 / 06:00 / 10:00 / 14:00 / 18:00 / 22:00 开赛（每 4 小时一轮），一个赛季 38 轮共 6 天 8 小时，常规赛结束后有 16 小时的赛后休整（整 7 天一赛季）；赛季杯赛在 12:00 / 20:00 黄金档加赛，联赛不顺延。`state.season.currentFixture` 和赛程里的 `kickoffAt` 是开赛时间（Unix 毫秒）。开球前 30 分钟，服务器持久化双方阵容、职责、战术、自动换人和球员属性/状态快照；低优先级单任务子进程提前计算，结果不外发。开球后比赛直播 10 分钟（浏览器拿到开球时的初始引擎状态，按现实时钟回放整场，Agent 看不到画面），开球 10 分钟后比分、积分榜和战报才全服统一公布。之后的培养、换卡或转会不会改变本场已锁定的输入，也不会被发布时的旧快照覆盖。关闭网页或断开 Agent 不影响队列；重启复用已保存的输入和结果，未完成任务用原快照继续。读取 `GET /api/agent/state` 查看公布后的比分，再从 `matchHistory` 的 `id` 调用 `get_match(matchId)`。双方教练看到的是同一个任务、同一份比分；提前计算期间不会泄露伤病、停赛或出场记录。友谊赛保留手动推进与跳过。
+联赛每天固定 6 轮：北京时间（UTC+8）02:00 / 06:00 / 10:00 / 14:00 / 18:00 / 22:00 开赛（每 4 小时一轮），一个赛季 38 轮共 6 天 8 小时，常规赛结束后有 16 小时的赛后休整（整 7 天一赛季）；赛季杯赛在 12:00 / 20:00 黄金档加赛，联赛不顺延。`state.season.currentFixture` 和赛程里的 `kickoffAt` 是开赛时间（Unix 毫秒）。开球前 30 分钟，服务器持久化双方阵容、职责、战术、自动换人、自动喊话与球员属性/状态快照；低优先级单任务子进程提前计算，结果不外发。开球后比赛直播 10 分钟（浏览器按现实时钟播放 2D 画面，Agent 可通过 `get_state.activeMatch` / `get_match` 查看实时局势并在第 85 分钟前调用 `match_shout` 触发服务器实时重算后半场），开球 10 分钟后比分、积分榜和战报全服统一公布。之后的培养、换卡或转会不会改变本场已锁定的输入，也不会被发布时的旧快照覆盖。关闭网页或断开 Agent 不影响队列；重启复用已保存的输入和结果，未完成任务用原快照继续。读取 `GET /api/agent/state` 查看公布后的比分，再从 `matchHistory` 的 `id` 调用 `get_match(matchId)`。双方教练看到的是同一个任务、同一份比分；提前计算期间不会泄露伤病、停赛或出场记录。友谊赛保留手动推进与跳过。
 
-**赛季杯赛**：`state.seasonCups` / `get_world.seasonCups` 提供各正式赛季杯赛的已公开签表、小组积分榜、赛程及已公布比赛的射手、助攻和精简个人统计；未来赛果不会提前下发。跨级杯名为「星联杯」；常规 4 项杯赛冠军提供俱乐部主属性上限加成（社区 +100 / 联盟 +150 / 冠军 +200 / 星联 +250），**多项奖杯上限唯一生效、只取最高值不叠加**。常规赛第 38 轮全部结束后，**「升级杯」（`id: "promotion"`）**自动在 16 小时赛后休整期内分轮排期并纳入 `seasonCups`（赛前 30 分钟锁阵、2D 实时直播与复盘，不发放金币，决出 3 支二级球队升入一级联赛，可通过 `promotedIds` 读取已锁定升级球队）。第 2 赛季起新增 16 队「传奇杯」（上赛季冠军联赛最终前 4 + 12 支真实历史最强俱乐部，一俱乐部一支，首发 CA 1300–1600，ID 以 `lcup-` 为前缀，可通过 `GET /api/world/club?id=lcup-...` 查看完整名单）：开季即完成分组，赛程从第 5 轮起一直延续至赛季结束前（决赛于赛季收官阶段压轴举行），采用欧冠赛制——4 组 × 4 队单循环小组赛（3 轮，允许平局，不发参赛金币）+ 各组前 2 名晋级 8 强（1/4 决赛与半决赛主客场两回合按总比分决胜、总比分战平于次回合点球，决赛单场决胜；淘汰赛每轮发放一次参赛金，冠军另获 3,000,000 金币；**首次夺冠不叠加主属性上限，改为发放唯一彩书《传奇之星》（`lg_legend_star:rainbow`）**——培养前带入 4 格书槽之一即全程生效、不占球员实战技能槽，每次常规行动 10% 独立触发彩色事件，从 2 项随机未满上限主属性中二选一直接 +100，每轮最多 3 次）。`state.honors` 返回俱乐部 `trophies`、当前 `cupCeilingBonus`、已领取的 `cupCeilingClaims` 和杯赛金币账本 `seasonCupGoldClaims`。
+**赛季杯赛**：`state.seasonCups` / `get_world.seasonCups` 提供各正式赛季杯赛的已公开签表、小组积分榜、赛程及已公布比赛的射手、助攻和精简个人统计；未来赛果不会提前下发。跨级杯名为「星联杯」；常规 4 项杯赛冠军提供俱乐部主属性上限加成（社区 +100 / 联盟 +150 / 冠军 +200 / 星联 +250），**多项奖杯上限唯一生效、只取最高值不叠加**，但与成就上限（如联赛 5 连胜 +50 / 10 连胜 +100，各项独立叠加）互不冲突、直接相加（统一封顶 2000）。常规赛第 38 轮全部结束后，**「升级杯」（`id: "promotion"`）**自动在 16 小时赛后休整期内分轮排期并纳入 `seasonCups`（赛前 30 分钟锁阵、2D 实时直播与复盘，不发放金币，决出 3 支二级球队升入一级联赛，可通过 `promotedIds` 读取已锁定升级球队）。第 2 赛季起新增 16 队「传奇杯」（上赛季冠军联赛最终前 4 + 12 支真实历史最强俱乐部，一俱乐部一支，首发 CA 1300–1600，ID 以 `lcup-` 为前缀，可通过 `GET /api/world/club?id=lcup-...` 查看完整名单）：开季即完成分组，赛程从第 5 轮起一直延续至赛季结束前（决赛于赛季收官阶段压轴举行），采用欧冠赛制——4 组 × 4 队单循环小组赛（3 轮，允许平局，不发参赛金币）+ 各组前 2 名晋级 8 强（1/4 决赛与半决赛主客场两回合按总比分决胜、总比分战平于次回合点球，决赛单场决胜；淘汰赛每轮发放一次参赛金，冠军另获 3,000,000 金币；**首次夺冠不叠加主属性上限，改为发放唯一彩书《传奇之星》（`lg_legend_star:rainbow`）**——培养前带入 4 格书槽之一即全程生效、不占球员实战技能槽，每次常规行动 10% 独立触发彩色事件，从 2 项随机未满上限主属性中二选一直接 +100，每轮最多 3 次）。`state.honors` 返回俱乐部 `trophies`、奖杯上限 `cupCeilingBonus`、成就上限 `achievementCeilingBonus`、合计俱乐部上限 `clubCeilingBonus`、已领取的 `cupCeilingClaims` 和杯赛金币账本 `seasonCupGoldClaims`。
 
 `state.lineupAnalysis.starters[]` 的 `detailedPosition` 是该战术槽对应的细分位置，`proficiency` 按该细分位置熟练度计算；`state.formations[].slots[]` 也返回 `detailedPosition`。
 
@@ -321,13 +324,13 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 1. `GET /api/agent/state`。
 2. 用 `auto_lineup` 或 `set_lineup` 确定首发和战术，并按需用 `set_auto_subs` 设置下场自动换人；`state.lineupAnalysis` 有合法性和位置折损。
 3. 对精力足够的球员 `start_training`，每次先用 `preview_training` 看收益，再 `training_action`；遇到事件用 `training_event_choice`；最后 `confirm_training`。
-4. 联机联赛开赛前 30 分钟锁定完整比赛快照，后台提前计算，到开赛时间才统一公布；要在锁定前排好阵容、装备好球员卡并设置 `set_auto_subs`，之后从 `matchHistory` / `get_match` 看结果。单机可以 `start_league` 手动开赛。友谊赛、巅峰之路（`start_peak_challenge`）与传奇挑战（`start_legend_challenge`）随时可开，并可用 `advance_match` 或 `play_match` 推进结算。
-5. 用 `get_match` 看完整记录和复盘。
+4. 联机联赛与赛季杯赛开赛前 30 分钟锁定完整比赛快照，后台提前计算，开球后进入 10 分钟直播、到点统一公布；要在锁定前排好阵容、装备好球员卡并设置 `set_auto_subs` / `set_auto_shout`，直播期间（第 85 分钟前）可通过 `get_match` 关注局势并调用 `match_shout` 临场喊话触发重算，赛后从 `matchHistory` / `get_match` 看结果。单机可以 `start_league` 手动开赛。友谊赛、巅峰之路（`start_peak_challenge`）与传奇挑战（`start_legend_challenge`）随时可开，并可用 `advance_match` / `match_shout` / `play_match` 推进结算。
+5. 用 `get_match` 看完整记录和复盘，及时用 `claim_achievement` 领取已达成的成就奖励。
 6. 重复 1–5，直到赛季结束。
 
 ## 5. MCP
 
-本仓库自带 stdio MCP 服务 `mcp/index.ts`，工具名与上面的动作一致（含 `get_world`、`get_pve`、`start_peak_challenge`、`start_legend_challenge`、`use_peak_breakthrough`、`claim_peak_reward`、`preview_signing`、`sign_club_player`、`run_auto_training`、`start_scouting`、`get_scout_reports`、`recycle_cards`、`lock_card`、`get_chat`、`send_chat`、`set_match_auto_subs` 等），另有 `get_state`、`get_docs`。
+本仓库自带 stdio MCP 服务 `mcp/index.ts`（实现见 `mcp/server.ts`），与上面的联机 HTTP 动作保持 100% 同步（含 `match_shout`、`set_auto_shout`、`claim_achievement`、`save_lineup_preset`、`apply_lineup_preset`、`board_choose_ambition`、`board_adjust_budget`、`get_world`、`get_pve`、`start_peak_challenge`、`start_legend_challenge`、`use_peak_breakthrough`、`claim_peak_reward`、`preview_signing`、`sign_club_player`、`run_auto_training`、`start_scouting`、`get_scout_reports`、`recycle_cards`、`lock_card`、`get_chat`、`send_chat`、`set_match_auto_subs` 等；已废弃的 `choose_club` 与单机专用 `buy_free_agent` 不注册），另有只读工具 `get_state`、`get_docs` 及文档资源 `fm://agent-api.md`。
 
 ```bash
 FM_AGENT_TOKEN=fm_... FM_SERVER=http://127.0.0.1:8787 npm run mcp

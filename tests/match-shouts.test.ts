@@ -201,9 +201,13 @@ describe('FM27 场边情绪喊话系统（8 种喊话 · 全队/单人 · 正负
 
   it('Agent API 支持 match_shout、set_auto_shout，且 activeMatch.shouts 与球员情绪完整暴露', () => {
     const { game } = startFriendly(303)
-    const toggle = applyAgentAction(game, { action: 'set_auto_shout', enabled: true })
+    const unlockedNow = (game.season.startedAt ?? Date.now()) - 2 * 60 * 60 * 1000
+    const toggle = applyAgentAction(game, { action: 'set_auto_shout', enabled: true }, unlockedNow)
     expect(toggle.ok).toBe(true)
     expect(game.lineup.autoShout).toBe(true)
+    // 锁阵窗口内修改自动喊话会被拒绝
+    const lockedToggle = applyAgentAction(game, { action: 'set_auto_shout', enabled: false }, (game.season.startedAt ?? Date.now()) + 10_000)
+    expect(lockedToggle.ok).toBe(false)
 
     const viewBefore = agentView(game)
     expect(viewBefore.shoutKinds).toHaveLength(8)

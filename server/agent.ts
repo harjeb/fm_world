@@ -1112,7 +1112,7 @@ function findRecord(game: GameState, id: string) {
 
 export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.now(), options: AgentOptions = {}): AgentOutcome {
   const rawAction = (rawBody as { action?: unknown } | null)?.action
-  if ((rawAction === 'auto_lineup' || rawAction === 'set_lineup' || rawAction === 'apply_lineup_preset' || rawAction === 'set_auto_subs') && lineupLockState(game, now).locked) {
+  if ((rawAction === 'auto_lineup' || rawAction === 'set_lineup' || rawAction === 'apply_lineup_preset' || rawAction === 'set_auto_subs' || rawAction === 'set_auto_shout') && lineupLockState(game, now).locked) {
     return { ok: false, error: '阵容已锁定：开赛前 30 分钟内不能修改，比赛由服务器自动结算' }
   }
   const body = asRecord(rawBody)
@@ -1324,8 +1324,8 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       // 和培养页的“自动培养”开关一样：只推进进行中的一轮，不会自己开始新一轮。
       const playerId = text(body.playerId)
       if (!autoTrainingRunnable(game, playerId)) return { ok: false, error: '没有进行中的培养：先 start_training，或先处理已完成的培养结果' }
-      const rawSteps = Number(body.maxSteps ?? 60)
-      const maxSteps = Math.max(1, Math.min(200, Number.isFinite(rawSteps) ? Math.floor(rawSteps) : 60))
+      const rawSteps = Number(body.maxSteps ?? 120)
+      const maxSteps = Math.max(1, Math.min(200, Number.isFinite(rawSteps) ? Math.floor(rawSteps) : 120))
       const steps: { kind: string; label: string | null }[] = []
       let completed = false
       while (steps.length < maxSteps && autoTrainingRunnable(game, playerId)) {
@@ -1417,11 +1417,11 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
         return { ok: false, error: `第 ${game.season.round} 轮还没开始：距下一轮 ${matchdayCountdown(game, now)}` }
       }
       const result = startLeague(game, now)
-      return { ...result, result: result.ok ? matchView(game) : undefined }
+      return { ...result, result: result.ok ? matchView(game, now) : undefined }
     }
     case 'start_friendly': {
       const result = startSingleChallenge(game, text(body.teamId), now)
-      return { ...result, result: result.ok ? matchView(game) : undefined }
+      return { ...result, result: result.ok ? matchView(game, now) : undefined }
     }
     case 'get_pve': {
       return { ok: true, result: pveCatalogView(game, now, body) }
@@ -1431,13 +1431,13 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       const cleared = game.pve?.peak.cleared ?? 0
       const stage = body.stage === undefined ? Math.min(PEAK_STAGE_COUNT, cleared + 1) : Number(body.stage)
       const result = startPeakChallenge(game, stage, now)
-      return { ...result, result: result.ok ? matchView(game) : undefined }
+      return { ...result, result: result.ok ? matchView(game, now) : undefined }
     }
     case 'start_legend_challenge': {
       const legendId = text(body.legendId)
       if (!legendId) return { ok: false, error: '请提供 legendId（来自 get_pve 的 legends.teams[].id）' }
       const result = startLegendChallenge(game, legendId, now)
-      return { ...result, result: result.ok ? matchView(game) : undefined }
+      return { ...result, result: result.ok ? matchView(game, now) : undefined }
     }
     case 'use_peak_breakthrough': {
       const playerId = text(body.playerId)
@@ -1460,7 +1460,7 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
         const record = raw ? (options.resolveMatchRecord ? options.resolveMatchRecord(raw) : raw) : undefined
         return record ? { ok: true, result: { record, review: buildReview(record) } } : { ok: false, error: '比赛记录不存在' }
       }
-      const view = matchView(game)
+      const view = matchView(game, now)
       return view ? { ok: true, result: view } : { ok: false, error: '当前没有进行中的比赛' }
     }
     case 'advance_match': {
@@ -1476,7 +1476,7 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
         return record ? { ok: true, result: { finished: true, record: matchResult(record), match: null } } : { ok: false, error: '比赛尚未结束或无法结算' }
       }
       syncActiveEngine(game, engine, now)
-      return { ok: true, result: { finished: false, record: null, match: matchView(game) } }
+      return { ok: true, result: { finished: false, record: null, match: matchView(game, now) } }
     }
     case 'set_auto_shout': {
       if (typeof body.enabled !== 'boolean') return { ok: false, error: 'enabled 必须是布尔值' }
@@ -1512,20 +1512,20 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       const rawPlan = body.plan ?? body.autoSubs
       const syncDefault = body.syncDefault === true && !lineupLockState(game, now).locked
       const result = changeMatchAutoSubs(game, engine, rawPlan as Parameters<typeof changeMatchAutoSubs>[2], syncDefault)
-      return { ...result, result: result.ok ? matchView(game) : undefined }
+      return { ...result, result: result.ok ? matchView(game, now) : undefined }
     }
     case 'substitute': {
       if (!game.activeMatch) return { ok: false, error: '当前没有进行中的比赛' }
       const engine = restoreActiveEngine(game)
       if (!engine) return { ok: false, error: '无法恢复比赛引擎' }
       const result = makeSubstitution(game, engine, text(body.outId), text(body.inId))
-      return { ...result, result: result.ok ? matchView(game) : undefined }
+      return { ...result, result: result.ok ? matchView(game, now) : undefined }
     }
     case 'coach_pause': {
       if (!game.activeMatch) return { ok: false, error: '当前没有进行中的比赛' }
       if (game.activeMatch.context.isLeague) return { ok: false, error: '联赛不能暂停，请直接调整战术或换人' }
       const ok = useCoachPause(game)
-      return ok ? { ok: true, result: matchView(game) } : { ok: false, error: '教练暂停已用完' }
+      return ok ? { ok: true, result: matchView(game, now) } : { ok: false, error: '教练暂停已用完' }
     }
     case 'play_match': {
       if (!game.activeMatch) return { ok: false, error: '当前没有进行中的比赛' }
