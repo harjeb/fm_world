@@ -1,0 +1,226 @@
+/* An instrument, not an overlay panel: aim remains legible against grass and white netting. */
+.pk-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: 9px;
+  --pk-accent: #8ff4d2;
+  --pk-lit: #effff9;
+}
+.pk-hud[data-zone='bad'] {
+  --pk-accent: #ffa196;
+}
+.pk-hud[data-zone='near'] {
+  --pk-accent: #ffd78b;
+}
+.pk-sight {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  transform: translate(-50%, -50%);
+  overflow: visible;
+  color: var(--pk-accent);
+  filter: drop-shadow(0 1px 1.5px #041e22);
+}
+.pk-sight-halo {
+  fill: #07292b30;
+  stroke: #083130a6;
+  stroke-width: 2.5;
+}
+.pk-sight-bezel {
+  stroke: currentColor;
+  stroke-width: 2;
+  transform-origin: center;
+  animation: pk-breathe 2.4s ease-in-out infinite;
+}
+.pk-sight-core {
+  fill: none;
+  stroke: #edfff9;
+  stroke-width: 1;
+  opacity: 0.85;
+}
+.pk-sight-index {
+  fill: none;
+  stroke: #edfff9;
+  stroke-width: 1.3;
+}
+.pk-sight-dot {
+  fill: #fff;
+}
+.pk-sight-fx {
+  transform-origin: center;
+}
+.pk-hud[data-drag] .pk-sight-bezel {
+  animation: none;
+  transform: scale(0.9);
+}
+.pk-hud[data-state='charge'] .pk-sight-bezel {
+  animation: none;
+  transform: scale(0.89);
+}
+.pk-hud[data-state='lock'] .pk-sight-fx {
+  animation: pk-focus 0.36s ease-out both;
+}
+.pk-hud[data-state='lock'] .pk-sight-bezel {
+  animation: none;
+}
+.pk-gauge {
+  position: absolute;
+  right: 7px;
+  bottom: 6%;
+  width: 31px;
+  height: clamp(119px, 44%, 180px);
+  display: grid;
+  grid-template-rows: 12px 1fr 18px 13px;
+  justify-items: center;
+  gap: 4px;
+  padding: 7px 2px 5px;
+  box-sizing: content-box;
+  color: #f1fff9;
+  background: linear-gradient(160deg, #0b292deb, #091c20ca);
+  border: 1px solid #d1fff332;
+  border-radius: 10px;
+  box-shadow: 0 3px 14px #071b203d;
+  font:
+    700 11px/1 system-ui,
+    sans-serif;
+  user-select: none;
+}
+.pk-gauge-id {
+  font:
+    700 8px/12px ui-monospace,
+    monospace;
+  letter-spacing: 0.13em;
+  color: #c5dfd9;
+}
+.pk-scale {
+  position: relative;
+  width: 14px;
+  height: 100%;
+  min-height: 0;
+}
+.pk-gauge-track {
+  position: absolute;
+  inset: 0 2px;
+  border-radius: 4px;
+  background: #23343d;
+  overflow: hidden;
+}
+.pk-bands,
+.pk-charge,
+.pk-divisions {
+  position: absolute;
+  inset: 0;
+}
+.pk-bands {
+  background: linear-gradient(
+    to top,
+    #7d4854 0 var(--pk-b0),
+    #d6a34e var(--pk-b0) var(--pk-b1),
+    #30c990 var(--pk-b1) var(--pk-b2),
+    #d6a34e var(--pk-b2) var(--pk-b3),
+    #a34e57 var(--pk-b3) 100%
+  );
+}
+.pk-charge {
+  bottom: 0;
+  top: auto;
+  height: var(--pk-power);
+  background: linear-gradient(to top, #fff1, #fff6);
+  border-top: 1px solid #fff9;
+}
+.pk-divisions {
+  background: repeating-linear-gradient(
+    to top,
+    transparent 0,
+    transparent calc(10% - 1px),
+    #0b282c66 calc(10% - 1px),
+    #0b282c66 10%
+  );
+}
+.pk-window {
+  position: absolute;
+  bottom: var(--pk-b1);
+  height: calc(var(--pk-b2) - var(--pk-b1));
+  left: -1px;
+  right: -1px;
+  border: 1px solid #a6ffdd;
+  border-radius: 3px;
+  box-shadow: 0 0 5px #63ffb361;
+}
+.pk-needle {
+  position: absolute;
+  bottom: var(--pk-power);
+  left: -4px;
+  right: -4px;
+  height: 2px;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: 0 0 5px #f0fff9;
+  transform: translateY(50%);
+}
+.pk-needle::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: -2px;
+  width: 6px;
+  height: 6px;
+  background: white;
+  transform: rotate(45deg);
+  border-radius: 1px;
+}
+.pk-value {
+  font:
+    700 15px/18px ui-monospace,
+    monospace;
+  font-variant-numeric: tabular-nums;
+}
+.pk-label {
+  font: 600 9px/12px system-ui;
+  color: #c8ded6;
+}
+.pk-hud[data-state='lock'] .pk-value,
+.pk-hud[data-state='lock'] .pk-label {
+  color: var(--pk-accent);
+}
+.pk-hud[data-state='lock'] .pk-gauge {
+  animation: pk-confirm 0.35s ease-out;
+}
+@keyframes pk-breathe {
+  0%,
+  100% {
+    transform: scale(0.94);
+    opacity: 0.82;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+@keyframes pk-focus {
+  0% {
+    transform: scale(1.18);
+  }
+  55% {
+    transform: scale(0.77);
+  }
+  100% {
+    transform: scale(0.9);
+  }
+}
+@keyframes pk-confirm {
+  0% {
+    box-shadow: 0 0 15px var(--pk-accent);
+  }
+  100% {
+    box-shadow: 0 3px 14px #071b203d;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pk-hud * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

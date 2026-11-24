@@ -67,7 +67,7 @@ import { SCOUT_LEVELS, startScouting, deleteScoutReport, type ScoutLevel, type S
 import { aiTransferOffers } from '../game/market.ts'
 import { isLocalFreeAgentAvailable } from '../game/free-market.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeStarTraits } from '../game/names.ts'
-import { catchUpSeason, lineupLockState, settleGameConditions, skipToPostseasonEnd } from '../game/season.ts'
+import { PLAYER_TEAM_ID, catchUpSeason, lineupLockState, settleGameConditions, skipToPostseasonEnd } from '../game/season.ts'
 import { fetchFriendlyTeam, flushOnlineNow, isOnlineMode } from '../online.ts'
 import { advanceLeagueRealtime, leagueDisplayClock, setLeagueClock } from '../game/realtime.ts'
 import { displayClock } from '../game/match/time.ts'
@@ -85,7 +85,7 @@ import { adjustBoardBudgetOnline, aiTransferMarket, bidOnline, buyFromAIClubOnli
 import { agentHandoffText } from './agent-handoff.ts'
 import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
 import { UNHAPPY_HOURS } from '../game/transfer-rules.ts'
-import { cardName, findAnyPlayer } from './components.ts'
+import { cardName, clubLook, findAnyPlayer } from './components.ts'
 import { clockText, countdownText, esc, pct } from './format.ts'
 import { icon } from './icons.ts'
 import { morph } from './morph.ts'
@@ -2459,7 +2459,7 @@ document.addEventListener('click', async (event) => {
       break
     }
     case 'penalty-training': {
-      try { const { openPenaltyTraining } = await import('./penalty/training.ts'); if (ui.screen === 'challenge') openPenaltyTraining(game.roster) }
+      try { const { openPenaltyTraining } = await import('./penalty/training.ts'); if (ui.screen === 'challenge') await openPenaltyTraining(game.roster, clubLook(PLAYER_TEAM_ID)) }
       catch { showNotice('3D 训练场加载失败，请稍后重试。') }
       return
     }

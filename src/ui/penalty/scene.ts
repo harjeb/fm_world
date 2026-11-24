@@ -1,102 +1,57 @@
 import * as T from 'three'
 import { HALF, HEIGHT, SPOT, R, GLOVE_Z, clamp, keeperAt, type Point } from '../../game/penalty/practice.ts'
 
-export function createGround(host: HTMLElement) {
+import { stadium } from './stadium.ts'
+import { makeGoalNet } from './goal-net.ts'
+import type { Impact } from '../../game/penalty/net.ts'
+import type { loadMatchday } from './matchday.ts'
+export type Inspection = 'play' | 'player' | 'keeper' | 'ball'
+
+export function createGround(host: HTMLElement, art: Awaited<ReturnType<typeof loadMatchday>>) {
   const renderer = new T.WebGLRenderer({ antialias: true, powerPreference: 'low-power' })
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.6))
   host.append(renderer.domElement)
   const scene = new T.Scene(),
     camera = new T.PerspectiveCamera(39, 1, 0.1, 120)
-  scene.background = new T.Color(0x344c68)
-  scene.fog = new T.FogExp2(0x344c68, 0.023)
+  const sky = document.createElement('canvas')
+  sky.width = 8
+  sky.height = 256
+  const sky2d = sky.getContext('2d')!,
+    skyRamp = sky2d.createLinearGradient(0, 0, 0, 256)
+  skyRamp.addColorStop(0, '#355278')
+  skyRamp.addColorStop(0.44, '#8ca9b5')
+  skyRamp.addColorStop(0.7, '#e8b89a')
+  skyRamp.addColorStop(1, '#697e87')
+  sky2d.fillStyle = skyRamp
+  sky2d.fillRect(0, 0, 8, 256)
+  const horizon = new T.CanvasTexture(sky)
+  horizon.colorSpace = T.SRGBColorSpace
+  scene.background = horizon
+  renderer.shadowMap.enabled = true
+  renderer.shadowMap.type = T.PCFShadowMap
+  scene.fog = new T.FogExp2(0x567080, 0.013)
   scene.add(new T.HemisphereLight(0xecf6ff, 0x78a681, 2.1))
   const sun = new T.DirectionalLight(0xffecd3, 2.2)
-  sun.position.set(-5, 12, 9)
-  scene.add(sun)
-  const materials = new Map<number, T.MeshStandardMaterial>()
-  function mesh(g: T.BufferGeometry, color: number, pos: number[], parent: T.Object3D = scene) {
-    if (!materials.has(color)) materials.set(color, new T.MeshStandardMaterial({ color, roughness: 0.88 }))
-    const obj = new T.Mesh(g, materials.get(color))
-    obj.position.set(pos[0], pos[1], pos[2])
-    parent.add(obj)
-    return obj
-  }
-  const box = (
-    w: number,
-    h: number,
-    d: number,
-    c: number,
-    x: number,
-    y: number,
-    z: number,
-    p: T.Object3D = scene,
-  ) => mesh(new T.BoxGeometry(w, h, d), c, [x, y, z], p)
-  for (let i = 0; i < 14; i++) box(58, 0.12, 4, i % 2 ? 0x2f805f : 0x378d65, 0, -0.08, -13 + i * 4)
-  const white = 0xeef5e8
-  box(36, 0.015, 0.08, white, 0, 0.004, 0)
-  box(18, 0.015, 0.07, white, 0, 0.004, 5.5)
-  for (const sign of [-1, 1]) {
-    box(0.07, 0.015, 5.5, white, sign * 9, 0.004, 2.75)
-    box(0.1, HEIGHT, 0.1, white, sign * HALF, HEIGHT / 2, 0)
-  }
-  box(HALF * 2 + 0.1, 0.1, 0.1, white, 0, HEIGHT, 0)
-  box(0.21, 0.014, 0.13, white, 0, 0.006, SPOT)
-  // Low-cost net: one line batch. Hide the back net when looking through it as keeper.
-  const netCoords: number[] = []
-  for (let x = -HALF; x <= HALF + 0.01; x += HALF / 11)
-    netCoords.push(x, 0, -1.35, x, HEIGHT, -1.35, x, HEIGHT, -1.35, x, HEIGHT, 0)
-  for (let y = 0; y <= HEIGHT + 0.01; y += HEIGHT / 8)
-    netCoords.push(-HALF, y, -1.35, HALF, y, -1.35, -HALF, y, 0, -HALF, y, -1.35, HALF, y, 0, HALF, y, -1.35)
-  const net = new T.LineSegments(
-    new T.BufferGeometry().setAttribute('position', new T.Float32BufferAttribute(netCoords, 3)),
-    new T.LineBasicMaterial({ color: 0xdfeaf1, transparent: true, opacity: 0.38 }),
-  )
-  scene.add(net)
-  for (const z of [-9, 28])
-    for (let i = 0; i < 4; i++)
-      box(52, 0.85, 1.2, i % 2 ? 0x36577c : 0x487092, 0, 0.3 + i * 0.8, z + (z < 0 ? -1 : 1) * i)
-  for (const x of [-15, 15])
-    for (const z of [-7, 24]) {
-      box(0.18, 9, 0.18, 0x779298, x, 4.5, z)
-      box(2.8, 0.6, 0.25, 0xfff8d6, x, 9, z)
+  sun.position.set(-7, 12, 13)
+  sun.target.position.set(0, 0, 6)
+  sun.castShadow = true
+  sun.shadow.mapSize.setScalar(host.clientWidth < 600 ? 512 : 1024)
+  Object.assign(sun.shadow.camera, { left: -10, right: 10, top: 10, bottom: -10, near: 0.5, far: 40 })
+  sun.shadow.normalBias = 0.012
+  sun.shadow.bias = -0.0004
+  scene.add(sun, sun.target)
+  art.objects.traverse((n) => {
+    if (n instanceof T.Mesh) {
+      n.castShadow = true
+      n.receiveShadow = true
     }
-  function figure(c: number) {
-    const p = new T.Group()
-    scene.add(p)
-    mesh(new T.SphereGeometry(0.19, 12, 10), 0xb67856, [0, 0.61, 0], p)
-    box(0.46, 0.56, 0.28, c, 0, 0.17, 0, p)
-    box(0.42, 0.21, 0.29, 0x202f46, 0, -0.21, 0, p)
-    const legs = [-1, 1].map((side) => {
-      const joint = new T.Group()
-      joint.position.set(side * 0.14, -0.27, 0)
-      p.add(joint)
-      box(0.15, 0.52, 0.18, c, 0, -0.27, 0, joint)
-      box(0.17, 0.15, 0.29, 0x192537, 0, -0.59, 0, joint)
-      box(0.13, 0.34, 0.15, c, side * 0.29, 0.13, 0, p)
-      return joint
-    })
-    return { body: p, legs }
-  }
-  const kicker = figure(0xf16545),
-    keeper = figure(0x35cabc)
-  const gloves = [-1, 1].map(() => mesh(new T.SphereGeometry(0.17, 12, 10), 0xffd859, [0, 0, GLOVE_Z]))
-  const ball = mesh(new T.IcosahedronGeometry(R, 2), 0xffffff, [0, R, SPOT])
-  mesh(new T.IcosahedronGeometry(0.043, 0), 0x192737, [0, 0.026, 0.09], ball)
-  const marker = new T.Group()
-  scene.add(marker)
-  for (const s of [-1, 1]) {
-    box(0.42, 0.035, 0.035, 0xffdf65, 0, 0.19 * s, 0, marker)
-    box(0.035, 0.38, 0.035, 0xffdf65, 0.2 * s, 0, 0, marker)
-  }
-  const shadow = (x: number, z: number, s: number) => {
-    const m = mesh(new T.CircleGeometry(s, 24), 0x276d55, [x, 0.012, z])
-    m.rotation.x = -Math.PI / 2
-    m.scale.y = 0.53
-    return m
-  }
-  const ballShade = shadow(0, SPOT, 0.13),
-    keeperShade = shadow(0, GLOVE_Z, 0.52),
-    kickerShade = shadow(0, SPOT, 0.43)
+  })
+  const venue = stadium(art, renderer.capabilities.getMaxAnisotropy())
+  scene.add(venue.root)
+  const net = makeGoalNet()
+  scene.add(net.object, art.objects)
+  const { ball } = art
+  const projected = new T.Vector3()
   const trailGeo = new T.BufferGeometry(),
     lineMat = new T.LineBasicMaterial({ color: 0xffdf80, depthTest: false })
   const trail = new T.Line(trailGeo, lineMat)
@@ -107,6 +62,7 @@ export function createGround(host: HTMLElement) {
     trail.visible = points.length > 0
     if (points.length) trailGeo.setFromPoints(points.map((p) => new T.Vector3(p.x, p.y, p.z)))
   }
+  let inspecting: Inspection = 'play'
   let defending = false
   let revision = 0
   function resize() {
@@ -116,11 +72,11 @@ export function createGround(host: HTMLElement) {
     if (!w || !h) return
     renderer.setSize(w, h, false)
     camera.aspect = w / h
-    camera.position.set(0, defending ? 2.65 : 4.05, defending ? -6.7 : 16.6)
+    camera.position.set(defending ? 0 : -1.45, defending ? 2.65 : 1.97, defending ? -6.7 : 17.8)
     camera.lookAt(0, defending ? 1 : 1.05, defending ? 4.5 : 2)
     camera.fov = Math.max(
       39,
-      T.MathUtils.radToDeg(2 * Math.atan(4.25 / ((defending ? 6.7 : 16.6) * camera.aspect))),
+      T.MathUtils.radToDeg(2 * Math.atan(4.25 / ((defending ? 6.7 : 17.8) * camera.aspect))),
     )
     camera.updateProjectionMatrix()
     camera.updateMatrixWorld()
@@ -142,49 +98,66 @@ export function createGround(host: HTMLElement) {
   }
   return {
     aimAt,
+    aimScreen(aim: Point): Point {
+      projected.set(aim.x, aim.y, 0).project(camera)
+      return { x: (projected.x * 0.5 + 0.5) * host.clientWidth, y: (0.5 - projected.y * 0.5) * host.clientHeight }
+    },
     path,
     canvas: renderer.domElement,
     get revision() {
       return revision
     },
+    dress: art.dress,
+    inspect(value: Inspection) {
+      inspecting = value
+      resize()
+    },
     mode(keep: boolean) {
       defending = keep
-      net.visible = !keep
+      net.keeperView(keep)
       resize()
     },
     draw(
       p: { x: number; y: number; z: number },
       pose: ReturnType<typeof keeperAt>,
-      aim: Point | null,
       run: number,
+      hit: Impact | null,
+      sinceImpact: number,
+      turn: number,
     ) {
-      kicker.body.position.set(-0.32, 0.96, SPOT + 0.15 + 1.65 * (1 - run))
-      kicker.body.rotation.x = -0.12 * run
-      kicker.legs[0].rotation.x = 0.32 * Math.sin(4 * Math.PI * run)
-      kicker.legs[1].rotation.x = run < 0.8 ? -0.38 * Math.sin(4 * Math.PI * run) : (1.08 * (run - 0.8)) / 0.2
-      keeper.body.position.set(pose.body.x, pose.body.y, GLOVE_Z)
-      keeper.body.rotation.z = -clamp(pose.body.x * 0.42, -1.05, 1.05)
-      ballShade.position.set(p.x, 0.012, p.z)
-      keeperShade.position.x = pose.body.x
-      kickerShade.position.set(-0.32, 0.012, kicker.body.position.z)
-      for (const [i, g] of gloves.entries()) {
-        const pt = i ? pose.right : pose.left
-        g.position.set(pt.x, pt.y, GLOVE_Z)
-      }
-      marker.visible = !!aim
-      if (aim) marker.position.set(aim.x, aim.y, 0.08)
+      art.pose(pose, run)
+      net.move(hit, sinceImpact)
       ball.position.set(p.x, p.y, p.z)
       ball.rotation.x = -p.z * 2
+      if (inspecting !== 'play') {
+        const obj = inspecting === 'player' ? art.kicker : inspecting === 'keeper' ? art.keeper : ball
+        const target = obj.position.clone()
+        if (inspecting !== 'ball') target.y += 0.01
+        const angle = turn + 0.22 + (inspecting === 'keeper' ? Math.PI : 0),
+          r = inspecting === 'ball' ? 0.52 : 2.98
+        camera.fov = inspecting === 'ball' ? 32 : 40
+        camera.position.set(
+          target.x + Math.sin(angle) * r,
+          target.y + (inspecting === 'ball' ? 0.14 : 0.34),
+          target.z + Math.cos(angle) * r,
+        )
+        camera.lookAt(target)
+        camera.updateProjectionMatrix()
+      }
       renderer.render(scene, camera)
     },
     dispose() {
       ro.disconnect()
+      scene.remove(art.objects)
+      venue.dispose()
+      art.dispose()
       scene.traverse((o) => {
         if (o instanceof T.Mesh || o instanceof T.Line) o.geometry.dispose()
       })
-      for (const m of materials.values()) m.dispose()
-      net.material.dispose()
+      net.dispose()
       lineMat.dispose()
+      horizon.dispose()
+      sun.shadow.dispose()
       renderer.dispose()
       renderer.forceContextLoss()
       renderer.domElement.remove()

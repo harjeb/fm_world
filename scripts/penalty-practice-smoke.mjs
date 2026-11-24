@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -89,6 +89,21 @@ try {
   await click('[data-nav="challenge"]')
   await click('[data-action="penalty-training"]')
   await wait('!!document.querySelector(".penalty-lab canvas")')
+  for (const mode of ['player', 'keeper', 'ball', 'play']) {
+    await evaluate(
+      `(()=>{const s=document.querySelector('.penalty-lab .inspect');s.value='${mode}';s.dispatchEvent(new Event('change'))})()`,
+    )
+    assert.equal(await evaluate('document.querySelector(".go").hidden'), mode !== 'play')
+    if (process.env.FM_ART_PREVIEWS) {
+      await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
+      const clip = await evaluate(
+        '(()=>{const r=document.querySelector(".ground").getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,scale:1}})()',
+      )
+      const { data } = await send('Page.captureScreenshot', { clip })
+      await mkdir(process.env.FM_ART_PREVIEWS, { recursive: true })
+      await writeFile(join(process.env.FM_ART_PREVIEWS, mode + '.png'), Buffer.from(data, 'base64'))
+    }
+  }
   await click('.penalty-lab .go')
   await sleep(320)
   await click('.penalty-lab .go')

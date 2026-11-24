@@ -62,24 +62,6 @@
   width: 100%;
   height: 100%;
 }
-.penalty-lab .meter {
-  pointer-events: none;
-  position: absolute;
-  right: 12px;
-  bottom: 10%;
-  height: 65%;
-  width: 16px;
-  border: 2px solid white;
-  border-radius: 6px;
-}
-.penalty-lab .meter i {
-  position: absolute;
-  left: -5px;
-  right: -5px;
-  height: 4px;
-  background: white;
-  box-shadow: 0 1px 3px #16272c;
-}
 .penalty-lab .pad {
   touch-action: none;
   user-select: none;

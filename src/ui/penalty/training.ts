@@ -1,4 +1,5 @@
 import './training.css'
+import { createHud, shotHud } from './hud.ts'
 import { attrRating } from '../../game/scale.ts'
 import type { Player } from '../../game/types.ts'
 import {
@@ -22,7 +23,9 @@ import {
   type Point,
   type Shot,
 } from '../../game/penalty/practice.ts'
-import { createGround } from './scene.ts'
+import { createGround, type Inspection } from './scene.ts'
+import { loadMatchday, type Team } from './matchday.ts'
+import { finishBall, netImpact, SETTLE, type Impact } from '../../game/penalty/net.ts'
 
 function options(select: HTMLSelectElement, rows: [string, string][]) {
   select.replaceChildren(...rows.map(([value, label]) => new Option(label, value)))
@@ -34,14 +37,14 @@ function ability(player?: Player): Ability {
     a[key] = clamp(attrRating(key, player.attrs[key], player.positions.GK > 0) / 100)
   return a
 }
-export function openPenaltyTraining(roster: readonly Player[] = []) {
+export async function openPenaltyTraining(roster: readonly Player[], club: Team) {
   if (document.querySelector('.penalty-lab')) return
   const d = document.createElement('dialog')
   d.className = 'penalty-lab'
   d.setAttribute('aria-labelledby', 'penalty-title')
   d.innerHTML = `<header><div><small>S3 · 自由训练</small><h2 id="penalty-title">十二码之夜</h2></div><button class="leave">退出训练</button></header>
-    <div class="pitch3"><div class="ground"></div><div class="meter" aria-label="射门力度"><i></i></div><div class="pad" tabindex="0" role="group" aria-label="扑救方向盘"><span>扑</span></div></div>
-    <p class="call" role="status"></p><div class="settings"><label>视角<select class="role"><option value="kick">我来主罚</option><option value="keep">我来守门</option></select></label><label>主罚手<select class="striker"></select></label><label>门将<select class="keeper"></select></label><label>踢法<select class="kick"></select></label><label>触球脚面<select class="foot"></select></label></div>
+    <div class="pitch3"><div class="ground"></div>${shotHud}<div class="pad" tabindex="0" role="group" aria-label="扑救方向盘"><span>扑</span></div></div>
+    <p class="call" role="status"></p><div class="settings"><label>视角<select class="role"><option value="kick">我来主罚</option><option value="keep">我来守门</option></select></label><label>主罚手<select class="striker"></select></label><label>门将<select class="keeper"></select></label><label>踢法<select class="kick"></select></label><label>触球脚面<select class="foot"></select></label><label>装备特写<select class="inspect"><option value="play">返回训练镜头</option><option value="player">主罚手球衣</option><option value="keeper">门将球衣</option><option value="ball">比赛用球</option></select></label></div>
     <small class="ratings"></small><footer><button class="go"></button><button class="repeat" hidden>重扑同一球</button><small>不限次数 · 无奖励 · 不影响联赛</small></footer>`
   document.body.append(d)
   const el = <E extends HTMLElement = HTMLElement>(s: string) => d.querySelector<E>(s)!
@@ -63,8 +66,7 @@ export function openPenaltyTraining(roster: readonly Player[] = []) {
     status = el('.call'),
     pitch = el('.pitch3'),
     pad = el('.pad'),
-    bar = el('.meter'),
-    cursor = el('.meter i'),
+    hud = createHud(pitch),
     go = el<HTMLButtonElement>('.go')
   const failed = () => {
     cancelAnimationFrame(frame)
@@ -75,14 +77,36 @@ export function openPenaltyTraining(roster: readonly Player[] = []) {
     el('.repeat').hidden = true
     status.textContent = '无法显示 3D 球场：请使用支持 WebGL 2 的浏览器并开启硬件加速。未消耗次数。'
   }
+  pitch.hidden = true
+  el('.settings').hidden = true
+  go.hidden = true
+  status.textContent = '正在加载球员、队服和比赛用球…'
+  let art: Awaited<ReturnType<typeof loadMatchday>>
   try {
-    ground = createGround(stage)
-  } catch {
+    art = await loadMatchday(club)
+  } catch (error) {
+    console.error('无法加载点球训练场资源', error)
+    status.textContent = '美术资源加载失败，请退出后重试。未消耗次数。'
+    return
+  }
+  if (!d.open) {
+    art.dispose()
+    return
+  }
+  pitch.hidden = false
+  el('.settings').hidden = false
+  go.hidden = false
+  try {
+    ground = createGround(stage, art)
+  } catch (error) {
+    console.error('无法创建点球训练场', error)
+    art.dispose()
     failed()
     return
   }
   const view = ground
   view.canvas.addEventListener('webglcontextlost', failed, opts)
+  const inspection = el<HTMLSelectElement>('.inspect')
   const role = el<HTMLSelectElement>('.role'),
     ss = el<HTMLSelectElement>('.striker'),
     gs = el<HTMLSelectElement>('.keeper'),
@@ -128,6 +152,7 @@ export function openPenaltyTraining(roster: readonly Player[] = []) {
     pad.firstElementChild!.removeAttribute('style')
     activePointer = null
   }
+  let impact: Impact | null = null
   let lastOpponentShot: Shot | null = null
   const repeat = el<HTMLButtonElement>('.repeat')
   repeat.addEventListener(
@@ -143,6 +168,8 @@ export function openPenaltyTraining(roster: readonly Player[] = []) {
   )
   function reset() {
     phase = 'ready'
+    impact = null
+    origin = performance.now()
     shot = null
     dive = null
     clearPad()
@@ -155,23 +182,26 @@ export function openPenaltyTraining(roster: readonly Player[] = []) {
     el('.ratings').textContent = defend
       ? `训练评分 · 扑救反应 ${rating(goalie.reflexes)}　爆发 ${rating(goalie.acceleration)}　手控 ${rating(goalie.handling)}`
       : `训练评分 · 射术 ${rating(shooter.shooting)}　力量 ${rating(shooter.strength)}　镇定 ${rating(shooter.composure)}`
+    view.dress(strikers[Number(ss.value)], keepers[Number(gs.value)])
+    const inspecting = inspection.value !== 'play'
+    view.inspect(inspection.value as Inspection)
     view.mode(defend)
     view.path([])
     repeat.hidden = !defend || !lastOpponentShot
     pad.hidden = !defend
-    bar.hidden = defend
-    cursor.style.bottom = '0%'
+    hud.reset(!defend && !inspecting, bounds)
     ks.disabled = fs.disabled = defend
     go.disabled = false
     go.textContent = defend ? '让对手主罚' : '瞄准好了 · 开始蓄力'
     status.textContent = defend
       ? '点开始后观察助跑。推方向盘即扑，不推守中；也可用方向键。'
-      : '拖动球门内的金色瞄准框，或用方向键微调。'
-    const pct = (n: number) => `${100 * n}%`,
-      { center: c, green: g, yellow: y } = bounds
-    bar.style.background = `linear-gradient(to top,#a34850 0 ${pct(c - g - y)},#ecbb59 ${pct(c - g - y)} ${pct(c - g)},#38c692 ${pct(c - g)} ${pct(c + g)},#ecbb59 ${pct(c + g)} ${pct(c + g + y)},#a34850 ${pct(c + g + y)} 100%)`
+      : '拖动球门内的圆形准星，或用方向键微调。'
+    if (inspecting) {
+      pad.hidden = repeat.hidden = go.hidden = true
+      status.textContent = `${club.name} · 装备特写。切回训练镜头即可继续。`
+    } else go.hidden = false
   }
-  for (const select of [role, ss, gs, ks, fs])
+  for (const select of [role, ss, gs, ks, fs, inspection])
     select.addEventListener(
       'change',
       () => {
@@ -188,6 +218,7 @@ export function openPenaltyTraining(roster: readonly Player[] = []) {
     if (phase === 'flight') return
     if (!defend && phase === 'ready') {
       phase = 'power'
+      hud.charge()
       origin = performance.now()
       go.textContent = '锁定力度 · 起脚'
       status.textContent = '越高越有力，绿色是当前踢法的合适力度。'
@@ -213,8 +244,8 @@ export function openPenaltyTraining(roster: readonly Player[] = []) {
       dive = null
     } else {
       power = meter(clock(), bounds.cycle)
-      cursor.style.bottom = `${100 * power}%`
       shot = makeShot(kick, fs.value === '外脚背', aim, power, shooter, seed)
+      hud.lock(power, shot.zone)
       dive =
         rnd() < 0.17 ? null : { at: -0.09 + rnd() * 0.25, dir: fromKeeperPad(rnd() < 0.5 ? -1 : 1, rnd() - 0.5) }
     }
@@ -254,6 +285,7 @@ export function openPenaltyTraining(roster: readonly Player[] = []) {
           return
         node.setPointerCapture(e.pointerId)
         activePointer = e.pointerId
+        if (!defend) hud.drag(true)
         pointer(e)
       },
       opts,
@@ -262,7 +294,10 @@ export function openPenaltyTraining(roster: readonly Player[] = []) {
     node.addEventListener(
       'lostpointercapture',
       (e) => {
-        if (e.pointerId === activePointer) activePointer = null
+        if (e.pointerId === activePointer) {
+          activePointer = null
+          hud.drag(false)
+        }
       },
       opts,
     )
@@ -311,31 +346,47 @@ export function openPenaltyTraining(roster: readonly Player[] = []) {
     frame = requestAnimationFrame(tick)
     if (paused !== null) return
     elapsed = clock()
-    if (phase === 'power') cursor.style.bottom = `${100 * meter(elapsed, bounds.cycle)}%`
+    if (phase === 'power') hud.value(meter(elapsed, bounds.cycle))
     let t = phase === 'done' ? stopAt : phase === 'flight' ? elapsed - lead() : -2
     if (phase === 'flight' && shot) {
       const out = resolve(shot, dive, goalie)
       if (t >= out.at) {
         phase = 'done'
+        impact = netImpact(shot, out.result)
         stopAt = t = out.at
         const n = 40
         view.path(Array.from({ length: n + 1 }, (_, i) => ballAt(shot!, (t * i) / n)))
-        status.textContent = `${out.result} · 力度${shot.zone}。${defend ? (dive ? '黄线是实际球路，可对照手套位置。' : '本球选择留在中路。') : '金框是预期落点，黄线是实际球路。'}`
+        status.textContent = `${out.result} · 力度${shot.zone}。${defend ? (dive ? '黄线是实际球路，可对照手套位置。' : '本球选择留在中路。') : '圆形准星是预期落点，黄线是实际球路。'}`
         go.disabled = false
         go.textContent = '再练一球'
         repeat.hidden = !defend
       }
     }
-    if (phase !== 'flight' && lastPhase === phase && lastAim === aim && lastRevision === view.revision) return
-    lastPhase = phase
+    const afterLine = phase === 'done' ? Math.max(0, elapsed - lead() - stopAt) : 0
+    const sinceImpact = impact ? afterLine - impact.delay : 0
+    const netMoving = !!impact && sinceImpact < SETTLE
+    // Render one final settled frame after the motion ends.
+    if (
+      !netMoving &&
+      inspection.value === 'play' &&
+      phase !== 'flight' &&
+      lastPhase === phase &&
+      lastAim === aim &&
+      lastRevision === view.revision
+    )
+      return
+    lastPhase = netMoving ? null : phase
     lastAim = aim
     lastRevision = view.revision
     view.draw(
-      shot ? ballAt(shot, t) : { x: 0, y: R, z: SPOT },
+      shot && impact ? finishBall(shot, impact, afterLine) : shot ? ballAt(shot, t) : { x: 0, y: R, z: SPOT },
       keeperAt(dive, goalie, t),
-      defend ? null : aim,
       phase === 'flight' || phase === 'done' ? clamp(1 + t / lead()) : 0,
+      sinceImpact >= 0 && sinceImpact < SETTLE ? impact : null,
+      sinceImpact,
+      elapsed * 0.55,
     )
+    if (!defend && inspection.value === 'play') hud.locate(view.aimScreen(aim))
   }
   reset()
   tick()
