@@ -9,6 +9,8 @@ import {
   keeperAt,
   makeShot,
   meter,
+  planPenaltyKeeperDive,
+  postKeeperPose,
   R,
   resolve,
   SPOT,
@@ -90,5 +92,37 @@ describe('3D penalty practice', () => {
       return [ballAt(s, s.time), resolve(s, null, a)]
     }
     expect(play(15)).toEqual(play(120))
+  })
+  it('punishes weak scuffed or over-hit power and lets AI keeper cleanly catch slow rollers', () => {
+    // Weak under-powered kicks collapse low and are reliably caught ('抱住') by the AI keeper
+    for (const pwr of [0.05, 0.22, 0.42]) {
+      for (const ax of [-2.4, 0, 2.4]) {
+        const weak = makeShot('push', false, { x: ax, y: 1.6 }, pwr, a, 123)
+        expect(weak.zone).toBe('欠力')
+        const dive = planPenaltyKeeperDive(weak, 'push', a, () => 0.5)
+        const out = resolve(weak, dive, a)
+        expect(out.result).toBe('抱住')
+      }
+    }
+    // Slamming max over-power skies over the crossbar even when aiming low
+    const skyDrive = makeShot('drive', false, { x: 1.2, y: 0.45 }, 1, a, 77)
+    expect(skyDrive.zone).toBe('过力')
+    expect(skyDrive.target.y).toBeGreaterThan(HEIGHT + 0.2)
+    expect(resolve(skyDrive, null, a).result).toBe('偏出')
+
+    // Well-placed Green corner shot beats the keeper even when keeper reads the right side
+    const greenCorner = makeShot('drive', false, { x: 3.05, y: 1.9 }, band('drive', a).center, a, 88)
+    expect(greenCorner.zone).toBe('合适')
+    const rightRead = planPenaltyKeeperDive(greenCorner, 'drive', a, () => 0.1)
+    expect(resolve(greenCorner, rightRead, a).result).toBe('进球')
+  })
+  it('brings a diving goalkeeper smoothly down onto the turf after outcome instead of floating', () => {
+    const dive = { at: 0, dir: fromKeeperPad(-1, 0.45) }
+    const midAir = postKeeperPose(dive, a, 0.48, 0, false)
+    const landed = postKeeperPose(dive, a, 0.48, 0.85, false)
+    expect(midAir.body.y).toBeGreaterThan(0.9)
+    expect(midAir.landed).toBe(0)
+    expect(landed.body.y).toBeCloseTo(0.26, 1)
+    expect(landed.landed).toBe(1)
   })
 })

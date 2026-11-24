@@ -1,15 +1,18 @@
 import './training.css'
 import { createHud, shotHud } from './hud.ts'
 import { lockSetPieceFrame } from './frame-lock.ts'
+import { attachCameraControls } from './camera-controls.ts'
 import { attrRating } from '../../game/scale.ts'
 import type { Player } from '../../game/types.ts'
 import {
   clamp,
   fromKeeperPad,
+  GLOVE_Z,
   HALF,
   HEIGHT,
   keeperAt,
   meter,
+  postKeeperPose,
   R,
   type Dive,
   type Point,
@@ -18,11 +21,13 @@ import {
 import {
   CURVE_OPTIONS,
   fkBand,
+  fkPrimaryBallAt,
   FREEKICK_SPOT_LIST,
   FREEKICK_SPOTS,
   FREEKICK_STYLES,
   makeFreeKickShot,
   makeOpponentFreeKick,
+  planFreeKickKeeperDive,
   resolveFreeKick,
   STANDARD_FK_ABILITY,
   WALL_ACTIONS,
@@ -44,7 +49,7 @@ import {
 } from '../../game/penalty/environment.ts'
 import { createGround } from './scene.ts'
 import { loadMatchday, type Team } from './matchday.ts'
-import { finishBall, netImpact, SETTLE, type Impact } from '../../game/penalty/net.ts'
+import { finishBall, netImpact, POST_DURATION, SETTLE, settleNonGoalBall, type Impact } from '../../game/penalty/net.ts'
 
 export interface FreeKickStageContext {
   title: string
@@ -161,8 +166,9 @@ export async function openFreeKickLab(
     <footer class="lab-foot">
       <div class="lab-actions">
         <button class="go" type="button" data-phase="ready"></button>
+        <button class="replay" type="button" hidden>重放动画</button>
       </div>
-      <small class="lab-note">${stageCtx ? '活动关卡 · 配合破门同样计过关' : '不限次数 · 可切换无门将/人墙与全部赛季环境'}</small>
+      <small class="lab-note">${stageCtx ? '活动关卡 · 配合破门同样计过关' : '支持进球回放与拖拽移动视角 · 可切换无门将/人墙与全环境'}</small>
     </footer>`
   document.body.append(d)
   const el = <E extends HTMLElement = HTMLElement>(s: string) => d.querySelector<E>(s)!
@@ -313,7 +319,23 @@ export async function openFreeKickLab(
     wallShift: WallShift = 0,
     currentEnv: PitchEnvironment = stageCtx?.env ?? ENVIRONMENT_PRESETS.standard,
     bounds = fkBand(style, ability, currentEnv),
-    impact: Impact | null = null
+    impact: Impact | null = null,
+    replaying = false,
+    replayOrigin = 0
+
+  const camCtrl = attachCameraControls(d, pitch, stage, view, () => phase, ctrl.signal)
+  const sightEl = pitch.querySelector<HTMLElement>('.pk-sight')
+  const replayBtn = el<HTMLButtonElement>('.replay')
+  replayBtn.addEventListener(
+    'click',
+    () => {
+      if (!shot || phase !== 'done') return
+      replaying = true
+      replayOrigin = paused ?? performance.now()
+      lastPhase = null
+    },
+    opts,
+  )
 
   function clock() {
     return ((paused ?? performance.now()) - origin) / 1000
@@ -395,8 +417,11 @@ export async function openFreeKickLab(
     shot = null
     outcomePlan = null
     dive = null
+    replaying = false
     origin = performance.now()
     clearPad()
+    camCtrl.reset()
+    replayBtn.hidden = true
     currentEnv = stageCtx?.env ?? (ENVIRONMENT_PRESETS[envSelect.value] ?? ENVIRONMENT_PRESETS.standard)
     defend = role.value === 'keep'
     keeperless = role.value === 'open' || role.value === 'empty'
@@ -523,12 +548,11 @@ export async function openFreeKickLab(
       power = meter(clock(), bounds.cycle)
       shot = makeFreeKickShot(spot, style, curveOpt, aim, power, ability, seed, currentEnv)
       hud.lock(power, shot.zone)
-      dive = keeperless
-        ? null
-        : rnd() < 0.16
-          ? null
-          : { at: 0.05 + rnd() * 0.28, dir: fromKeeperPad(shot.target.x >= 0 ? -1 : 1, rnd() * 0.6 - 0.15) }
+      dive = keeperless ? null : planFreeKickKeeperDive(shot, ability, rnd)
     }
+    replayBtn.hidden = true
+    replaying = false
+    camCtrl.setReplayReady(false)
     outcomePlan = resolveCurrent()
     origin = performance.now()
     phase = 'flight'
@@ -542,7 +566,12 @@ export async function openFreeKickLab(
   const lead = () => (defend ? 1.15 : 0.32)
   function commitDive(right: number, up: number) {
     if (!defend || phase !== 'flight' || dive) return
-    dive = { at: clock() - lead(), dir: fromKeeperPad(right, up) }
+    const dir = fromKeeperPad(right, up)
+    let maxReach: number | undefined
+    if (shot && shot.time >= 0.9 && Math.sign(dir.x) === Math.sign(shot.target.x)) {
+      maxReach = clamp(Math.hypot(shot.target.x, shot.target.y - 1.06), 0.35, 2.95)
+    }
+    dive = { at: clock() - lead(), dir, maxReach }
     outcomePlan = resolveCurrent()
     const n = Math.hypot(right, up)
     padKnob.style.transform = `translate(${(right / n) * 26}px,${(-up / n) * 26}px)`
@@ -561,6 +590,7 @@ export async function openFreeKickLab(
     node.addEventListener(
       'pointerdown',
       (e) => {
+        if (node === stage && camCtrl.shouldInterceptAim(e, phase)) return
         if (
           activePointer !== null ||
           (defend ? node !== pad || phase !== 'flight' : node !== stage || phase !== 'ready')
@@ -628,14 +658,29 @@ export async function openFreeKickLab(
     if (paused !== null) return
     elapsed = clock()
     if (phase === 'power') hud.value(meter(elapsed, bounds.cycle))
-    let t = phase === 'done' ? stopAt : phase === 'flight' ? elapsed - lead() : -2
+    let animT = -2
+    if (phase === 'flight') {
+      animT = elapsed - lead()
+    } else if (phase === 'done') {
+      if (replaying) {
+        const repElapsed = (((paused ?? performance.now()) - replayOrigin) / 1000) * (camCtrl.slowMo ? 0.5 : 1)
+        animT = -lead() + repElapsed
+        if (animT >= stopAt + POST_DURATION) {
+          animT = stopAt + POST_DURATION
+          replaying = false
+        }
+      } else {
+        animT = Math.min(stopAt + POST_DURATION, elapsed - lead())
+      }
+    }
+
     if (phase === 'flight' && shot && outcomePlan) {
-      if (t >= outcomePlan.at) {
+      if (animT >= outcomePlan.at) {
         phase = 'done'
         delete pad.dataset.active
-        stopAt = t = outcomePlan.at
+        stopAt = outcomePlan.at
         const n = 48
-        view.path(Array.from({ length: n + 1 }, (_, i) => outcomePlan!.ballAtTime((t * i) / n)))
+        view.path(Array.from({ length: n + 1 }, (_, i) => outcomePlan!.ballAtTime((stopAt * i) / n)))
         const isGoal =
           outcomePlan.result === '进球' ||
           outcomePlan.result === '配合破门' ||
@@ -650,6 +695,9 @@ export async function openFreeKickLab(
           }
           impact = netImpact(fakeShot, '进球')
         }
+        replayBtn.hidden = false
+        replayBtn.textContent = isGoal ? '重放进球' : '重放动画'
+        camCtrl.setReplayReady(true)
         const mappedHudResult = isGoal
           ? '进球'
           : outcomePlan.result === '击中门框'
@@ -685,7 +733,7 @@ export async function openFreeKickLab(
           go.textContent = step.buttonLabel ?? (step.finished ? '返回活动页' : '下一球')
         } else {
           setStatus(
-            `${outcomePlan.result}${outcomePlan.underWall ? '（成功从起跳人墙脚下钻过！）' : ''} · 力度${shot.zone}。黄线为真实 3D 球路。`,
+            `${outcomePlan.result}${outcomePlan.underWall ? '（成功从起跳人墙脚下钻过！）' : ''} · 力度${shot.zone}。可直接拖拽画面旋转视角并重放动画。`,
             tone,
           )
           go.disabled = false
@@ -695,12 +743,15 @@ export async function openFreeKickLab(
       }
     }
 
-    const afterLine = phase === 'done' ? Math.max(0, elapsed - lead() - stopAt) : 0
-    const sinceImpact = impact ? afterLine - impact.delay : 0
-    const netMoving = !!impact && sinceImpact < SETTLE
+    const afterLine = phase === 'done' ? Math.max(0, animT - stopAt) : 0
+    const sinceImpact = impact && animT > stopAt ? afterLine - impact.delay : -1
+    const netMoving = !!impact && sinceImpact >= -0.2 && sinceImpact < SETTLE
+    const postMoving =
+      phase === 'done' && (replaying || (elapsed - lead() - stopAt < POST_DURATION + 0.12))
     const weatherAnimating = currentEnv.weather !== 'clear'
     if (
       !netMoving &&
+      !postMoving &&
       !weatherAnimating &&
       phase !== 'flight' &&
       lastPhase === phase &&
@@ -708,38 +759,79 @@ export async function openFreeKickLab(
       lastRevision === view.revision
     )
       return
-    lastPhase = netMoving ? null : phase
+    lastPhase = netMoving || postMoving ? null : phase
     lastAim = aim
     lastRevision = view.revision
 
-    poseWallAndBox(phase === 'flight' || phase === 'done' ? Math.max(0, t) : -1)
-    const ballPos =
-      shot && impact
-        ? finishBall(
-            {
-              target: outcomePlan!.goalCrossPoint,
-              time: Math.max(0.35, outcomePlan!.at),
-              arc: shot.arc * 0.35,
-              curve: shot.curve * 0.25,
-              zone: shot.zone,
-            },
-            impact,
-            afterLine,
-          )
-        : outcomePlan && (phase === 'flight' || phase === 'done')
-          ? outcomePlan.ballAtTime(Math.max(0, t))
-          : { x: spot.x, y: R, z: spot.z }
+    poseWallAndBox(phase === 'flight' || phase === 'done' ? Math.max(0, animT) : -1)
+
+    const kPose =
+      shot && animT > stopAt
+        ? postKeeperPose(dive, ability, stopAt, afterLine, outcomePlan?.result === '抱住', currentEnv)
+        : { ...keeperAt(dive, ability, Math.max(0, animT), currentEnv), landed: 0 }
+
+    let ballPos = { x: spot.x, y: R, z: spot.z }
+    if (shot && outcomePlan && (phase === 'flight' || phase === 'done')) {
+      if (animT <= 0) {
+        ballPos = { x: spot.x, y: R, z: spot.z }
+      } else if (animT <= stopAt) {
+        ballPos = outcomePlan.ballAtTime(animT)
+      } else if (impact) {
+        ballPos = finishBall(
+          {
+            target: outcomePlan.goalCrossPoint,
+            time: Math.max(0.35, outcomePlan.at),
+            arc: shot.arc * 0.35,
+            curve: shot.curve * 0.25,
+            zone: shot.zone,
+          },
+          impact,
+          afterLine,
+        )
+      } else {
+        const p0 = outcomePlan.ballAtTime(stopAt)
+        const pPrev = outcomePlan.ballAtTime(Math.max(0, stopAt - 0.04))
+        const dtVel = Math.max(0.01, stopAt - Math.max(0, stopAt - 0.04))
+        const vel = {
+          x: (p0.x - pPrev.x) / dtVel,
+          y: (p0.y - pPrev.y) / dtVel,
+          z: (p0.z - pPrev.z) / dtVel,
+        }
+        const r = outcomePlan.result
+        const kind =
+          r === '抱住'
+            ? 'catch'
+            : r === '挡出' || r === '头球被扑'
+              ? 'parry'
+              : r === '人墙挡出' || r === '卧草封出'
+                ? 'wall'
+                : r === '击中门框'
+                  ? 'frame'
+                  : 'miss'
+        const glovesMid = {
+          x: (kPose.left.x + kPose.right.x) * 0.5,
+          y: (kPose.left.y + kPose.right.y) * 0.5,
+          z: GLOVE_Z + 0.04,
+        }
+        ballPos = settleNonGoalBall(p0, vel, kind, afterLine, glovesMid)
+      }
+    }
 
     view.draw(
       ballPos,
-      keeperAt(dive, ability, Math.max(0, t), currentEnv),
-      phase === 'flight' || phase === 'done' ? clamp(1 + t / lead()) : 0,
+      kPose,
+      phase === 'flight' || phase === 'done' ? clamp(1 + animT / lead()) : 0,
       sinceImpact >= 0 && sinceImpact < SETTLE ? impact : null,
       sinceImpact,
       elapsed * 0.55,
       performance.now() / 1000,
+      shot && (phase === 'flight' || phase === 'done') ? Math.max(0, animT) : 0,
     )
-    if (!defend) hud.locate(view.aimScreen(aim))
+    if (sightEl) {
+      const hideSight = defend || replaying || view.isCustomCamera || camCtrl.freeLook
+      sightEl.style.visibility = hideSight ? 'hidden' : 'visible'
+      if (!hideSight) hud.locate(view.aimScreen(aim))
+    }
   }
 
   reset()

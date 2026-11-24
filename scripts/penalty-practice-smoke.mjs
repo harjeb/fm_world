@@ -125,6 +125,11 @@ try {
   await click('.penalty-lab .go')
   await wait('document.querySelector(".go").textContent === "再练一球"')
   assert.match(await evaluate('document.querySelector(".penalty-lab .call").textContent'), /力度/)
+  assert.equal(await evaluate('document.querySelector(".penalty-lab .replay").hidden'), false)
+  assert.equal(await evaluate('document.querySelector(".penalty-lab .cam-presets").hidden'), false)
+  await click('.penalty-lab [data-preset="behind_goal"]')
+  await click('.penalty-lab .replay')
+  await sleep(180)
   await evaluate(
     'const role=document.querySelector(".penalty-lab .role");role.value="keep";role.dispatchEvent(new Event("change"))',
   )
@@ -169,6 +174,14 @@ try {
   assert.equal(await evaluate('document.documentElement.classList.contains("pk-modal-lock")'), false)
   await click('[data-action="penalty-training"]')
   await wait('!!document.querySelector(".penalty-lab canvas")')
+  // Verify enlarged desktop layout dimensions (1440x900 PC viewport)
+  await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })
+  await sleep(120)
+  const pcRect = await evaluate(
+    '(()=>{const d=document.querySelector(".penalty-lab").getBoundingClientRect(),g=document.querySelector(".penalty-lab .ground").getBoundingClientRect();return {dw:d.width,gh:g.height}})()',
+  )
+  assert.ok(pcRect.dw >= 1150, `Expected PC dialog width >= 1150px, got ${pcRect.dw}`)
+  assert.ok(pcRect.gh >= 460, `Expected PC 3D pitch height >= 460px, got ${pcRect.gh}`)
   await click('.penalty-lab .leave')
   await wait('!document.querySelector(".penalty-lab")')
   await evaluate(

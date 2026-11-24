@@ -1,6 +1,7 @@
 import './training.css'
 import { createHud, shotHud } from './hud.ts'
 import { lockSetPieceFrame } from './frame-lock.ts'
+import { attachCameraControls } from './camera-controls.ts'
 import { attrRating } from '../../game/scale.ts'
 import type { Player } from '../../game/types.ts'
 import {
@@ -8,12 +9,15 @@ import {
   band,
   clamp,
   fromKeeperPad,
+  GLOVE_Z,
   HALF,
   HEIGHT,
   keeperAt,
   KICKS,
   makeShot,
   meter,
+  planPenaltyKeeperDive,
+  postKeeperPose,
   R,
   resolve,
   SPOT,
@@ -32,7 +36,7 @@ import {
 } from '../../game/penalty/environment.ts'
 import { createGround, type Inspection } from './scene.ts'
 import { loadMatchday, type Team } from './matchday.ts'
-import { finishBall, netImpact, SETTLE, type Impact } from '../../game/penalty/net.ts'
+import { finishBall, netImpact, POST_DURATION, SETTLE, settleNonGoalBall, type Impact } from '../../game/penalty/net.ts'
 
 export interface PenaltyStageContext {
   title: string
@@ -123,9 +127,10 @@ export async function openPenaltyTraining(
     <footer class="lab-foot">
       <div class="lab-actions">
         <button class="go" type="button" data-phase="ready"></button>
+        <button class="replay" type="button" hidden>重放动画</button>
         <button class="repeat" type="button" hidden>重扑同一球</button>
       </div>
-      <small class="lab-note">${stageCtx ? '活动关卡 · 体能伤病不带回联赛' : '不限次数 · 无奖励 · 不影响联赛'}</small>
+      <small class="lab-note">${stageCtx ? '活动关卡 · 体能伤病不带回联赛' : '支持进球回放与拖拽移动视角 · 不影响联赛'}</small>
     </footer>`
   document.body.append(d)
   const el = <E extends HTMLElement = HTMLElement>(s: string) => d.querySelector<E>(s)!
@@ -274,8 +279,24 @@ export async function openPenaltyTraining(
     activePointer = null
   }
   let impact: Impact | null = null
+  let outResult: Result | null = null
+  let replaying = false
+  let replayOrigin = 0
   let lastOpponentShot: Shot | null = null
+  const camCtrl = attachCameraControls(d, pitch, stage, view, () => phase, ctrl.signal)
+  const sightEl = pitch.querySelector<HTMLElement>('.pk-sight')
+  const replayBtn = el<HTMLButtonElement>('.replay')
   const repeat = el<HTMLButtonElement>('.repeat')
+  replayBtn.addEventListener(
+    'click',
+    () => {
+      if (!shot || phase !== 'done') return
+      replaying = true
+      replayOrigin = paused ?? performance.now()
+      lastPhase = null
+    },
+    opts,
+  )
   repeat.addEventListener(
     'click',
     () => {
@@ -290,10 +311,14 @@ export async function openPenaltyTraining(
   function reset() {
     phase = 'ready'
     impact = null
+    outResult = null
+    replaying = false
     origin = performance.now()
     shot = null
     dive = null
     clearPad()
+    camCtrl.reset()
+    replayBtn.hidden = true
     currentEnv = stageCtx?.env ?? (ENVIRONMENT_PRESETS[envSelect.value] ?? ENVIRONMENT_PRESETS.standard)
     defend = role.value === 'keep'
     keeperless = role.value === 'open'
@@ -322,6 +347,8 @@ export async function openPenaltyTraining(
     view.setEnvironment(currentEnv)
     view.setKeeperless(keeperless)
     const inspecting = inspection.value !== 'play'
+    const camBar = pitch.querySelector<HTMLElement>('.cam-bar')
+    if (camBar) camBar.hidden = inspecting
     view.inspect(inspection.value as Inspection)
     view.mode(defend)
     view.path([])
@@ -411,19 +438,12 @@ export async function openPenaltyTraining(
       power = meter(clock(), bounds.cycle)
       shot = makeShot(kick, fs.value === '外脚背', aim, power, shooter, seed, currentEnv)
       hud.lock(power, shot.zone)
-      if (keeperless) {
-        dive = null
-      } else if (stageCtx?.keeperBias === 'left') {
-        dive = { at: -0.05, dir: fromKeeperPad(1, rnd() * 0.3 - 0.1) }
-      } else if (stageCtx?.keeperBias === 'right') {
-        dive = { at: -0.05, dir: fromKeeperPad(-1, rnd() * 0.3 - 0.1) }
-      } else if (stageCtx?.keeperBias === 'early') {
-        dive = { at: -0.14, dir: fromKeeperPad(rnd() < 0.5 ? -1 : 1, 0.1) }
-      } else {
-        dive =
-          rnd() < 0.17 ? null : { at: -0.09 + rnd() * 0.25, dir: fromKeeperPad(rnd() < 0.5 ? -1 : 1, rnd() - 0.5) }
-      }
+      dive = keeperless ? null : planPenaltyKeeperDive(shot, kick, goalie, rnd, currentEnv, stageCtx?.keeperBias)
     }
+    replayBtn.hidden = true
+    replaying = false
+    outResult = null
+    camCtrl.setReplayReady(false)
     repeat.hidden = true
     origin = performance.now()
     phase = 'flight'
@@ -436,7 +456,12 @@ export async function openPenaltyTraining(
   const lead = () => (defend ? 1.25 : 0.3)
   function commitDive(right: number, up: number) {
     if (!defend || phase !== 'flight' || dive) return
-    dive = { at: clock() - lead(), dir: fromKeeperPad(right, up) }
+    const dir = fromKeeperPad(right, up)
+    let maxReach: number | undefined
+    if (shot && shot.time >= 0.7 && Math.sign(dir.x) === Math.sign(shot.target.x)) {
+      maxReach = clamp(Math.hypot(shot.target.x, shot.target.y - 1.06), 0.35, 2.95)
+    }
+    dive = { at: clock() - lead(), dir, maxReach }
     const n = Math.hypot(right, up)
     padKnob.style.transform = `translate(${(right / n) * 26}px,${(-up / n) * 26}px)`
     pad.dataset.dived = 'true'
@@ -454,6 +479,7 @@ export async function openPenaltyTraining(
     node.addEventListener(
       'pointerdown',
       (e) => {
+        if (node === stage && camCtrl.shouldInterceptAim(e, phase)) return
         if (
           activePointer !== null ||
           (defend ? node !== pad || phase !== 'flight' : node !== stage || phase !== 'ready')
@@ -522,31 +548,50 @@ export async function openPenaltyTraining(
     if (paused !== null) return
     elapsed = clock()
     if (phase === 'power') hud.value(meter(elapsed, bounds.cycle))
-    let t = phase === 'done' ? stopAt : phase === 'flight' ? elapsed - lead() : -2
+    let animT = -2
+    if (phase === 'flight') {
+      animT = elapsed - lead()
+    } else if (phase === 'done') {
+      if (replaying) {
+        const repElapsed = (((paused ?? performance.now()) - replayOrigin) / 1000) * (camCtrl.slowMo ? 0.5 : 1)
+        animT = -lead() + repElapsed
+        if (animT >= stopAt + POST_DURATION) {
+          animT = stopAt + POST_DURATION
+          replaying = false
+        }
+      } else {
+        animT = Math.min(stopAt + POST_DURATION, elapsed - lead())
+      }
+    }
+
     if (phase === 'flight' && shot) {
       const out = resolve(shot, dive, goalie, { keeperless, env: currentEnv })
-      if (t >= out.at) {
+      if (animT >= out.at) {
         phase = 'done'
+        outResult = out.result
         delete pad.dataset.active
         impact = netImpact(shot, out.result)
-        stopAt = t = out.at
+        stopAt = out.at
         const n = 40
-        view.path(Array.from({ length: n + 1 }, (_, i) => ballAt(shot!, (t * i) / n)))
+        view.path(Array.from({ length: n + 1 }, (_, i) => ballAt(shot!, (stopAt * i) / n)))
         hud.outcome(out.result, defend, `力度${shot.zone}`)
-        const tone =
-          out.result === '进球' || out.result === '碰到仍进'
+        const isGoal = out.result === '进球' || out.result === '碰到仍进'
+        replayBtn.hidden = false
+        replayBtn.textContent = isGoal ? '重放进球' : '重放动画'
+        camCtrl.setReplayReady(true)
+        const tone = isGoal
+          ? defend
+            ? 'bad'
+            : 'good'
+          : out.result === '抱住' || out.result === '挡出'
             ? defend
-              ? 'bad'
-              : 'good'
-            : out.result === '抱住' || out.result === '挡出'
-              ? defend
+              ? 'good'
+              : 'warn'
+            : out.result === '击中门框'
+              ? 'warn'
+              : defend
                 ? 'good'
-                : 'warn'
-              : out.result === '击中门框'
-                ? 'warn'
-                : defend
-                  ? 'good'
-                  : 'bad'
+                : 'bad'
         if (stageCtx) {
           const step = stageCtx.onAttempt({
             result: out.result,
@@ -571,7 +616,7 @@ export async function openPenaltyTraining(
           }
         } else {
           setStatus(
-            `${out.result} · 力度${shot.zone}。${defend ? (dive ? '黄线是实际球路，可对照手套位置。' : '本球选择留在中路。') : '圆形准星是预期落点，黄线是实际球路。'}`,
+            `${out.result} · 力度${shot.zone}。${defend ? (dive ? '黄线是实际球路，可对照手套位置。可拖拽画面移动视角或点重放。' : '本球选择留在中路。可拖拽画面移动视角或点重放。') : '圆形准星是预期落点，黄线是实际球路；可直接拖拽画面旋转视角并重放动画。'}`,
             tone,
           )
           go.disabled = false
@@ -581,12 +626,16 @@ export async function openPenaltyTraining(
         }
       }
     }
-    const afterLine = phase === 'done' ? Math.max(0, elapsed - lead() - stopAt) : 0
-    const sinceImpact = impact ? afterLine - impact.delay : 0
-    const netMoving = !!impact && sinceImpact < SETTLE
+
+    const afterLine = phase === 'done' ? Math.max(0, animT - stopAt) : 0
+    const sinceImpact = impact && animT > stopAt ? afterLine - impact.delay : -1
+    const netMoving = !!impact && sinceImpact >= -0.2 && sinceImpact < SETTLE
+    const postMoving =
+      phase === 'done' && (replaying || (elapsed - lead() - stopAt < POST_DURATION + 0.12))
     const weatherAnimating = currentEnv.weather !== 'clear'
     if (
       !netMoving &&
+      !postMoving &&
       !weatherAnimating &&
       inspection.value === 'play' &&
       phase !== 'flight' &&
@@ -595,19 +644,64 @@ export async function openPenaltyTraining(
       lastRevision === view.revision
     )
       return
-    lastPhase = netMoving ? null : phase
+    lastPhase = netMoving || postMoving ? null : phase
     lastAim = aim
     lastRevision = view.revision
+
+    const kPose =
+      shot && animT > stopAt
+        ? postKeeperPose(dive, goalie, stopAt, afterLine, outResult === '抱住', currentEnv)
+        : { ...keeperAt(dive, goalie, animT, currentEnv), landed: 0 }
+
+    let ballPos = { x: 0, y: R, z: SPOT }
+    if (shot) {
+      if (animT <= 0) {
+        ballPos = { x: 0, y: R, z: SPOT }
+      } else if (animT <= stopAt) {
+        ballPos = ballAt(shot, animT)
+      } else if (impact) {
+        ballPos = finishBall(shot, impact, afterLine)
+      } else {
+        const p0 = ballAt(shot, stopAt)
+        const u0 = clamp(stopAt / shot.time)
+        const du = 1 / Math.max(0.15, shot.time)
+        const vel = {
+          x: (shot.target.x + shot.curve * 4 * (1 - 2 * u0)) * du,
+          y: (shot.target.y - R + shot.arc * 4 * (1 - 2 * u0)) * du,
+          z: -SPOT * du,
+        }
+        const kind =
+          outResult === '抱住'
+            ? 'catch'
+            : outResult === '挡出'
+              ? 'parry'
+              : outResult === '击中门框'
+                ? 'frame'
+                : 'miss'
+        const glovesMid = {
+          x: (kPose.left.x + kPose.right.x) * 0.5,
+          y: (kPose.left.y + kPose.right.y) * 0.5,
+          z: GLOVE_Z + 0.04,
+        }
+        ballPos = settleNonGoalBall(p0, vel, kind, afterLine, glovesMid)
+      }
+    }
+
     view.draw(
-      shot && impact ? finishBall(shot, impact, afterLine) : shot ? ballAt(shot, t) : { x: 0, y: R, z: SPOT },
-      keeperAt(dive, goalie, t, currentEnv),
-      phase === 'flight' || phase === 'done' ? clamp(1 + t / lead()) : 0,
+      ballPos,
+      kPose,
+      phase === 'flight' || phase === 'done' ? clamp(1 + animT / lead()) : 0,
       sinceImpact >= 0 && sinceImpact < SETTLE ? impact : null,
       sinceImpact,
       elapsed * 0.55,
       performance.now() / 1000,
+      shot && (phase === 'flight' || phase === 'done') ? Math.max(0, animT) : 0,
     )
-    if (!defend && inspection.value === 'play') hud.locate(view.aimScreen(aim))
+    if (sightEl) {
+      const hideSight = defend || inspection.value !== 'play' || replaying || view.isCustomCamera || camCtrl.freeLook
+      sightEl.style.visibility = hideSight ? 'hidden' : 'visible'
+      if (!hideSight) hud.locate(view.aimScreen(aim))
+    }
   }
   reset()
   tick()

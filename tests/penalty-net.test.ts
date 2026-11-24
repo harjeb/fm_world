@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { finishBall, netImpact, NET_DEPTH, ripple, SETTLE } from '../src/game/penalty/net.ts'
+import { finishBall, netImpact, NET_DEPTH, ripple, SETTLE, settleNonGoalBall } from '../src/game/penalty/net.ts'
 import { HALF, HEIGHT, R, type Result, type Shot } from '../src/game/penalty/practice.ts'
 const shot: Shot = { target: { x: 0.4, y: 1.1 }, time: 0.58, zone: '合适', arc: 0.24, curve: 0 }
 describe('post-goal presentation', () => {
@@ -29,5 +29,16 @@ describe('post-goal presentation', () => {
     expect(ripple(0, 0.06, 28)).toBeGreaterThan(ripple(0, 0.06, 14))
     expect(ripple(0, 0.21, 20)).toBeLessThan(0)
     expect(ripple(0, SETTLE, 20)).toBe(0)
+  })
+  it('settles non-goal rebounds onto the turf and locks catches into the gloves', () => {
+    const caught = settleNonGoalBall({ x: 1.2, y: 1.1, z: 0.55 }, { x: 2, y: 0, z: -18 }, 'catch', 0.4, {
+      x: 1.35,
+      y: 0.3,
+      z: 0.58,
+    })
+    expect(caught).toEqual({ x: 1.35, y: 0.3, z: 0.58 })
+    const parried = settleNonGoalBall({ x: 1.4, y: 1.3, z: 0.55 }, { x: 3, y: 1, z: -20 }, 'parry', 2.0)
+    expect(parried.y).toBe(R)
+    expect(parried.x).toBeGreaterThan(1.4)
   })
 })

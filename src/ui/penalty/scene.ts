@@ -251,6 +251,43 @@ export function createGround(host: HTMLElement, art: Awaited<ReturnType<typeof l
   let inspecting: Inspection = 'play'
   let defending = false
   let revision = 0
+
+  const defPos = new T.Vector3()
+  const defTarget = new T.Vector3()
+  let defFov = 39
+  const camTarget = new T.Vector3()
+  let customCam = false
+  let camYaw = 0
+  let camPitch = 0.18
+  let camDist = 14
+
+  function syncSphericalFromCurrent() {
+    const offset = camera.position.clone().sub(camTarget)
+    camDist = Math.max(2.2, offset.length())
+    camPitch = clamp(Math.asin(clamp(offset.y / camDist, -0.95, 0.95)), 0.05, 1.38)
+    camYaw = Math.atan2(offset.x, offset.z)
+  }
+
+  function applyCamera() {
+    if (!customCam) {
+      camera.position.copy(defPos)
+      camera.lookAt(defTarget)
+      camera.fov = defFov
+      net.keeperView(defending)
+    } else {
+      const cosP = Math.cos(camPitch)
+      const cx = camTarget.x + camDist * cosP * Math.sin(camYaw)
+      const cy = Math.max(0.32, camTarget.y + camDist * Math.sin(camPitch))
+      const cz = camTarget.z + camDist * cosP * Math.cos(camYaw)
+      camera.position.set(cx, cy, cz)
+      camera.lookAt(camTarget)
+      camera.fov = clamp(defFov, 34, 48)
+      net.keeperView(cz < -0.5)
+    }
+    camera.updateProjectionMatrix()
+    camera.updateMatrixWorld()
+  }
+
   function resize() {
     revision++
     const w = host.clientWidth,
@@ -259,23 +296,23 @@ export function createGround(host: HTMLElement, art: Awaited<ReturnType<typeof l
     renderer.setSize(w, h, false)
     camera.aspect = w / h
     if (defending) {
-      camera.position.set(0, 2.65, -6.7)
-      camera.lookAt(spotX * 0.25, 1, Math.min(8, spotZ * 0.42))
-      camera.fov = Math.max(39, T.MathUtils.radToDeg(2 * Math.atan(4.25 / (6.7 * camera.aspect))))
+      defPos.set(0, 2.65, -6.7)
+      defTarget.set(spotX * 0.25, 1, Math.min(8, spotZ * 0.42))
+      defFov = Math.max(39, T.MathUtils.radToDeg(2 * Math.atan(4.25 / (6.7 * camera.aspect))))
     } else {
       const distBack = spotZ > 13 ? 7.6 : 6.8
       const camY = spotZ > 13 ? 2.48 + (spotZ - 13) * 0.045 : 1.97
       const camX = spotX * 1.12 - (spotZ > 13 ? 0.95 : 1.45)
       const camZ = spotZ + distBack
-      camera.position.set(camX, camY, camZ)
-      camera.lookAt(spotX * 0.14, 1.08, 1.8)
-      camera.fov = Math.max(
+      defPos.set(camX, camY, camZ)
+      defTarget.set(spotX * 0.14, 1.08, 1.8)
+      defFov = Math.max(
         spotZ > 13 ? 36 : 39,
         T.MathUtils.radToDeg(2 * Math.atan(4.45 / (Math.min(20, camZ) * camera.aspect))),
       )
     }
-    camera.updateProjectionMatrix()
-    camera.updateMatrixWorld()
+    if (!customCam) camTarget.copy(defTarget)
+    applyCamera()
   }
   const ro = new ResizeObserver(resize)
   ro.observe(host)
@@ -296,7 +333,84 @@ export function createGround(host: HTMLElement, art: Awaited<ReturnType<typeof l
     aimAt,
     aimScreen(aim: Point): Point {
       projected.set(aim.x, aim.y, 0).project(camera)
+      if (projected.z > 1) return { x: -9999, y: -9999 }
       return { x: (projected.x * 0.5 + 0.5) * host.clientWidth, y: (0.5 - projected.y * 0.5) * host.clientHeight }
+    },
+    get isCustomCamera() {
+      return customCam
+    },
+    orbitCamera(dYaw: number, dPitch: number) {
+      if (!customCam) {
+        camTarget.copy(defTarget)
+        syncSphericalFromCurrent()
+        customCam = true
+      }
+      camYaw -= dYaw
+      camPitch = clamp(camPitch + dPitch, 0.04, 1.36)
+      revision++
+      applyCamera()
+    },
+    panCamera(dx: number, dy: number) {
+      if (!customCam) {
+        camTarget.copy(defTarget)
+        syncSphericalFromCurrent()
+        customCam = true
+      }
+      const rightX = Math.cos(camYaw)
+      const rightZ = -Math.sin(camYaw)
+      const fwdX = -Math.sin(camYaw)
+      const fwdZ = -Math.cos(camYaw)
+      const scale = camDist * 0.0022
+      camTarget.x = clamp(camTarget.x - dx * rightX * scale + dy * fwdX * scale * 0.65, -12, 12)
+      camTarget.y = clamp(camTarget.y + dy * scale * 0.55, 0.25, 4.8)
+      camTarget.z = clamp(camTarget.z - dx * rightZ * scale + dy * fwdZ * scale * 0.65, -4, Math.max(16, spotZ + 4))
+      revision++
+      applyCamera()
+    },
+    zoomCamera(factor: number) {
+      if (!customCam) {
+        camTarget.copy(defTarget)
+        syncSphericalFromCurrent()
+        customCam = true
+      }
+      camDist = clamp(camDist * factor, 2.6, 34)
+      revision++
+      applyCamera()
+    },
+    setCameraPreset(preset: 'default' | 'behind_goal' | 'side' | 'bird') {
+      if (preset === 'default') {
+        customCam = false
+        camTarget.copy(defTarget)
+        revision++
+        applyCamera()
+        return
+      }
+      customCam = true
+      if (preset === 'behind_goal') {
+        camTarget.set(0, 1.15, 2.2)
+        camYaw = Math.PI * 0.94
+        camPitch = 0.16
+        camDist = 7.8
+      } else if (preset === 'side') {
+        camTarget.set(0, 1.1, Math.min(6.5, spotZ * 0.36))
+        camYaw = Math.PI * 0.44
+        camPitch = 0.15
+        camDist = Math.max(11.5, spotZ * 0.72)
+      } else if (preset === 'bird') {
+        camTarget.set(spotX * 0.25, 0.9, Math.min(8, spotZ * 0.42))
+        camYaw = -0.18
+        camPitch = 0.78
+        camDist = Math.max(15.5, spotZ * 0.95)
+      }
+      revision++
+      applyCamera()
+    },
+    resetCamera() {
+      if (!customCam) return
+      customCam = false
+      camTarget.copy(defTarget)
+      revision++
+      applyCamera()
     },
     path,
     extras,
@@ -313,27 +427,31 @@ export function createGround(host: HTMLElement, art: Awaited<ReturnType<typeof l
     setSpot(x: number, z: number) {
       spotX = x
       spotZ = z
+      customCam = false
       resize()
     },
     inspect(value: Inspection) {
       inspecting = value
+      customCam = false
       resize()
     },
     mode(keep: boolean) {
       defending = keep
+      customCam = false
       net.keeperView(keep)
       resize()
     },
     draw(
       p: { x: number; y: number; z: number },
-      pose: ReturnType<typeof keeperAt>,
+      pose: ReturnType<typeof keeperAt> & { landed?: number },
       run: number,
       hit: Impact | null,
       sinceImpact: number,
       turn: number,
       timeSec = turn / 0.55,
+      afterContact = 0,
     ) {
-      art.pose(pose, run, spotX, spotZ)
+      art.pose(pose, run, spotX, spotZ, afterContact, pose.landed ?? 0)
       net.move(hit, sinceImpact)
       updateWeatherParticles(timeSec)
       ball.position.set(p.x, p.y, p.z)

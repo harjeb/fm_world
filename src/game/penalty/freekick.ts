@@ -157,7 +157,8 @@ export function makeFreeKickShot(
   env?: PitchEnvironment,
 ): FreeKickShot {
   const b = fkBand(style, a, env),
-    delta = clamp(power) - b.center,
+    p = clamp(power),
+    delta = p - b.center,
     excess = Math.max(0, Math.abs(delta) - b.green)
   const signed = (((Math.imul(seed, 1664525) + 1013904223) >>> 0) / 0xffffffff) * 2 - 1
   const zone: Zone = !excess
@@ -171,20 +172,59 @@ export function makeFreeKickShot(
         : '过力'
 
   const dist = Math.hypot(spot.x, spot.z)
-  let speed = FREEKICK_STYLES[style].speed * (0.78 + 0.38 * a.strength) * clamp(1 + delta * 1.45, 0.36, 1.48)
-  const scatterScale = style === 'loft_pass' ? 3.2 : 4.2
-  let targetX = (style === 'loft_pass' ? spot.headerTarget.x + aim.x * 0.38 : aim.x) + signed * excess * scatterScale
-  let targetY =
-    style === 'low_drive'
-      ? clamp(0.18 + Math.max(0, delta) * 1.6, R, 0.95)
-      : style === 'loft_pass'
-        ? clamp(spot.headerTarget.y + (aim.y - 1.2) * 0.32 + delta * 1.8, 0.9, 2.95)
-        : Math.max(R, aim.y + (delta < 0 ? -1.5 : 6.2) * excess)
-
+  let speedScale = 1
   let arc = FREEKICK_STYLES[style].arc
-  const spinControl = 0.72 + 0.35 * (0.5 * a.passing + 0.5 * a.vision)
+  const baseX = style === 'loft_pass' ? spot.headerTarget.x + aim.x * 0.38 : aim.x
+  const baseY =
+    style === 'low_drive'
+      ? clamp(0.18 + Math.max(0, delta) * 0.8, R, 0.42)
+      : style === 'loft_pass'
+        ? clamp(spot.headerTarget.y + (aim.y - 1.2) * 0.32, 1.25, 2.45)
+        : aim.y
+  let targetX = baseX
+  let targetY = baseY
+
+  if (delta < 0 && excess > 0) {
+    if (zone === '稍轻') {
+      const u = excess / Math.max(0.02, b.yellow)
+      speedScale = 0.83 - 0.15 * u
+      targetX = baseX * (1 - 0.15 * u) + signed * excess * 2.8
+      targetY = Math.max(R, baseY * (1 - 0.24 * u) - 0.22 * u)
+      arc *= 1 - 0.24 * u
+    } else {
+      const underSpan = Math.max(0.12, b.center - b.green - b.yellow)
+      const underRed = clamp((excess - b.yellow) / underSpan)
+      speedScale = 0.55 - 0.24 * underRed
+      // Scuffed free kick loses lift (hits wall or rolls weakly to keeper; loft_pass falls short)
+      targetX = baseX * (0.65 - 0.32 * underRed) + signed * (0.35 + 0.65 * underRed)
+      targetY = style === 'loft_pass' ? clamp(0.95 - 0.55 * underRed, R, 1.05) : Math.max(R, baseY * (0.35 - 0.26 * underRed))
+      arc *= 0.32 * (1 - 0.55 * underRed)
+    }
+  } else if (delta > 0 && excess > 0) {
+    if (zone === '稍重') {
+      const u = excess / Math.max(0.02, b.yellow)
+      speedScale = 1.05 + 0.12 * u
+      targetX = baseX + signed * excess * 6.2
+      targetY = style === 'low_drive' ? clamp(baseY + 0.42 * u, R, 0.92) : baseY + excess * 9.4
+    } else {
+      const overSpan = Math.max(0.04, 1 - (b.center + b.green + b.yellow))
+      const overRed = clamp((excess - b.yellow) / overSpan)
+      speedScale = 1.16 + 0.25 * overRed
+      targetX = baseX + signed * (excess * 7.4 + overRed * 1.65)
+      targetY =
+        style === 'low_drive'
+          ? 1.15 + 1.85 * overRed
+          : style === 'loft_pass'
+            ? 2.95 + 1.35 * overRed
+            : baseY + excess * 8.2 + 1.55 + 1.95 * overRed
+      arc *= 1.18 + 0.25 * overRed
+    }
+  }
+
+  let speed = FREEKICK_STYLES[style].speed * (0.78 + 0.38 * a.strength) * speedScale
+  const spinControl = (0.72 + 0.35 * (0.5 * a.passing + 0.5 * a.vision)) * (zone === '欠力' ? 0.42 : 1)
   let curve = CURVE_OPTIONS[curveOption].bend * spinControl * 0.48
-  const knuckleDrop = style === 'knuckle' ? 0.55 + 0.35 * a.shooting : 0
+  const knuckleDrop = style === 'knuckle' && zone !== '欠力' && zone !== '过力' ? 0.55 + 0.35 * a.shooting : 0
 
   if (env && !isStandardEnvironment(env)) {
     const ep = environmentPhysics(env)
@@ -496,6 +536,44 @@ export function makeOpponentFreeKick(
       ? { x: spot.wallBaseX + (r1 - 0.5) * 1.1, y: 0.24 }
       : { x: (r1 < 0.5 ? -1 : 1) * (1.2 + r2 * 1.9), y: 1.15 + r1 * 0.95 }
   return makeFreeKickShot(spot, style, curveOpt, aim, b.center + (r2 - 0.5) * 0.14, shooter, s2, env)
+}
+
+export function planFreeKickKeeperDive(
+  s: FreeKickShot,
+  a: FreeKickAbility,
+  rnd: () => number,
+): Dive | null {
+  const mkTargetDive = (at: number, tx: number, ty: number): Dive => {
+    const dx = tx
+    const dy = ty - 1.06
+    const len = Math.hypot(dx, dy) || 1
+    return { at, dir: { x: dx / len, y: dy / len }, target: { x: tx, y: ty } }
+  }
+
+  if (s.style === 'loft_pass') {
+    const ht = s.spot.headerTarget
+    // Keeper tracks the cross and reacts to the back-post header redirect
+    const startAt = s.time - 0.04 + (1 - a.reflexes) * 0.14 + rnd() * 0.05
+    return mkTargetDive(startAt, ht.x * 0.86, 1.24)
+  }
+
+  const atGlove = s.time * (1 - GLOVE_Z / s.spot.z)
+  const pGlove = fkPrimaryBallAt(s, atGlove)
+
+  // Slow / under-powered shots: plenty of flight time from 20m+, keeper tracks & catches cleanly
+  if (s.zone === '欠力' || s.zone === '稍轻' || s.time >= 1.08) {
+    return mkTargetDive(0.12 + (1 - a.reflexes) * 0.1, pGlove.x, pGlove.y)
+  }
+
+  // Central shots within goalkeeper's natural patrol zone
+  if (Math.abs(pGlove.x) < 1.28) {
+    return mkTargetDive(0.14 + (1 - a.reflexes) * 0.08, pGlove.x, pGlove.y)
+  }
+
+  // Fast Green/Yellow shots toward the corners: wall screens initial vision (~0.24-0.38s delay)
+  // Well-placed Green curlers/knuckleballs into the top/side corner beat his dive; poorly placed ones are saved!
+  const screenDelay = 0.23 + (1 - a.reflexes) * 0.15 + rnd() * 0.08
+  return mkTargetDive(screenDelay, pGlove.x, pGlove.y)
 }
 
 export { fromKeeperPad }

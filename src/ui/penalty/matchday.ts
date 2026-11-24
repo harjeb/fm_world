@@ -406,12 +406,21 @@ export async function loadMatchday(club: Team) {
     fig.root.updateMatrixWorld(true)
   }
 
-  function pose(k: ReturnType<typeof keeperAt>, run: number, spotX = 0, spotZ = SPOT) {
+  function pose(
+    k: ReturnType<typeof keeperAt>,
+    run: number,
+    spotX = 0,
+    spotZ = SPOT,
+    afterContact = 0,
+    keeperLand = 0,
+  ) {
     // --- STRIKER ---
     const sc = kicker.root.scale.y
     const aimYaw = Math.atan2(-spotX, spotZ)
-    const approachX = spotX - 0.14 - 0.04 * clamp(run / 0.82)
-    const approachZ = spotZ + 0.22 + 1.66 * (1 - run)
+    const settle = afterContact > 0 ? clamp(afterContact / 0.54) : 0
+    const settleEase = settle * (2 - settle)
+    const approachX = spotX - 0.14 - 0.04 * clamp(run / 0.82) + 0.06 * settleEase
+    const approachZ = spotZ + 0.22 + 1.66 * (1 - run) - 0.34 * settleEase
     const runLift = run > 0 && run < 0.96 ? Math.abs(Math.sin(4 * Math.PI * run)) * 0.035 : 0
     kicker.root.position.set(approachX, 0.96 * sc, approachZ)
 
@@ -445,7 +454,7 @@ export async function loadMatchday(club: Team) {
       kicker.elbows[0].rotation.set(0.85, 0, 0)
       kicker.elbows[1].rotation.set(0.85, 0, 0)
       plantFeetOnTurf(kicker, runLift)
-    } else {
+    } else if (afterContact <= 0) {
       const w = clamp((run - 0.78) / 0.22)
       const swing = w < 0.35 ? -0.62 * (w / 0.35) : -0.62 + 1.56 * ((w - 0.35) / 0.65)
       const rootX = -0.15 + 0.11 * w
@@ -461,27 +470,55 @@ export async function loadMatchday(club: Team) {
       kicker.elbows[0].rotation.set(0.55, 0, 0)
       kicker.elbows[1].rotation.set(0.65, 0, 0)
       plantFeetOnTurf(kicker, 0)
+    } else {
+      // Smooth post-strike follow-through: kicking leg swings down into a balanced forward step + idle breathing
+      const breathe = afterContact > 0.54 ? Math.sin((afterContact - 0.54) * 2.8) * 0.018 : 0
+      const rootX = -0.04 * (1 - settleEase) - 0.03 * settleEase + breathe * 0.5
+      const rootY = -0.14 * (1 - settleEase) + aimYaw * 0.45 * settleEase
+      const rootZ = 0.13 * (1 - settleEase)
+      kicker.root.rotation.set(rootX, rootY, rootZ, 'YXZ')
+
+      const hipL = 0.15 * (1 - settleEase) + 0.18 * settleEase
+      const kneeL = -0.24 * (1 - settleEase) - 0.2 * settleEase
+      kicker.legs[0].rotation.set(hipL, 0, -0.06)
+      kicker.knees[0].rotation.set(kneeL, 0, 0)
+      kicker.ankles[0].rotation.set(-(rootX + hipL + kneeL), 0, 0.06)
+
+      // Right kicking leg lowers smoothly from +0.94 rad high follow-through down onto the turf (-0.14 rad forward stance)
+      const hipR = 0.94 * (1 - settleEase) - 0.14 * settleEase
+      const kneeR = -0.198 * (1 - settleEase) - 0.22 * settleEase - Math.sin(settle * Math.PI) * 0.24
+      kicker.legs[1].rotation.set(hipR, 0, 0.07)
+      kicker.knees[1].rotation.set(kneeR, 0, 0)
+      kicker.ankles[1].rotation.set(-0.22 * (1 - settleEase) - (rootX + hipR + kneeR) * 0.85 * settleEase, 0, -0.05)
+
+      kicker.arms[0].rotation.set(0.32 * (1 - settleEase) + (0.08 + breathe) * settleEase, 0, -0.75 * (1 - settleEase) - 0.15 * settleEase)
+      kicker.arms[1].rotation.set(-0.38 * (1 - settleEase) - (0.06 - breathe) * settleEase, 0, 0.28 * (1 - settleEase) + 0.15 * settleEase)
+      kicker.elbows[0].rotation.set(0.55 * (1 - settleEase) + 0.44 * settleEase, 0, 0)
+      kicker.elbows[1].rotation.set(0.65 * (1 - settleEase) + 0.48 * settleEase, 0, 0)
+      plantFeetOnTurf(kicker, 0)
     }
 
     // --- GOALKEEPER ---
-    const diveMag = clamp(Math.abs(k.body.x) / 1.35)
+    const diveMag = clamp(Math.max(Math.abs(k.body.x) / 1.35, keeperLand))
     const rootX = -0.14 * (1 - diveMag)
+    const sideSign = Math.sign(k.body.x) || 1
+    const airRoll = clamp(k.body.x * 0.48, -1.24, 1.24)
+    const landedRoll = sideSign * 1.42
+    const rollZ = airRoll * (1 - keeperLand) + landedRoll * keeperLand
     keeper.root.position.set(k.body.x, k.body.y, GLOVE_Z - 0.22 * (1 - diveMag * 0.65))
-    keeper.root.rotation.set(rootX, Math.PI, clamp(k.body.x * 0.48, -1.24, 1.24), 'YXZ')
+    keeper.root.rotation.set(rootX, Math.PI, rollZ, 'YXZ')
 
     const crouchHip = 0.28 * (1 - diveMag)
     const crouchKnee = -0.52 * (1 - diveMag)
-    const spread = 0.17 * (1 - diveMag) + 0.06 * diveMag
-    const sideSign = Math.sign(k.body.x)
-    const hipL = crouchHip - 0.18 * diveMag
-    const hipR = crouchHip - 0.18 * diveMag
-    const kneeL = crouchKnee - (sideSign > 0 ? 0.32 : 0.12) * diveMag
-    const kneeR = crouchKnee - (sideSign < 0 ? 0.32 : 0.12) * diveMag
+    const spread = 0.17 * (1 - diveMag) + 0.06 * diveMag * (1 - keeperLand * 0.5)
+    const hipL = crouchHip - 0.18 * diveMag + 0.28 * keeperLand
+    const hipR = crouchHip - 0.18 * diveMag + 0.18 * keeperLand
+    const kneeL = crouchKnee - (sideSign > 0 ? 0.32 : 0.12) * diveMag - 0.35 * keeperLand
+    const kneeR = crouchKnee - (sideSign < 0 ? 0.32 : 0.12) * diveMag - 0.25 * keeperLand
     keeper.legs[0].rotation.set(hipL, 0, -spread)
     keeper.legs[1].rotation.set(hipR, 0, spread)
     keeper.knees[0].rotation.set(kneeL, 0, 0)
     keeper.knees[1].rotation.set(kneeR, 0, 0)
-    // Keep goalkeeper boot soles 100% level on turf during crouch, relax ankles during mid-air dive
     keeper.ankles[0].rotation.set(-(rootX + hipL + kneeL) * (1 - diveMag) - 0.28 * diveMag, 0, spread * (1 - diveMag))
     keeper.ankles[1].rotation.set(-(rootX + hipR + kneeR) * (1 - diveMag) - 0.28 * diveMag, 0, -spread * (1 - diveMag))
 
