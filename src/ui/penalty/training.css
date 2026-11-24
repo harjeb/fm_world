@@ -1,0 +1,134 @@
+.penalty-lab {
+  box-sizing: border-box;
+  width: min(820px, 96vw);
+  max-height: 95dvh;
+  padding: 1rem;
+  background: #10262d;
+  color: #f1f6eb;
+  border: 1px solid #638579;
+  border-radius: 16px;
+  overflow: auto;
+  color-scheme: dark;
+  margin: auto;
+  font:
+    500 15px/1.4 system-ui,
+    sans-serif;
+}
+.penalty-lab::backdrop {
+  background: #07151de0;
+}
+.penalty-lab header,
+.penalty-lab footer,
+.penalty-lab .settings {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.penalty-lab header {
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+.penalty-lab h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: inherit;
+}
+.penalty-lab small {
+  color: #a8cabe;
+}
+.penalty-lab button,
+.penalty-lab select {
+  font: inherit;
+  border-radius: 6px;
+  border: 1px solid #648276;
+  padding: 0.4rem 0.6rem;
+  background: #233e45;
+  color: inherit;
+}
+.penalty-lab .pitch3 {
+  position: relative;
+}
+.penalty-lab .ground {
+  height: clamp(210px, 46dvh, 410px);
+  width: 100%;
+  touch-action: none;
+  background: #315746;
+  border-radius: 9px;
+  overflow: hidden;
+}
+.penalty-lab canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.penalty-lab .meter {
+  pointer-events: none;
+  position: absolute;
+  right: 12px;
+  bottom: 10%;
+  height: 65%;
+  width: 16px;
+  border: 2px solid white;
+  border-radius: 6px;
+}
+.penalty-lab .meter i {
+  position: absolute;
+  left: -5px;
+  right: -5px;
+  height: 4px;
+  background: white;
+  box-shadow: 0 1px 3px #16272c;
+}
+.penalty-lab .pad {
+  touch-action: none;
+  user-select: none;
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 88px;
+  height: 88px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px solid #e1fff2b0;
+  background: #102730a0;
+}
+.penalty-lab .pad span {
+  display: grid;
+  place-items: center;
+  width: 37px;
+  height: 37px;
+  border: 1px solid #f5ddb0;
+  background: #24383b;
+  color: #ffdf98;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.penalty-lab [hidden] {
+  display: none !important;
+}
+.penalty-lab .settings {
+  align-items: end;
+  gap: 0.5rem;
+}
+.penalty-lab label {
+  display: grid;
+  gap: 0.14rem;
+  font-size: 0.8rem;
+  color: #d7e7d9;
+}
+.penalty-lab select {
+  max-width: 13rem;
+}
+.penalty-lab footer {
+  margin-top: 0.9rem;
+}
+.penalty-lab .go {
+  background: #f9ca6a;
+  color: #172731;
+  font-weight: 700;
+}
+.penalty-lab .call {
+  margin: 0.65rem 0;
+}

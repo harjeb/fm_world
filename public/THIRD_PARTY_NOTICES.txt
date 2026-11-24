@@ -26,6 +26,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## Three.js
+
+[Three.js](https://threejs.org/) renders the optional S3 penalty training ground. MIT License, Copyright © 2010-2026 three.js authors. The MIT permission notice and disclaimer above apply to this library as well.
+
 ## fflate
 
 [fflate](https://github.com/101arrowz/fflate) compresses large browser saves.

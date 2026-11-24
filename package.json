@@ -18,6 +18,7 @@
     "match:motion": "tsx scripts/motion-profile.ts",
     "match:timing": "tsx scripts/playback-timing.ts",
     "match:tracking": "tsx scripts/export-match-tracking.ts",
+    "smoke:penalty": "node scripts/penalty-practice-smoke.mjs",
     "smoke:animation": "node scripts/match-animation-smoke.mjs",
     "server": "tsx server/index.ts",
     "start": "tsx server/index.ts",
@@ -54,6 +55,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
+    "@types/three": "0.187.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
@@ -62,6 +64,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
     "fflate": "0.8.2",
+    "three": "0.187.0",
     "zod": "^3.25.76"
   }
 }

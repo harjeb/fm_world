@@ -2458,6 +2458,11 @@ document.addEventListener('click', async (event) => {
       openFriendly(startSingleChallenge(game, teamId))
       break
     }
+    case 'penalty-training': {
+      try { const { openPenaltyTraining } = await import('./penalty/training.ts'); if (ui.screen === 'challenge') openPenaltyTraining(game.roster) }
+      catch { showNotice('3D 训练场加载失败，请稍后重试。') }
+      return
+    }
     case 'start-legend-challenge': {
       const teamId = actionEl.dataset.team
       if (!teamId) break
