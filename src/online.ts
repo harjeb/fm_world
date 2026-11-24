@@ -305,6 +305,7 @@ function triggerResyncFromServer(): void {
         onlineState.revision = current.revision
         onlineState.lastSync = Date.now()
         syncedGame = current.game
+        if (onlineState.error.includes('另一设备')) onlineState.error = ''
         remoteGameHandler?.(current.game)
         if (publicWorld && current.game.world?.seasonIndex !== publicWorld.seasonIndex) void refreshPublicWorld()
         notify()
@@ -589,6 +590,7 @@ function connectEvents(): void {
         const next = applyStatePatch(syncedGame, parsed)
         syncedGame = next
         onlineState.revision = parsed.revision
+        if (onlineState.error.includes('另一设备')) onlineState.error = ''
         remoteGameHandler?.(next)
         if (publicWorld && next.world?.seasonIndex !== publicWorld.seasonIndex) void refreshPublicWorld()
         notify()
@@ -609,7 +611,10 @@ function connectEvents(): void {
       } else {
         onlineState.revision = data.revision
         syncedGame = data.game
-        if (data.source !== clientId) remoteGameHandler?.(data.game)
+        if (data.source !== clientId) {
+          if (onlineState.error.includes('另一设备')) onlineState.error = ''
+          remoteGameHandler?.(data.game)
+        }
       }
       if (publicWorld && data.game.world?.seasonIndex !== publicWorld.seasonIndex) void refreshPublicWorld()
       notify()
@@ -735,6 +740,7 @@ async function flushSave(): Promise<void> {
     return
   }
   if (!token || !pendingGame) return
+  const epoch = sessionEpoch
   saving = true
   let finishSave!: () => void
   saveFinished = new Promise<void>((resolve) => { finishSave = resolve })
@@ -748,20 +754,33 @@ async function flushSave(): Promise<void> {
       // 联赛直播回放是服务器下发的副本，不存回服务器（几十 KB 的初始引擎状态）。
       body: JSON.stringify({ game: withoutDeferredCupPool(game.activeMatch?.preplayed ? { ...game, activeMatch: undefined } : game), baseRevision }),
     }, SAVE_TIMEOUT_MS)
+    if (epoch !== sessionEpoch || !isOnlineMode()) return
     if (pendingGame && pendingRevision === baseRevision) pendingRevision = result.revision
     onlineState.revision = Math.max(onlineState.revision, result.revision)
     syncedGame = game
     onlineState.lastSync = result.updatedAt
     onlineState.error = ''
   } catch (error) {
+    if (epoch !== sessionEpoch || !isOnlineMode()) return
     // 保存失败不等于退出联机会话；保留服务器球队快照，不能切到本地推进逻辑。
-    onlineState.error = error instanceof Error ? error.message : '同步失败'
-    if (onlineState.error.includes('另一设备')) {
+    const message = error instanceof Error ? error.message : '同步失败'
+    onlineState.error = message
+    if (message.includes('另一设备')) {
       try {
-        const current = await requestJson<{ game: GameState; revision: number }>('/api/game', undefined, RECOVERY_TIMEOUT_MS)
+        const current = await requestJson<{ game: GameState; revision: number }>('/api/game', { cache: 'no-store' }, RECOVERY_TIMEOUT_MS)
+        if (epoch !== sessionEpoch || !isOnlineMode() || !current.game || !Number.isSafeInteger(current.revision)) return
         hydrateOnlineGame(current.game)
         onlineState.revision = current.revision
+        onlineState.lastSync = Date.now()
         syncedGame = current.game
+        if (pendingGame && pendingRevision <= baseRevision) {
+          pendingGame = null
+          if (saveTimer !== null) {
+            window.clearTimeout(saveTimer)
+            saveTimer = null
+          }
+        }
+        onlineState.error = ''
         remoteGameHandler?.(current.game)
       } catch {
         // 留到下一次 SSE/手动刷新。
@@ -771,12 +790,15 @@ async function flushSave(): Promise<void> {
     saving = false
     finishSave()
     saveFinished = null
+    if (epoch !== sessionEpoch) return
     if (!pendingGame) {
       if (deferredState) {
         // 自己保存成功后，保存前收到的同版本 SSE 不能覆盖已推进的本地比赛。
         if (deferredState.revision > onlineState.revision) {
           onlineState.revision = deferredState.revision
+          onlineState.lastSync = Date.now()
           syncedGame = deferredState.game
+          if (onlineState.error.includes('另一设备')) onlineState.error = ''
           remoteGameHandler?.(deferredState.game)
         }
         deferredState = null
@@ -796,7 +818,10 @@ async function flushSave(): Promise<void> {
             break
           }
         }
-        if (applied && !deferredResync && syncedGame) remoteGameHandler?.(syncedGame)
+        if (applied && !deferredResync && syncedGame) {
+          if (onlineState.error.includes('另一设备')) onlineState.error = ''
+          remoteGameHandler?.(syncedGame)
+        }
       }
       if (deferredResync) {
         deferredResync = false
@@ -844,15 +869,17 @@ export async function leagueActionOnline(body: Record<string, unknown>): Promise
 
 /** 巅峰次数由服务器原子扣除，避免多设备重复使用。 */
 export async function startPeakOnline(stage: number): Promise<GameState> {
+  const epoch = sessionEpoch
   try {
     return await onlineGameAction('/api/peak/start', { stage })
   } catch (error) {
     // 其他设备可能已经消耗次数，失败后拉回权威状态以更新页面。
     try {
-      const current = await requestJson<{ game: GameState; revision: number }>('/api/game')
-      if (current.revision >= onlineState.revision) {
+      const current = await requestJson<{ game: GameState; revision: number }>('/api/game', { cache: 'no-store' }, RECOVERY_TIMEOUT_MS)
+      if (epoch === sessionEpoch && isOnlineMode() && current.game && Number.isSafeInteger(current.revision) && current.revision >= onlineState.revision) {
         hydrateOnlineGame(current.game)
         onlineState.revision = current.revision
+        onlineState.lastSync = Date.now()
         syncedGame = current.game
         remoteGameHandler?.(current.game)
         notify()
@@ -881,15 +908,17 @@ export async function respondOfferOnline(offerId: string, accept: boolean): Prom
 
 /** 响应丢失或并发失败时先取回权威状态：请求可能已提交，不能盲目在本地重做。 */
 async function protectedGameAction(endpoint: string, body: Record<string, unknown> | (() => Record<string, unknown>)): Promise<GameState> {
+  const epoch = sessionEpoch
   await requireSyncedOnline()
   try {
     return await submitGameAction(endpoint, body, ACTION_TIMEOUT_MS)
   } catch (error) {
     try {
-      const current = await requestJson<{ game: GameState; revision: number }>('/api/game', undefined, RECOVERY_TIMEOUT_MS)
-      if (current.revision >= onlineState.revision) {
+      const current = await requestJson<{ game: GameState; revision: number }>('/api/game', { cache: 'no-store' }, RECOVERY_TIMEOUT_MS)
+      if (epoch === sessionEpoch && isOnlineMode() && current.game && Number.isSafeInteger(current.revision) && current.revision >= onlineState.revision) {
         hydrateOnlineGame(current.game)
         onlineState.revision = current.revision
+        onlineState.lastSync = Date.now()
         syncedGame = current.game
         remoteGameHandler?.(current.game)
         notify()
