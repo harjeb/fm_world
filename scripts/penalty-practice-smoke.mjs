@@ -89,6 +89,22 @@ try {
   await click('[data-nav="challenge"]')
   await click('[data-action="penalty-training"]')
   await wait('!!document.querySelector(".penalty-lab canvas")')
+  // Verify mobile frame scroll-lock: page & dialog must not scroll or drag when swiping on the 3D pitch!
+  assert.equal(await evaluate('document.documentElement.classList.contains("pk-modal-lock")'), true)
+  assert.equal(await evaluate('getComputedStyle(document.querySelector(".penalty-lab")).overflow'), 'hidden')
+  const { sx, sy } = await evaluate(
+    '(()=>{const r=document.querySelector(".penalty-lab .ground").getBoundingClientRect();return {sx:r.x+r.width/2,sy:r.y+r.height/2}})()',
+  )
+  for (const [type, points] of [
+    ['touchStart', [{ x: sx, y: sy }]],
+    ['touchMove', [{ x: sx - 45, y: sy + 55 }]],
+    ['touchEnd', []],
+  ])
+    await send('Input.dispatchTouchEvent', { type, touchPoints: points })
+  assert.deepEqual(
+    await evaluate('({ winY: window.scrollY, dlgY: document.querySelector(".penalty-lab").scrollTop })'),
+    { winY: 0, dlgY: 0 },
+  )
   for (const mode of ['player', 'keeper', 'ball', 'play']) {
     await evaluate(
       `(()=>{const s=document.querySelector('.penalty-lab .inspect');s.value='${mode}';s.dispatchEvent(new Event('change'))})()`,
@@ -129,6 +145,28 @@ try {
   assert.match(await evaluate('document.querySelector(".penalty-lab .call").textContent'), /留在中路/)
   await click('.penalty-lab .leave')
   await wait('!document.querySelector(".penalty-lab")')
+  assert.equal(await evaluate('document.documentElement.classList.contains("pk-modal-lock")'), false)
+  // Verify Free Kick Lab mobile frame scroll-lock as well
+  await click('[data-action="freekick-training"]')
+  await wait('!!document.querySelector(".freekick-lab canvas")')
+  assert.equal(await evaluate('document.documentElement.classList.contains("pk-modal-lock")'), true)
+  assert.equal(await evaluate('getComputedStyle(document.querySelector(".freekick-lab")).overflow'), 'hidden')
+  const { fkX, fkY } = await evaluate(
+    '(()=>{const r=document.querySelector(".freekick-lab .ground").getBoundingClientRect();return {fkX:r.x+r.width/2,fkY:r.y+r.height/2}})()',
+  )
+  for (const [type, points] of [
+    ['touchStart', [{ x: fkX, y: fkY }]],
+    ['touchMove', [{ x: fkX + 50, y: fkY - 60 }]],
+    ['touchEnd', []],
+  ])
+    await send('Input.dispatchTouchEvent', { type, touchPoints: points })
+  assert.deepEqual(
+    await evaluate('({ winY: window.scrollY, dlgY: document.querySelector(".freekick-lab").scrollTop })'),
+    { winY: 0, dlgY: 0 },
+  )
+  await click('.freekick-lab .leave')
+  await wait('!document.querySelector(".penalty-lab")')
+  assert.equal(await evaluate('document.documentElement.classList.contains("pk-modal-lock")'), false)
   await click('[data-action="penalty-training"]')
   await wait('!!document.querySelector(".penalty-lab canvas")')
   await click('.penalty-lab .leave')

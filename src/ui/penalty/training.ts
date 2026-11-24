@@ -1,5 +1,6 @@
 import './training.css'
 import { createHud, shotHud } from './hud.ts'
+import { lockSetPieceFrame } from './frame-lock.ts'
 import { attrRating } from '../../game/scale.ts'
 import type { Player } from '../../game/types.ts'
 import {
@@ -133,10 +134,12 @@ export async function openPenaltyTraining(
   const ctrl = new AbortController(),
     opts = { signal: ctrl.signal }
   let frame = 0,
-    ground: ReturnType<typeof createGround> | undefined
+    ground: ReturnType<typeof createGround> | undefined,
+    unlockFrame: (() => void) | undefined
   const end = () => {
     ctrl.abort()
     cancelAnimationFrame(frame)
+    unlockFrame?.()
     ground?.dispose()
     d.remove()
   }
@@ -151,6 +154,7 @@ export async function openPenaltyTraining(
     padKnob = el('.pad-knob'),
     hud = createHud(pitch),
     go = el<HTMLButtonElement>('.go')
+  unlockFrame = lockSetPieceFrame(d, pitch, ctrl.signal)
   const setStatus = (text: string, tone: 'info' | 'charge' | 'good' | 'warn' | 'bad' = 'info') => {
     status.textContent = text
     status.dataset.tone = tone
