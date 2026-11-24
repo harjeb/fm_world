@@ -2290,9 +2290,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         ? refreshOffseasonBoardPreview(account.game, ownedClubId(account), sharedWorld.teams)
         : false
       const youthChanged = settleYouth(account.game, now())
-      // 体能每小时按比例恢复；PvE 迁移不覆盖 main 的体能和共享名册逻辑。
+      // 体能与训练精力均由服务器按实时时间自动结算，避免联机球员停留在低精力无法开启培养。
       const rested = settleAccountConditions(account)
-      let migrated = achResult.changed || youthChanged || seasonShopAwarded || boardLocked || boardPreviewed || markedShared || elevenUpgraded || signaturesAdded || cardsAdded || pveAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || sharedTeamsChanged || sharedFixturesChanged || sharedWorldChanged || publishedMatches.changed || rested || absorbInto(account)
+      const energySettled = settleSquadEnergy(account.game, now(), 1)
+      let migrated = achResult.changed || youthChanged || seasonShopAwarded || boardLocked || boardPreviewed || markedShared || elevenUpgraded || signaturesAdded || cardsAdded || pveAdded || namesUpgraded || traitsUpgraded || attrsUpgraded || sharedTeamsChanged || sharedFixturesChanged || sharedWorldChanged || publishedMatches.changed || rested || energySettled || absorbInto(account)
       const economyAdded = account.game.economy == null || account.game.economy.fans === undefined
       economyOf(account.game)
       const progressingLeague = !!account.game.activeMatch?.context.isLeague
@@ -3601,6 +3602,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         }
       } else {
         if (typeof body.playerId !== 'string' || !body.playerId || !Array.isArray(body.bookKeys) || !body.bookKeys.every(key => typeof key === 'string') || typeof body.points !== 'number') return json(res, 400, { error: '培养参数无效' })
+        settleSquadEnergy(game, now())
         outcome = startTrainingWithSupport(game, body.playerId, undefined, body.bookKeys as string[], body.points as number, false)
       }
       if (!outcome.ok) { await sendJson(400, { error: outcome.error, revision: account.revision, game: publicGame(account) }, true); return }
@@ -3897,9 +3899,15 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         const known = account.game.roster.find((item) => item.id === player.id)
         // 联机比赛体能由已发布的服务器结果决定；旧页面不能把赛后体能恢复成赛前值。
         if (known && sharedWorld.matchBook!.conditionAt[player.id] !== undefined) player.condition = known.condition
-        // 体能恢复由服务器每小时结算，页面不能改结算时间。
-        if (known) player.recoveryAt = known.recoveryAt
-        else delete player.recoveryAt
+        // 体能与精力恢复由服务器权威结算，旧页面保存不能倒扣或改写结算时间。
+        if (known) {
+          player.recoveryAt = known.recoveryAt
+          player.energy = known.energy
+          player.energyAt = known.energyAt
+        } else {
+          delete player.recoveryAt
+          player.energyAt ??= now()
+        }
         if (known?.unhappy) player.unhappy = known.unhappy
         else delete player.unhappy
       }

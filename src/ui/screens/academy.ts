@@ -11,6 +11,8 @@ import { tipAttrs } from '../tooltip.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
 import { getSkillTier } from '../../game/inheritance.ts'
 import { game, ui, type SquadSortKey } from '../state.ts'
+import { currentEnergy } from '../../game/energy.ts'
+import { serverNow } from '../../online.ts'
 
 function sortValue(player: Player, key: SquadSortKey): number | string {
   switch (key) {
@@ -19,7 +21,7 @@ function sortValue(player: Player, key: SquadSortKey): number | string {
     case 'age': return player.age ?? 24
     case 'ca': return playerCA(player)
     case 'condition': return player.condition ?? 100
-    case 'energy': return player.energy ?? 100
+    case 'energy': return currentEnergy(player, serverNow())
     case 'value': return bestMarketValue(game, player)
     default: {
       const index = Number(key.slice(4))
@@ -77,7 +79,7 @@ function squadRow(player: Player): string {
     <td class="num strong">${caHeat(playerCA(player))}</td>
     ${mainAttrs(player).map((key) => `<td class="num">${attrHeat(player.attrs[key])}</td>`).join('')}
     <td class="meter-cell">${meter(player.condition ?? 100)}</td>
-    <td class="meter-cell">${meter(player.energy ?? 100)}</td>
+    <td class="meter-cell">${meter(currentEnergy(player, serverNow()))}</td>
     <td class="num dim">${bestMarketValue(game, player).toLocaleString()}</td>
     <td>${statusTags(player)}</td>
     <td><span class="tag-row">${traitLabel(player.traitId, true)}${skills}${more}</span></td>

@@ -18,7 +18,7 @@ import { aiPoachRound, expireOffers, generateAIOffers, joinAIClub, localMarketCl
 import { aiBidFor, aiSignFreeAgents, playerValue } from '../src/game/ai-club.ts'
 import { aiTransferOffers, clubSaleTerms, previewClubSigning, signClubPlayer } from '../src/game/market.ts'
 import { refreshAILineups, validateLineup } from '../src/game/squad.ts'
-import { settleEnergy } from '../src/game/energy.ts'
+import { currentEnergy, settleEnergy } from '../src/game/energy.ts'
 import { startTraining } from '../src/game/actions.ts'
 import { catchUpSeason } from '../src/game/season.ts'
 import { GAME_DAY_MS, seasonStartForRound } from '../src/game/calendar.ts'
@@ -313,6 +313,66 @@ describe('训练精力', () => {
     expect(startTraining(game, player.id).ok).toBe(false)
     player.energyAt = Date.now() - 0.7 * GAME_DAY_MS
     expect(startTraining(game, player.id).ok).toBe(true)
+  })
+
+  it('联机服务端自动补算低精力球员恢复，且旧页面 PUT /api/game 不会覆盖已恢复的精力', async () => {
+    const game = createWorldGame(2503)
+    const p = game.roster[0]
+    const t0 = Date.UTC(2026, 10, 24, 0, 0, 0)
+    p.energy = 10
+    p.energyAt = t0
+    // 不足 1 点时不推进 energyAt，不丢失小数时间
+    expect(settleEnergy(p, t0 + 60_000, 1)).toBe(false)
+    expect(p.energyAt).toBe(t0)
+    expect(currentEnergy(p, t0 + 60_000)).toBeGreaterThan(10)
+    // 累计超过 1 点后一次性结算完整恢复
+    expect(settleEnergy(p, t0 + 10 * 60_000, 1)).toBe(true)
+    expect(p.energy).toBeGreaterThan(14)
+
+    // 联机服务器测试：开培养耗至 < 30 → 时间推进 4 小时 → GET /api/game 自动回满 100，旧页 PUT 不倒扣
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-energy-srv-'))
+    dirs.push(dir)
+    let clockNow = Date.UTC(2026, 10, 24, 2, 0, 0)
+    const srv = createAppServer({ dataDir: dir, staticDir: path.resolve('dist'), tickMs: 0, now: () => clockNow })
+    servers.push(srv)
+    await new Promise<void>((resolve) => srv.server.listen(0, '127.0.0.1', resolve))
+    const base = `http://127.0.0.1:${(srv.server.address() as AddressInfo).port}`
+
+    const reg = await fetch(`${base}/api/register`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'energy_coach', password: 'password123', clubName: '精力测试队' }),
+    }).then((r) => r.json()) as { token: string; revision: number; game: any }
+    const targetId = reg.game.roster[0].id
+
+    // 连续开 3 轮（或者先开始 1 轮耗掉 30 精力至 70）
+    const start1 = await fetch(`${base}/api/training/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${reg.token}` },
+      body: JSON.stringify({ playerId: targetId, bookKeys: [], points: 0 }),
+    }).then((r) => r.json()) as { ok: boolean; revision: number; game: any }
+    expect(start1.ok).toBe(true)
+    const tiredSnap = structuredClone(start1.game)
+    expect(tiredSnap.roster.find((x: any) => x.id === targetId).energy).toBeLessThanOrEqual(70)
+
+    // 推进 4 小时，联机服务端拉档即自动补算回满 100
+    clockNow += 4 * 60 * 60_000
+    const afterWait = await fetch(`${base}/api/game`, {
+      headers: { authorization: `Bearer ${reg.token}` },
+    }).then((r) => r.json()) as { revision: number; game: any }
+    expect(afterWait.game.roster.find((x: any) => x.id === targetId).energy).toBe(100)
+
+    // 旧页面携带 energy=70 执行 PUT /api/game，服务端必须保留 100 不被覆盖
+    const putRes = await fetch(`${base}/api/game`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${reg.token}` },
+      body: JSON.stringify({ game: tiredSnap, baseRevision: afterWait.revision }),
+    })
+    expect(putRes.status).toBe(200)
+    const afterPut = await fetch(`${base}/api/game`, {
+      headers: { authorization: `Bearer ${reg.token}` },
+    }).then((r) => r.json()) as { game: any }
+    expect(afterPut.game.roster.find((x: any) => x.id === targetId).energy).toBe(100)
   })
 })
 

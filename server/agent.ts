@@ -91,6 +91,7 @@ import {
   shoutStatusOf,
 } from '../src/game/match/shouts.ts'
 import { injuryUntil } from '../src/game/injury.ts'
+import { currentEnergy } from '../src/game/energy.ts'
 import { buildReview } from '../src/game/review.ts'
 import { cardRecyclePoints, cardsOf, playerCards, recyclePlayerCards, setCardRecycleLock, untrainedPlayer } from '../src/game/cards.ts'
 import { skillEffectText, traitEffectText } from '../src/game/data/skill-effects.ts'
@@ -269,7 +270,7 @@ export function playerView(player: GameState['roster'][number], game: GameState,
     skills: player.skills,
     skillTiers: player.skillTiers ?? {},
     condition: player.condition,
-    energy: player.energy,
+    energy: Math.round(currentEnergy(player, now) * 10) / 10,
     /** 不满（拒绝了高价报价）：截止时间前精力恢复只剩一成。 */
     unhappy: player.unhappy ? { until: player.unhappy.until, reason: player.unhappy.reason } : null,
     injuryUntil: injuryUntil(game, player, now),
@@ -636,7 +637,7 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
       facilityLevels: session.facilityLevels ?? null,
       fatigue: session.fatigue,
       stamina: 100 - session.fatigue,
-      energy: player?.energy ?? session.energy,
+      energy: player ? Math.round(currentEnergy(player, now) * 10) / 10 : session.energy,
       completed: session.completed,
       cardId: session.cardId ?? null,
       routeId: session.routeId,

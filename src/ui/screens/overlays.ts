@@ -9,7 +9,8 @@ import { attrRating, initialDisplayCA, mainAttrsFor } from '../../game/rating.ts
 import { MAIN_FIELD_ATTRS, MAIN_GK_ATTRS } from '../../game/scale.ts'
 import { worldTransferTeams, type ClubPreview } from '../../game/world.ts'
 import { conferenceLabel } from '../../game/data/world-clubs.ts'
-import { aiTransferMarket, isOnlineMode, marketState, onlineState, publicConfig, registrationClubs } from '../../online.ts'
+import { aiTransferMarket, isOnlineMode, marketState, onlineState, publicConfig, registrationClubs, serverNow } from '../../online.ts'
+import { currentEnergy } from '../../game/energy.ts'
 import { AUCTION_EXTEND_MS, auctionRaiseFee, committedFunds } from '../../game/auction.ts'
 import { checkWageCapForSigning, transferBudgetAvailable } from '../../game/board.ts'
 import { previewClubSigning } from '../../game/market.ts'
@@ -177,7 +178,7 @@ export function renderDetailOverlay(): string {
             ${owned ? `<h3>状态</h3>
             <div class="profile-meters">
               <div><span>比赛体能</span>${meter(player.condition ?? 100)}</div>
-              <div><span>训练精力</span>${meter(player.energy ?? 100)}</div>
+              <div><span>训练精力</span>${meter(currentEnergy(player, serverNow()))}</div>
             </div>` : ''}
             <h3>性格</h3>
             <div class="profile-meters">${personality.map(([label, value]) => `<div><span>${label}</span><span class="meter-wrap"><span class="meter neutral"><i style="width:${Math.max(0, Math.min(100, value))}%"></i></span><span class="meter-value">${Math.round(value)}</span></span></div>`).join('')}</div>

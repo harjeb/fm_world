@@ -19,6 +19,8 @@ import { keyAttrsOf } from '../../game/data/key-attrs.ts'
 import { activityColor, attrColor, attributeRadar, attrHeat, bookTitle, caHeat, cardName, cardSelect, icon, mainAttrs, meter, pageHead, panel, posBadge, primaryPosition, skillGroups, tag, tile, traitLabel } from '../components.ts'
 import { attrLabel, attrValue, caDelta, displayEventHint, esc, gainHtml, gainText, pct, playerCA, positionLabel, skillName, trainingLogText } from '../format.ts'
 import { game, ui } from '../state.ts'
+import { currentEnergy } from '../../game/energy.ts'
+import { serverNow } from '../../online.ts'
 import { filterTrainingBookIds } from '../training-books.ts'
 import { isYouthTrainee } from '../../game/youth.ts'
 import { youthBadge } from '../components.ts'
@@ -93,7 +95,7 @@ function overviewTable(): string {
       : session
         ? tag(session.pendingEventId ? '待处理事件' : `培养中 ${session.action}/${trainingActionsTotal(session)}`, session.pendingEventId ? 'gold' : 'info')
         : '<span class="muted small">空闲</span>'
-    const energy = player.energy ?? 100
+    const energy = currentEnergy(player, serverNow())
     return `<tr tabindex="0" class="clickable" data-action="open-training" data-player="${esc(player.id)}" data-key="${esc(player.id)}">
       <td>${posBadge(primaryPosition(player))}</td>
       <td class="name-cell"><span class="name-plain">${esc(player.name)}</span><small>${esc(player.enName)}</small></td>
@@ -164,7 +166,7 @@ function autoConfirmButton(player: Player): string {
   if (session?.completed || candidate) {
     return `<button class="btn" data-action="auto-strategy-close">保存策略（请先处理新卡）</button>`
   }
-  const energy = player.energy ?? 100
+  const energy = currentEnergy(player, serverNow())
   if (energy >= TRAINING_ENERGY_COST) {
     return `<button class="btn primary" data-action="training-auto-confirm" data-player="${esc(player.id)}">${icon('play', 14)}开始并自动培养（-${TRAINING_ENERGY_COST} 精力）</button>`
   }
@@ -347,7 +349,7 @@ function bookLoadout(session: TrainingSession): string {
 }
 
 function renderTrainingStart(player: Player): string {
-  const energy = player.energy ?? 100
+  const energy = currentEnergy(player, serverNow())
   const enough = energy >= TRAINING_ENERGY_COST
   const base = { ...baseBuild(player) }
   const gk = player.positions.GK > 0
@@ -440,7 +442,7 @@ function trainingHeader(current: Player, session: TrainingSession, cand: Player)
       <div class="stat-box"><span>培养中 CA</span><b>${playerCA(cand).toFixed(1)}</b><small class="${playerCA(cand) >= playerCA(current) ? 'up' : 'down'}">${caDelta(current, cand)} · 上限 ${Math.round(caCeilingOf(effectiveTrainingCeilings(session), current.positions.GK > 0))}</small></div>
       <div class="stat-box"><span>训练体力</span>${meter(stamina)}</div>
       ${(session.cupCeilingBonus ?? 0) > 0 ? `<div class="stat-box"><span>上限加成</span><b>+${session.cupCeilingBonus}</b></div>` : ''}
-      <div class="stat-box"><span>剩余精力</span>${meter(current.energy ?? 100)}</div>
+      <div class="stat-box"><span>剩余精力</span>${meter(currentEnergy(current, serverNow()))}</div>
       <div class="stat-box"><span>下次事件</span><b>${session.action >= total ? '—' : pct(eventP)}</b></div>
     </div>
     <div class="train-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${session.action}"><i style="width:${((session.action / total) * 100).toFixed(1)}%"></i></div>
