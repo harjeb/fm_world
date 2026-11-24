@@ -23,14 +23,14 @@ export const STANDARD: Ability = {
   handling: 0.55,
 }
 export const KICKS = {
-  push: { label: '推射', feet: ['脚内侧'], sweet: 0.47, speed: 20, arc: 0.24 },
-  drive: { label: '大力射门', feet: ['正脚背'], sweet: 0.73, speed: 29, arc: 0.35 },
-  snap: { label: '抽射', feet: ['正脚背', '外脚背'], sweet: 0.6, speed: 25, arc: 0.15 },
-  chip: { label: '勺子点球', feet: ['脚尖'], sweet: 0.3, speed: 14, arc: 1.28 },
+  push: { label: '推射', feet: ['脚内侧'], sweet: 0.74, speed: 20, arc: 0.24 },
+  drive: { label: '大力射门', feet: ['正脚背'], sweet: 0.81, speed: 29, arc: 0.35 },
+  snap: { label: '抽射', feet: ['正脚背', '外脚背'], sweet: 0.78, speed: 25, arc: 0.15 },
+  chip: { label: '勺子点球', feet: ['脚尖'], sweet: 0.62, speed: 14, arc: 1.28 },
 } as const
 export type Kick = keyof typeof KICKS
 export function band(k: Kick, a: Ability) {
-  const center = KICKS[k].sweet + (k === 'drive' ? 0.1 * a.strength : 0)
+  const center = KICKS[k].sweet + (k === 'drive' ? 0.05 * a.strength : 0)
   const green = (0.045 + 0.085 * a.shooting) * (k === 'drive' ? 0.78 : 1)
   return { center, green, yellow: 0.045 + 0.04 * a.shooting, cycle: 1.45 + 1.2 * a.composure }
 }

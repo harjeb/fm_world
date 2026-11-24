@@ -18,10 +18,12 @@ export function createGround(host: HTMLElement, art: Awaited<ReturnType<typeof l
   sky.height = 256
   const sky2d = sky.getContext('2d')!,
     skyRamp = sky2d.createLinearGradient(0, 0, 0, 256)
-  skyRamp.addColorStop(0, '#355278')
-  skyRamp.addColorStop(0.44, '#8ca9b5')
-  skyRamp.addColorStop(0.7, '#e8b89a')
-  skyRamp.addColorStop(1, '#697e87')
+  skyRamp.addColorStop(0, '#13213b')
+  skyRamp.addColorStop(0.26, '#213a5e')
+  skyRamp.addColorStop(0.48, '#3b5d80')
+  skyRamp.addColorStop(0.62, '#6986a1')
+  skyRamp.addColorStop(0.74, '#b89a8c')
+  skyRamp.addColorStop(1, '#26394a')
   sky2d.fillStyle = skyRamp
   sky2d.fillRect(0, 0, 8, 256)
   const horizon = new T.CanvasTexture(sky)
@@ -29,9 +31,9 @@ export function createGround(host: HTMLElement, art: Awaited<ReturnType<typeof l
   scene.background = horizon
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = T.PCFShadowMap
-  scene.fog = new T.FogExp2(0x567080, 0.013)
-  scene.add(new T.HemisphereLight(0xecf6ff, 0x78a681, 2.1))
-  const sun = new T.DirectionalLight(0xffecd3, 2.2)
+  scene.fog = new T.FogExp2(0x273e55, 0.011)
+  scene.add(new T.HemisphereLight(0xdcebff, 0x5c8b66, 1.75))
+  const sun = new T.DirectionalLight(0xfff0d8, 2.25)
   sun.position.set(-7, 12, 13)
   sun.target.position.set(0, 0, 6)
   sun.castShadow = true
@@ -39,7 +41,11 @@ export function createGround(host: HTMLElement, art: Awaited<ReturnType<typeof l
   Object.assign(sun.shadow.camera, { left: -10, right: 10, top: 10, bottom: -10, near: 0.5, far: 40 })
   sun.shadow.normalBias = 0.012
   sun.shadow.bias = -0.0004
-  scene.add(sun, sun.target)
+  // Subtle stadium floodlight rim light for crisp 3D athlete shoulder/hair silhouette
+  const rim = new T.DirectionalLight(0x9ecaff, 0.85)
+  rim.position.set(6, 9.5, -10)
+  rim.target.position.set(0, 1, 6)
+  scene.add(sun, sun.target, rim, rim.target)
   art.objects.traverse((n) => {
     if (n instanceof T.Mesh) {
       n.castShadow = true
@@ -52,15 +58,43 @@ export function createGround(host: HTMLElement, art: Awaited<ReturnType<typeof l
   scene.add(net.object, art.objects)
   const { ball } = art
   const projected = new T.Vector3()
-  const trailGeo = new T.BufferGeometry(),
-    lineMat = new T.LineBasicMaterial({ color: 0xffdf80, depthTest: false })
-  const trail = new T.Line(trailGeo, lineMat)
+  const trailMat = new T.MeshBasicMaterial({
+    color: 0xffe26a,
+    transparent: true,
+    opacity: 0.86,
+    depthTest: false,
+  })
+  const trail = new T.Mesh(new T.BufferGeometry(), trailMat)
+  trail.visible = false
   trail.frustumCulled = false
   trail.renderOrder = 2
-  scene.add(trail)
+  const impactRing = new T.Mesh(
+    new T.RingGeometry(0.11, 0.165, 24),
+    new T.MeshBasicMaterial({
+      color: 0xfff099,
+      side: T.DoubleSide,
+      transparent: true,
+      opacity: 0.92,
+      depthTest: false,
+    }),
+  )
+  impactRing.visible = false
+  impactRing.renderOrder = 3
+  scene.add(trail, impactRing)
   function path(points: { x: number; y: number; z: number }[]) {
-    trail.visible = points.length > 0
-    if (points.length) trailGeo.setFromPoints(points.map((p) => new T.Vector3(p.x, p.y, p.z)))
+    trail.geometry.dispose()
+    if (points.length >= 2) {
+      const curve = new T.CatmullRomCurve3(points.map((p) => new T.Vector3(p.x, p.y, p.z)))
+      trail.geometry = new T.TubeGeometry(curve, 36, 0.022, 6, false)
+      trail.visible = true
+      const end = points[points.length - 1]
+      impactRing.position.set(end.x, end.y, end.z)
+      impactRing.visible = true
+    } else {
+      trail.geometry = new T.BufferGeometry()
+      trail.visible = false
+      impactRing.visible = false
+    }
   }
   let inspecting: Inspection = 'play'
   let defending = false
@@ -155,7 +189,8 @@ export function createGround(host: HTMLElement, art: Awaited<ReturnType<typeof l
         if (o instanceof T.Mesh || o instanceof T.Line) o.geometry.dispose()
       })
       net.dispose()
-      lineMat.dispose()
+      trailMat.dispose()
+      ;(impactRing.material as T.Material).dispose()
       horizon.dispose()
       sun.shadow.dispose()
       renderer.dispose()

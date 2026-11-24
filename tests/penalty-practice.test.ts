@@ -39,6 +39,10 @@ describe('3D penalty practice', () => {
     expect(band('push', expert).yellow).toBeGreaterThan(b.yellow)
     expect(band('push', expert).cycle).toBeGreaterThan(b.cycle)
     expect(band('chip', a).center).toBeLessThan(band('push', a).center)
+    expect(band('push', a).center).toBeGreaterThan(0.68)
+    expect(band('snap', a).center).toBeGreaterThan(band('push', a).center)
+    expect(band('drive', a).center).toBeGreaterThan(band('snap', a).center)
+    expect(band('drive', expert).center + band('drive', expert).green).toBeLessThan(1)
     expect([0, b.cycle / 2, b.cycle].map((t) => meter(t, b.cycle))).toEqual([0, 1, 0])
     const snap = makeShot('snap', true, aim, band('snap', a).center, a, 42),
       straight = { ...snap, curve: 0 }

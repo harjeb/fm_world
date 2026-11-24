@@ -37,17 +37,68 @@ function ability(player?: Player): Ability {
     a[key] = clamp(attrRating(key, player.attrs[key], player.positions.GK > 0) / 100)
   return a
 }
+function ratingTier(score: number) {
+  return score >= 80 ? 'hi' : score >= 60 ? 'mid' : 'base'
+}
+function renderRatings(host: HTMLElement, rows: [string, number][]) {
+  host.innerHTML =
+    `<span class="ratings-title">训练评分</span>` +
+    rows
+      .map(
+        ([label, score]) =>
+          `<span class="rating-chip" data-tier="${ratingTier(score)}" style="--score:${score}%"><span>${label}</span><b>${score}</b></span>`,
+      )
+      .join('')
+}
+
 export async function openPenaltyTraining(roster: readonly Player[], club: Team) {
   if (document.querySelector('.penalty-lab')) return
   const d = document.createElement('dialog')
   d.className = 'penalty-lab'
   d.setAttribute('aria-labelledby', 'penalty-title')
-  d.innerHTML = `<header><div><small>S3 · 自由训练</small><h2 id="penalty-title">十二码之夜</h2></div><button class="leave">退出训练</button></header>
-    <div class="pitch3"><div class="ground"></div>${shotHud}<div class="pad" tabindex="0" role="group" aria-label="扑救方向盘"><span>扑</span></div></div>
-    <p class="call" role="status"></p><div class="settings"><label>视角<select class="role"><option value="kick">我来主罚</option><option value="keep">我来守门</option></select></label><label>主罚手<select class="striker"></select></label><label>门将<select class="keeper"></select></label><label>踢法<select class="kick"></select></label><label>触球脚面<select class="foot"></select></label><label>装备特写<select class="inspect"><option value="play">返回训练镜头</option><option value="player">主罚手球衣</option><option value="keeper">门将球衣</option><option value="ball">比赛用球</option></select></label></div>
-    <small class="ratings"></small><footer><button class="go"></button><button class="repeat" hidden>重扑同一球</button><small>不限次数 · 无奖励 · 不影响联赛</small></footer>`
+  d.innerHTML = `<header class="lab-head">
+      <div class="lab-title">
+        <span class="lab-eyebrow">S3 · 自由训练</span>
+        <h2 id="penalty-title">十二码之夜</h2>
+        <span class="lab-club"><i class="lab-club-dot"></i><span class="lab-club-name"></span></span>
+      </div>
+      <button class="leave" type="button">退出训练</button>
+    </header>
+    <div class="pitch3">
+      <div class="ground"></div>${shotHud}
+      <div class="pad" tabindex="0" role="group" aria-label="扑救方向盘">
+        <svg class="pad-dial" viewBox="-50 -50 100 100" aria-hidden="true">
+          <circle class="pad-outer" r="46"/>
+          <circle class="pad-deadzone" r="24" stroke-dasharray="3 3"/>
+          <g class="pad-ticks">
+            <path d="M0 -42v6 M0 42v-6 M-42 0h6 M42 0h-6"/>
+            <path class="pad-diag" d="M-29 -29l5 5 M29 -29l-5 5 M-29 29l5 -5 M29 29l-5 -5"/>
+          </g>
+        </svg>
+        <span class="pad-knob">扑</span>
+      </div>
+    </div>
+    <p class="call" role="status" data-tone="info"></p>
+    <div class="ratings" aria-live="polite"></div>
+    <div class="settings">
+      <label><span>视角</span><select class="role"><option value="kick">我来主罚</option><option value="keep">我来守门</option></select></label>
+      <label><span>主罚手</span><select class="striker"></select></label>
+      <label><span>门将</span><select class="keeper"></select></label>
+      <label><span>踢法</span><select class="kick"></select></label>
+      <label><span>触球脚面</span><select class="foot"></select></label>
+      <label><span>装备特写</span><select class="inspect"><option value="play">返回训练镜头</option><option value="player">主罚手球衣</option><option value="keeper">门将球衣</option><option value="ball">比赛用球</option></select></label>
+    </div>
+    <footer class="lab-foot">
+      <div class="lab-actions">
+        <button class="go" type="button" data-phase="ready"></button>
+        <button class="repeat" type="button" hidden>重扑同一球</button>
+      </div>
+      <small class="lab-note">不限次数 · 无奖励 · 不影响联赛</small>
+    </footer>`
   document.body.append(d)
   const el = <E extends HTMLElement = HTMLElement>(s: string) => d.querySelector<E>(s)!
+  el('.lab-club-name').textContent = club.name
+  el('.lab-club-dot').style.backgroundColor = club.color
   const ctrl = new AbortController(),
     opts = { signal: ctrl.signal }
   let frame = 0,
@@ -66,8 +117,13 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
     status = el('.call'),
     pitch = el('.pitch3'),
     pad = el('.pad'),
+    padKnob = el('.pad-knob'),
     hud = createHud(pitch),
     go = el<HTMLButtonElement>('.go')
+  const setStatus = (text: string, tone: 'info' | 'charge' | 'good' | 'warn' | 'bad' = 'info') => {
+    status.textContent = text
+    status.dataset.tone = tone
+  }
   const failed = () => {
     cancelAnimationFrame(frame)
     pitch.hidden = true
@@ -75,18 +131,19 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
     el('.ratings').hidden = true
     go.hidden = true
     el('.repeat').hidden = true
-    status.textContent = '无法显示 3D 球场：请使用支持 WebGL 2 的浏览器并开启硬件加速。未消耗次数。'
+    setStatus('无法显示 3D 球场：请使用支持 WebGL 2 的浏览器并开启硬件加速。未消耗次数。', 'bad')
   }
   pitch.hidden = true
   el('.settings').hidden = true
+  el('.ratings').hidden = true
   go.hidden = true
-  status.textContent = '正在加载球员、队服和比赛用球…'
+  setStatus('正在加载球员、队服和比赛用球…', 'info')
   let art: Awaited<ReturnType<typeof loadMatchday>>
   try {
     art = await loadMatchday(club)
   } catch (error) {
     console.error('无法加载点球训练场资源', error)
-    status.textContent = '美术资源加载失败，请退出后重试。未消耗次数。'
+    setStatus('美术资源加载失败，请退出后重试。未消耗次数。', 'bad')
     return
   }
   if (!d.open) {
@@ -95,6 +152,7 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
   }
   pitch.hidden = false
   el('.settings').hidden = false
+  el('.ratings').hidden = false
   go.hidden = false
   try {
     ground = createGround(stage, art)
@@ -149,7 +207,9 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
     return ((paused ?? performance.now()) - origin) / 1000
   }
   function clearPad() {
-    pad.firstElementChild!.removeAttribute('style')
+    padKnob.removeAttribute('style')
+    delete pad.dataset.active
+    delete pad.dataset.dived
     activePointer = null
   }
   let impact: Impact | null = null
@@ -174,31 +234,54 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
     dive = null
     clearPad()
     defend = role.value === 'keep'
-    shooter = ability(strikers[Number(ss.value)])
-    goalie = ability(keepers[Number(gs.value)])
+    const currentStriker = strikers[Number(ss.value)]
+    const currentKeeper = keepers[Number(gs.value)]
+    shooter = ability(currentStriker)
+    goalie = ability(currentKeeper)
     kick = ks.value as Kick
     bounds = band(kick, shooter)
     const rating = (n: number) => Math.round(n * 100)
-    el('.ratings').textContent = defend
-      ? `训练评分 · 扑救反应 ${rating(goalie.reflexes)}　爆发 ${rating(goalie.acceleration)}　手控 ${rating(goalie.handling)}`
-      : `训练评分 · 射术 ${rating(shooter.shooting)}　力量 ${rating(shooter.strength)}　镇定 ${rating(shooter.composure)}`
-    view.dress(strikers[Number(ss.value)], keepers[Number(gs.value)])
+    renderRatings(
+      el('.ratings'),
+      defend
+        ? [
+            ['扑救反应', rating(goalie.reflexes)],
+            ['爆发', rating(goalie.acceleration)],
+            ['手控', rating(goalie.handling)],
+          ]
+        : [
+            ['射术', rating(shooter.shooting)],
+            ['力量', rating(shooter.strength)],
+            ['镇定', rating(shooter.composure)],
+          ],
+    )
+    view.dress(currentStriker, currentKeeper)
     const inspecting = inspection.value !== 'play'
     view.inspect(inspection.value as Inspection)
     view.mode(defend)
     view.path([])
     repeat.hidden = !defend || !lastOpponentShot
-    pad.hidden = !defend
-    hud.reset(!defend && !inspecting, bounds)
+    pad.hidden = !defend || inspecting
+    hud.reset(!inspecting, defend, bounds)
+    hud.meta(
+      defend ? '守门训练' : '主罚训练',
+      defend
+        ? currentKeeper?.name ?? '训练门将'
+        : `${KICKS[kick].label} · ${fs.value}`,
+    )
     ks.disabled = fs.disabled = defend
     go.disabled = false
+    go.dataset.phase = 'ready'
     go.textContent = defend ? '让对手主罚' : '瞄准好了 · 开始蓄力'
-    status.textContent = defend
-      ? '点开始后观察助跑。推方向盘即扑，不推守中；也可用方向键。'
-      : '拖动球门内的圆形准星，或用方向键微调。'
+    setStatus(
+      defend
+        ? '点开始后观察助跑。推方向盘即扑，不推守中；也可用方向键。'
+        : '拖动球门内的瞄准准星，或用方向键微调落点。',
+      'info',
+    )
     if (inspecting) {
       pad.hidden = repeat.hidden = go.hidden = true
-      status.textContent = `${club.name} · 装备特写。切回训练镜头即可继续。`
+      setStatus(`${club.name} · 装备特写。切回训练镜头即可继续。`, 'info')
     } else go.hidden = false
   }
   for (const select of [role, ss, gs, ks, fs, inspection])
@@ -220,8 +303,9 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
       phase = 'power'
       hud.charge()
       origin = performance.now()
+      go.dataset.phase = 'power'
       go.textContent = '锁定力度 · 起脚'
-      status.textContent = '越高越有力，绿色是当前踢法的合适力度。'
+      setStatus('越高越有力，停在右侧上下限范围标记内为最佳力度。', 'charge')
       return
     }
     const seed = crypto.getRandomValues(new Uint32Array(1))[0],
@@ -242,6 +326,7 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
         )
       lastOpponentShot = shot
       dive = null
+      pad.dataset.active = 'true'
     } else {
       power = meter(clock(), bounds.cycle)
       shot = makeShot(kick, fs.value === '外脚背', aim, power, shooter, seed)
@@ -253,8 +338,9 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
     origin = performance.now()
     phase = 'flight'
     go.disabled = true
+    go.dataset.phase = 'flight'
     go.textContent = defend ? '观察出脚…' : '射门中…'
-    status.textContent = defend ? '对手开始助跑！看准球路，向那个方向推。' : '观察实际落点与门将的位置。'
+    setStatus(defend ? '对手开始助跑！看准球路，向那个方向推。' : '观察实际落点与门将的位置。', 'info')
   }
   go.addEventListener('click', () => start(), opts)
   const lead = () => (defend ? 1.25 : 0.3)
@@ -262,8 +348,8 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
     if (!defend || phase !== 'flight' || dive) return
     dive = { at: clock() - lead(), dir: fromKeeperPad(right, up) }
     const n = Math.hypot(right, up)
-    ;(pad.firstElementChild as HTMLElement).style.transform =
-      `translate(${(right / n) * 24}px,${(-up / n) * 24}px)`
+    padKnob.style.transform = `translate(${(right / n) * 26}px,${(-up / n) * 26}px)`
+    pad.dataset.dived = 'true'
   }
   function pointer(e: PointerEvent) {
     if (activePointer !== e.pointerId) return
@@ -352,12 +438,32 @@ export async function openPenaltyTraining(roster: readonly Player[], club: Team)
       const out = resolve(shot, dive, goalie)
       if (t >= out.at) {
         phase = 'done'
+        delete pad.dataset.active
         impact = netImpact(shot, out.result)
         stopAt = t = out.at
         const n = 40
         view.path(Array.from({ length: n + 1 }, (_, i) => ballAt(shot!, (t * i) / n)))
-        status.textContent = `${out.result} · 力度${shot.zone}。${defend ? (dive ? '黄线是实际球路，可对照手套位置。' : '本球选择留在中路。') : '圆形准星是预期落点，黄线是实际球路。'}`
+        hud.outcome(out.result, defend, `力度${shot.zone}`)
+        const tone =
+          out.result === '进球' || out.result === '碰到仍进'
+            ? defend
+              ? 'bad'
+              : 'good'
+            : out.result === '抱住' || out.result === '挡出'
+              ? defend
+                ? 'good'
+                : 'warn'
+              : out.result === '击中门框'
+                ? 'warn'
+                : defend
+                  ? 'good'
+                  : 'bad'
+        setStatus(
+          `${out.result} · 力度${shot.zone}。${defend ? (dive ? '黄线是实际球路，可对照手套位置。' : '本球选择留在中路。') : '圆形准星是预期落点，黄线是实际球路。'}`,
+          tone,
+        )
         go.disabled = false
+        go.dataset.phase = 'done'
         go.textContent = '再练一球'
         repeat.hidden = !defend
       }
