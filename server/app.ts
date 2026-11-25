@@ -273,9 +273,25 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     sharedWorld.freeStars = ownerless.freeStars
     sharedWorld.reserveStars = ownerless.reserveStars
   }
-  // 初始冠军联赛 20 支球队永久锁定，即使降级也不开放玩家注册/接管；启动时补齐旧存档标记。
+  // 初始冠军联赛 20 支球队永久锁定，即使降级也不开放玩家注册/接管；启动时补齐旧存档标记，并同步旧联赛级别简介文案。
+  const renameLegacyTierStyle = (style: string | undefined): string | undefined =>
+    style === '一级联赛球队。' ? '精英联赛球队。' : style === '二级联赛球队。' ? '先锋联赛球队。' : style
   for (const club of sharedWorld.world.clubs) {
     if (INITIAL_CHAMPIONS_CLUB_IDS.has(club.id) && !club.playerLocked) club.playerLocked = true
+    const nextStyle = renameLegacyTierStyle(club.style)
+    if (nextStyle && nextStyle !== club.style) club.style = nextStyle
+  }
+  if (sharedWorld.teams) {
+    for (const team of Object.values(sharedWorld.teams)) {
+      const nextStyle = renameLegacyTierStyle(team.style)
+      if (nextStyle && nextStyle !== team.style) team.style = nextStyle
+    }
+  }
+  if (sharedWorld.cupOpening?.teams) {
+    for (const [id, team] of Object.entries(sharedWorld.cupOpening.teams)) {
+      const nextStyle = renameLegacyTierStyle(team.style)
+      if (nextStyle && nextStyle !== team.style) sharedWorld.cupOpening.teams[id] = Object.freeze({ ...team, style: nextStyle })
+    }
   }
   // SQLite 原子交接后、world.json 更新前可能重启；以已提交的接管者为准。
   for (const { club_id, holder, initial_name } of accountStore.handovers()) {
@@ -339,7 +355,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
           club.short = name.slice(0, 2)
           club.color = color
           club.accent = '#0f172a'
-          club.style = '二级联赛球队。'
+          club.style = '先锋联赛球队。'
           const team = sharedWorld.teams?.[club.id]
           if (team) {
             team.name = name
@@ -347,7 +363,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
             team.short = name.slice(0, 2)
             team.color = color
             team.accent = '#0f172a'
-            team.style = '二级联赛球队。'
+            team.style = '先锋联赛球队。'
           }
           if (club.conference) touchedDivisions.add(`d2-${club.conference}`)
         })
@@ -582,6 +598,17 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     migratedGame?: GameState
   }
   const accountSync = new WeakMap<Account, AccountSyncState>()
+  const accountYouthRevision = new WeakMap<Account, number>()
+  for (const account of db.accounts) accountYouthRevision.set(account, account.revision)
+  const youthRevisionOf = (account: Account): number => {
+    const existing = accountYouthRevision.get(account)
+    if (existing !== undefined) return existing
+    accountYouthRevision.set(account, account.revision)
+    return account.revision
+  }
+  const markYouthChanged = (account: Account): void => {
+    accountYouthRevision.set(account, account.revision)
+  }
   const syncOf = (account: Account): AccountSyncState => {
     let state = accountSync.get(account)
     if (!state) {
@@ -2331,6 +2358,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       pullSharedFixtures(account)
       pullSharedWorld(account)
       account.revision++
+      if (youthChanged) markYouthChanged(account)
       // 杯赛/商店/成就福利补发后，旧客户端基于奖励前的余额不能再覆盖该账号。
       if (publishedMatches.rewardChanged || seasonShopAwarded || achResult.backfilledMoney > 0) account.lastUserRevision = account.revision
       // lastUserRevision 通常只记录“玩家自己保存”的版本；AI / 共享世界 / 自动结算的改动不算，
@@ -2656,6 +2684,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         account.appliedMatchIds = []
         account.revision++
         account.lastUserRevision = account.revision
+        markYouthChanged(account)
         account.updatedAt = now()
         absorbInto(account)
       }
@@ -2832,6 +2861,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       }
       serveStatic(req, res, url)
     } catch (error) {
+      if (error instanceof PayloadTooLargeError) {
+        if (!res.headersSent) json(res, 413, { error: error.message })
+        else res.end()
+        return
+      }
       console.error(error)
       if (!res.headersSent) json(res, 500, { error: '服务器内部错误' })
       else res.end()
@@ -3009,7 +3043,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         if (!isVacantSeat(ownerId) && db.accounts.some((item) => item.id === ownerId)) {
           return json(res, 409, { error: '这支球队已经有人执教，请选择其他球队' })
         }
-        if (club.tier !== 'division2' && !isVacantSeat(ownerId)) return json(res, 400, { error: '只能选择空缺的二级球队或前任教练释放的球队' })
+        if (club.tier !== 'division2' && !isVacantSeat(ownerId)) return json(res, 400, { error: '只能选择空缺的先锋联赛球队或前任教练释放的球队' })
       } else {
         // 未指定球队时优先交接托管席，再选二级空位；满员才扩区。
         club = availableRegistrationClub()
@@ -3036,6 +3070,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         createdAt: now(),
         updatedAt: now(),
       }
+      accountYouthRevision.set(account, account.revision)
       const initialTeam = sharedWorld.teams?.[club.id]
       if (initialTeam && !previous) {
         account.game.roster = structuredClone(initialTeam.players).map((player) => ({
@@ -3167,6 +3202,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
             accountSync.delete(agentAccount)
             agentAccount.revision++
             agentAccount.lastUserRevision = agentAccount.revision
+            markYouthChanged(agentAccount)
             agentAccount.updatedAt = now()
             pendingAccountCommits.set(agentAccount.id, Symbol('youth-agent-commit'))
             persistAccount(agentAccount)
@@ -3495,7 +3531,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const body = await readJsonBody(req)
       if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
       advanceAccount(account)
-      if (!Number.isSafeInteger(body.baseRevision) || body.baseRevision !== account.revision) { await sendJson(409, { error: '青训状态已变化，请刷新后重试', revision: account.revision, game: publicGame(account) }, true); return }
+      const baseRevision = body.baseRevision
+      if (typeof baseRevision !== 'number' || !Number.isSafeInteger(baseRevision) || baseRevision < 0 || baseRevision > account.revision || baseRevision < youthRevisionOf(account)) {
+        await sendJson(409, { error: '青训状态已变化，请刷新后重试', revision: account.revision, game: publicGame(account) }, true)
+        return
+      }
       const game = structuredClone(account.game)
       const outcome = applyYouthAction(game, body, now(), officialLineupLocked(account, now()) || !!liveMatchFor(account))
       if (!outcome.ok) { await sendJson(400, { error: outcome.error, revision: account.revision, game: publicGame(account) }, true); return }
@@ -3503,6 +3543,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       accountSync.delete(account)
       account.revision++
       account.lastUserRevision = account.revision
+      markYouthChanged(account)
       account.updatedAt = now()
       pendingAccountCommits.set(account.id, Symbol('youth-commit'))
       persistAccount(account)
@@ -3732,7 +3773,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       preservePositionProfiles(account.game, body.game)
       const youthError = preserveYouthState(account.game, body.game, now())
       if (youthError) { await sendJson(400, { error: youthError, revision: account.revision, game: publicGame(account) }, true); return }
-      if (account.game.shared) body.game.reserveStars = account.game.reserveStars
+      if (account.game.shared) {
+        body.game.reserveStars = account.game.reserveStars
+        if (body.game.aiTeams.length === 0) body.game.aiTeams = account.game.aiTeams
+      }
       // The private ledger lives in game_json so it is committed atomically with the
       // balance. Never trust a ledger supplied by the client.
       const previousPrivate = account.game as GameState & { recycledCardIds?: string[] }
@@ -3865,15 +3909,16 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const officialRecords = account.game.challengeHistory.filter(item => item.cupId?.startsWith('season-'))
       const restoredChallenges = (body.game.challengeHistory ?? [])
         .filter(item => !item.cupId?.startsWith('season-'))
-        .map(item => {
+        .flatMap(item => {
           if (item.detailDeferred) {
             const existing = previousChallengesById.get(item.id)
-            if (existing) return existing
+            if (existing) return [existing]
+            if (!item.score) return []
             const cleaned = { ...item }
             delete cleaned.detailDeferred
-            return cleaned
+            return [cleaned]
           }
-          return item
+          return [item]
         })
       body.game.challengeHistory = [...restoredChallenges, ...officialRecords].sort((a, b) => b.createdAt - a.createdAt)
       if (body.game.world && account.game.world) body.game.world = account.game.world
@@ -4268,13 +4313,20 @@ function json(res: ServerResponse, status: number, value: unknown): void {
   res.end(JSON.stringify(value))
 }
 
+const MAX_JSON_BODY_BYTES = 32 * 1024 * 1024
+
+class PayloadTooLargeError extends Error {
+  readonly status = 413
+  constructor() { super('请求体过大') }
+}
+
 async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = []
   let size = 0
   for await (const chunk of req) {
     const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
     size += buf.length
-    if (size > 8 * 1024 * 1024) throw new Error('请求体过大')
+    if (size > MAX_JSON_BODY_BYTES) throw new PayloadTooLargeError()
     chunks.push(buf)
   }
   if (chunks.length === 0) return {}

@@ -227,7 +227,7 @@ export function renderAccountOverlay(): string {
           ${registering ? `
             <div class="form-row"><label for="account-club">执教球队</label><select id="account-club">
               <option value="">${registrationClubs === null ? '正在加载球队…' : clubs.length ? '请选择一支可接管的球队' : '暂无空缺球队'}</option>
-              ${clubs.map((club) => `<option value="${esc(club.id)}" ${selectedClub?.id === club.id ? 'selected' : ''}>${esc(club.name)} · ${esc(club.tier === 'champions' ? '冠军联赛' : club.tier === 'division1' ? (club.conference ? `一级联赛 · ${conferenceLabel(club.conference)}` : '一级联赛') : conferenceLabel(club.conference))} · RANK ${club.rating ?? '—'}</option>`).join('')}
+              ${clubs.map((club) => `<option value="${esc(club.id)}" ${selectedClub?.id === club.id ? 'selected' : ''}>${esc(club.name)} · ${esc(club.tier === 'champions' ? '冠军联赛' : club.tier === 'division1' ? (club.conference ? `精英联赛 · ${conferenceLabel(club.conference)}` : '精英联赛') : conferenceLabel(club.conference))} · RANK ${club.rating ?? '—'}</option>`).join('')}
             </select></div>
             ${selectedClub ? `<p class="hint">${[...selectedClub.players].sort((a, b) => b.ca - a.ca).slice(0, 3).map((player) => `${posBadge(primaryPosition(player))} ${esc(player.name)} · CA ${player.ca.toFixed(0)}`).join(' / ')}</p>` : ''}
             <div class="banner warn compact"><b>活跃度与接管提示：</b>连续超过 <b>3 天</b>未上线，球队将由 AI 临时接管（最多接管至满 1 周）；连续 <b>7 天</b>未上线将<b>自动清理教练账号并释放球队席位</b>（恢复原队名，保留球队阵容与进度供新教练接手）。</div>
@@ -316,7 +316,7 @@ export function renderNewGameOverlay(): string {
       <div class="modal newgame-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="开始新游戏">
         ${required ? '' : `<button class="modal-close" data-action="newgame-close" aria-label="关闭">${icon('close', 16)}</button>`}
         <div class="kicker">${required ? '离线模式' : '开始新游戏'}</div>
-        <h1>选择要接管的二级联赛球队</h1>
+        <h1>选择要接管的先锋联赛球队</h1>
         ${required ? '' : `<div class="banner bad compact">${icon('alert', 15)}<span>开始新游戏会覆盖当前存档，无法撤销。</span></div>`}
         <div class="pick-layout">
           <div class="pick-list">${column('north', '北区')}${column('south', '南区')}</div>

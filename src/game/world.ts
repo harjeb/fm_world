@@ -809,7 +809,7 @@ export function expandWorldConference(world: WorldState, seed: number): { confer
     short: name.slice(0, 2),
     color,
     accent: '#0f172a',
-    style: '二级联赛球队。',
+    style: '先锋联赛球队。',
     formationId: rng.pick(['4-4-2', '4-3-3', '4-2-3-1', '3-5-2', '5-3-2', '4-1-4-1', '3-4-3', '4-1-2-1-2'] as const),
     tactics: { ...rng.pick(EXPAND_TACTICS) },
     strength: index < 5 ? 3 : index < 14 ? 2 : 1,
@@ -1537,7 +1537,7 @@ function addExpansionClubs(
       short: name.slice(0, 2),
       color,
       accent: '#0f172a',
-      style: tier === 'division1' ? '一级联赛球队。' : '二级联赛球队。',
+      style: tier === 'division1' ? '精英联赛球队。' : '先锋联赛球队。',
       formationId: rng.pick(['4-4-2', '4-3-3', '4-2-3-1', '3-5-2', '5-3-2', '4-1-4-1', '3-4-3', '4-1-2-1-2'] as const),
       tactics: { ...rng.pick(EXPAND_TACTICS) },
       strength,
@@ -2005,13 +2005,13 @@ export function ensureWorldCalendar(world: WorldState): boolean {
 
 export function worldDivisionLabel(_world: WorldState, divisionId: string): string {
   if (divisionId === 'champions') return '冠军联赛'
-  if (divisionId === 'division1') return '一级联赛'
-  if (divisionId.startsWith('d1-')) return `一级联赛 · ${conferenceLabel(conferenceOfDivision(divisionId) ?? 'north')}`
-  return `二级联赛 · ${conferenceLabel(conferenceOfDivision(divisionId) ?? 'north')}`
+  if (divisionId === 'division1') return '精英联赛'
+  if (divisionId.startsWith('d1-')) return `精英联赛 · ${conferenceLabel(conferenceOfDivision(divisionId) ?? 'north')}`
+  return `先锋联赛 · ${conferenceLabel(conferenceOfDivision(divisionId) ?? 'north')}`
 }
 
 export function worldTierLabel(tier: TierId): string {
-  return tier === 'champions' ? '冠军联赛' : tier === 'division1' ? '一级联赛' : '二级联赛'
+  return tier === 'champions' ? '冠军联赛' : tier === 'division1' ? '精英联赛' : '先锋联赛'
 }
 
 export { payWorldWages }

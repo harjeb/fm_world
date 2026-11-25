@@ -164,15 +164,15 @@ function promotionPreview(game: GameState, ownId: string): string {
     ? '首轮资格赛决出 12 强 → A/B/C 3 组 × 4 队单循环（3 轮）→ 3 场跨组附加赛（A2vB3 / B2vC3 / C2vA3）'
     : '各区第 2/3 资格赛 → 2 组循环赛 → 小组第 2 附加赛'
   const detailText = spots === 6
-    ? '常规赛 38 轮全部结束后进入 16 小时赛后休整期，升级杯共 5 轮自动分轮排期并采用 2D 正式赛直播与战报（赛前 30 分钟锁阵）：首轮资格赛决出 12 支小组赛球队，随机分入 A / B / C 三个 4 队小组踢 3 轮单循环（零轮空）；每组第 1 直接升入一级联赛（3 队），末轮由 3 场跨组附加赛（A2 vs B3、B2 vs C3、C2 vs A3，单场平局点球）再决出 3 队，共 6 队升入一级联赛。'
-    : '常规赛 38 轮全部结束后进入 16 小时赛后休整期，升级杯自动分轮排期并采用 2D 正式赛直播与战报（赛前 30 分钟锁阵）：各二级赛区第 1 名首轮轮空，第 2/3 名踢单场资格赛；晋级队与各区第 1 随机分入 A/B 两组踢单循环，小组第 1 直接升级，两个小组第 2 再战单场附加赛决出第 3 个升级名额。'
-  const summary = `<div class="sc-summary"><span>状态：<b>第 38 轮常规赛结束后开赛</b></span><span>赛制：<b>${formatText}</b></span><span>升级名额：<b>共 ${spots} 支球队升入一级联赛</b></span></div>
+    ? '常规赛 38 轮全部结束后进入 16 小时赛后休整期，升级杯共 5 轮自动分轮排期并采用 2D 正式赛直播与战报（赛前 30 分钟锁阵）：首轮资格赛决出 12 支小组赛球队，随机分入 A / B / C 三个 4 队小组踢 3 轮单循环（零轮空）；每组第 1 直接升入精英联赛（3 队），末轮由 3 场跨组附加赛（A2 vs B3、B2 vs C3、C2 vs A3，单场平局点球）再决出 3 队，共 6 队升入精英联赛。'
+    : '常规赛 38 轮全部结束后进入 16 小时赛后休整期，升级杯自动分轮排期并采用 2D 正式赛直播与战报（赛前 30 分钟锁阵）：各先锋赛区第 1 名首轮轮空，第 2/3 名踢单场资格赛；晋级队与各区第 1 随机分入 A/B 两组踢单循环，小组第 1 直接升级，两个小组第 2 再战单场附加赛决出第 3 个升级名额。'
+  const summary = `<div class="sc-summary"><span>状态：<b>第 38 轮常规赛结束后开赛</b></span><span>赛制：<b>${formatText}</b></span><span>升级名额：<b>共 ${spots} 支球队升入精英联赛</b></span></div>
     <p class="hint pad">${detailText}</p>`
-  return `${summary}${panel(`当前暂定升级杯资格（${qualified.entrants.length} 队）`, rows ? `<div class="rows">${rows}</div>` : '<p class="hint pad">等待二级联赛积分榜更新。</p>', { flush: true })}`
+  return `${summary}${panel(`当前暂定升级杯资格（${qualified.entrants.length} 队）`, rows ? `<div class="rows">${rows}</div>` : '<p class="hint pad">等待先锋联赛积分榜更新。</p>', { flush: true })}`
 }
 
 function promotionStatusLabel(cup: SeasonCup, ownId: string): string {
-  if (cup.promotedIds?.includes(ownId)) return '已升级（升入一级联赛）'
+  if (cup.promotedIds?.includes(ownId)) return '已升级（升入精英联赛）'
   if (!cup.entrants.includes(ownId)) return '未获得资格'
   if (cup.championId) return '未获升级'
   const current = cup.rounds.at(-1)
@@ -202,8 +202,8 @@ function renderPromotionCup(game: GameState, cup: SeasonCup, ownId: string): str
     return `<span>${esc(label)}：<b>${esc(kickoffTimeLabel(date))}</b></span>`
   }).join('')
   const summaryNote = isSixSpot
-    ? '升级杯在赛后 16 小时休整期内按 5 轮档期自动开赛（赛前 30 分钟锁阵、2D 直播、完整战报进复盘）：首轮资格赛决出 12 强进入小组赛，随机分入 A / B / C 三个 4 队小组踢 3 轮单循环；各组第 1 直接升入一级联赛（3 队），末轮由 3 场跨组附加赛（A2vB3、B2vC3、C2vA3，平局点球）再决出 3 个升级名额，共 6 队升级。'
-    : '升级杯在赛后 16 小时休整期内按档期自动开赛（赛前 30 分钟锁阵、2D 直播、完整战报进复盘）：首轮各二级赛区第 1 名轮空、第 2/3 名踢资格赛（平局点球）；出线队与轮空队分 A/B 两组踢单循环，各组第 1 直接升入一级联赛，两个小组第 2 踢单场附加赛争夺第 3 个升级名额。'
+    ? '升级杯在赛后 16 小时休整期内按 5 轮档期自动开赛（赛前 30 分钟锁阵、2D 直播、完整战报进复盘）：首轮资格赛决出 12 强进入小组赛，随机分入 A / B / C 三个 4 队小组踢 3 轮单循环；各组第 1 直接升入精英联赛（3 队），末轮由 3 场跨组附加赛（A2vB3、B2vC3、C2vA3，平局点球）再决出 3 个升级名额，共 6 队升级。'
+    : '升级杯在赛后 16 小时休整期内按档期自动开赛（赛前 30 分钟锁阵、2D 直播、完整战报进复盘）：首轮各先锋赛区第 1 名轮空、第 2/3 名踢资格赛（平局点球）；出线队与轮空队分 A/B 两组踢单循环，各组第 1 直接升入精英联赛，两个小组第 2 踢单场附加赛争夺第 3 个升级名额。'
   const summary = `<div class="sc-summary"><span>状态：<b>${esc(status)}</b></span><span>参赛球队：<b>${cup.entrants.length}</b></span><span>已锁定升级（${promoted.length}/${spots}）：<b>${promotedHtml}</b></span></div>
     <div class="sc-summary">${scheduleChips}</div>
     <p class="hint pad">${summaryNote}</p>`
@@ -248,7 +248,7 @@ function renderPromotionCup(game: GameState, cup: SeasonCup, ownId: string): str
       const fxHtml = matches.map(f => fxRow(f, `第 ${Math.max(1, f.round - 1)} 轮`)).join('')
       return panel(group.name, `<div class="table-scroll"><table class="dt"><thead><tr><th class="num">#</th><th>球队</th><th class="num">赛</th><th class="num">胜平负</th><th class="num">净胜</th><th class="num">分</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>${fxHtml ? `<div class="sc-group-fx-list">${fxHtml}</div>` : ''}`, { flush: true, aside: `<span class="muted small">${isSixSpot ? '第 1 升级 · 第 2/3 进附加赛' : '第 1 升级 · 第 2 进附加赛'}</span>` })
     }).join('')
-    groupSection = `<section class="sc-groups-section"><h2>第 2 阶段 · 小组循环赛</h2><p class="hint">常规时间允许平局（胜 3 分 / 平 1 分 / 负 0 分），同分依次比较净胜球、进球数与相互战绩。每组第 1 直接升入一级联赛，${isSixSpot ? '各组第 2 与第 3 进入最终跨组附加赛。' : '第 2 进入最终附加赛。'}</p><div class="grid sc-groups-grid">${groupCards}</div></section>`
+    groupSection = `<section class="sc-groups-section"><h2>第 2 阶段 · 小组循环赛</h2><p class="hint">常规时间允许平局（胜 3 分 / 平 1 分 / 负 0 分），同分依次比较净胜球、进球数与相互战绩。每组第 1 直接升入精英联赛，${isSixSpot ? '各组第 2 与第 3 进入最终跨组附加赛。' : '第 2 进入最终附加赛。'}</p><div class="grid sc-groups-grid">${groupCards}</div></section>`
   } else {
     groupSection = panel('第 2 阶段 · 小组循环赛', `<p class="hint pad">资格赛（${esc(kickoffTimeLabel(cup.dates[0]))}）公布结果后，胜者与轮空队自动抽签分成 ${isSixSpot ? 'A / B / C 三组（每组 4 队）' : 'A / B 两组'}，并于 ${esc(kickoffTimeLabel(cup.dates[1]))} 起开踢小组赛。</p>`, { flush: true })
   }
@@ -322,7 +322,7 @@ export function renderSeasonCups(game: GameState, selected: SeasonCupId = 'commu
   const appearanceText = hasGroups ? `${reward.appearance.toLocaleString()}（小组赛不发奖金）` : reward.appearance.toLocaleString()
   const d2ZoneCount = game.world.divisions.filter(div => div.tier === 'division2').length
   const communityRule = cup.id === 'community' && d2ZoneCount > 4
-    ? `当前二级联赛共有 ${d2ZoneCount} 个分区（超过 4 区），社区杯自动按全二级总积分榜（积分→净胜球→进球）取前 32 支球队踢 5 轮单场淘汰赛。`
+    ? `当前先锋联赛共有 ${d2ZoneCount} 个分区（超过 4 区），社区杯自动按全先锋总积分榜（积分→净胜球→进球）取前 32 支球队踢 5 轮单场淘汰赛。`
     : ''
   const noteText = hasGroups
     ? `小组赛（${LEGEND_GROUP_ROUNDS} 轮单循环）不发参赛奖金；晋级 8 强后 1/4 决赛与半决赛踢主客场两回合、决赛单场决胜，淘汰赛每轮发放一次参赛金；冠军另获额外奖金，首次夺冠发放专属技能书 ${bookTitle('传奇之星', 'rainbow')}（带入培养书槽即生效、不占实战技能槽，每次行动 10% 触发彩色事件随机 2 项未满主属性二选一 +100，每轮最多 3 次）。`

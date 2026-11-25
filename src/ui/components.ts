@@ -402,9 +402,9 @@ function tableZone(tier: TierId | undefined, index: number, total: number): Zone
 
 function zoneLegend(tier: TierId | undefined): string {
   const items: [Zone, string][] = tier === 'champions'
-    ? [['champion', '冠军 · 传奇杯'], ['legend', '传奇杯资格（前 4）'], ['relegate', '降入一级联赛']]
+    ? [['champion', '冠军 · 传奇杯'], ['legend', '传奇杯资格（前 4）'], ['relegate', '降入精英联赛']]
     : tier === 'division1'
-      ? [['promote', '直升冠军联赛（前 3）'], ['cup', '星联杯区（第 6 轮前 8）'], ['relegate', '降入二级联赛']]
+      ? [['promote', '直升冠军联赛（前 3）'], ['cup', '星联杯区（第 6 轮前 8）'], ['relegate', '降入先锋联赛']]
       : tier === 'division2'
         ? [['playoff', '升级杯区（前 3）'], ['cup', '社区杯区（第 6 轮前 8）']]
         : []

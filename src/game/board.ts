@@ -730,7 +730,7 @@ export function chooseBoardAmbition(
       const targetTier: TierId = options.tier ?? preview.projectedTier
       const allowed = new Set<TierId>([preview.projectedTier, ...(preview.promotionOptions?.length ? ['division1' as TierId] : [])])
       if (!allowed.has(targetTier)) {
-        return { ok: false, error: '无效的休赛期预选级别，请分别为一级联赛或二级联赛方案选择' }
+        return { ok: false, error: '无效的休赛期预选级别，请分别为精英联赛或先锋联赛方案选择' }
       }
       ;(board.pendingChoicesByTier ??= {})[targetTier] = ambition
       return { ok: true }

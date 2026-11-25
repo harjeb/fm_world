@@ -399,12 +399,12 @@ function boardTab(): string {
         <div class="banner gold">
           ${icon('clock', 16)}
           <b>正在争夺升级席位 · 支持双情景提前预选（换季自动匹配真实级别）</b>
-          <span>升一级预选：<b>${esc(BOARD_AMBITION_META[pickedD1].label)}</b>${hasD1Picked ? '' : '（默认）'} · 留二级预选：<b>${esc(BOARD_AMBITION_META[pickedD2].label)}</b>${hasD2Picked ? '' : '（默认）'}</span>
+          <span>升精英预选：<b>${esc(BOARD_AMBITION_META[pickedD1].label)}</b>${hasD1Picked ? '' : '（默认）'} · 留先锋预选：<b>${esc(BOARD_AMBITION_META[pickedD2].label)}</b>${hasD2Picked ? '' : '（默认）'}</span>
         </div>
-        <p class="hint">预算系数 ${Math.round(prev.budgetMultiplier * 100)}% · 工资帽系数 ${Math.round(prev.wageMultiplier * 100)}%。现在就能把「升入一级」和「留在二级」两套意向都选好，换季时系统自动按升级杯最终结果生效对应那一套；开季前 ${BOARD_CHOICE_MAX_ROUND} 轮内仍可调整。</p>
-        ${prev.promotionOptions?.length ? `<h4 class="board-scenario-title">${tag('情景一', 'good')} 若升级杯成功升入「一级联赛」· 当前预选：<b>${esc(BOARD_AMBITION_META[pickedD1].label)}</b>${hasD1Picked ? '' : '<small class="muted">（默认）</small>'}</h4>
+        <p class="hint">预算系数 ${Math.round(prev.budgetMultiplier * 100)}% · 工资帽系数 ${Math.round(prev.wageMultiplier * 100)}%。现在就能把「升入精英」和「留在先锋」两套意向都选好，换季时系统自动按升级杯最终结果生效对应那一套；开季前 ${BOARD_CHOICE_MAX_ROUND} 轮内仍可调整。</p>
+        ${prev.promotionOptions?.length ? `<h4 class="board-scenario-title">${tag('情景一', 'good')} 若升级杯成功升入「精英联赛」· 当前预选：<b>${esc(BOARD_AMBITION_META[pickedD1].label)}</b>${hasD1Picked ? '' : '<small class="muted">（默认）</small>'}</h4>
         <div class="board-options">${prev.promotionOptions.map((opt) => boardOptionCard(opt, opt.ambition === pickedD1, 'offseason', false, 'division1')).join('')}</div>` : ''}
-        <h4 class="board-scenario-title">${tag('情景二', 'info')} 若升级杯未出线留在「二级联赛」（战力预估第 ${prev.powerRank}/${prev.totalClubs}）· 当前预选：<b>${esc(BOARD_AMBITION_META[pickedD2].label)}</b>${hasD2Picked ? '' : '<small class="muted">（默认）</small>'}</h4>
+        <h4 class="board-scenario-title">${tag('情景二', 'info')} 若升级杯未出线留在「先锋联赛」（战力预估第 ${prev.powerRank}/${prev.totalClubs}）· 当前预选：<b>${esc(BOARD_AMBITION_META[pickedD2].label)}</b>${hasD2Picked ? '' : '<small class="muted">（默认）</small>'}</h4>
         <div class="board-options">${prev.options.map((opt) => boardOptionCard(opt, opt.ambition === pickedD2, 'offseason', false, 'division2')).join('')}</div>
       `)
     } else {

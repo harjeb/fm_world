@@ -102,7 +102,7 @@ function def(id: string, [name, enName, color]: ClubIdentity, tier: TierId, inde
   const tactic = TACTICS[index % TACTICS.length]
   return {
     id, name, enName, short: name.slice(0, 2), tier, conference, starCount,
-    color, accent: '#0f172a', style: `${tier === 'champions' ? '顶级' : tier === 'division1' ? '一级' : '二级'}联赛球队。`,
+    color, accent: '#0f172a', style: `${tier === 'champions' ? '顶级' : tier === 'division1' ? '精英' : '先锋'}联赛球队。`,
     formationId: FORMATIONS[index % FORMATIONS.length], tactics: { ...tactic }, strength, playerNames: [],
   }
 }

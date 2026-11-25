@@ -215,6 +215,7 @@ let deferredState: StateResponse | null = null
 let deferredPatches: StatePatchResponse[] = []
 let deferredResync = false
 let syncedGame: GameState | null = null
+const syncedChallengeIds = new Set<string>()
 let resyncPending: Promise<void> | null = null
 let pendingGame: GameState | null = null
 let pendingRevision = 0
@@ -250,6 +251,55 @@ function authHeaders(): Record<string, string> {
     'X-FM-Lazy-Cup': '1',
     'X-FM-Slim': '1',
     ...(token ? { Authorization: `Bearer ${token}`, 'X-FM-Client': clientId } : {}),
+  }
+}
+
+function noteSyncedGame(game: GameState | null | undefined): void {
+  syncedGame = game ?? null
+  if (Array.isArray(game?.challengeHistory)) {
+    for (const item of game.challengeHistory) {
+      if (item?.id) syncedChallengeIds.add(item.id)
+    }
+  }
+}
+
+/** 联机 PUT /api/game 上传前瘦身：省略服务端本就权威覆盖的共享大字段，并将已入库挑战战报压为轻量引用。 */
+function prepareUploadGame(game: GameState): GameState {
+  const base = withoutDeferredCupPool(game.activeMatch?.preplayed ? { ...game, activeMatch: undefined } : game)
+  if (!base.shared) return base
+  const playerClub = base.world?.clubs?.find((club) => club.id === 'player')
+  const slimWorld = base.world
+    ? {
+        seasonIndex: base.world.seasonIndex,
+        playerDivisionId: base.world.playerDivisionId,
+        clubs: playerClub
+          ? [{ id: 'player', squadKey: playerClub.squadKey, ...(playerClub.formationId ? { formationId: playerClub.formationId } : {}) }]
+          : [],
+        divisions: [],
+      }
+    : undefined
+  const slimChallenges = (base.challengeHistory ?? []).map((item) => {
+    if (item.cupId?.startsWith('season-') || syncedChallengeIds.has(item.id)) {
+      return {
+        id: item.id,
+        createdAt: item.createdAt,
+        ...(item.mode ? { mode: item.mode } : {}),
+        ...(item.cupId ? { cupId: item.cupId } : {}),
+        detailDeferred: true as const,
+      }
+    }
+    return item
+  })
+  return {
+    ...base,
+    aiTeams: [],
+    matchHistory: [],
+    seasonHistory: [],
+    appearances: undefined,
+    reserveStars: undefined,
+    season: { ...base.season, fixtures: [] },
+    ...(slimWorld ? { world: slimWorld as unknown as GameState['world'] } : {}),
+    challengeHistory: slimChallenges as unknown as GameState['challengeHistory'],
   }
 }
 
@@ -304,7 +354,7 @@ function triggerResyncFromServer(): void {
       if (current.revision >= onlineState.revision) {
         onlineState.revision = current.revision
         onlineState.lastSync = Date.now()
-        syncedGame = current.game
+        noteSyncedGame(current.game)
         if (onlineState.error.includes('另一设备')) onlineState.error = ''
         remoteGameHandler?.(current.game)
         if (publicWorld && current.game.world?.seasonIndex !== publicWorld.seasonIndex) void refreshPublicWorld()
@@ -427,6 +477,7 @@ export async function logoutOnline(): Promise<void> {
   deferredPatches = []
   deferredResync = false
   syncedGame = null
+  syncedChallengeIds.clear()
   loadedMatchRecords.clear()
   matchRecordRequests.clear()
   setRemoteSaver(null)
@@ -450,6 +501,7 @@ async function restoreSession(): Promise<GameState | null> {
   ++sessionEpoch
   ++publicWorldRequest
   publicWorld = null
+  syncedChallengeIds.clear()
   loadedMatchRecords.clear()
   matchRecordRequests.clear()
   deferredState = null
@@ -466,7 +518,7 @@ async function restoreSession(): Promise<GameState | null> {
     onlineState.user = snapshot.user ?? (await requestJson<{ user: OnlineUser }>('/api/me', undefined, ACTION_TIMEOUT_MS)).user
     onlineState.clubCoaches = snapshot.clubCoaches ?? null
     onlineState.revision = snapshot.revision
-    syncedGame = snapshot.game
+    noteSyncedGame(snapshot.game)
     onlineState.error = ''
     onlineState.status = 'online'
     onlineState.lastSync = Date.now()
@@ -490,6 +542,7 @@ function acceptSession(data: AuthResponse): void {
   ++sessionEpoch
   ++publicWorldRequest
   publicWorld = null
+  syncedChallengeIds.clear()
   loadedMatchRecords.clear()
   matchRecordRequests.clear()
   deferredState = null
@@ -501,7 +554,7 @@ function acceptSession(data: AuthResponse): void {
   onlineState.clubCoaches = data.clubCoaches ?? null
   onlineState.user = data.user
   onlineState.revision = data.revision
-  syncedGame = data.game ?? null
+  noteSyncedGame(data.game)
   onlineState.status = 'online'
   onlineState.connected = false
   onlineState.error = ''
@@ -588,7 +641,7 @@ function connectEvents(): void {
           return
         }
         const next = applyStatePatch(syncedGame, parsed)
-        syncedGame = next
+        noteSyncedGame(next)
         onlineState.revision = parsed.revision
         if (onlineState.error.includes('另一设备')) onlineState.error = ''
         remoteGameHandler?.(next)
@@ -610,7 +663,7 @@ function connectEvents(): void {
         deferredPatches = []
       } else {
         onlineState.revision = data.revision
-        syncedGame = data.game
+        noteSyncedGame(data.game)
         if (data.source !== clientId) {
           if (onlineState.error.includes('另一设备')) onlineState.error = ''
           remoteGameHandler?.(data.game)
@@ -751,13 +804,13 @@ async function flushSave(): Promise<void> {
     const result = await requestJson<{ ok: boolean; revision: number; updatedAt: number }>('/api/game', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      // 联赛直播回放是服务器下发的副本，不存回服务器（几十 KB 的初始引擎状态）。
-      body: JSON.stringify({ game: withoutDeferredCupPool(game.activeMatch?.preplayed ? { ...game, activeMatch: undefined } : game), baseRevision }),
+      // 联赛直播回放、服务端权威共享字段与已入库挑战战报不重复上传，避免大存档触发 413。
+      body: JSON.stringify({ game: prepareUploadGame(game), baseRevision }),
     }, SAVE_TIMEOUT_MS)
     if (epoch !== sessionEpoch || !isOnlineMode()) return
     if (pendingGame && pendingRevision === baseRevision) pendingRevision = result.revision
     onlineState.revision = Math.max(onlineState.revision, result.revision)
-    syncedGame = game
+    noteSyncedGame(game)
     onlineState.lastSync = result.updatedAt
     onlineState.error = ''
   } catch (error) {
@@ -772,7 +825,7 @@ async function flushSave(): Promise<void> {
         hydrateOnlineGame(current.game)
         onlineState.revision = current.revision
         onlineState.lastSync = Date.now()
-        syncedGame = current.game
+        noteSyncedGame(current.game)
         if (pendingGame && pendingRevision <= baseRevision) {
           pendingGame = null
           if (saveTimer !== null) {
@@ -797,7 +850,7 @@ async function flushSave(): Promise<void> {
         if (deferredState.revision > onlineState.revision) {
           onlineState.revision = deferredState.revision
           onlineState.lastSync = Date.now()
-          syncedGame = deferredState.game
+          noteSyncedGame(deferredState.game)
           if (onlineState.error.includes('另一设备')) onlineState.error = ''
           remoteGameHandler?.(deferredState.game)
         }
@@ -810,7 +863,7 @@ async function flushSave(): Promise<void> {
         for (const patch of queued) {
           if (patch.revision <= onlineState.revision) continue
           if (syncedGame && patch.baseRevision === onlineState.revision) {
-            syncedGame = applyStatePatch(syncedGame, patch)
+            noteSyncedGame(applyStatePatch(syncedGame, patch))
             onlineState.revision = patch.revision
             applied = true
           } else {
@@ -880,7 +933,7 @@ export async function startPeakOnline(stage: number): Promise<GameState> {
         hydrateOnlineGame(current.game)
         onlineState.revision = current.revision
         onlineState.lastSync = Date.now()
-        syncedGame = current.game
+        noteSyncedGame(current.game)
         remoteGameHandler?.(current.game)
         notify()
       }
@@ -919,7 +972,7 @@ async function protectedGameAction(endpoint: string, body: Record<string, unknow
         hydrateOnlineGame(current.game)
         onlineState.revision = current.revision
         onlineState.lastSync = Date.now()
-        syncedGame = current.game
+        noteSyncedGame(current.game)
         remoteGameHandler?.(current.game)
         notify()
       }
@@ -1140,7 +1193,7 @@ async function submitGameAction(endpoint: string, body: Record<string, unknown> 
   if (result.revision >= onlineState.revision) {
     onlineState.revision = result.revision
     onlineState.lastSync = Date.now()
-    syncedGame = nextGame
+    noteSyncedGame(nextGame)
     remoteGameHandler?.(nextGame)
     notify()
   }

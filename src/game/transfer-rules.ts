@@ -26,6 +26,8 @@ export const VETERAN_MIN_AGE = 29
 export const BENCH_WARMER_SHARE = 0.15
 /** 年轻主力最近出场占比低于这个，就不再算“非卖品”。 */
 export const YOUNG_STARTER_LOW_SHARE = 0.35
+/** 两套阵容缺少替代者时（仍保有一套合法首发），替补球员需要额外支付的高溢价。 */
+export const DEPTH_SHORTAGE_PREMIUM = 0.8
 /** 报价不低于身价的这个倍数算“高价”：拒绝高价报价，球员会不满。 */
 export const HIGH_OFFER_RATIO = 1.3
 /** 不满持续现实小时数（16 小时 = 4 轮联赛）。 */
@@ -97,6 +99,8 @@ export function assessRelease(input: {
   lineup: Pick<Lineup, 'starters' | 'bench'>
   minutes?: readonly number[]
   value: number
+  /** 对方两套阵容缺少该位置替代者（仅用于非首发替补）：可卖，但需要额外高额溢价。 */
+  depthShortage?: boolean
 }): ReleaseAssessment {
   const age = input.player.age ?? 24
   const ageBand = ageBandOf(age)
@@ -130,6 +134,10 @@ export function assessRelease(input: {
     status = 'rotation'
     required = 0.2 + 0.3 * share
     reasons.splice(0, reasons.length, `年轻主力但最近出场只有 ${Math.round(share * 100)}%：至少多给 ${Math.round(required * 100)}%`)
+  }
+  if (input.depthShortage && required !== null) {
+    required += DEPTH_SHORTAGE_PREMIUM
+    reasons.push(`两套阵容缺少替代者：需额外高溢价 +${Math.round(DEPTH_SHORTAGE_PREMIUM * 100)}% 才肯放人`)
   }
   const value = Math.max(0, Math.round(input.value))
   return {

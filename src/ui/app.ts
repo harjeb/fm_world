@@ -1572,7 +1572,7 @@ document.addEventListener('click', async (event) => {
       const tier = isBoardTier(actionEl.dataset.tier) ? actionEl.dataset.tier : undefined
       const lock = actionEl.dataset.lock === '1'
       const label = BOARD_AMBITION_META[ambition].label
-      const tierPrefix = tier === 'division1' ? '（若升入一级）' : tier === 'division2' ? '（若留在二级）' : ''
+      const tierPrefix = tier === 'division1' ? '（若升入精英）' : tier === 'division2' ? '（若留在先锋）' : ''
       const successText = scope === 'offseason'
         ? `已预选下赛季目标${tierPrefix}：${label}（换季按实际级别生效）。`
         : lock

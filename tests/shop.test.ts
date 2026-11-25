@@ -247,7 +247,8 @@ describe('技能书商店与点数系统', () => {
     expect(html).toContain('250')
     expect(html).toContain('兑换（100 点）')
     expect(html).toContain('自动补发 10 商店点数')
-    expect(html).toContain('二级联赛')
+    expect(html).toContain('先锋联赛')
+    expect(html).toContain('精英联赛')
     expect(html).toContain('冠军联赛')
 
     await loadPveContent()
