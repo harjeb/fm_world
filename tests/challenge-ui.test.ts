@@ -4,6 +4,7 @@ beforeAll(loadPveContent)
 import { renderChallenge } from '../src/ui/screens/challenge.ts'
 import { game, ui } from '../src/ui/state.ts'
 import { peakDailyStatus } from '../src/game/peak-attempts.ts'
+import { LEGEND_DAILY_LIMIT, legendDailyStatus } from '../src/game/legend-attempts.ts'
 
 describe('挑战页面', () => {
   it('传奇挑战默认筛选 B 档，所有档位都可以直接开战', () => {
@@ -109,12 +110,24 @@ describe('挑战页面', () => {
     ui.legendSearch = ''
   })
 
-  it('传奇档位筛选可渲染', () => {
-    ui.challengeMode = 'legend'
-    ui.legendTier = 'S+'
-    const legend = renderChallenge()
-    expect(legend).toContain('S+')
-    expect(legend).toContain('传奇球队')
-
+  it('传奇档位筛选与现实日 20 次配额可渲染，次数用完时禁用开战按钮', () => {
+    const prevAttempts = game.pve!.legendDailyAttempts
+    const previousActive = game.activeMatch
+    try {
+      game.activeMatch = undefined
+      game.pve!.legendDailyAttempts = { day: legendDailyStatus(game).day, count: LEGEND_DAILY_LIMIT }
+      ui.challengeMode = 'legend'
+      ui.legendTier = 'S+'
+      const legend = renderChallenge()
+      expect(legend).toContain('S+')
+      expect(legend).toContain('传奇球队')
+      expect(legend).toContain('今日剩余')
+      expect(legend).toContain(`0 / ${LEGEND_DAILY_LIMIT}`)
+      expect(legend).toContain('北京时间 00:00 重置')
+      expect(legend).toContain('次数已用完')
+    } finally {
+      game.pve!.legendDailyAttempts = prevAttempts
+      game.activeMatch = previousActive
+    }
   })
 })

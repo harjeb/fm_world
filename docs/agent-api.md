@@ -282,14 +282,14 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 ### 巅峰之路与传奇挑战（PvE）
 
-`state.pve` 返回巅峰之路摘要（`peak.cleared`、`nextStage`、`totalStages`、`dailyLimit`、`dailyAttempts`、`breakthroughCards`、`reward50Ready`、`reward50`、`currentStageDef`）与传奇挑战摘要（`legends.total`、`beaten`、`records`）。PvE 比赛默认全队满体能开球，不消耗联赛体能、不产生赛后伤停；开赛后可通过 `advance_match` / `set_match_tactics` / `set_match_auto_subs` / `substitute` / `coach_pause` / `play_match` 推进并结算，赛果记入 `challengeHistory`。
+`state.pve` 返回巅峰之路摘要（`peak.cleared`、`nextStage`、`totalStages`、`dailyLimit`、`dailyAttempts`、`breakthroughCards`、`reward50Ready`、`reward50`、`currentStageDef`）与传奇挑战摘要（`legends.total`、`beaten`、`dailyLimit`、`dailyAttempts`、`records`）。PvE 比赛默认全队满体能开球，不消耗联赛体能、不产生赛后伤停；开赛后可通过 `advance_match` / `set_match_tactics` / `set_match_auto_subs` / `substitute` / `coach_pause` / `play_match` 推进并结算，赛果记入 `challengeHistory`。
 
 - `get_pve` — 只读，不写存档。返回巅峰之路全部 100 关目录（含目标 CA、奖励、巅峰技能书掉落及 50 关全明星奖励候选 `reward50Candidates`）和全部 50 支传奇强队列表（含 `id`、档位、掉落传奇技能书 `dropSkill` 与个人历史战绩）。可选传 `stage`（1–100）或 `legendId` 预览该对手完整 16 人名单。
   - `stage?`
   - `legendId?`
 - `start_peak_challenge` — 开启一场巅峰之路比赛（淘汰制，平局自动点球决胜；每日上限 10 次，北京时间 00:00 重置）。仅可挑战已通关关卡或当前下一关（`stage <= cleared + 1`）；首次通关自动发放关卡金币/球迷奖励、属性突破卡及 80–100 关巅峰技能书。
   - `stage?`: 1–100，省略时默认挑战下一未通关关卡（`cleared + 1`）
-- `start_legend_challenge` — 与一支历史传奇强队开赛（允许平局；战胜对应强队可概率掉落该队专属传奇技能书）。
+- `start_legend_challenge` — 与一支历史传奇强队开赛（允许平局；战胜对应强队可概率掉落该队专属传奇技能书；每个现实自然日限挑战 20 次，北京时间 00:00 重置，开赛即消耗）。
   - `legendId`: 来自 `get_pve` 的 `legends.teams[].id`（例如 `"barcelona-2010-11"`）
 - `use_peak_breakthrough` — 消耗 1 张巅峰属性突破卡，把指定球员一项主属性的个人上限 +100（不超过 2000 硬上限；如该球员正在培养，同步提升本轮候选上限）。
   - `playerId`

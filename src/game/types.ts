@@ -1272,6 +1272,10 @@ export type PvePeakReward = {
 
 export type PveState = {
   legends: Record<string, PveLegendRecord>
+  /** 传奇挑战开赛时消耗的现实自然日（北京时间 00:00 重置）次数；旧存档缺省表示尚未记录。 */
+  legendDailyAttempts?: { day: number; count: number }
+  /** 所有传奇挑战共用的递增开赛序号，用于不重复的种子和战报 ID。 */
+  legendAttemptCounter?: number
   peak: {
     cleared: number
     history: PvePeakHistoryEntry[]
