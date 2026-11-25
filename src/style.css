@@ -18,6 +18,8 @@
   --text: #e9edf2;
   --text-2: #b4bdc8;
   --text-3: #8d98a6;
+  --muted: var(--text-3);
+  --dim: var(--text-2);
   --accent: #cdf33f;
   --accent-ink: #141a05;
   --accent-soft: rgba(205, 243, 63, 0.085);
@@ -27,6 +29,14 @@
   --info: #62aef5;
   --legend: #b57bff;
   --hidden-attr: #c4a6ff;
+  --attr-passing: #4ea1ff;
+  --attr-shooting: #ff5d5d;
+  --attr-dribbling: #ff9f43;
+  --attr-tackling: #b57bff;
+  --attr-strength: #f5d04a;
+  --attr-speed: #3ddc84;
+  --attr-acceleration: #2dd4d4;
+  --attr-silver: #b4bcc8;
   --h1: #f2706a;
   --h2: #f0975a;
   --h3: #e9c753;
@@ -2366,4 +2376,170 @@ circle.pm-5 { fill: var(--h6); }
 @media (max-width: 560px) {
   .shout-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .shout-target-select { min-width: 0; width: 100%; }
+}
+
+/* ---------- 主题切换控件布局 ---------- */
+.boot-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.boot-head .kicker { margin-bottom: 0; }
+.mobile-nav-head-actions { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.mobile-nav-theme { height: 28px; padding: 0 8px; font-size: 12px; }
+
+/* ---------- 浅色模式（Daylight Slate-Alabaster 主题） ---------- */
+:root[data-theme="light"] {
+  --bg: #eef2f6;
+  --side: #f8fafc;
+  --panel: #ffffff;
+  --panel-2: #f3f6fa;
+  --raised: #e6ecf2;
+  --hover: #dfe7f0;
+  --line: #d6dfe8;
+  --line-2: #b9c6d4;
+  --text: #111827;
+  --text-2: #374151;
+  --text-3: #5b6778;
+  --muted: var(--text-3);
+  --dim: var(--text-2);
+  --accent: #2f7d18;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(47, 125, 24, 0.1);
+  --good: #15803d;
+  --warn: #b45309;
+  --bad: #dc2626;
+  --info: #1d6fd8;
+  --legend: #7c3aed;
+  --hidden-attr: #6d28d9;
+  --attr-passing: #1d6fd8;
+  --attr-shooting: #dc2626;
+  --attr-dribbling: #c25e0a;
+  --attr-tackling: #7c3aed;
+  --attr-strength: #a16207;
+  --attr-speed: #15803d;
+  --attr-acceleration: #0e7c86;
+  --attr-silver: #5b6778;
+  --h1: #dc2626;
+  --h2: #d95d16;
+  --h3: #b07d0a;
+  --h4: #4d8a12;
+  --h5: #12824c;
+  --h6: #0e7c86;
+  color-scheme: light;
+}
+
+:root[data-theme="light"] .btn:hover:not(:disabled) { background: var(--hover); }
+:root[data-theme="light"] .btn.primary:hover:not(:disabled) { background: #246612; }
+:root[data-theme="light"] .btn.danger { color: #ffffff; }
+:root[data-theme="light"] .nav-badge,
+:root[data-theme="light"] .mobile-more-badge,
+:root[data-theme="light"] .mark.yellow { color: #ffffff; }
+:root[data-theme="light"] .panel { box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }
+:root[data-theme="light"] .topbar { box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04); }
+:root[data-theme="light"] .toast { background: var(--panel); box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14); }
+:root[data-theme="light"] .overlay { background: rgba(15, 23, 42, 0.42); }
+:root[data-theme="light"] .modal { box-shadow: 0 20px 56px rgba(15, 23, 42, 0.18); }
+:root[data-theme="light"] .chat-backdrop,
+:root[data-theme="light"] .mobile-nav-backdrop { background: rgba(15, 23, 42, 0.36); }
+:root[data-theme="light"] .chat-drawer { box-shadow: -12px 0 36px rgba(15, 23, 42, 0.15); }
+:root[data-theme="light"] .mobile-nav-sheet { box-shadow: 0 -10px 32px rgba(15, 23, 42, 0.16); }
+:root[data-theme="light"] .tooltip { background: #ffffff; border-color: var(--line-2); box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16); }
+:root[data-theme="light"] input,
+:root[data-theme="light"] select { background-color: var(--panel); }
+:root[data-theme="light"] .preview { background: var(--panel-2); }
+
+/* 数据表、技能标签与隐藏属性 */
+:root[data-theme="light"] .dt tbody tr:nth-child(even) td { background: rgba(15, 23, 42, 0.022); }
+:root[data-theme="light"] .dt tr.me:hover td { background: rgba(47, 125, 24, 0.15); }
+:root[data-theme="light"] .hidden-attr b { color: #5b21b6; }
+:root[data-theme="light"] .tag.skill-silver { color: #475569; border-color: rgba(100, 116, 139, 0.45); background: rgba(100, 116, 139, 0.1); }
+:root[data-theme="light"] .book-name.skill-silver { color: #475569; }
+:root[data-theme="light"] .tag.skill-gold { color: #a16207; border-color: rgba(180, 83, 9, 0.45); background: rgba(217, 119, 6, 0.1); }
+:root[data-theme="light"] .book-name.skill-gold { color: #a16207; }
+:root[data-theme="light"] .tag.skill-rainbow .skill-label,
+:root[data-theme="light"] .book-name.skill-rainbow {
+  background: linear-gradient(90deg, #d92672 0%, #c97a00 28%, #0f8a4c 54%, #0b74c4 78%, #7c3aed 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+:root[data-theme="light"] .training-book-option.tier-silver { border-left-color: #64748b; }
+:root[data-theme="light"] .training-book-option.tier-rainbow { background: linear-gradient(90deg, rgba(217, 38, 114, 0.07), rgba(11, 116, 196, 0.06) 55%, var(--panel-2)); }
+
+/* 雷达图、训练日历与品质弹字 */
+:root[data-theme="light"] .radar-shape { fill: rgba(47, 125, 24, 0.18); }
+:root[data-theme="light"] .radar-base { fill: rgba(91, 103, 120, 0.14); }
+:root[data-theme="light"] .cal-slot.done { background: #dbe4ee; color: var(--text); }
+:root[data-theme="light"] .cal-slot.camp { background: rgba(217, 119, 6, 0.14); color: #92400e; box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.35); }
+:root[data-theme="light"] .cal-slot.camp.done { background: #fde68a; color: #78350f; }
+:root[data-theme="light"] .cal-slot.q-great { background: #bbf7d0; color: #14532d; }
+:root[data-theme="light"] .cal-slot.q-perfect { background: #d9f99d; color: #365314; }
+:root[data-theme="light"] .cal-swatch-done { background: #cbd5e1; }
+:root[data-theme="light"] .cal-swatch-camp { background: #fde68a; box-shadow: inset 0 0 0 1px rgba(180, 83, 9, 0.55); }
+:root[data-theme="light"] .cal-swatch-great { background: #86efac; }
+:root[data-theme="light"] .cal-swatch-perfect { background: #bef264; }
+:root[data-theme="light"] .camp-hint { color: #b45309; }
+:root[data-theme="light"] .quality-popup {
+  color: #111827;
+  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.92), 0 0 18px var(--glow, rgba(15, 23, 42, 0.25));
+}
+:root[data-theme="light"] .quality-popup.q-ok { color: #15803d; --glow: rgba(21, 128, 61, 0.35); }
+:root[data-theme="light"] .quality-popup.q-plain { color: #475569; --glow: rgba(71, 85, 105, 0.28); }
+:root[data-theme="light"] .quality-popup.q-fail { color: #dc2626; --glow: rgba(220, 38, 38, 0.35); }
+:root[data-theme="light"] .quality-popup.q-great { color: #b45309; --glow: rgba(217, 119, 6, 0.42); }
+:root[data-theme="light"] .quality-popup.q-perfect { color: #9333ea; --glow: rgba(147, 51, 234, 0.42); }
+
+/* 绿茵战术板上的下拉条始终保持深色半透白字，避免浅色模式字色变暗看不清 */
+:root[data-theme="light"] .slot .pick { background: rgba(10, 22, 16, 0.84); border-color: rgba(255, 255, 255, 0.24); color: #f8fafc; }
+:root[data-theme="light"] .slot .pick:hover { background: rgba(10, 22, 16, 0.94); border-color: rgba(255, 255, 255, 0.5); }
+:root[data-theme="light"] .slot .slot-role { color: #cbd5e1; }
+:root[data-theme="light"] .slot .pick > .ico { color: #cbd5e1; }
+:root[data-theme="light"] .bench-slot.drop-over { border-color: var(--accent); }
+:root[data-theme="light"] .fitness-base { color: rgba(15, 23, 42, 0.16); }
+:root[data-theme="light"] .card-name-input { background: rgba(15, 23, 42, 0.06); }
+:root[data-theme="light"] .auto-switch.on i::after { background: #ffffff; }
+:root[data-theme="light"] .tac-style-bar,
+:root[data-theme="light"] .tac-plan-bar,
+:root[data-theme="light"] .fm-rules-empty { background: var(--panel-2); }
+
+/* 全服播报、聊天、董事会、FM 战术规则与排名折线 */
+:root[data-theme="light"] .market-ticker {
+  background: linear-gradient(90deg, rgba(47, 125, 24, 0.1), rgba(47, 125, 24, 0.02)), var(--side);
+  border-bottom-color: rgba(47, 125, 24, 0.28);
+}
+:root[data-theme="light"] .chat-msg.mine {
+  background: linear-gradient(90deg, rgba(47, 125, 24, 0.08), rgba(47, 125, 24, 0.02)), var(--panel-2);
+  border-color: rgba(47, 125, 24, 0.35);
+}
+:root[data-theme="light"] .chat-mine-tag { border-color: rgba(47, 125, 24, 0.38); }
+:root[data-theme="light"] .board-alert,
+:root[data-theme="light"] .board-opt.selected { border-color: rgba(47, 125, 24, 0.45); background: rgba(47, 125, 24, 0.07); }
+:root[data-theme="light"] .board-policy-pills > div,
+:root[data-theme="light"] .board-target-item,
+:root[data-theme="light"] .board-kpi,
+:root[data-theme="light"] .board-slider-preview > div,
+:root[data-theme="light"] .board-opt,
+:root[data-theme="light"] .board-budget-strip { background: var(--panel-2); }
+:root[data-theme="light"] .board-opt-dl > div { border-bottom-color: var(--line); }
+:root[data-theme="light"] .fm-slot-card.is-main { border-color: rgba(21, 128, 61, 0.4); background: rgba(21, 128, 61, 0.06); }
+:root[data-theme="light"] .fm-rule-tag.cond { background: rgba(29, 111, 216, 0.12); color: #1d4ed8; }
+:root[data-theme="light"] .fm-rule-tag.act { background: rgba(21, 128, 61, 0.12); color: #15803d; }
+:root[data-theme="light"] .fm-rule-tag.sub { background: rgba(180, 83, 9, 0.12); color: #b45309; }
+:root[data-theme="light"] .rank-zone.champion { fill: rgba(47, 125, 24, 0.1); }
+:root[data-theme="light"] .rank-zone.legend { fill: rgba(124, 58, 237, 0.08); }
+:root[data-theme="light"] .rank-zone.promote { fill: rgba(21, 128, 61, 0.08); }
+:root[data-theme="light"] .rank-zone.playoff { fill: rgba(180, 83, 9, 0.08); }
+:root[data-theme="light"] .rank-zone.relegate { fill: rgba(220, 38, 38, 0.08); }
+
+/* 成就系统与场边喊话心情 */
+:root[data-theme="light"] .ach-bar { background: var(--raised); }
+:root[data-theme="light"] .ach-bar.is-mystery { background: #d8e1eb; }
+:root[data-theme="light"] .ach-card.is-hidden-locked { background: #e9eff5; border-color: #cbd5e1; }
+:root[data-theme="light"] .ach-card.is-welfare { background: linear-gradient(135deg, rgba(217, 119, 6, 0.11), var(--panel-2) 60%); }
+:root[data-theme="light"] .ach-card.is-hidden-unlocked { background: linear-gradient(135deg, rgba(21, 128, 61, 0.09), var(--panel-2) 60%); }
+:root[data-theme="light"] .mark.mood-positive { background: rgba(21, 128, 61, 0.12); color: #15803d; border-color: rgba(21, 128, 61, 0.38); }
+:root[data-theme="light"] .mark.mood-neutral { background: rgba(100, 116, 139, 0.12); color: #475569; border-color: rgba(100, 116, 139, 0.35); }
+:root[data-theme="light"] .mark.mood-negative { background: rgba(220, 38, 38, 0.12); color: #dc2626; border-color: rgba(220, 38, 38, 0.38); }
+:root[data-theme="light"] .event-line.shout { background: rgba(21, 128, 61, 0.08); box-shadow: inset 3px 0 var(--good); }
+:root[data-theme="light"] .event-line.shout .type { color: var(--good); }
+@media (max-width: 760px) {
+  :root[data-theme="light"] .dt.squad th:nth-child(2),
+  :root[data-theme="light"] .dt.squad td:nth-child(2) { box-shadow: 2px 0 6px rgba(15, 23, 42, 0.12); }
 }

@@ -127,7 +127,9 @@ import { renderWorld } from './screens/world.ts'
 import { renderSeasonCups } from './season-cup-view.ts'
 import { returnToChallengeAfterWin } from './match-completion.ts'
 import { latestPlayedRound } from '../game/standings-history.ts'
+import { currentTheme, initTheme, isLightTheme, toggleTheme } from './theme.ts'
 
+initTheme()
 const app = document.getElementById('app')!
 const SAVE_FAILURE_NOTICE = '存档保存失败：浏览器未能写入本地存档。请勿刷新或关闭页面。'
 
@@ -445,7 +447,7 @@ function mountTurnstile(): void {
     if (!api || slot.childElementCount > 0) return
     api.render(slot, {
       sitekey: publicConfig.turnstileSiteKey,
-      theme: 'dark',
+      theme: currentTheme(),
       callback: (token: string) => { ui.turnstileToken = token },
       'expired-callback': () => { ui.turnstileToken = '' },
       'error-callback': () => { ui.turnstileToken = '' },
@@ -618,9 +620,13 @@ function renderBootGate(): string {
   if (restoringGame) return `<div class="overlay boot-gate"><div class="modal boot-modal" role="status"><h1>正在读取联机存档…</h1><p class="hint">正在向服务器获取最新进度。</p></div></div>`
   const online = hasOnlineSession()
   const name = onlineState.user ? esc(onlineState.user.username) : ''
+  const light = isLightTheme()
   return `<div class="overlay boot-gate">
     <div class="modal boot-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="选择游戏模式">
-      <div class="kicker">FM 世界</div>
+      <div class="boot-head">
+        <div class="kicker">FM 世界</div>
+        <button type="button" class="btn ghost small" data-action="theme-toggle" title="${light ? '切换到深色模式' : '切换到浅色模式'}">${icon(light ? 'moon' : 'sun', 14)}<span>${light ? '深色模式' : '浅色模式'}</span></button>
+      </div>
       <h1>选择游戏模式</h1>
       <p class="hint">登录后进入全服共享世界：所有账号看到同一批球队、同一个赛季、同一个日期。</p>
       <p class="hint">离线模式只玩这台设备上的本地存档，时间和赛季都按本地时间自己走。</p>
@@ -1821,6 +1827,10 @@ document.addEventListener('click', async (event) => {
         ui.notice = '已退出联机账号，继续使用本地存档。'
         render()
       })
+      break
+    case 'theme-toggle':
+      toggleTheme()
+      render()
       break
     case 'new-game':
       if (isOnlineMode() || sharedActionUnavailable()) { showNotice('联机账号不能重开个人世界；请先退出账号再创建本地存档。'); break }

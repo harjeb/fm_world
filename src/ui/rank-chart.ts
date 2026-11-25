@@ -7,9 +7,10 @@ import { clubLook, crest, ownName, panel, tag } from './components.ts'
 import { esc } from './format.ts'
 import { tipAttrs } from './tooltip.ts'
 import { game } from './state.ts'
+import { isLightTheme } from './theme.ts'
 
 const RESULT_LABELS: Record<'W' | 'D' | 'L', string> = { W: '胜', D: '平', L: '负' }
-const RESULT_COLORS: Record<'W' | 'D' | 'L', string> = { W: '#4fd08a', D: '#f2b84b', L: '#f2706a' }
+const RESULT_COLORS: Record<'W' | 'D' | 'L', string> = { W: 'var(--good)', D: 'var(--warn)', L: 'var(--bad)' }
 
 function hexLuminance(color: string): number {
   const match = /^#([0-9a-f]{6})$/i.exec(color)
@@ -22,11 +23,13 @@ function hexLuminance(color: string): number {
   return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
 }
 
-/** 深色球衣在石墨底面板上对比度过低时，回退为高亮天蓝色以保证折线清晰可读。 */
+/** 球衣色在当前底色上对比度过低时，回退为清晰可读的主题蓝。 */
 function readableLineColor(color: string | undefined, isPlayer: boolean): string {
   if (isPlayer) return 'var(--accent)'
   if (!color || !/^#[0-9a-f]{6}$/i.test(color)) return 'var(--info)'
-  return hexLuminance(color) < 0.14 ? '#62aef5' : color
+  const lum = hexLuminance(color)
+  if (isLightTheme()) return lum > 0.7 ? '#1d6fd8' : color
+  return lum < 0.14 ? '#62aef5' : color
 }
 
 function uniqueSorted(nums: number[]): number[] {
