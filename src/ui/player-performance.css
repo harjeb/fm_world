@@ -70,3 +70,33 @@
 @media (max-width: 420px) {
   .pp-block-body { grid-template-columns: 1fr; gap: 12px; }
 }
+
+:root[data-theme="light"] .player-performance {
+  --pp-line: var(--line);
+  color: var(--text);
+  background: var(--panel);
+  border-color: var(--line);
+}
+:root[data-theme="light"] .pp-eyebrow { color: #6d28d9; }
+:root[data-theme="light"] .pp-note,
+:root[data-theme="light"] .pp-table thead,
+:root[data-theme="light"] .pp-summary h3 span,
+:root[data-theme="light"] .pp-item span { color: var(--text-3); }
+:root[data-theme="light"] .pp-toggle { background: var(--panel-2); border: 1px solid var(--line); }
+:root[data-theme="light"] .pp-toggle button.is-active { background: #6d28d9; color: #fff; }
+:root[data-theme="light"] .player-performance button:focus-visible { outline-color: var(--accent); }
+:root[data-theme="light"] .pp-table th,
+:root[data-theme="light"] .pp-table td { border-bottom-color: var(--line); }
+:root[data-theme="light"] .pp-table tbody tr:nth-child(even) { background: var(--panel-2); }
+:root[data-theme="light"] .pp-table tbody tr.is-active { background: rgba(109, 40, 217, 0.12); color: var(--text); }
+:root[data-theme="light"] .pp-table tbody tr[data-performance-competition]:hover { filter: none; background: var(--hover); }
+:root[data-theme="light"] .pp-table tbody tr.is-active[data-performance-competition]:hover { background: rgba(109, 40, 217, 0.18); }
+:root[data-theme="light"] .pp-radio { border-color: var(--line-2); }
+:root[data-theme="light"] .is-active .pp-radio { border-color: #6d28d9; }
+:root[data-theme="light"] .pp-violet { --accent: #7c3aed; }
+:root[data-theme="light"] .pp-lime { --accent: #3f7d12; }
+:root[data-theme="light"] .pp-cyan { --accent: #0f766e; }
+:root[data-theme="light"] .pp-rose { --accent: #be123c; }
+:root[data-theme="light"] .pp-ring { background: conic-gradient(var(--accent) var(--pp-progress), var(--raised) 0); }
+:root[data-theme="light"] .pp-ring:before { background: var(--panel); }
+:root[data-theme="light"] .pp-ring-unknown b { color: var(--text-3); }

@@ -226,7 +226,7 @@ export function renderAccountOverlay(): string {
           ${registering && mode === 'invite' ? '<div class="form-row"><label for="account-invite">邀请码</label><input id="account-invite" autocomplete="off" placeholder="向管理员索取" /></div>' : ''}
           ${registering ? `
             <div class="form-row"><label for="account-club">执教球队</label><select id="account-club">
-              <option value="">${registrationClubs === null ? '正在加载球队…' : clubs.length ? '请选择一支可接管的球队' : '暂无空缺球队'}</option>
+              <option value="">${registrationClubs === null ? '正在加载球队…' : clubs.length ? '请选择一支可接管的先锋联赛球队' : '暂无空缺球队'}</option>
               ${clubs.map((club) => `<option value="${esc(club.id)}" ${selectedClub?.id === club.id ? 'selected' : ''}>${esc(club.name)} · ${esc(club.tier === 'champions' ? '冠军联赛' : club.tier === 'division1' ? (club.conference ? `精英联赛 · ${conferenceLabel(club.conference)}` : '精英联赛') : conferenceLabel(club.conference))} · RANK ${club.rating ?? '—'}</option>`).join('')}
             </select></div>
             ${selectedClub ? `<p class="hint">${[...selectedClub.players].sort((a, b) => b.ca - a.ca).slice(0, 3).map((player) => `${posBadge(primaryPosition(player))} ${esc(player.name)} · CA ${player.ca.toFixed(0)}`).join(' / ')}</p>` : ''}

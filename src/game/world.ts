@@ -1617,6 +1617,8 @@ function promoteAndRelegate(game: GameState, protectedClubs: ReadonlySet<string>
     if (club) {
       club.tier = 'division1'
       club.conference = undefined
+      // 任何从冠军联赛降级的球队永久锁定，即使后续降到先锋联赛也不开放新玩家选择
+      club.playerLocked = true
       incomingD1.push(club)
     }
   }

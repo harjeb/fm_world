@@ -13,3 +13,6 @@
   .youth-ratings { gap: 8px; }
   .youth-ratings .rating-stars { font-size: 17px; }
 }
+:root[data-theme="light"] .rating-star--full { color: #d97706; }
+:root[data-theme="light"] .rating-star--empty { color: #cbd5e1; }
+:root[data-theme="light"] .rating-star--half { background: linear-gradient(90deg, #d97706 50%, #cbd5e1 50%); -webkit-background-clip: text; background-clip: text; }

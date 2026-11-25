@@ -274,11 +274,17 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     sharedWorld.freeStars = ownerless.freeStars
     sharedWorld.reserveStars = ownerless.reserveStars
   }
-  // 初始冠军联赛 20 支球队永久锁定，即使降级也不开放玩家注册/接管；启动时补齐旧存档标记，并同步旧联赛级别简介文案。
+  // 初始冠军联赛 20 支球队及历史上从冠军联赛降级的球队永久锁定，即使降到先锋联赛也不开放新玩家选择；启动时补齐旧存档标记，并同步旧联赛级别简介文案。
   const renameLegacyTierStyle = (style: string | undefined): string | undefined =>
     style === '一级联赛球队。' ? '精英联赛球队。' : style === '二级联赛球队。' ? '先锋联赛球队。' : style
+  const championsLockedIds = new Set<string>(INITIAL_CHAMPIONS_CLUB_IDS)
+  for (const entry of sharedWorld.world.history ?? []) {
+    if (Array.isArray(entry.relegations) && entry.relegations.length >= 6) {
+      for (const id of entry.relegations.slice(0, 3)) championsLockedIds.add(id)
+    }
+  }
   for (const club of sharedWorld.world.clubs) {
-    if (INITIAL_CHAMPIONS_CLUB_IDS.has(club.id) && !club.playerLocked) club.playerLocked = true
+    if (championsLockedIds.has(club.id) && !club.playerLocked) club.playerLocked = true
     const nextStyle = renameLegacyTierStyle(club.style)
     if (nextStyle && nextStyle !== club.style) club.style = nextStyle
   }
@@ -2904,9 +2910,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     return worldSlots(sharedWorld.world, sharedWorld.owners, aliveAccountIds())
   }
 
-  /** 二级联赛满员时按需开出新赛区，并补齐名册、AI 经营轮次与前序已公布轮次。 */
+  /** 先锋联赛满员时按需开出新赛区，并补齐名册、AI 经营轮次与前序已公布轮次。 */
   function availableRegistrationClub(): WorldClub | undefined {
-    const existing = sharedWorld.world.clubs.find(item => !isClubPlayerLocked(item) && isVacantSeat(sharedWorld.owners[item.id])) ?? pickFreeClubForNewAccount(sharedWorld.world, sharedWorld.owners, aliveAccountIds())
+    const existing = sharedWorld.world.clubs.find(item => item.tier === 'division2' && !isClubPlayerLocked(item) && isVacantSeat(sharedWorld.owners[item.id])) ?? pickFreeClubForNewAccount(sharedWorld.world, sharedWorld.owners, aliveAccountIds())
     if (existing) return existing
     const completedBefore = completedWorldRound(sharedWorld.world)
     const { divisionId } = expandWorldConference(
@@ -3003,12 +3009,12 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return
     }
 
-    // 注册预览不预占球队：二级空位及各级别释放的托管席都可选。
+    // 注册预览不预占球队：仅开放当前处于先锋联赛的空缺球队（含精英联赛降级队与先锋联赛内释放席，不含冠军联赛降级锁定队）。
     if (url.pathname === '/api/registration/clubs' && req.method === 'GET') {
       if (registrationMode === 'closed') return json(res, 403, { error: '本服务器已关闭注册' })
       advanceAllMatches()
       availableRegistrationClub()
-      const clubs = worldSnapshot().clubs.filter((club) => !club.managed && !club.playerLocked && !isClubPlayerLocked(club.id) && (club.tier === 'division2' || isVacantSeat(sharedWorld.owners[club.id])))
+      const clubs = worldSnapshot().clubs.filter((club) => club.tier === 'division2' && !club.managed && !club.playerLocked && !isClubPlayerLocked(club.id))
       await sendJson(200, { clubs }, true)
       return
     }
@@ -3038,13 +3044,13 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (requestedClubId) {
         if (!club) return json(res, 400, { error: '找不到这支球队，请刷新列表' })
         if (isClubPlayerLocked(club)) {
-          return json(res, 403, { error: '初始冠军联赛球队已锁定，即使降级也不开放玩家选择，请选择其他球队' })
+          return json(res, 403, { error: '初始或曾从冠军联赛降级的球队已锁定，不开放新玩家选择，请选择其他先锋联赛球队' })
         }
         const ownerId = sharedWorld.owners[club.id]
         if (!isVacantSeat(ownerId) && db.accounts.some((item) => item.id === ownerId)) {
           return json(res, 409, { error: '这支球队已经有人执教，请选择其他球队' })
         }
-        if (club.tier !== 'division2' && !isVacantSeat(ownerId)) return json(res, 400, { error: '只能选择空缺的先锋联赛球队或前任教练释放的球队' })
+        if (club.tier !== 'division2') return json(res, 400, { error: '新玩家只能在先锋联赛中选择空缺球队' })
       } else {
         // 未指定球队时优先交接托管席，再选二级空位；满员才扩区。
         club = availableRegistrationClub()

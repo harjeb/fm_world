@@ -251,15 +251,15 @@ export function skillGroups(player: Pick<Player, 'skills' | 'skillTiers'>): stri
 
 /** 7 项外场主属性各一种颜色；隐藏属性、门将专属属性和没有主属性成长的项目一律银色。 */
 export const ATTR_COLORS: Partial<Record<AttrKey, string>> = {
-  passing: '#4ea1ff',
-  shooting: '#ff5d5d',
-  dribbling: '#ff9f43',
-  tackling: '#b57bff',
-  strength: '#f5d04a',
-  speed: '#3ddc84',
-  acceleration: '#2dd4d4',
+  passing: 'var(--attr-passing)',
+  shooting: 'var(--attr-shooting)',
+  dribbling: 'var(--attr-dribbling)',
+  tackling: 'var(--attr-tackling)',
+  strength: 'var(--attr-strength)',
+  speed: 'var(--attr-speed)',
+  acceleration: 'var(--attr-acceleration)',
 }
-export const ATTR_SILVER = '#b4bcc8'
+export const ATTR_SILVER = 'var(--attr-silver)'
 
 /** 单个属性的颜色：7 项外场主属性各有一种，其余（隐藏属性、门将专属属性）是银色。 */
 export function attrColor(key: AttrKey): string {

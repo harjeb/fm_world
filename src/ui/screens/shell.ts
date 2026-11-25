@@ -10,6 +10,7 @@ import { countdownText, esc } from '../format.ts'
 import { leadingBid } from '../../game/auction.ts'
 import { icon, type IconName } from '../icons.ts'
 import { game, ui, type Screen } from '../state.ts'
+import { isLightTheme } from '../theme.ts'
 
 /** badge：普通提醒（黄色）；alert：要尽快处理的（红色圆点，优先于 badge 显示）。 */
 type NavItem = { id: Screen; label: string; icon: IconName; badge?: () => number; alert?: () => number }
@@ -130,7 +131,10 @@ export function renderMobileNavSheet(): string {
             <small>第 ${game.season.index} 赛季 · ${esc(divisionText())} · 余额 ${economy.balance.toLocaleString()}</small>
           </div>
         </div>
-        <button type="button" class="modal-close mobile-nav-close" data-action="mobile-nav-close" aria-label="关闭导航">${icon('close', 16)}</button>
+        <div class="mobile-nav-head-actions">
+          <button type="button" class="btn ghost small mobile-nav-theme" data-action="theme-toggle" aria-label="${isLightTheme() ? '切换到深色模式' : '切换到浅色模式'}">${icon(isLightTheme() ? 'moon' : 'sun', 15)}<span>${isLightTheme() ? '深色' : '浅色'}</span></button>
+          <button type="button" class="modal-close mobile-nav-close" data-action="mobile-nav-close" aria-label="关闭导航">${icon('close', 16)}</button>
+        </div>
       </header>
       <div class="mobile-nav-body">
         ${game.activeMatch ? `<button type="button" class="mobile-nav-live ${ui.screen === 'match' ? 'active' : ''}" data-action="mobile-nav-go" data-screen="match">${icon('live', 18)}<span>比赛进行中 · 点击返回球场</span></button>` : ''}
@@ -185,6 +189,13 @@ function chatChip(): string {
   return `<button class="btn ghost top-chat ${ui.chatOpen ? 'active' : ''}" data-action="chat-toggle" title="全服聊天（保留最新 50 条）">${icon('chat', 15)}<span class="optional">聊天</span>${badge}</button>`
 }
 
+/** 浅色 / 深色主题切换入口。 */
+function themeChip(): string {
+  const light = isLightTheme()
+  const label = light ? '切换到深色模式' : '切换到浅色模式'
+  return `<button type="button" class="btn ghost top-theme" data-action="theme-toggle" title="${label}" aria-label="${label}" aria-pressed="${light}">${icon(light ? 'moon' : 'sun', 15)}<span class="optional">${light ? '深色' : '浅色'}</span></button>`
+}
+
 export function renderTopbar(): string {
   const economy = economyOf(game)
   const online = onlineState.status === 'online'
@@ -206,6 +217,7 @@ export function renderTopbar(): string {
       <div class="top-controls">
         ${auctionChip()}
         ${chatChip()}
+        ${themeChip()}
         <button class="btn ghost top-version" data-action="changelog-open" title="查看版本更新说明">${icon('info', 15)}<span>${esc(APP_VERSION)}</span><span class="optional">更新说明</span></button>
         <button class="btn ghost top-account" data-action="account-open">${icon('user', 15)}<span class="account-name">${account}</span>${sync ? `<span class="sync-state ${onlineState.connected && !onlineState.error ? 'ok' : 'muted'}">${sync}</span>` : ''}</button>
         ${online ? '' : `<button class="btn ghost" data-action="new-game" title="开始新游戏">${icon('newgame', 15)}<span class="optional">新游戏</span></button>`}

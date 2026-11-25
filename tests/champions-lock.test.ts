@@ -75,4 +75,92 @@ describe('初始冠军联赛球队锁定（降级到二级也不允许玩家选�
     })
     expect(okRes.status).toBe(201)
   })
+
+  it('只允许在先锋联赛选队：升入精英联赛的原二级托管席不可继承，曾从冠军联赛降级的原精英队亦禁止选择', async () => {
+    const first = await start()
+    // 先注册一支先锋联赛球队 d2n_01，再把该队模拟升到精英联赛并释放为托管席，同时把原精英队 d1_05 记入冠军联赛降级史并降到先锋联赛
+    const reg = await fetch(`${first.base}/api/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'old_coach', password: 'secret123', clubId: 'd2n_01' }),
+    })
+    expect(reg.status).toBe(201)
+    first.app.close()
+    servers.pop()
+
+    const worldPath = path.join(first.dir, 'world.json')
+    const saved = JSON.parse(fs.readFileSync(worldPath, 'utf8'))
+    // 1. 原二级队 d2n_01 升入精英联赛，且前任教练释放成空缺托管席（club:d2n_01）
+    const promotedD2 = saved.world.clubs.find((club: any) => club.id === 'd2n_01')
+    promotedD2.tier = 'division1'
+    promotedD2.conference = undefined
+    saved.owners['d2n_01'] = 'club:d2n_01'
+
+    // 2. 原精英队 d1_05 历史上曾升入冠军联赛并从冠军联赛降级（relegations 前 3），如今落到先锋联赛
+    const formerChamp = saved.world.clubs.find((club: any) => club.id === 'd1_05')
+    formerChamp.tier = 'division2'
+    formerChamp.conference = 'north'
+    delete formerChamp.playerLocked
+    saved.world.history = [
+      {
+        seasonIndex: 1,
+        champion: '皇家马德里',
+        promotions: ['d1_05', 'd1_02', 'd1_03', 'd2n_01', 'd2s_01', 'd2n_02'],
+        relegations: ['ai_18', 'ai_19', 'ai_20', 'd1_18', 'd1_19', 'd1_20'],
+      },
+      {
+        seasonIndex: 2,
+        champion: '皇家马德里',
+        promotions: ['d1_06', 'd1_07', 'd1_08', 'd2n_03', 'd2s_02', 'd2s_03'],
+        relegations: ['d1_05', 'ai_16', 'ai_17', 'd1_15', 'd1_16', 'd1_17'],
+      },
+    ]
+
+    // 3. 原精英队 d1_15 从精英联赛直接降到先锋联赛（未曾从冠军联赛降级）→ 应当可选
+    const d1Relegated = saved.world.clubs.find((club: any) => club.id === 'd1_15')
+    d1Relegated.tier = 'division2'
+    d1Relegated.conference = 'south'
+    delete d1Relegated.playerLocked
+
+    fs.writeFileSync(worldPath, JSON.stringify(saved))
+
+    const restarted = await start(first.dir)
+    const regClubsRes = await fetch(`${restarted.base}/api/registration/clubs`)
+    expect(regClubsRes.status).toBe(200)
+    const regClubs = (await regClubsRes.json() as { clubs: Array<{ id: string; tier: string }> }).clubs
+    const regIds = new Set(regClubs.map((c) => c.id))
+
+    // 所有可选队必须全部在先锋联赛（division2）
+    expect(regClubs.every((c) => c.tier === 'division2')).toBe(true)
+    // 升入精英联赛的原二级托管席 d2n_01 不可见且不能继承
+    expect(regIds.has('d2n_01')).toBe(false)
+    // 曾从冠军联赛降级的 d1_05 已被回填 playerLocked 且不可见
+    expect(regIds.has('d1_05')).toBe(false)
+    // 仅从精英联赛降级的 d1_15 正常可见可选
+    expect(regIds.has('d1_15')).toBe(true)
+
+    // 尝试显式继承升到精英联赛的 d2n_01 → 400 拒绝
+    const inheritPromoted = await fetch(`${restarted.base}/api/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'sneaky_d1', password: 'secret123', clubId: 'd2n_01' }),
+    })
+    expect(inheritPromoted.status).toBe(400)
+
+    // 尝试显式选曾从冠军联赛降级的 d1_05 → 403 拒绝
+    const pickFormerChamp = await fetch(`${restarted.base}/api/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'sneaky_champ', password: 'secret123', clubId: 'd1_05' }),
+    })
+    expect(pickFormerChamp.status).toBe(403)
+
+    // 显式选择从精英联赛降级的 d1_15 → 201 成功
+    const pickD1Relegated = await fetch(`${restarted.base}/api/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'valid_d1_drop', password: 'secret123', clubId: 'd1_15' }),
+    })
+    expect(pickD1Relegated.status).toBe(201)
+  })
 })
