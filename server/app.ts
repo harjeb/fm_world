@@ -2860,6 +2860,11 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       }
       serveStatic(req, res, url)
     } catch (error) {
+      if (error instanceof PayloadTooLargeError) {
+        if (!res.headersSent) json(res, 413, { error: error.message })
+        else res.end()
+        return
+      }
       console.error(error)
       if (!res.headersSent) json(res, 500, { error: '服务器内部错误' })
       else res.end()
@@ -3740,7 +3745,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       preservePositionProfiles(account.game, body.game)
       const youthError = preserveYouthState(account.game, body.game, now())
       if (youthError) { await sendJson(400, { error: youthError, revision: account.revision, game: publicGame(account) }, true); return }
-      if (account.game.shared) body.game.reserveStars = account.game.reserveStars
+      if (account.game.shared) {
+        body.game.reserveStars = account.game.reserveStars
+        if (body.game.aiTeams.length === 0) body.game.aiTeams = account.game.aiTeams
+      }
       // The private ledger lives in game_json so it is committed atomically with the
       // balance. Never trust a ledger supplied by the client.
       const previousPrivate = account.game as GameState & { recycledCardIds?: string[] }
@@ -3859,15 +3867,16 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const officialRecords = account.game.challengeHistory.filter(item => item.cupId?.startsWith('season-'))
       const restoredChallenges = (body.game.challengeHistory ?? [])
         .filter(item => !item.cupId?.startsWith('season-'))
-        .map(item => {
+        .flatMap(item => {
           if (item.detailDeferred) {
             const existing = previousChallengesById.get(item.id)
-            if (existing) return existing
+            if (existing) return [existing]
+            if (!item.score) return []
             const cleaned = { ...item }
             delete cleaned.detailDeferred
-            return cleaned
+            return [cleaned]
           }
-          return item
+          return [item]
         })
       body.game.challengeHistory = [...restoredChallenges, ...officialRecords].sort((a, b) => b.createdAt - a.createdAt)
       if (body.game.world && account.game.world) body.game.world = account.game.world
@@ -4262,13 +4271,20 @@ function json(res: ServerResponse, status: number, value: unknown): void {
   res.end(JSON.stringify(value))
 }
 
+const MAX_JSON_BODY_BYTES = 32 * 1024 * 1024
+
+class PayloadTooLargeError extends Error {
+  readonly status = 413
+  constructor() { super('请求体过大') }
+}
+
 async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = []
   let size = 0
   for await (const chunk of req) {
     const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
     size += buf.length
-    if (size > 8 * 1024 * 1024) throw new Error('请求体过大')
+    if (size > MAX_JSON_BODY_BYTES) throw new PayloadTooLargeError()
     chunks.push(buf)
   }
   if (chunks.length === 0) return {}

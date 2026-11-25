@@ -276,3 +276,113 @@ it('冲突即时恢复失败时保留错误提示，待后续 SSE 同步权威�
   expect(lastYouthBaseRevision).toBe(4)
   expect(online.onlineState.revision).toBe(5)
 })
+
+it('联机共享存档 PUT /api/game 上传前剥离服务端权威大字段并压薄已入库战报，同时与真实服务器往返完整保留历史记录', async () => {
+  const fs = await import('node:fs')
+  const os = await import('node:os')
+  const path = await import('node:path')
+  const { createAppServer } = await import('../server/app.ts')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-slim-put-'))
+  const srv = createAppServer({ dataDir: dir, tickMs: 0, registration: 'open' })
+  await new Promise<void>((resolve) => srv.server.listen(0, '127.0.0.1', resolve))
+  const { port } = srv.server.address() as { port: number }
+  const baseUrl = `http://127.0.0.1:${port}`
+  const realFetch = globalThis.fetch
+
+  try {
+    const reg = await realFetch(`${baseUrl}/api/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'slim_tester', password: 'password123' }),
+    }).then((r) => r.json() as Promise<{ token: string; user: { id: string; username: string }; revision: number; game: import('../src/game/types.ts').GameState }>)
+    const auth = { Authorization: `Bearer ${reg.token}`, 'Content-Type': 'application/json' }
+
+    // 先写入一条完整挑战战报（模拟已入库历史战报，含大体积 playerStats）。
+    const teamStats = { possession: 50, passes: 400, passesCompleted: 340, shots: 10, shotsOnTarget: 5, goals: 2, interceptions: 10, tackles: 14, fouls: 8, corners: 4, xg: 1.6, distance: 105000, yellowCards: 1, redCards: 0 }
+    const oldRecord: import('../src/game/types.ts').MatchRecord = {
+      id: 'm-friendly-old-1',
+      seed: 101,
+      createdAt: Date.now() - 10_000,
+      seasonIndex: reg.game.season.index,
+      durationSeconds: 90,
+      isLeague: false,
+      mode: 'friendly',
+      homeId: 'player',
+      awayId: 'opp-1',
+      opponentId: 'opp-1',
+      homeName: reg.game.clubName,
+      awayName: '历史对手',
+      score: { home: 3, away: 1 },
+      result: 'win',
+      stats: { home: teamStats, away: teamStats },
+      playerStats: Array.from({ length: 22 }, (_, i) => ({ playerId: `p${i}`, name: `球员${i}`, side: i < 11 ? 'home' as const : 'away' as const, minutes: 90, goals: i === 0 ? 3 : 0, assists: 0, shots: 1, shotsOnTarget: 1, passes: 20, passesCompleted: 18, tackles: 1, interceptions: 1, saves: 0, xg: 0.2, xa: 0.1, distance: 10000, staminaLeft: 80, touches: 30, onMinute: 0, offMinute: 90, rating: 7.5 })),
+      keyEvents: [],
+      skillStats: [],
+      failureStats: [],
+      goalDetails: [],
+      instructions: [],
+      lineup: reg.game.lineup,
+    }
+    const seedPut = await realFetch(`${baseUrl}/api/game`, {
+      method: 'PUT',
+      headers: auth,
+      body: JSON.stringify({ game: { ...reg.game, challengeHistory: [oldRecord] }, baseRevision: reg.revision }),
+    })
+    expect(seedPut.status).toBe(200)
+
+    // 用 online.ts 正常登录，验证客户端 PUT /api/game 瘦身与真实服务器往返。
+    const store = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => store.set(key, value),
+      removeItem: (key: string) => store.delete(key),
+    })
+    vi.stubGlobal('window', { setTimeout, clearTimeout })
+    vi.stubGlobal('EventSource', FakeEvents)
+
+    let lastPutBody = ''
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (url === '/api/game' && init?.method === 'PUT') lastPutBody = String(init.body ?? '')
+      return realFetch(`${baseUrl}${url}`, init)
+    }))
+
+    const { saveGame } = await import('../src/game/state.ts')
+    const online = await import('../src/online.ts')
+    const logged = await online.loginOnline('slim_tester', 'password123')
+    const fullSize = JSON.stringify({ game: logged.game, baseRevision: logged.revision }).length
+
+    // 再新增一条刚踢完的友谊赛记录并保存：旧战报应发轻量引用，新战报应全量发送，大字段应剥离。
+    const freshRecord = { ...structuredClone(oldRecord), id: 'm-friendly-new-2', createdAt: Date.now(), awayName: '最新对手' }
+    logged.game.challengeHistory = [freshRecord, ...logged.game.challengeHistory]
+    saveGame(logged.game)
+    await online.flushOnlineNow()
+
+    expect(online.onlineState.error).toBe('')
+    expect(lastPutBody.length).toBeLessThan(fullSize * 0.5)
+    const sent = JSON.parse(lastPutBody) as { game: import('../src/game/types.ts').GameState }
+    expect(sent.game.aiTeams).toEqual([])
+    expect(sent.game.matchHistory).toEqual([])
+    expect(sent.game.season.fixtures).toEqual([])
+    expect(sent.game.world?.divisions).toEqual([])
+    const sentOld = sent.game.challengeHistory.find((r) => r.id === 'm-friendly-old-1') as Record<string, unknown>
+    const sentNew = sent.game.challengeHistory.find((r) => r.id === 'm-friendly-new-2') as Record<string, unknown>
+    expect(sentOld.detailDeferred).toBe(true)
+    expect(sentOld.playerStats).toBeUndefined()
+    expect(Array.isArray(sentNew.playerStats)).toBe(true)
+
+    // 紧接着升级球场，应正常成功；重新拉取服务器存档，旧战报与新战报及共享世界均完整保留。
+    const upgraded = await online.upgradeFacilityOnline('stadium')
+    expect(upgraded.economy?.stadium).toBeGreaterThanOrEqual(1)
+    const verify = await realFetch(`${baseUrl}/api/game`, { headers: { Authorization: `Bearer ${reg.token}` } })
+      .then((r) => r.json() as Promise<{ game: import('../src/game/types.ts').GameState }>)
+    expect(verify.game.aiTeams.length).toBeGreaterThan(0)
+    expect(verify.game.world?.divisions.length).toBeGreaterThan(0)
+    const restoredOld = verify.game.challengeHistory.find((r) => r.id === 'm-friendly-old-1')!
+    const restoredNew = verify.game.challengeHistory.find((r) => r.id === 'm-friendly-new-2')!
+    expect(restoredOld.playerStats).toHaveLength(22)
+    expect(restoredNew.playerStats).toHaveLength(22)
+  } finally {
+    await srv.shutdown()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
