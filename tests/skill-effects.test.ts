@@ -13,10 +13,14 @@ describe('技能和特性的效果说明', () => {
         const text = skillEffectText(id, tier)
         expect(text, id).toMatch(/[\d]/)
         expect(text, id).not.toMatch(/\d\.\d{2,}/)
+        expect(text, id).not.toMatch(/[+→]\s*0(?![.\d])/)
         expect(text, id).not.toMatch(/NaN|undefined/)
       }
       expect(skillTierNote(id), id).toContain('银')
     }
+    expect(skillEffectText('lg_stamina_regen', 'gold')).toContain('+10% / +14%')
+    expect(skillEffectText('lg_low_drive', 'gold')).toContain('射正率 +3% / +4.2%，进球率 +2% / +2.8%')
+    expect(skillEffectText('lg_gk_economy', 'gold')).toContain('+8% / +11.2%')
   })
 
   it('数值按等级放大，和比赛结算一致', () => {

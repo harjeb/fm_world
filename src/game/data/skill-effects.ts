@@ -95,7 +95,12 @@ export function skillEffectText(id: SkillId, tier: SkillTier = 'silver'): string
   const peak = PEAK_SKILLS[id as keyof typeof PEAK_SKILLS] as { effect?: string } | undefined
   const effect = legend?.effect ?? peak?.effect
   if (!effect) return ''
-  const text = effect.replace(/(\d+\.\d{2,})/g, (_match, value: string) => String(Math.round(Number(value) * 10) / 10))
+  const text = effect.replace(/(\d+\.\d{2,})/g, (_match, value: string) => {
+    const n = Number(value)
+    if (!Number.isFinite(n)) return value
+    const rounded = Math.round(n * 10) / 10
+    return n !== 0 && rounded === 0 ? String(Number(n.toPrecision(2))) : String(rounded)
+  })
   return `${text}（银/金 ×1 / 彩 ×1.4）`
 }
 
