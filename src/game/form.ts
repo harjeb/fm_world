@@ -1,5 +1,6 @@
 import type { GameState, MatchRecord, MatchTeamStats, PlayerMatchStats } from './types.ts'
 import { PLAYER_TEAM_ID } from './season.ts'
+import { matchKeeperConceded } from './player-stats.ts'
 
 /**
  * 从比赛记录里算出来的展示数据：球员近况和球队近期分析。
@@ -52,10 +53,12 @@ export type PlayerForm = {
   /** 以下是本赛季联赛累计。 */
   apps: number
   goals: number
+  saves: number
+  cleanSheets: number
   wins: number
 }
 
-const emptyForm = (): PlayerForm => ({ ratings: [], average: null, recentMinutes: 0, apps: 0, goals: 0, wins: 0 })
+const emptyForm = (): PlayerForm => ({ ratings: [], average: null, recentMinutes: 0, apps: 0, goals: 0, saves: 0, cleanSheets: 0, wins: 0 })
 
 /** 全队每名球员的近况。matchHistory 新的在前。 */
 export function squadForm(game: GameState, limit = FORM_MATCHES): Map<string, PlayerForm> {
@@ -78,6 +81,8 @@ export function squadForm(game: GameState, limit = FORM_MATCHES): Map<string, Pl
       if (thisSeason) {
         form.apps += 1
         form.goals += stat.goals
+        form.saves += typeof stat.saves === 'number' && Number.isFinite(stat.saves) ? stat.saves : 0
+        if (matchKeeperConceded(record, stat).cleanSheet) form.cleanSheets += 1
         if (record.result === 'win') form.wins += 1
       }
       forms.set(id, form)

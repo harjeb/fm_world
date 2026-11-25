@@ -782,6 +782,12 @@ export type PlayerMatchStats = {
   xa?: number
   tackleAttempts?: number
   saves?: number
+  /** 门将在场期间失球数（旧战报缺省时可由比分与出场时长推导）。 */
+  goalsConceded?: number
+  /** 门将在场期间面对射正的预期失球之和（xGOT）。 */
+  xgConceded?: number
+  /** 门将出击摘球 / 没收高空球次数。 */
+  claims?: number
   /** 赛后按本场事件计算的 1–10 分游戏评分。 */
   rating?: number
   goals: number

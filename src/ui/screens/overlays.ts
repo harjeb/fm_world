@@ -44,29 +44,48 @@ function cardRows(player: Player): string {
   <p class="hint">换卡不影响体能和精力。${cards.length ? `<button class="link" data-nav="inventory">去库存比较 ${icon('right', 12)}</button>` : '培养一轮后这里会多一张卡。'}</p>`
 }
 
-/** 本赛季 / 生涯数据；别队球员只能拿到本赛季的进球和助攻。 */
+/** 本赛季 / 生涯数据；门将展示扑救、失球、零封等门将统计，别队球员仅能从赛程读取公开统计。 */
 function statsBlock(player: Player): string {
+  const gk = (player.positions?.GK ?? 0) > 0
   const own = isOwnPlayer(game, player.id)
   const totals = own
     ? (ui.playerStatsTab === 'career' ? careerStats(game, player.id) : seasonStats(game, player.id))
     : null
-  const other = own ? null : fixtureTotals(game, player.id)
+  const other = own || gk ? null : fixtureTotals(game, player.id)
+  const passPct = totals && totals.passes ? `${Math.round((totals.passesCompleted / totals.passes) * 100)}%` : '—'
+  const savePct = totals && totals.saveRate !== null ? `${Math.round(totals.saveRate * 100)}%` : '—'
   const rows: [string, number | string][] = totals
-    ? [
-        ['出场', totals.apps], ['进球', totals.goals], ['助攻', totals.assists], ['每场进球', totals.goalsPerMatch.toFixed(2)],
-        ['射门', totals.shots], ['传球成功', totals.passes ? `${Math.round((totals.passesCompleted / totals.passes) * 100)}%` : '—'],
-        ['抢断', totals.tackles], ['拦截', totals.interceptions], ['出场分钟', Math.round(totals.minutes)],
-      ]
-    : [
-        ['出场', '—'], ['进球', other!.goals], ['助攻', other!.assists],
-      ]
+    ? gk
+      ? [
+          ['出场', totals.apps],
+          ['零封', totals.concededKnownApps ? totals.cleanSheets : '—'],
+          ['扑救', totals.savesKnownApps ? totals.saves : '—'],
+          ['失球', totals.concededKnownApps ? totals.goalsConceded : '—'],
+          ['扑救成功率', savePct],
+          ['场均扑救', totals.savesKnownApps ? totals.savesPerMatch.toFixed(2) : '—'],
+          ['场均失球', totals.concededKnownApps ? totals.concededPerMatch.toFixed(2) : '—'],
+          ['传球成功', passPct],
+          ['出场分钟', Math.round(totals.minutes)],
+        ]
+      : [
+          ['出场', totals.apps], ['进球', totals.goals], ['助攻', totals.assists], ['每场进球', totals.goalsPerMatch.toFixed(2)],
+          ['射门', totals.shots], ['传球成功', passPct],
+          ['抢断', totals.tackles], ['拦截', totals.interceptions], ['出场分钟', Math.round(totals.minutes)],
+        ]
+    : gk
+      ? [
+          ['出场', '—'], ['扑救', '—'], ['失球', '—'], ['零封', '—'],
+        ]
+      : [
+          ['出场', '—'], ['进球', other!.goals], ['助攻', other!.assists],
+        ]
   return `<section class="player-stats">
     <div class="stat-tabs">
       <button class="tab ${ui.playerStatsTab === 'season' ? 'active' : ''}" data-player-stats-tab="season">本赛季</button>
       ${own ? `<button class="tab ${ui.playerStatsTab === 'career' ? 'active' : ''}" data-player-stats-tab="career">生涯</button>` : ''}
     </div>
     <dl class="facts">${rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>
-    ${own ? '' : '<p class="hint">进球与助攻来自赛程记录；未记录完整出场次数。</p>'}
+    ${own ? '' : gk ? '<p class="hint">别队门将未在赛程中记录完整扑救与失球数据；可在「球员表现」查看交手战报。</p>' : '<p class="hint">进球与助攻来自赛程记录；未记录完整出场次数。</p>'}
   </section>`
 }
 

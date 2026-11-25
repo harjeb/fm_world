@@ -15,7 +15,7 @@ import { derivedRng } from '../rng.ts'
 import { prepareMatchInjuries } from '../injury.ts'
 import { commentLog } from '../match/commentary.ts'
 import { shotPositionText, shotTargetText } from '../match/shooting.ts'
-import { recordChance, recordChanceGoal, recordSave, recordShot, recordTackleAttempt } from '../match/performance.ts'
+import { recordChance, recordChanceGoal, recordClaim, recordConceded, recordSave, recordShot, recordTackleAttempt } from '../match/performance.ts'
 import { MatchRatings } from '../match/ratings.ts'
 import { SettlementKernel, pickByWeight, totalWeight } from '../match/resolution.ts'
 import { GOAL_Y, PITCH_LENGTH, PITCH_WIDTH, buildMatchTeam, skillTierMultiplier } from '../match/team.ts'
@@ -631,6 +631,12 @@ export class PesSettlement implements ContactModel {
         g.lastGoalBy = side
         g.score.home = m.teams[0].score
         g.score.away = m.teams[1].score
+        {
+          const concedingTeam = g.teams[side === 'home' ? 1 : 0]
+          const concedingGk = this.kernel.teamGoalkeeper(concedingTeam)
+          const shotXg = !own && this.extra.lastShot && e.t - this.extra.lastShot.t <= 8 ? this.extra.lastShot.xg : 0
+          if (concedingGk) recordConceded(concedingGk.stats, shotXg)
+        }
         if (!own && scorer) {
           scorer.stats.goals++
           const shot = this.extra.lastShot
@@ -701,9 +707,13 @@ export class PesSettlement implements ContactModel {
       }
       case 'save': {
         if (this.extra.keyPass !== undefined) this.extra.keyPass = null
-        if (e.meta?.claim === true) break
         const keeper = this.mp[e.actors[0]]
-        recordSave(keeper.stats)
+        if (e.meta?.claim === true) {
+          recordClaim(keeper.stats)
+          break
+        }
+        const shotXg = this.extra.lastShot && e.t - this.extra.lastShot.t <= 8 ? this.extra.lastShot.xg : 0
+        recordSave(keeper.stats, shotXg)
         this.recover(keeper, m, 'lg_save_second_wind', 3)
         const shooter = e.actors[1] !== undefined ? this.mp[e.actors[1]] : null
         const detail = e.meta?.hold === true ? '，稳稳抱住' : e.meta?.corner === true ? '，托出底线形成角球' : '，但没有抱稳'

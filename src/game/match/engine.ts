@@ -2,7 +2,7 @@ import { STAR_TRAITS } from '../data/star-traits.generated.ts'
 import type { ShotScope, TraitCondition } from '../data/star-traits.ts'
 import type { BaseTraitId } from '../types.ts'
 import { skillTierMultiplier } from './team.ts'
-import { recordChance, recordChanceGoal, recordSave, recordShot, recordTackleAttempt } from './performance.ts'
+import { recordChance, recordChanceGoal, recordConceded, recordSave, recordShot, recordTackleAttempt } from './performance.ts'
 import { MatchRatings } from './ratings.ts'
 import { FREE_KICK_DELIVERY_RANGE, FREE_KICK_SHOT_RANGE, PRESS_LEVEL, SettlementKernel, pickByWeight, totalWeight } from './resolution.ts'
 import type { PassModel, PassType, ShotModel } from './resolution.ts'
@@ -2000,6 +2000,8 @@ export class MatchEngine {
     if (creator) recordChance(creator.stats, raw.goal)
     if (roll < raw.goal) {
       if (creator) recordChanceGoal(creator.stats)
+      const gkConceded = this.teamGoalkeeper(opp)
+      if (gkConceded) recordConceded(gkConceded.stats, raw.goal)
       this.state.score[shooter.side]++
       this.state.lastGoalBy = shooter.side
       shooter.stats.goals++
@@ -2034,7 +2036,7 @@ export class MatchEngine {
     if (roll < raw.goal + raw.save) {
       this.statsOf(team).shotsOnTarget++
       const gk = this.teamGoalkeeper(opp)
-      if (gk) recordSave(gk.stats)
+      if (gk) recordSave(gk.stats, raw.goal)
       if (gk && opts.penalty) {
         this.state.ball = { x: gk.x, y: gk.y, ownerId: gk.id, justReceived: true }
         this.state.possession = gk.side

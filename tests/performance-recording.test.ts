@@ -72,6 +72,14 @@ describe('新增比赛数据的事件记录', () => {
     fire(g, { type: 'save', ti: 1, t: 4, actors: [keeper.pid], meta: { claim: true } })
     expect(p).toMatchObject({ chancesCreated: 1, xa: 0.31 })
     expect(k.saves).toBe(1)
+    expect(k.claims).toBe(1)
+    expect(k.xgConceded).toBeCloseTo(0.31)
+    // 再经历一次失球，确认失球和面对预期失球同步累计。
+    fire(g, { type: 'shot', ti: 0, t: 4.5, actors: [winner.pid], xg: 0.44, meta: { result: 'goal' } })
+    g.match.teams[0].score = 1
+    fire(g, { type: 'goal', ti: 0, t: 4.8, actors: [winner.pid] })
+    expect(k.goalsConceded).toBe(1)
+    expect(k.xgConceded).toBeCloseTo(0.75)
     // 角球直接争顶，不产生普通传球事件。
     fire(g, { type: 'corner', ti: 0, t: 5, actors: [] })
     g.match.ball.meta = { type: 'pass', from: passer.pid, cross: true }
@@ -189,5 +197,32 @@ describe('两代引擎到战报的完整记录', () => {
       expect(stat.xg).toBeGreaterThanOrEqual(0)
     }
     expect(JSON.parse(JSON.stringify(record)).playerStats).toEqual(record.playerStats)
+    for (const team of state.teams) {
+      const oppSide = team.side === 'home' ? 'away' : 'home'
+      const gkConceded = [...team.players, ...team.bench].reduce((total, player) => total + (player.stats.goalsConceded ?? 0), 0)
+      expect(gkConceded).toBe(state.score[oppSide])
+    }
+  })
+
+  it('旧快照缺少门将新增字段时恢复比赛不伪造半场失球与出击数据', () => {
+    const g = newGame()
+    const [shooter] = g.match.teams[0].players.slice(1, 2)
+    const keeper = g.match.teams[1].players[0]
+    const snap = JSON.parse(JSON.stringify(g.serialize())) as PesMatchSnapshot
+    const contact = snap.contact as { game: typeof g.state }
+    for (const team of contact.game.teams) for (const player of [...team.players, ...team.bench]) {
+      delete player.stats.goalsConceded
+      delete player.stats.xgConceded
+      delete player.stats.claims
+    }
+    const resumed = PesGame.restore(snap)
+    fire(resumed, { type: 'shot', ti: 0, t: 2, actors: [shooter.pid], xg: 0.35, meta: { result: 'goal' } })
+    resumed.match.teams[0].score = 1
+    fire(resumed, { type: 'goal', ti: 0, t: 2.2, actors: [shooter.pid] })
+    fire(resumed, { type: 'save', ti: 1, t: 3, actors: [keeper.pid], meta: { claim: true } })
+    const kStats = resumed.settlement.gamePlayer(keeper.pid).stats
+    expect(kStats.goalsConceded).toBeUndefined()
+    expect(kStats.xgConceded).toBeUndefined()
+    expect(kStats.claims).toBeUndefined()
   })
 })

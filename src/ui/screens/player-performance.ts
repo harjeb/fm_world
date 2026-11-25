@@ -1,4 +1,5 @@
 import type { GameState, MatchRecord, Player, PlayerMatchStats } from '../../game/types.ts'
+import { matchKeeperConceded } from '../../game/player-stats.ts'
 import { game } from '../state.ts'
 import { esc } from '../format.ts'
 
@@ -7,10 +8,24 @@ export type PerformancePeriod = 'season' | 'career'
 
 type Metric = 'goals' | 'assists' | 'shots' | 'passes' | 'passesCompleted' | 'tackles' | 'interceptions' | 'distance' | 'touches' | 'yellowCards' | 'redCards'
 const metrics: Metric[] = ['goals', 'assists', 'shots', 'passes', 'passesCompleted', 'tackles', 'interceptions', 'distance', 'touches', 'yellowCards', 'redCards']
-export type AdvancedMetric = 'shotsOnTarget' | 'xg' | 'chancesCreated' | 'chancesConverted' | 'xa' | 'tackleAttempts' | 'rating'
-const advancedMetrics: AdvancedMetric[] = ['shotsOnTarget', 'xg', 'chancesCreated', 'chancesConverted', 'xa', 'tackleAttempts', 'rating']
+export type AdvancedMetric = 'shotsOnTarget' | 'xg' | 'chancesCreated' | 'chancesConverted' | 'xa' | 'tackleAttempts' | 'rating' | 'saves' | 'goalsConceded' | 'claims' | 'xgConceded'
+const directAdvancedMetrics: Exclude<AdvancedMetric, 'goalsConceded'>[] = ['shotsOnTarget', 'xg', 'chancesCreated', 'chancesConverted', 'xa', 'tackleAttempts', 'rating', 'saves', 'claims', 'xgConceded']
+const advancedMetrics: AdvancedMetric[] = [...directAdvancedMetrics, 'goalsConceded']
 type RateTotals = { success: number; attempts: number; matches: number }
-export type PerformanceTotals = { appearances: number; minutes: number; wins: number; resultsKnown: number; coverage: Record<AdvancedMetric, number>; tackleRate: RateTotals; chanceRate: RateTotals } & Record<Metric | AdvancedMetric, number | null>
+type DeltaTotals = { value: number; matches: number }
+export type PerformanceTotals = {
+  appearances: number
+  minutes: number
+  wins: number
+  resultsKnown: number
+  cleanSheets: number
+  coverage: Record<AdvancedMetric, number>
+  metricMinutes: { saves: number; goalsConceded: number }
+  tackleRate: RateTotals
+  chanceRate: RateTotals
+  saveRate: RateTotals
+  goalsPrevented: DeltaTotals
+} & Record<Metric | AdvancedMetric, number | null>
 const competitions: { id: PerformanceCompetition; label: string }[] = [
   { id: 'all', label: '全部比赛' }, { id: 'league', label: '联赛' }, { id: 'friendly', label: '友谊赛' },
   { id: 'legend', label: '传奇挑战' }, { id: 'cup', label: '杯赛' }, { id: 'peak', label: '巅峰之路' },
@@ -30,7 +45,21 @@ function valid(value: unknown): value is number {
 
 /** Basic totals require complete history. New metrics use only recorded appearances and expose coverage. */
 export function aggregatePerformance(state: Pick<GameState, 'matchHistory' | 'challengeHistory' | 'season'>, playerId: string, period: PerformancePeriod, competition: PerformanceCompetition): PerformanceTotals {
-  const totals = { appearances: 0, minutes: 0, wins: 0, resultsKnown: 0, ...Object.fromEntries(metrics.map(key => [key, 0])), ...Object.fromEntries(advancedMetrics.map(key => [key, null])), coverage: Object.fromEntries(advancedMetrics.map(key => [key, 0])), tackleRate: { success: 0, attempts: 0, matches: 0 }, chanceRate: { success: 0, attempts: 0, matches: 0 } } as PerformanceTotals
+  const totals = {
+    appearances: 0,
+    minutes: 0,
+    wins: 0,
+    resultsKnown: 0,
+    cleanSheets: 0,
+    ...Object.fromEntries(metrics.map(key => [key, 0])),
+    ...Object.fromEntries(advancedMetrics.map(key => [key, null])),
+    coverage: Object.fromEntries(advancedMetrics.map(key => [key, 0])),
+    metricMinutes: { saves: 0, goalsConceded: 0 },
+    tackleRate: { success: 0, attempts: 0, matches: 0 },
+    chanceRate: { success: 0, attempts: 0, matches: 0 },
+    saveRate: { success: 0, attempts: 0, matches: 0 },
+    goalsPrevented: { value: 0, matches: 0 },
+  } as PerformanceTotals
   const seen = new Set<string>()
   for (const record of [...(state.matchHistory ?? []), ...(state.challengeHistory ?? [])]) {
     if (period === 'season' && (record.seasonIndex ?? 1) !== state.season.index) continue
@@ -51,11 +80,28 @@ export function aggregatePerformance(state: Pick<GameState, 'matchHistory' | 'ch
       if (!valid(value)) totals[key] = null
       else if (totals[key] !== null) totals[key] += value
     }
-    for (const key of advancedMetrics) {
+    for (const key of directAdvancedMetrics) {
       const value = stats[key]
       if (!valid(value) || (key === 'rating' && (value < 1 || value > 10))) continue
       totals[key] = (totals[key] ?? 0) + value
       totals.coverage[key]++
+    }
+    if (valid(stats.saves)) totals.metricMinutes.saves += stats.minutes
+    const { conceded, cleanSheet } = matchKeeperConceded(record, stats)
+    if (conceded !== null) {
+      totals.goalsConceded = (totals.goalsConceded ?? 0) + conceded
+      totals.coverage.goalsConceded++
+      totals.metricMinutes.goalsConceded += stats.minutes
+      if (cleanSheet) totals.cleanSheets++
+    }
+    if (valid(stats.saves) && conceded !== null) {
+      totals.saveRate.success += stats.saves
+      totals.saveRate.attempts += stats.saves + conceded
+      totals.saveRate.matches++
+    }
+    if (valid(stats.xgConceded) && conceded !== null) {
+      totals.goalsPrevented.value += stats.xgConceded - conceded
+      totals.goalsPrevented.matches++
     }
     if (valid(stats.tackles) && valid(stats.tackleAttempts) && stats.tackles <= stats.tackleAttempts) {
       totals.tackleRate.success += stats.tackles
@@ -73,6 +119,11 @@ export function aggregatePerformance(state: Pick<GameState, 'matchHistory' | 'ch
 }
 
 const number = (value: number | null, digits = 0): string => value === null || !Number.isFinite(value) ? '—' : value.toFixed(digits)
+const signedNumber = (value: number | null, digits = 2): string => {
+  if (value === null || !Number.isFinite(value)) return '—'
+  const rounded = Math.abs(value) < 1e-9 ? 0 : value
+  return `${rounded > 0 ? '+' : ''}${rounded.toFixed(digits)}`
+}
 const ratio = (numerator: number | null, denominator: number | null, scale: number, digits: number, suffix = ''): string =>
   numerator === null || denominator === null || denominator <= 0 || numerator < 0 || numerator > denominator && scale === 100 ? '—' : `${number(numerator / denominator * scale, digits)}${suffix}`
 const per90 = (value: number | null, minutes: number): string => ratio(value, minutes, 90, 2)
@@ -86,8 +137,34 @@ const block = (title: string, accent: string, primary: string, label: string, de
   return `<section class="pp-block pp-${accent}"><h3>${esc(title)}</h3><div class="pp-block-body"><div class="pp-primary"><strong>${esc(primary)}</strong><span>${esc(label)}</span><div class="pp-ring-row"><span class="pp-ring ${ratioValue === null ? 'pp-ring-unknown' : ''}" style="--pp-progress:${Math.round((ratioValue ?? 0) * 100)}%" role="img" aria-label="${esc(ringLabel)} ${esc(rate)}"><b>${esc(rate)}</b></span><span>${esc(ringLabel)}</span></div></div><div class="pp-details">${details}</div></div></section>`
 }
 
+function renderKeeperPerformance(player: Player, period: PerformancePeriod, competition: PerformanceCompetition, total: PerformanceTotals): string {
+  const rows = competitions.map(({ id, label }) => {
+    const t = aggregatePerformance(game, player.id, period, id)
+    const clean = t.coverage.goalsConceded > 0 ? number(t.cleanSheets) : '—'
+    const cards = t.appearances > 0 ? `${number(t.yellowCards)} / ${number(t.redCards)}` : '—'
+    return `<tr data-performance-competition="${esc(id)}" class="${id === competition ? 'is-active' : ''}"><th scope="row"><button type="button" data-performance-competition="${esc(id)}" aria-pressed="${id === competition}"><span class="pp-radio" aria-hidden="true"></span>${esc(label)}</button></th><td>${t.appearances}</td><td>${number(t.saves)}</td><td>${number(t.goalsConceded)}</td><td>${clean}</td><td>${percent(t.saveRate.success, t.saveRate.attempts)}</td><td>${cards}</td><td>${percent(t.passesCompleted, t.passes)}</td></tr>`
+  }).join('')
+  const cleanCount = total.coverage.goalsConceded > 0 ? number(total.cleanSheets) : '—'
+  const cleanNum = total.coverage.goalsConceded > 0 ? total.cleanSheets : null
+  const faced = total.saveRate.matches > 0 ? number(total.saveRate.attempts) : '—'
+  const prevented = total.goalsPrevented.matches > 0 ? signedNumber(total.goalsPrevented.value, 2) : '—'
+  return `<section class="player-performance" aria-label="${esc(player.name)}的比赛表现">
+    <header class="pp-header"><div><span class="pp-eyebrow">GOALKEEPER PERFORMANCE</span><h2>${esc(player.name)} · 比赛表现</h2></div><div class="pp-toggle" aria-label="统计时段">${(['season', 'career'] as const).map(p => `<button type="button" data-performance-period="${p}" aria-pressed="${p === period}" class="${p === period ? 'is-active' : ''}">${p === 'season' ? '本赛季' : '生涯'}</button>`).join('')}</div></header>
+    <p class="pp-note">仅统计已保存战报和实际出场；未收录场次不计入，无法计算时显示 —。新增数据仅汇总有记录的场次，括号为已记录 / 出场场次。零封指单场出场不少于 60 分钟且未失球；扑救成功率 = 扑救 ÷ (扑救 + 失球)；阻止失球 = 面对预期失球 − 实际失球（正值代表扑救表现优于预期）；出击摘球指主动出击没收传中或高空球。评分为依据扑救、传球和红黄牌计算的游戏估算。胜场按常规比分计算。</p>
+    <div class="pp-table-wrap"><table class="pp-table"><thead><tr><th scope="col">比赛</th><th scope="col">出场</th><th scope="col">扑救</th><th scope="col">失球</th><th scope="col">零封</th><th scope="col">扑救成功率</th><th scope="col">黄 / 红牌</th><th scope="col">传球成功率</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="pp-summary"><h3>门将赛事数据 <span>${esc(competitions.find(c => c.id === competition)?.label ?? '')}</span></h3><div class="pp-summary-grid">${item('出场', number(total.appearances))}${item('胜场 / 已知赛果', `${total.wins} / ${total.resultsKnown}`)}${item('出场时间', `${number(total.minutes)} 分钟`)}${item(`零封${coverage(total.coverage.goalsConceded, total.appearances)}`, cleanCount)}${item('触球', number(total.touches))}</div></div>
+    <div class="pp-analytics">
+      ${block('门线扑救', 'violet', number(total.saves), '扑救', item(`面对射正${coverage(total.saveRate.matches, total.appearances)}`, faced) + item(`扑救 / 90${coverage(total.coverage.saves, total.appearances)}`, per90(total.saves, total.metricMinutes.saves)) + item(`扑救成功率${coverage(total.saveRate.matches, total.appearances)}`, percent(total.saveRate.success, total.saveRate.attempts)), `扑救成功率${coverage(total.saveRate.matches, total.appearances)}`, total.saveRate.matches > 0 ? total.saveRate.success : null, total.saveRate.attempts)}
+      ${block('失球与零封', 'lime', cleanCount, '零封', item(`失球${coverage(total.coverage.goalsConceded, total.appearances)}`, number(total.goalsConceded)) + item(`失球 / 90${coverage(total.coverage.goalsConceded, total.appearances)}`, per90(total.goalsConceded, total.metricMinutes.goalsConceded)) + item(`阻止失球${coverage(total.goalsPrevented.matches, total.appearances)}`, prevented), `零封率${coverage(total.coverage.goalsConceded, total.appearances)}`, cleanNum, total.coverage.goalsConceded)}
+      ${block('出球组织', 'cyan', number(total.passesCompleted), '成功传球', item('传球', number(total.passes)) + item('成功传球', number(total.passesCompleted)) + item('成功传球 / 90', per90(total.passesCompleted, total.minutes)), '传球成功率', total.passesCompleted, total.passes)}
+      ${block('禁区控制', 'rose', number(total.claims), '出击摘球', item(`出击摘球${coverage(total.coverage.claims, total.appearances)}`, number(total.claims)) + item('拦截', number(total.interceptions)) + item('跑动距离 / 90（米）', per90(total.distance, total.minutes)), '胜率（已知赛果）', total.wins, total.resultsKnown)}
+    </div><div class="pp-bottom">${item(`扑救 / 90${coverage(total.coverage.saves, total.appearances)}`, per90(total.saves, total.metricMinutes.saves))}${item(`失球 / 90${coverage(total.coverage.goalsConceded, total.appearances)}`, per90(total.goalsConceded, total.metricMinutes.goalsConceded))}${item(`零封率${coverage(total.coverage.goalsConceded, total.appearances)}`, percent(cleanNum, total.coverage.goalsConceded))}${item('胜率（已知赛果）', percent(total.wins, total.resultsKnown))}${item(`面对预期失球${coverage(total.coverage.xgConceded, total.appearances)}`, number(total.xgConceded, 2))}${item(`平均评分${coverage(total.coverage.rating, total.appearances)}`, number(averageRating(total), 1))}</div>
+  </section>`
+}
+
 export function renderPlayerPerformance(player: Player, period: PerformancePeriod, competition: PerformanceCompetition): string {
   const total = aggregatePerformance(game, player.id, period, competition)
+  if ((player.positions?.GK ?? 0) > 0) return renderKeeperPerformance(player, period, competition, total)
   const rows = competitions.map(({ id, label }) => {
     const t = aggregatePerformance(game, player.id, period, id)
     return `<tr data-performance-competition="${esc(id)}" class="${id === competition ? 'is-active' : ''}"><th scope="row"><button type="button" data-performance-competition="${esc(id)}" aria-pressed="${id === competition}"><span class="pp-radio" aria-hidden="true"></span>${esc(label)}</button></th><td>${t.appearances}</td><td>${number(t.goals)}</td><td>${number(t.assists)}</td><td>${number(t.shots)}</td><td>${number(t.yellowCards)}</td><td>${number(t.redCards)}</td><td>${percent(t.passesCompleted, t.passes)}</td></tr>`

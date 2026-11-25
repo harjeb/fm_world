@@ -20,8 +20,18 @@ export function recordTackleAttempt(stats: PlayerMatchStats): void {
   if (stats.tackleAttempts !== undefined) stats.tackleAttempts++
 }
 
-export function recordSave(stats: PlayerMatchStats): void {
+export function recordSave(stats: PlayerMatchStats, xg = 0): void {
   if (stats.saves !== undefined) stats.saves++
+  if (stats.xgConceded !== undefined && Number.isFinite(xg) && xg > 0) stats.xgConceded += xg
+}
+
+export function recordConceded(stats: PlayerMatchStats, xg = 0): void {
+  if (stats.goalsConceded !== undefined) stats.goalsConceded++
+  if (stats.xgConceded !== undefined && Number.isFinite(xg) && xg > 0) stats.xgConceded += xg
+}
+
+export function recordClaim(stats: PlayerMatchStats): void {
+  if (stats.claims !== undefined) stats.claims++
 }
 
 /**

@@ -19,7 +19,7 @@ export function comparisonCandidates(): Player[] {
 const tabs: [CompareTab, string][] = [['overview', '总览'], ['attributes', '属性'], ['stats', '数据'], ['positions', '位置']]
 const fieldRadar: AttrKey[] = ['shooting', 'dribbling', 'speed', 'acceleration', 'strength', 'tackling', 'passing']
 const keeperRadar: AttrKey[] = ['reflexes', 'handling', 'composure', 'passing', 'rushing', 'oneOnOne']
-const isKeeper = (p: Player) => p.positions.GK > 0
+const isKeeper = (p: Player) => (p.positions?.GK ?? 0) > 0
 const number = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? String(Math.round(value * 10) / 10) : '—'
 const mainPosition = (p: Player): Position | undefined => [...POSITIONS].sort((a, b) => (p.positions[b] ?? 0) - (p.positions[a] ?? 0)).find(pos => p.positions[pos] > 0)
 const positionName = (p: Player) => { const pos = mainPosition(p); return pos ? POSITION_LABELS[pos] : '位置未知' }
@@ -68,17 +68,71 @@ function tackleRate(t?: PerformanceTotals): string {
   const rate = t?.tackleRate
   return rate && rate.attempts > 0 ? `${Math.round(rate.success / rate.attempts * 100)}%（${rate.matches}/${t!.appearances} 场）` : '—'
 }
+function saveRate(t?: PerformanceTotals, withCoverage = true): string {
+  const rate = t?.saveRate
+  if (!rate || rate.attempts <= 0) return '—'
+  const pct = `${Math.round(rate.success / rate.attempts * 100)}%`
+  return withCoverage ? `${pct}（${rate.matches}/${t!.appearances} 场）` : pct
+}
+function cleanSheets(t?: PerformanceTotals): string {
+  return t && t.coverage.goalsConceded > 0 ? `${t.cleanSheets}（${t.coverage.goalsConceded}/${t.appearances} 场）` : '—'
+}
+function cleanSheetRate(t?: PerformanceTotals): string {
+  return t && t.coverage.goalsConceded > 0 ? `${Math.round(t.cleanSheets / t.coverage.goalsConceded * 100)}%（${t.coverage.goalsConceded}/${t.appearances} 场）` : '—'
+}
+function keeperPer90(t: PerformanceTotals | undefined, key: 'saves' | 'goalsConceded'): string {
+  if (!t || !t.coverage[key] || t.metricMinutes[key] <= 0 || t[key] === null) return '—'
+  return `${((t[key]! / t.metricMinutes[key]) * 90).toFixed(2)}（${t.coverage[key]}/${t.appearances} 场）`
+}
+function goalsPrevented(t?: PerformanceTotals): string {
+  if (!t || !t.goalsPrevented.matches) return '—'
+  const val = Math.abs(t.goalsPrevented.value) < 1e-9 ? 0 : t.goalsPrevented.value
+  return `${val > 0 ? '+' : ''}${val.toFixed(2)}（${t.goalsPrevented.matches}/${t.appearances} 场）`
+}
 function statTable(p: Player, other?: Player): string {
   const first = recordedStats(p), second = recordedStats(other)
-  const rows: [string, string, string][] = [
-    ['出场', statValue(first, 'appearances'), statValue(second, 'appearances')],
-    ['出场时间（分钟）', statValue(first, 'minutes'), statValue(second, 'minutes')],
-    ...([['进球', 'goals'], ['助攻', 'assists'], ['射门', 'shots'], ['传球', 'passes'], ['抢断', 'tackles'], ['拦截', 'interceptions']] as const)
-      .map(([label, key]): [string, string, string] => [label, statValue(first, key), statValue(second, key)]),
-    ...([['射正', 'shotsOnTarget', 0], ['创造机会', 'chancesCreated', 0], ['预期进球', 'xg', 2], ['预期助攻', 'xa', 2], ['评分', 'rating', 1]] as const)
-      .map(([label, key, digits]): [string, string, string] => [label, advancedValue(first, key, digits), advancedValue(second, key, digits)]),
-    ['传球成功率', passRate(first), passRate(second)], ['抢断成功率', tackleRate(first), tackleRate(second)],
-  ]
+  const bothKeepers = isKeeper(p) && (!other || isKeeper(other))
+  const mixed = !!other && isKeeper(p) !== isKeeper(other)
+  const gkCell = (target: Player | undefined, stats: PerformanceTotals | undefined, fn: (t: PerformanceTotals) => string): string =>
+    target && isKeeper(target) && stats ? fn(stats) : '—'
+  const rows: [string, string, string][] = bothKeepers
+    ? [
+        ['出场', statValue(first, 'appearances'), statValue(second, 'appearances')],
+        ['出场时间（分钟）', statValue(first, 'minutes'), statValue(second, 'minutes')],
+        ['扑救', advancedValue(first, 'saves', 0), advancedValue(second, 'saves', 0)],
+        ['失球', advancedValue(first, 'goalsConceded', 0), advancedValue(second, 'goalsConceded', 0)],
+        ['零封', cleanSheets(first), cleanSheets(second)],
+        ['扑救成功率', saveRate(first), saveRate(second)],
+        ['零封率', cleanSheetRate(first), cleanSheetRate(second)],
+        ['扑救 / 90', keeperPer90(first, 'saves'), keeperPer90(second, 'saves')],
+        ['失球 / 90', keeperPer90(first, 'goalsConceded'), keeperPer90(second, 'goalsConceded')],
+        ['面对预期失球', advancedValue(first, 'xgConceded', 2), advancedValue(second, 'xgConceded', 2)],
+        ['阻止失球', goalsPrevented(first), goalsPrevented(second)],
+        ['出击摘球', advancedValue(first, 'claims', 0), advancedValue(second, 'claims', 0)],
+        ['传球', statValue(first, 'passes'), statValue(second, 'passes')],
+        ['传球成功率', passRate(first), passRate(second)],
+        ['拦截', statValue(first, 'interceptions'), statValue(second, 'interceptions')],
+        ['评分', advancedValue(first, 'rating', 1), advancedValue(second, 'rating', 1)],
+      ]
+    : [
+        ['出场', statValue(first, 'appearances'), statValue(second, 'appearances')],
+        ['出场时间（分钟）', statValue(first, 'minutes'), statValue(second, 'minutes')],
+        ...([['进球', 'goals'], ['助攻', 'assists'], ['射门', 'shots'], ['传球', 'passes'], ['抢断', 'tackles'], ['拦截', 'interceptions']] as const)
+          .map(([label, key]): [string, string, string] => [label, statValue(first, key), statValue(second, key)]),
+        ...([['射正', 'shotsOnTarget', 0], ['创造机会', 'chancesCreated', 0], ['预期进球', 'xg', 2], ['预期助攻', 'xa', 2], ['评分', 'rating', 1]] as const)
+          .map(([label, key, digits]): [string, string, string] => [label, advancedValue(first, key, digits), advancedValue(second, key, digits)]),
+        ['传球成功率', passRate(first), passRate(second)],
+        ['抢断成功率', tackleRate(first), tackleRate(second)],
+        ...(mixed
+          ? [
+              ['扑救', gkCell(p, first, t => advancedValue(t, 'saves', 0)), gkCell(other, second, t => advancedValue(t, 'saves', 0))] as [string, string, string],
+              ['失球', gkCell(p, first, t => advancedValue(t, 'goalsConceded', 0)), gkCell(other, second, t => advancedValue(t, 'goalsConceded', 0))] as [string, string, string],
+              ['零封', gkCell(p, first, cleanSheets), gkCell(other, second, cleanSheets)] as [string, string, string],
+              ['扑救成功率', gkCell(p, first, t => saveRate(t)), gkCell(other, second, t => saveRate(t))] as [string, string, string],
+              ['出击摘球', gkCell(p, first, t => advancedValue(t, 'claims', 0)), gkCell(other, second, t => advancedValue(t, 'claims', 0))] as [string, string, string],
+            ]
+          : []),
+      ]
   return `<p class="pc-muted">仅统计本赛季已保存的战报；新增数据只汇总有记录的场次，括号为已记录 / 出场场次；缺失数据以 — 显示。评分为游戏事件估算。</p><div class="pc-table-wrap"><table class="pc-table"><thead><tr><th>本赛季数据</th><th>${esc(p.name)}</th><th>${other ? esc(other.name) : '对比球员'}</th></tr></thead><tbody>${rows.map(([label, a, b]) => `<tr><th>${label}</th><td>${a}</td><td>${b}</td></tr>`).join('')}</tbody></table></div>`
 }
 function diffArrow(dir: 'up' | 'down', title: string): string {
@@ -142,7 +196,11 @@ function positionsTable(p: Player, other?: Player): string {
 function overview(p: Player, other?: Player): string {
   return `<div class="pc-overview-cards">${[p, other].map(target => {
     const stats = recordedStats(target)
-    return `<article class="pc-summary"><div><h3>赛季统计</h3><p class="pc-muted">仅含已保存战报</p><p>出场 ${statValue(stats, 'appearances')}　进球 ${statValue(stats, 'goals')}　助攻 ${statValue(stats, 'assists')}</p><p>传球成功率 ${passRate(stats)}　评分 ${advancedValue(stats, 'rating', 1)}</p></div><div>${pitch(target)}<p>${target ? esc(positionName(target)) : '未选择球员'}</p></div></article>`
+    const gk = !!target && isKeeper(target)
+    const summaryLines = gk
+      ? `<p>出场 ${statValue(stats, 'appearances')}　扑救 ${stats && stats.coverage.saves > 0 ? number(stats.saves) : '—'}　失球 ${stats && stats.coverage.goalsConceded > 0 ? number(stats.goalsConceded) : '—'}　零封 ${stats && stats.coverage.goalsConceded > 0 ? number(stats.cleanSheets) : '—'}</p><p>扑救成功率 ${saveRate(stats, false)}　传球成功率 ${passRate(stats)}　评分 ${advancedValue(stats, 'rating', 1)}</p>`
+      : `<p>出场 ${statValue(stats, 'appearances')}　进球 ${statValue(stats, 'goals')}　助攻 ${statValue(stats, 'assists')}</p><p>传球成功率 ${passRate(stats)}　评分 ${advancedValue(stats, 'rating', 1)}</p>`
+    return `<article class="pc-summary"><div><h3>赛季统计</h3><p class="pc-muted">仅含已保存战报</p>${summaryLines}</div><div>${pitch(target)}<p>${target ? esc(positionName(target)) : '未选择球员'}</p></div></article>`
   }).join('')}</div><section class="pc-radar-section"><h3>属性对比</h3><div class="pc-radar-layout"><div class="pc-facts"><span>惯用脚</span><b>${esc(({ L: '左脚', R: '右脚', B: '双脚' } as const)[p.foot] ?? '—')}</b><span>身高</span><b>${number(p.height)} 厘米</b></div><div>${radar(p, other)}<div class="pc-legend"><span><i class="pc-dot-first"></i>${esc(p.name)}</span>${other ? `<span><i class="pc-dot-second"></i>${esc(other.name)}</span>` : ''}</div><p class="pc-muted pc-center">比赛评分，雷达上限为 100（超出部分截顶）${other && isKeeper(p) !== isKeeper(other) ? '；门将与外场球员尺度不同，仅供参考' : ''}</p></div><div class="pc-facts pc-facts-right"><span>惯用脚</span><b>${other ? esc(({ L: '左脚', R: '右脚', B: '双脚' } as const)[other.foot] ?? '—') : '—'}</b><span>身高</span><b>${other ? `${number(other.height)} 厘米` : '—'}</b></div></div></section>`
 }
 

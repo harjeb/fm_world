@@ -399,6 +399,7 @@ function playerRow(player: Player, draft: Lineup, formation: FormationDef, selec
   const dropTarget = placement.slot ? slotTarget(placement.slot.id) : placement.benchIndex !== undefined ? benchTarget(placement.benchIndex) : 'reserve'
   const positions = DETAILED_POSITIONS.filter((pos) => detailedPositionValue(player, pos) >= PLAYABLE_PROFICIENCY).sort((a, b) => detailedPositionValue(player, b) - detailedPositionValue(player, a))
   const winRate = form.apps > 0 ? pct(form.wins / form.apps) : '—'
+  const gk = player.positions.GK > 0
   return `<tr class="${isPicked ? 'me' : ''} ${assignable ? 'clickable' : ''}" data-key="${esc(player.id)}" data-drop="${dropTarget}" ${assignable ? `tabindex="0" data-action="lineup-assign" data-player="${esc(player.id)}"` : ''}>
     <td class="t-place ${placement.slot || placement.benchIndex !== undefined ? '' : 'reserve'}">${pick(`${posBadge(placement.slot?.position ?? primaryPosition(player))}<span>${esc(placeLabel)}</span>`, `<select data-move-player="${esc(player.id)}" aria-label="${esc(player.name)}的位置">${moveOptions(player, draft, formation)}</select>`)}</td>
     <td class="name-cell t-name"><span class="grip" draggable="true" data-drag-player="${esc(player.id)}" title="拖到球场或替补席">${icon('grip', 13)}</span><button class="name-btn" data-action="detail" data-player="${esc(player.id)}">${esc(player.name)}</button>${youthBadge(player)}${playerFlags(player)}</td>
@@ -411,7 +412,7 @@ function playerRow(player: Player, draft: Lineup, formation: FormationDef, selec
     <td class="t-form">${formBars(form)}</td>
     <td><span class="pos-list">${positions.map((pos) => `<span title="${DETAILED_POSITION_LABELS[pos]} 熟练 ${Math.round(detailedPositionValue(player, pos))}"><span class="pos ${positionClass(DETAILED_TO_POSITION[pos])}">${pos}</span></span>`).join('')}</span></td>
     <td class="num dim">${form.apps || '—'}</td>
-    <td class="num dim">${form.apps ? form.goals : '—'}</td>
+    <td class="num dim"${gk && form.apps ? ` title="本赛季联赛零封 ${form.cleanSheets} 场 · 扑救 ${form.saves} 次"` : ''}>${form.apps ? (gk ? `${form.cleanSheets} 零` : form.goals) : '—'}</td>
     <td class="num dim">${winRate}</td>
   </tr>`
 }
@@ -453,7 +454,7 @@ function squadTable(draft: Lineup, formation: FormationDef, selectedId: string |
       <th class="t-role">职责</th><th>球员卡</th>
       <th title="最近 5 场联赛的表现分，由进球、拦截、传球等算出，只用于展示">近 5 场</th>
       <th title="熟练度 80 以上的位置；低于 80 不算可踢">可踢位置</th>
-      <th class="num" title="本赛季联赛出场">场</th><th class="num" title="本赛季联赛进球">球</th><th class="num" title="本赛季出场时的胜率">胜率</th>
+      <th class="num" title="本赛季联赛出场">场</th><th class="num" title="本赛季联赛进球（门将显示零封场次）">球/零</th><th class="num" title="本赛季出场时的胜率">胜率</th>
     </tr></thead>
     <tbody>
       ${groupRow('首发', `${draft.starters.length} / ${formation.slots.length}`)}

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { GameState, MatchRecord, Player, PlayerMatchStats } from '../src/game/types.ts'
 import { aggregatePerformance, averageRating, renderPlayerPerformance } from '../src/ui/screens/player-performance.ts'
+import { renderDetailOverlay } from '../src/ui/screens/overlays.ts'
 import { createInitialGame } from '../src/game/state.ts'
-import { game as originalGame, setGame } from '../src/ui/state.ts'
+import { game as originalGame, setGame, ui } from '../src/ui/state.ts'
 
 const stats = (patch: Partial<PlayerMatchStats> = {}): PlayerMatchStats => ({ playerId: 'away:player:1', name: 'P', side: 'away', minutes: 90, goals: 1, assists: 1, shots: 2, passes: 10, passesCompleted: 8, tackles: 2, interceptions: 1, distance: 100, touches: 12, staminaLeft: 50, yellowCards: 0, redCards: 0, ...patch })
 const record = (id: string, patch: Partial<MatchRecord> = {}): MatchRecord => ({ id, isLeague: true, seasonIndex: 2, score: { home: 0, away: 2 }, result: 'loss', playerStats: [stats()], ...patch } as MatchRecord)
@@ -63,5 +64,85 @@ describe('player performance', () => {
     expect(html).toContain('data-performance-competition="cup" aria-pressed="true"')
     expect(html).not.toMatch(/NaN|Infinity/)
     expect(html).toContain('—')
+  })
+
+  it('门将比赛表现与球员档案展示门将专属数据，不显示外场进攻指标', () => {
+    const legacy = record('gk-old', {
+      score: { home: 0, away: 1 },
+      playerStats: [stats({ side: 'away', goals: 0, assists: 0, shots: 0, tackles: 0, passes: 20, passesCompleted: 16, minutes: 90 })],
+    })
+    const modern = record('gk-new', {
+      score: { home: 2, away: 1 },
+      playerStats: [stats({ side: 'away', goals: 0, assists: 0, shots: 0, tackles: 0, passes: 25, passesCompleted: 20, minutes: 90, saves: 6, goalsConceded: 2, xgConceded: 2.8, claims: 2, rating: 7.6 })],
+    })
+    const total = aggregatePerformance(state([legacy, modern]), 'player:1', 'season', 'all')
+    expect(total).toMatchObject({
+      appearances: 2,
+      cleanSheets: 1,
+      saves: 6,
+      goalsConceded: 2,
+      claims: 2,
+      saveRate: { success: 6, attempts: 8, matches: 1 },
+      goalsPrevented: { matches: 1 },
+    })
+    expect(total.goalsPrevented.value).toBeCloseTo(0.8)
+    expect(total.coverage).toMatchObject({ saves: 1, goalsConceded: 2, claims: 1, xgConceded: 1, rating: 1 })
+
+    const game = createInitialGame(92)
+    game.season.index = 2
+    const gk = game.roster.find(p => p.positions.GK > 0)!
+    const gkLegacy = record('gk-old', {
+      score: { home: 0, away: 1 },
+      playerStats: [stats({ playerId: `away:${gk.id}`, sourceId: gk.id, name: gk.name, side: 'away', goals: 0, assists: 0, shots: 0, tackles: 0, passes: 20, passesCompleted: 16, minutes: 90 })],
+    })
+    const gkModern = record('gk-new', {
+      score: { home: 2, away: 1 },
+      playerStats: [stats({ playerId: `away:${gk.id}`, sourceId: gk.id, name: gk.name, side: 'away', goals: 0, assists: 0, shots: 0, tackles: 0, passes: 25, passesCompleted: 20, minutes: 90, saves: 6, goalsConceded: 2, xgConceded: 2.8, claims: 2, rating: 7.6 })],
+    })
+    game.matchHistory = [gkLegacy, gkModern]
+    setGame(game)
+    const prevDetail = ui.detailPlayerId
+    const prevView = ui.playerDetailView
+    const prevStatsTab = ui.playerStatsTab
+    try {
+      const perfHtml = renderPlayerPerformance(gk, 'season', 'all')
+      expect(perfHtml).toContain('GOALKEEPER PERFORMANCE')
+      expect(perfHtml).toContain('门线扑救')
+      expect(perfHtml).toContain('失球与零封')
+      expect(perfHtml).toContain('出球组织')
+      expect(perfHtml).toContain('禁区控制')
+      expect(perfHtml).toContain('扑救成功率（1/2 场） 75%')
+      expect(perfHtml).toContain('零封率（2/2 场） 50%')
+      expect(perfHtml).toContain('阻止失球（1/2 场）</span><strong>+0.80</strong>')
+      expect(perfHtml).toContain('面对预期失球（1/2 场）</span><strong>2.80</strong>')
+      expect(perfHtml).toContain('出击摘球（1/2 场）</span><strong>2</strong>')
+      expect(perfHtml).not.toContain('射门转化率')
+      expect(perfHtml).not.toContain('创造机会')
+      expect(perfHtml).not.toContain('抢断成功率')
+      expect(perfHtml).not.toMatch(/NaN|Infinity/)
+
+      // 球员档案页本赛季 / 生涯数据块应展示门将指标
+      ui.detailPlayerId = gk.id
+      ui.playerDetailView = 'profile'
+      ui.playerStatsTab = 'season'
+      const profileHtml = renderDetailOverlay()
+      expect(profileHtml).toContain('<dt>零封</dt><dd>1</dd>')
+      expect(profileHtml).toContain('<dt>扑救</dt><dd>6</dd>')
+      expect(profileHtml).toContain('<dt>失球</dt><dd>2</dd>')
+      expect(profileHtml).toContain('<dt>扑救成功率</dt><dd>75%</dd>')
+      expect(profileHtml).not.toContain('<dt>每场进球</dt>')
+      expect(profileHtml).not.toContain('<dt>射门</dt>')
+
+      // 零出场门将安全渲染 —，不产生 NaN/Infinity
+      game.matchHistory = []
+      const emptyHtml = renderPlayerPerformance(gk, 'season', 'all')
+      expect(emptyHtml).not.toMatch(/NaN|Infinity/)
+      expect(emptyHtml).toContain('—')
+    } finally {
+      ui.detailPlayerId = prevDetail
+      ui.playerDetailView = prevView
+      ui.playerStatsTab = prevStatsTab
+      setGame(originalGame)
+    }
   })
 })

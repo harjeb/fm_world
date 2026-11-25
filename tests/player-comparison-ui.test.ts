@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { createInitialGame } from '../src/game/state.ts'
+import type { MatchRecord } from '../src/game/types.ts'
 import { renderPlayerComparison, type CompareTab } from '../src/ui/screens/player-comparison.ts'
 import { positionMap } from '../src/ui/components.ts'
 import { game as originalGame, setGame } from '../src/ui/state.ts'
@@ -82,5 +83,52 @@ describe('球员对比', () => {
     for (const tab of ['overview', 'attributes', 'stats', 'positions'] as CompareTab[]) {
       expect(renderPlayerComparison(a, b, [b], tab)).toContain(`data-player-compare-tab="${tab}" class="pc-active"`)
     }
+  })
+
+  it('门将对比在总览和数据页展示门将专属指标，混合对比仅在门将列展示门将指标', () => {
+    const game = createInitialGame(712)
+    game.season.index = 1
+    const keepers = game.roster.filter(p => p.positions.GK > 0)
+    const outfielder = game.roster.find(p => p.positions.GK <= 0)!
+    const [gkA, gkB] = keepers
+    expect(gkA).toBeTruthy()
+    expect(gkB).toBeTruthy()
+    game.matchHistory = [
+      {
+        id: 'gk-cmp-1', isLeague: true, seasonIndex: 1, score: { home: 2, away: 0 }, result: 'win',
+        playerStats: [
+          { playerId: `home:${gkA.id}`, sourceId: gkA.id, name: gkA.name, side: 'home', minutes: 90, passes: 20, passesCompleted: 18, shots: 0, goals: 0, assists: 0, tackles: 0, interceptions: 1, distance: 4000, staminaLeft: 85, touches: 24, saves: 4, goalsConceded: 0, xgConceded: 1.15, claims: 2, rating: 7.4 },
+          { playerId: `home:${outfielder.id}`, sourceId: outfielder.id, name: outfielder.name, side: 'home', minutes: 90, passes: 30, passesCompleted: 27, shots: 3, goals: 1, assists: 1, tackles: 2, interceptions: 2, distance: 9500, staminaLeft: 70, touches: 45, rating: 7.8 },
+        ],
+      } as MatchRecord,
+      {
+        id: 'gk-cmp-2', isLeague: true, seasonIndex: 1, score: { home: 1, away: 2 }, result: 'loss',
+        playerStats: [
+          { playerId: `home:${gkB.id}`, sourceId: gkB.id, name: gkB.name, side: 'home', minutes: 90, passes: 22, passesCompleted: 17, shots: 0, goals: 0, assists: 0, tackles: 0, interceptions: 0, distance: 4100, staminaLeft: 82, touches: 26, saves: 3, goalsConceded: 2, xgConceded: 1.6, claims: 1, rating: 6.5 },
+        ],
+      } as MatchRecord,
+    ]
+    setGame(game)
+
+    const gkOverview = renderPlayerComparison(gkA, gkB, [gkA, gkB], 'overview')
+    expect(gkOverview).toContain('扑救 4　失球 0　零封 1')
+    expect(gkOverview).toContain('扑救 3　失球 2　零封 0')
+    expect(gkOverview).toContain('扑救成功率 100%')
+    expect(gkOverview).toContain('扑救成功率 60%')
+    expect(gkOverview).not.toContain('进球 ')
+
+    const gkStats = renderPlayerComparison(gkA, gkB, [gkA, gkB], 'stats')
+    expect(gkStats).toContain('<th>扑救</th><td>4（1/1 场）</td><td>3（1/1 场）</td>')
+    expect(gkStats).toContain('<th>失球</th><td>0（1/1 场）</td><td>2（1/1 场）</td>')
+    expect(gkStats).toContain('<th>零封</th><td>1（1/1 场）</td><td>0（1/1 场）</td>')
+    expect(gkStats).toContain('<th>扑救成功率</th><td>100%（1/1 场）</td><td>60%（1/1 场）</td>')
+    expect(gkStats).toContain('<th>阻止失球</th><td>+1.15（1/1 场）</td><td>-0.40（1/1 场）</td>')
+    expect(gkStats).toContain('<th>出击摘球</th><td>2（1/1 场）</td><td>1（1/1 场）</td>')
+    expect(gkStats).not.toContain('<th>进球</th>')
+    expect(gkStats).not.toContain('<th>射门</th>')
+
+    const mixedStats = renderPlayerComparison(outfielder, gkA, [outfielder, gkA], 'stats')
+    expect(mixedStats).toContain('<th>扑救</th><td>—</td><td>4（1/1 场）</td>')
+    expect(mixedStats).toContain('<th>零封</th><td>—</td><td>1（1/1 场）</td>')
   })
 })
