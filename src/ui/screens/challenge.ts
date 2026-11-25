@@ -14,11 +14,14 @@ import { peakSkillForStage } from '../../game/data/peak-skills.ts'
 import { SQUAD_LIMIT } from '../../game/market.ts'
 import { legendRecordOf } from '../../game/pve.ts'
 import { legendSkillForTeam } from '../../game/data/legend-skills.ts'
+import { SKILLS } from '../../game/data/skills.ts'
+import { skillEffectText } from '../../game/data/skill-effects.ts'
 import { legendBookLabel } from '../../game/legend-books.ts'
 import { cupTeam } from '../../game/cup-run.ts'
 import { clubRatings, lineupRating } from '../../game/club-rating.ts'
 import { pveContentReady } from '../../game/pve-content.ts'
 import { bookTitle, caHeat, clubName, icon, ownName, pageHead, panel, recordResult, resultPill, tag, tile } from '../components.ts'
+import { tipAttrs } from '../tooltip.ts'
 import { aiTeamTacticLabel, countdownText, esc, playerCA } from '../format.ts'
 import { divisionRatings } from '../club-view.ts'
 import { starRating } from '../stars.ts'
@@ -68,10 +71,43 @@ function renderFriendly(): string {
     }).join('')}</tbody></table></div>`, { flush: true })}${recordsPanel(game.challengeHistory.filter((record) => !record.mode || record.mode === 'friendly'))}</div>`
 }
 
+const BOOK_TIER_ORDER = { rainbow: 0, gold: 1, silver: 2 } as const
+const BOOK_TIER_NAME = { rainbow: '彩虹', gold: '金色', silver: '银色' } as const
+
 function legendBooksPanel(): string {
   const books = game.legendBooks ?? []
   if (!books.length) return ''
-  return panel(`技能书库存 <small>${books.length}</small>`, `<p class="hint pad">技能书分银、金、彩等不同稀有度，可重复携带：联赛场上球员会随机掉落，传奇挑战与巅峰之路也能获得；前往培养页选择球员并配置到书槽。</p><div class="rows">${books.map((book) => `<div class="row-line"><span>${bookTitle(legendBookLabel(book), book.tier)}</span><small class="muted">可在培养页带进书槽</small></div>`).join('')}</div><div class="btn-row pad"><button class="btn small" data-nav="training">去培养配置技能卡 ${icon('right', 12)}</button></div>`, { flush: true })
+  const sorted = books.slice().sort((a, b) =>
+    BOOK_TIER_ORDER[a.tier] - BOOK_TIER_ORDER[b.tier] || legendBookLabel(a).localeCompare(legendBookLabel(b), 'zh-CN'),
+  )
+  const counts = { rainbow: 0, gold: 0, silver: 0 }
+  for (const book of sorted) counts[book.tier]++
+  const summary = (['rainbow', 'gold', 'silver'] as const)
+    .filter((tier) => counts[tier] > 0)
+    .map((tier) => `<span class="book-tier-chip tier-${tier}">${BOOK_TIER_NAME[tier]} ${counts[tier]}</span>`)
+    .join('')
+  const items = sorted.map((book) => {
+    const label = legendBookLabel(book)
+    const def = SKILLS[book.id as keyof typeof SKILLS]
+    const effect = def ? skillEffectText(book.id as keyof typeof SKILLS, book.tier) : ''
+    const tipBody = [def?.desc, effect, '可在培养页带进书槽'].filter(Boolean).join('\n')
+    const tip = tipAttrs(`${label} · ${BOOK_TIER_NAME[book.tier]}技能书`, tipBody)
+    return `<div class="book-card tier-${book.tier}" role="listitem" ${tip} data-book-id="${esc(book.id)}" data-book-tier="${book.tier}">
+      <div class="book-cover">
+        <span class="book-spine" aria-hidden="true"></span>
+        <span class="book-emblem" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.2 5.4L20 10l-4.5 3.7L16.9 20 12 16.7 7.1 20l1.4-6.3L4 10l5.8-1.6z"/></svg></span>
+        <span class="book-cover-title">${bookTitle(label, book.tier)}</span>
+        <span class="book-cover-rule" aria-hidden="true"></span>
+      </div>
+      <span class="book-pages" aria-hidden="true"></span>
+      <span class="book-ribbon" aria-hidden="true"></span>
+    </div>`
+  }).join('')
+  return panel(
+    `技能书库存 <small>${books.length}</small>`,
+    `<p class="hint pad">技能书按稀有度分为银色、金色与彩虹色，悬停或点击书本可查看详细效果；前往培养页选择球员并配置到书槽。</p><div class="book-shelf" role="list" aria-label="技能书库存书架">${items}</div><div class="btn-row pad"><button class="btn small" data-nav="training">去培养配置技能卡 ${icon('right', 12)}</button></div>`,
+    { flush: true, aside: summary ? `<span class="book-tier-summary">${summary}</span>` : undefined },
+  )
 }
 
 function renderLegend(): string {

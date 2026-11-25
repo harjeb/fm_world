@@ -94,20 +94,40 @@ describe('挑战页面', () => {
     expect(html).not.toContain('球星上限')
   })
 
-  it('传奇表显示掉落技能书，已获得书在挑战页可见', () => {
-    game.legendBooks = [{ id: 'lg_drill_master', tier: 'rainbow' }]
-    ui.challengeMode = 'legend'
-    ui.legendTier = 'ALL'
-    ui.legendSearch = '阿贾克斯'
-    ui.legendCountry = 'ALL'
-    ui.legendEra = 'ALL'
-    const html = renderChallenge()
-    expect(html).toContain('掉落技能书')
-    expect(html).toContain('<td><span class="tag skill-rainbow"><span class="skill-label">训练狂人</span></span></td>')
-    expect(html).toContain('技能书库存')
-    expect(html).toContain('<b class="book-name skill-rainbow">训练狂人</b>')
-    expect(html).not.toContain('skill-label">彩<')
-    ui.legendSearch = ''
+  it('传奇表显示掉落技能书，已获得书以多列书架卡片展示银/金/彩三档外观', () => {
+    const prevBooks = game.legendBooks
+    try {
+      game.legendBooks = [
+        { id: 'box_hunter', tier: 'silver' },
+        { id: 'lg_stamina_regen', tier: 'gold' },
+        { id: 'lg_drill_master', tier: 'rainbow' },
+      ]
+      ui.challengeMode = 'legend'
+      ui.legendTier = 'ALL'
+      ui.legendSearch = '阿贾克斯'
+      ui.legendCountry = 'ALL'
+      ui.legendEra = 'ALL'
+      const html = renderChallenge()
+      expect(html).toContain('掉落技能书')
+      expect(html).toContain('<td><span class="tag skill-rainbow"><span class="skill-label">训练狂人</span></span></td>')
+      expect(html).toContain('技能书库存')
+      expect(html).toContain('class="book-shelf"')
+      expect(html).toContain('class="book-card tier-rainbow"')
+      expect(html).toContain('class="book-card tier-gold"')
+      expect(html).toContain('class="book-card tier-silver"')
+      expect(html).toContain('class="book-spine"')
+      expect(html).toContain('class="book-pages"')
+      expect(html).toContain('<b class="book-name skill-rainbow">训练狂人</b>')
+      expect(html).toContain('<b class="book-name skill-gold">呼吸法</b>')
+      expect(html).toContain('<b class="book-name skill-silver">禁区猎手</b>')
+      // 彩虹 -> 金 -> 银排序展示
+      expect(html.indexOf('data-book-tier="rainbow"')).toBeLessThan(html.indexOf('data-book-tier="gold"'))
+      expect(html.indexOf('data-book-tier="gold"')).toBeLessThan(html.indexOf('data-book-tier="silver"'))
+      expect(html).not.toContain('skill-label">彩<')
+    } finally {
+      game.legendBooks = prevBooks
+      ui.legendSearch = ''
+    }
   })
 
   it('传奇档位筛选与现实日 20 次配额可渲染，次数用完时禁用开战按钮', () => {
