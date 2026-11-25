@@ -942,6 +942,27 @@ export async function startPeakOnline(stage: number): Promise<GameState> {
   }
 }
 
+/** 传奇挑战每日次数（现实日 20 次）由服务器原子扣除，避免多设备重复使用。 */
+export async function startLegendOnline(legendId: string): Promise<GameState> {
+  const epoch = sessionEpoch
+  try {
+    return await onlineGameAction('/api/legend/start', { legendId })
+  } catch (error) {
+    try {
+      const current = await requestJson<{ game: GameState; revision: number }>('/api/game', { cache: 'no-store' }, RECOVERY_TIMEOUT_MS)
+      if (epoch === sessionEpoch && isOnlineMode() && current.game && Number.isSafeInteger(current.revision) && current.revision >= onlineState.revision) {
+        hydrateOnlineGame(current.game)
+        onlineState.revision = current.revision
+        onlineState.lastSync = Date.now()
+        noteSyncedGame(current.game)
+        remoteGameHandler?.(current.game)
+        notify()
+      }
+    } catch { /* 保留原始错误 */ }
+    throw error
+  }
+}
+
 /** 联机改俱乐部名字：服务器检查字数和重名，成功后全服看到的新名字一起更新。 */
 export async function renameClubOnline(name: string): Promise<GameState> {
   const game = await onlineGameAction('/api/club/rename', { name })

@@ -82,7 +82,7 @@ import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPla
 import { minimumBid } from '../game/auction.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
 import { clubNameError, normalizeClubName } from '../game/club-name.ts'
-import { adjustBoardBudgetOnline, aiTransferMarket, bidOnline, buyFromAIClubOnline, buyShopBookOnline, chatState, chooseBoardAmbitionOnline, claimAchievementOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, recycleCardsOnline, refreshAITransferMarket, refreshChatOnline, refreshGameOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setCardRecycleLockOnline, startPeakOnline, startScoutingOnline, deleteScoutingOnline, startTrainingOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline, upgradeFacilityOnline } from '../online.ts'
+import { adjustBoardBudgetOnline, aiTransferMarket, bidOnline, buyFromAIClubOnline, buyShopBookOnline, chatState, chooseBoardAmbitionOnline, claimAchievementOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, recycleCardsOnline, refreshAITransferMarket, refreshChatOnline, refreshGameOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setCardRecycleLockOnline, startLegendOnline, startPeakOnline, startScoutingOnline, deleteScoutingOnline, startTrainingOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline, upgradeFacilityOnline } from '../online.ts'
 import { agentHandoffText } from './agent-handoff.ts'
 import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
 import { UNHAPPY_HOURS } from '../game/transfer-rules.ts'
@@ -2461,8 +2461,22 @@ document.addEventListener('click', async (event) => {
     }
     case 'start-legend-challenge': {
       const teamId = actionEl.dataset.team
-      if (!teamId) break
-      openFriendly(startLegendChallenge(game, teamId))
+      if (!teamId || ui.completing) break
+      if (!isOnlineMode()) {
+        openFriendly(startLegendChallenge(game, teamId))
+        break
+      }
+      ui.completing = true
+      render()
+      try {
+        await startLegendOnline(teamId)
+        openFriendly({ ok: true })
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : '无法开始传奇挑战')
+      } finally {
+        ui.completing = false
+        render()
+      }
       break
     }
     case 'start-peak-stage': {
@@ -3259,13 +3273,14 @@ window.setInterval(() => {
     void refreshGameOnline(() => game).catch(() => { /* 可通过报告面板手动重试 */ }).finally(() => { scoutRefreshPending = false })
   }
   for (const element of document.querySelectorAll<HTMLElement>('[data-countdown-end]')) {
-    const clock = element.closest('[data-peak-reset-at]') && !isOnlineMode() ? Date.now() : serverNow()
+    const clock = element.closest('[data-peak-reset-at], [data-legend-reset-at]') && !isOnlineMode() ? Date.now() : serverNow()
     const left = Number(element.dataset.countdownEnd) - clock
     element.textContent = countdownText(left)
     element.classList.toggle('urgent', left < 60_000)
   }
-  const peakReset = document.querySelector<HTMLElement>('[data-peak-reset-at]')
-  if (ui.screen === 'challenge' && peakReset && Number(peakReset.dataset.peakResetAt) <= (isOnlineMode() ? serverNow() : Date.now())) render()
+  const pveReset = document.querySelector<HTMLElement>('[data-peak-reset-at], [data-legend-reset-at]')
+  const pveResetAt = Number(pveReset?.dataset.peakResetAt ?? pveReset?.dataset.legendResetAt)
+  if (ui.screen === 'challenge' && pveReset && Number.isFinite(pveResetAt) && pveResetAt <= (isOnlineMode() ? serverNow() : Date.now())) render()
 }, 1000)
 window.setInterval(autoAdvanceSeason, 30_000)
 window.setInterval(() => { if (ui.screen !== 'match') render() }, 30_000)

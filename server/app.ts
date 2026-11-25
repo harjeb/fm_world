@@ -74,11 +74,12 @@ import { aiBuysLeft, noteAIBuy } from '../src/game/transfer-rules.ts'
 import { aiTransferOffers, settleMarket, signClubPlayer } from '../src/game/market.ts'
 import { elevenAITeam, upgradeElevenASide } from '../src/game/eleven.ts'
 import { elevenFormationFor, isLegacyFormation } from '../src/game/data/formations.ts'
-import { startChallengeWithOpponent, startPeakChallenge, startTrainingWithSupport } from '../src/game/actions.ts'
+import { startChallengeWithOpponent, startLegendChallenge, startPeakChallenge, startTrainingWithSupport } from '../src/game/actions.ts'
 import { awardAISeasonCup, awardSeasonCupChampion, awardSeasonCupMatch } from '../src/game/season-cup-rewards.ts'
 import { seasonCupPlayerStats } from '../src/game/season-cup-stats.ts'
 import { clubCeilingBonus, ensureCupCeilingClaims } from '../src/game/cup-rewards.ts'
 import { preservePeakAttempts, validatePeakSave } from './peak-guard.ts'
+import { preserveLegendAttempts, validateLegendSave } from './legend-guard.ts'
 import { validateLegacyCupSave } from './legacy-cup-guard.ts'
 import { MatchQueue, type MatchQueueOptions } from './match-queue.ts'
 import { MatchScheduler } from './match-scheduler.ts'
@@ -3691,6 +3692,22 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return
     }
 
+    if (url.pathname === '/api/legend/start' && req.method === 'POST') {
+      const body = await readJsonBody(req)
+      await loadPveContent()
+      advanceAccount(account)
+      if (!account.game.activeMatch && liveMatchFor(account)) { await sendJson(400, { error: '联赛直播期间不能开始传奇挑战', revision: account.revision, game: publicGame(account), serverTime: now() }, true); return }
+      const outcome = startLegendChallenge(account.game, String(body.legendId ?? ''), now())
+      if (!outcome.ok) { await sendJson(400, { error: outcome.error, revision: account.revision, game: publicGame(account), serverTime: now() }, true); return }
+      account.revision++
+      account.lastUserRevision = account.revision
+      account.updatedAt = now()
+      persistAccount(account)
+      broadcast(account, String(req.headers['x-fm-client'] ?? '').slice(0, 128))
+      await sendJson(200, { ok: true, revision: account.revision, game: publicGame(account), serverTime: now() }, true)
+      return
+    }
+
     if (url.pathname === '/api/match/action' && req.method === 'POST') {
       const body = await readJsonBody(req)
       if (!['start_league', 'set_match_tactics', 'set_match_auto_subs', 'substitute', 'match_shout'].includes(String(body.action))) return json(res, 400, { error: '不支持的比赛操作' })
@@ -3794,6 +3811,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       if (body.game.activeMatch?.preplayed && !account.game.activeMatch) delete body.game.activeMatch
       const peakError = validatePeakSave(account.game, body.game)
       if (peakError) { await sendJson(409, { error: peakError, revision: account.revision, game: publicGame(account) }, true); return }
+      const legendError = validateLegendSave(account.game, body.game)
+      if (legendError) { await sendJson(409, { error: legendError, revision: account.revision, game: publicGame(account) }, true); return }
       const legacyCupError = sharedWorld.world.seasonCupMode ? validateLegacyCupSave(account.game, body.game) : undefined
       if (legacyCupError) { await sendJson(409, { error: legacyCupError, revision: account.revision, game: publicGame(account) }, true); return }
       // 比赛公布会改变收入、球迷、市场等：不能把公布前的整份旧经济覆盖回去。
@@ -3906,6 +3925,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       ensureAchievements(body.game, now())
       syncUnlockedAchievements(body.game, now())
       preservePeakAttempts(account.game, body.game)
+      preserveLegendAttempts(account.game, body.game)
       if (body.game.namesVersion !== NAMES_VERSION || body.game.traitsVersion !== TRAITS_VERSION || body.game.attrsVersion !== ATTRS_VERSION) {
         if (body.game.reserveStars && Object.isFrozen(body.game.reserveStars)) {
           body.game.reserveStars = structuredClone(body.game.reserveStars)

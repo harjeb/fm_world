@@ -17,6 +17,7 @@ import { cachedOwnerlessTeams } from './world.ts'
 import { legendTeamById } from './legend.ts'
 import { PEAK_STAGE_COUNT, buildPeakTeam } from './peak.ts'
 import { PEAK_DAILY_LIMIT, nextPeakAttempt, peakDailyStatus, recordPeakAttempt } from './peak-attempts.ts'
+import { LEGEND_DAILY_LIMIT, legendDailyStatus, nextLegendAttempt, recordLegendAttempt } from './legend-attempts.ts'
 import { ensurePve } from './pve.ts'
 import { cupPlayerFixture, cupTeam, enterCup } from './cup-run.ts'
 import type { CupId } from './data/cup-config.ts'
@@ -995,17 +996,21 @@ export function startWorldChallenge(game: GameState, clubId: string, now = Date.
   return { ok: result.ok, error: result.error }
 }
 
-/** 传奇挑战：和静态复刻的历史俱乐部队踢一场。 */
+/** 传奇挑战：和静态复刻的历史俱乐部队踢一场；每个现实自然日（北京时间 00:00 重置）限 20 次。 */
 export function startLegendChallenge(game: GameState, legendId: string, now = Date.now()): { ok: boolean; error?: string } {
   const error = validateAutoSubPlan(game.roster, game.lineup, game.autoSubs ?? emptyAutoSubs())[0]
   if (error) return { ok: false, error: `自动换人规则无效：${error}` }
   const ai = legendTeamById(legendId)
   if (!ai) return { ok: false, error: '找不到这支传奇队' }
   ensurePve(game)
-  const played = game.pve?.legends?.[legendId]?.played ?? 0
-  const seed = splitSeed(game.seed, `legend-${legendId}-${played}`)
-  const result = startChallengeAgainstTeam(game, ai, seed, now, 'legend', undefined, undefined, { allowDraw: true })
-  if (result.ok) saveGame(game)
+  const quota = legendDailyStatus(game, now)
+  if (quota.remaining <= 0) return { ok: false, error: `今日传奇挑战次数已用完（每天 ${LEGEND_DAILY_LIMIT} 次），请在北京时间 00:00 重置后再来` }
+  const attempt = nextLegendAttempt(game, legendId)
+  const result = startChallengeAgainstTeam(game, ai, attempt.seed, now, 'legend', undefined, attempt.recordKey, { allowDraw: true })
+  if (result.ok) {
+    recordLegendAttempt(game, now, attempt.number)
+    saveGame(game)
+  }
   return { ok: result.ok, error: result.error }
 }
 

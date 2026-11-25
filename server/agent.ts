@@ -25,6 +25,7 @@ import { MAIN_ATTR_HARD_MAX } from '../src/game/scale.ts'
 import { PEAK_STAGES } from '../src/game/data/peak-stages.generated.ts'
 import { PEAK_STAGE_COUNT, buildPeakTeam } from '../src/game/peak.ts'
 import { PEAK_DAILY_LIMIT, peakDailyStatus } from '../src/game/peak-attempts.ts'
+import { LEGEND_DAILY_LIMIT, legendDailyStatus } from '../src/game/legend-attempts.ts'
 import { peakStageReward } from '../src/game/data/peak-rewards.ts'
 import { peakSkillForStage } from '../src/game/data/peak-skills.ts'
 import { applyPeakBreakthrough } from '../src/game/peak-milestones.ts'
@@ -531,6 +532,8 @@ function pveSummaryView(game: GameState, now: number) {
     legends: {
       total: LEGEND_TEAMS.length,
       beaten: Object.values(legends).filter((row) => row.won > 0).length,
+      dailyLimit: LEGEND_DAILY_LIMIT,
+      dailyAttempts: legendDailyStatus(game, now),
       records: Object.fromEntries(Object.entries(legends).map(([id, row]) => [id, { ...row }])),
     },
   }

@@ -7,6 +7,7 @@ import { legendTeamById } from '../../game/legend.ts'
 import { PEAK_STAGE_COUNT, peakStageDef, buildPeakTeam } from '../../game/peak.ts'
 import { PEAK_REWARD_STAGE, peakRewardReady } from '../../game/peak-reward.ts'
 import { PEAK_DAILY_LIMIT, peakDailyStatus } from '../../game/peak-attempts.ts'
+import { LEGEND_DAILY_LIMIT, legendDailyStatus } from '../../game/legend-attempts.ts'
 import { peakStageReward } from '../../game/data/peak-rewards.ts'
 import { peakStageShopPoints } from '../../game/shop.ts'
 import { peakSkillForStage } from '../../game/data/peak-skills.ts'
@@ -32,7 +33,7 @@ import { renderCup } from '../cup-view.ts'
 const MODE_LABEL = { friendly: '友谊赛', legend: '传奇挑战', cup: '杯赛挑战', peak: '巅峰之路' }
 const MODE_SUB = {
   friendly: '不计联赛积分，平局直接进入点球大战。',
-  legend: '50 支历史俱乐部队；胜/平掉技能书，首胜发球迷/资金。固定阵容与属性，可查看完整首发、替补和 7 项主属性。',
+  legend: '50 支历史俱乐部队；胜/平掉技能书，首胜发球迷/资金。每个现实日限挑战 20 次（北京时间 00:00 重置）。',
   cup: '两个 16 队杯和一个 32 队杯。世界球队 + 随机队，小组循环后淘汰赛；决赛单场。',
   peak: '100 关，对手 RANK 3850→14300。前 80 关生成/特别，最后 20 关世界杯国家队，所有玩家对手相同。',
 }
@@ -74,6 +75,9 @@ function legendBooksPanel(): string {
 }
 
 function renderLegend(): string {
+  const now = isOnlineMode() ? serverNow() : Date.now()
+  const quota = legendDailyStatus(game, now)
+  const beaten = Object.values(game.pve?.legends ?? {}).filter((row) => row.won > 0).length
   const eras = [...new Set(LEGEND_TEAMS.map((def) => `${Math.floor(Number(def.season.slice(0, 4)) / 10) * 10}`))].sort()
   const countries = [...new Set(LEGEND_TEAMS.map((def) => def.country).filter((country): country is string => !!country))].sort()
   const search = ui.legendSearch.trim().toLocaleLowerCase()
@@ -81,11 +85,14 @@ function renderLegend(): string {
     (ui.legendCountry === 'ALL' || def.country === ui.legendCountry) &&
     (ui.legendEra === 'ALL' || def.season.startsWith(ui.legendEra.slice(0, 3))) &&
     (!search || [def.club, def.clubEn, def.season, def.coach, ...def.players.flatMap((p) => [p[0], p[1], p[2]])].join(' ').toLocaleLowerCase().includes(search)))
-  return `<div class="toolbar"><select id="legend-country" aria-label="俱乐部国家"><option value="ALL">全部国家</option>${countries.map((country) => `<option ${country === ui.legendCountry ? 'selected' : ''} value="${country}">${country}</option>`).join('')}</select><input id="legend-search" type="search" aria-label="搜索传奇队" placeholder="球队、球员、国家或年份" value="${esc(ui.legendSearch)}"><select id="legend-era" aria-label="传奇队年代"><option value="ALL">全部年代</option>${eras.map((era) => `<option value="${era}" ${ui.legendEra === era ? 'selected' : ''}>${era} 年代</option>`).join('')}</select><div class="seg">${(['ALL', 'S+', 'S', 'A', 'B'] as const).map((tier) => `<button data-legend-tier="${tier}" class="${ui.legendTier === tier ? 'active' : ''}">${tier === 'ALL' ? '全部' : tier}</button>`).join('')}</div></div>
+  const startDisabled = !!game.activeMatch || !!ui.completing || quota.remaining <= 0
+  return `<div class="kpi-row">${tile('已击败', `${beaten} / ${LEGEND_TEAMS.length}`)}${tile('今日剩余', `${quota.remaining} / ${LEGEND_DAILY_LIMIT}`)}${tile('技能书库存', `${game.legendBooks?.length ?? 0} 本`)}</div>
+    <p class="hint pad" data-legend-reset-at="${quota.resetAt}">每个现实日（北京时间 00:00 重置）最多挑战 ${LEGEND_DAILY_LIMIT} 次；开赛即消耗，胜负平及重打均计入。下次重置：<span class="countdown" data-countdown-end="${quota.resetAt}">${esc(countdownText(quota.resetAt - now))}</span>。</p>
+    <div class="toolbar"><select id="legend-country" aria-label="俱乐部国家"><option value="ALL">全部国家</option>${countries.map((country) => `<option ${country === ui.legendCountry ? 'selected' : ''} value="${country}">${country}</option>`).join('')}</select><input id="legend-search" type="search" aria-label="搜索传奇队" placeholder="球队、球员、国家或年份" value="${esc(ui.legendSearch)}"><select id="legend-era" aria-label="传奇队年代"><option value="ALL">全部年代</option>${eras.map((era) => `<option value="${era}" ${ui.legendEra === era ? 'selected' : ''}>${era} 年代</option>`).join('')}</select><div class="seg">${(['ALL', 'S+', 'S', 'A', 'B'] as const).map((tier) => `<button data-legend-tier="${tier}" class="${ui.legendTier === tier ? 'active' : ''}">${tier === 'ALL' ? '全部' : tier}</button>`).join('')}</div></div>
     ${panel(`传奇球队 <small>${teams.length}</small>`, teams.length ? `<div class="table-scroll"><table class="dt"><thead><tr><th>球队</th><th>赛季</th><th>教练</th><th class="num" title="首发 CA 之和">RANK</th><th>核心球员</th><th>掉落技能书</th><th>战绩</th><th></th></tr></thead><tbody>${teams.map((def) => {
       const team = legendTeamById(def.id)!, record = legendRecordOf(game, def.id)
       const drop = legendSkillForTeam(def.id)
-      return `<tr><td>${tag(def.tier, def.tier === 'S+' ? 'gold' : '')} ${pveTeamButton(`legend:${def.id}`, def.club)}<details><summary>历史注解</summary>${esc(def.note)}</details></td><td>${def.season}</td><td>${esc(def.coach)}</td><td class="num strong">${Math.round(lineupRating(team.players, team.lineup))}</td><td>${esc(coreNames(team))}</td><td>${drop ? tag(esc(drop.name), 'skill-rainbow') : '—'}</td><td>${record.played ? `${record.won}胜 ${record.drawn}平 ${record.lost}负 · ${record.goals}:${record.conceded}` : '尚未挑战'}</td><td><button class="btn small" data-action="start-legend-challenge" data-team="${def.id}" ${game.activeMatch ? 'disabled' : ''}>开战</button></td></tr>`
+      return `<tr><td>${tag(def.tier, def.tier === 'S+' ? 'gold' : '')} ${pveTeamButton(`legend:${def.id}`, def.club)}<details><summary>历史注解</summary>${esc(def.note)}</details></td><td>${def.season}</td><td>${esc(def.coach)}</td><td class="num strong">${Math.round(lineupRating(team.players, team.lineup))}</td><td>${esc(coreNames(team))}</td><td>${drop ? tag(esc(drop.name), 'skill-rainbow') : '—'}</td><td>${record.played ? `${record.won}胜 ${record.drawn}平 ${record.lost}负 · ${record.goals}:${record.conceded}` : '尚未挑战'}</td><td><button class="btn small" data-action="start-legend-challenge" data-team="${def.id}" ${startDisabled ? 'disabled' : ''}>${quota.remaining <= 0 ? '次数已用完' : '开战'}</button></td></tr>`
     }).join('')}</tbody></table></div>` : '<p class="muted pad">没有符合条件的球队，请修改筛选。</p>', { flush: true })}
     ${legendBooksPanel()}
     ${recordsPanel(game.challengeHistory.filter((record) => record.mode === 'legend'), '传奇战报')}`
