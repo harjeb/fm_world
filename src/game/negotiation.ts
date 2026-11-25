@@ -22,8 +22,8 @@ export const SQUAD_ROLE_LABELS: Record<SquadRole, string> = {
 
 export const TIER_LABELS: Record<TierId, string> = {
   champions: '冠军联赛',
-  division1: '一级联赛',
-  division2: '二级联赛',
+  division1: '精英联赛',
+  division2: '先锋联赛',
 }
 
 const TIER_RANK: Record<TierId, number> = { division2: 1, division1: 2, champions: 3 }

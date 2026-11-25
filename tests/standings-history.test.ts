@@ -12,7 +12,7 @@ describe('联赛排名变化轨迹与世界页历史比赛记录', () => {
   it('射手榜和助攻榜使用所选联赛的名称，包括联机公开数据', () => {
     const worldGame = createWorldGame(777)
     setGame(worldGame)
-    for (const [id, label] of [['champions', '冠军联赛'], ['division1', '一级联赛'], ['d2-south', '二级联赛 · 南区']]) {
+    for (const [id, label] of [['champions', '冠军联赛'], ['division1', '精英联赛'], ['d2-south', '先锋联赛 · 南区']]) {
       const division = worldGame.world!.divisions.find((d) => d.divisionId === id)!
       for (const data of [division, { id, fixtures: division.fixtures }]) {
         const html = leaderPanels(data)

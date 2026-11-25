@@ -85,7 +85,7 @@ function renderPointsGuide(tier: TierId, rank: number | null): string {
         <h4 class="sub-head">赛季排名结算（级别越高越多）</h4>
         <details>
           <summary>查看 1–20 名完整点数表（当前：${esc(worldTierLabel(tier))}）</summary>
-          <div class="table-scroll"><table class="dt"><thead><tr><th class="num">排名</th><th class="num">二级联赛</th><th class="num">一级联赛</th><th class="num">冠军联赛</th></tr></thead><tbody>${rankRows}</tbody></table></div>
+          <div class="table-scroll"><table class="dt"><thead><tr><th class="num">排名</th><th class="num">先锋联赛</th><th class="num">精英联赛</th><th class="num">冠军联赛</th></tr></thead><tbody>${rankRows}</tbody></table></div>
         </details>
       </div>
     </div>

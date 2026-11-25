@@ -640,8 +640,8 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   {
     id: 'tier_division1',
     category: 'honors',
-    title: '升入一级',
-    desc: '带领俱乐部跻身一级联赛（或更高）',
+    title: '升入精英',
+    desc: '带领俱乐部跻身精英联赛（或更高）',
     target: 2,
     unit: '级联赛',
     reward: { shopPoints: 100 },

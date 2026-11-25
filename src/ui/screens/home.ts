@@ -80,14 +80,14 @@ function nextMatchPanel(): string {
       const hasBye = !!clubId && !!currentRound?.byes.includes(clubId)
       const nextDate = promo.dates[promo.rounds.length] ?? currentRound?.kickoffAt
       const title = promoted
-        ? '升级杯 · 已锁定升入一级联赛！'
+        ? '升级杯 · 已锁定升入精英联赛！'
         : hasBye
           ? `升级杯 · 本轮轮空（下一阶段 ${nextDate ? kickoffTimeLabel(nextDate) : '待定'}）`
           : inPromo
             ? '升级杯赛程进行中'
             : `赛后休整 · 升级杯进行中（距下赛季 ${nextSeasonCountdown(game, now)}）`
       const desc = promoted
-        ? '恭喜你已拿到下赛季一级联赛入场券！等待升级杯剩余场次结束后于新赛季正式升级。'
+        ? '恭喜你已拿到下赛季精英联赛入场券！等待升级杯剩余场次结束后于新赛季正式升级。'
         : hasBye
           ? (currentRound?.round === 1 ? '作为赛区第 1 名首轮轮空，资格赛结束后将自动抽签分入 A/B 组踢小组赛。' : '本轮小组赛轮空休整，可在升级杯页面查看同组实时比分与积分。')
           : '升级杯按赛程自动开赛并直播，可在杯赛页查看完整对阵与实时战报。'
@@ -351,8 +351,8 @@ function boardAlert(): string {
       const d1Text = board.pendingChoicesByTier?.division1 ? BOARD_AMBITION_META[board.pendingChoicesByTier.division1].label : '默认基准档'
       const d2Text = board.pendingChoicesByTier?.division2 ? BOARD_AMBITION_META[board.pendingChoicesByTier.division2].label : '默认基准档'
       return `<section class="offer-alert board-alert" role="status">
-        <div class="offer-alert-head">${icon('flag', 18)}<b>升级杯激战中 · 可提前为「升一级 / 留二级」分别预选第 ${prev.nextSeasonIndex} 赛季目标</b>
-          <span class="muted">若升一级：${esc(d1Text)} · 若留二级：${esc(d2Text)}（换季按最终结果自动生效）</span>
+        <div class="offer-alert-head">${icon('flag', 18)}<b>升级杯激战中 · 可提前为「升精英 / 留先锋」分别预选第 ${prev.nextSeasonIndex} 赛季目标</b>
+          <span class="muted">若升精英：${esc(d1Text)} · 若留先锋：${esc(d2Text)}（换季按最终结果自动生效）</span>
           <button class="btn small primary" data-action="go-club" data-tab="board">预选两套方案 ${icon('right', 12)}</button></div>
       </section>`
     }

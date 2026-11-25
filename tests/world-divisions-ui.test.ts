@@ -40,7 +40,7 @@ describe('世界页扩展赛区去重', () => {
     const html = renderWorld()
     const buttons = divisionButtons(html)
     expect(buttons).toEqual(['champions', 'division1', 'd2-north', 'd2-south', 'd2-zone3'])
-    expect(html).toContain('二级联赛（北区 / 南区 / 东区）')
+    expect(html).toContain('先锋联赛（北区 / 南区 / 东区）')
     expect(html).not.toContain('东区 / 东区')
     expect(html).toMatch(/class="tier active[^\"]*" data-world-div="d2-zone3"/)
   })

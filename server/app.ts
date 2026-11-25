@@ -272,9 +272,25 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     sharedWorld.freeStars = ownerless.freeStars
     sharedWorld.reserveStars = ownerless.reserveStars
   }
-  // 初始冠军联赛 20 支球队永久锁定，即使降级也不开放玩家注册/接管；启动时补齐旧存档标记。
+  // 初始冠军联赛 20 支球队永久锁定，即使降级也不开放玩家注册/接管；启动时补齐旧存档标记，并同步旧联赛级别简介文案。
+  const renameLegacyTierStyle = (style: string | undefined): string | undefined =>
+    style === '一级联赛球队。' ? '精英联赛球队。' : style === '二级联赛球队。' ? '先锋联赛球队。' : style
   for (const club of sharedWorld.world.clubs) {
     if (INITIAL_CHAMPIONS_CLUB_IDS.has(club.id) && !club.playerLocked) club.playerLocked = true
+    const nextStyle = renameLegacyTierStyle(club.style)
+    if (nextStyle && nextStyle !== club.style) club.style = nextStyle
+  }
+  if (sharedWorld.teams) {
+    for (const team of Object.values(sharedWorld.teams)) {
+      const nextStyle = renameLegacyTierStyle(team.style)
+      if (nextStyle && nextStyle !== team.style) team.style = nextStyle
+    }
+  }
+  if (sharedWorld.cupOpening?.teams) {
+    for (const [id, team] of Object.entries(sharedWorld.cupOpening.teams)) {
+      const nextStyle = renameLegacyTierStyle(team.style)
+      if (nextStyle && nextStyle !== team.style) sharedWorld.cupOpening.teams[id] = Object.freeze({ ...team, style: nextStyle })
+    }
   }
   // SQLite 原子交接后、world.json 更新前可能重启；以已提交的接管者为准。
   for (const { club_id, holder, initial_name } of accountStore.handovers()) {
@@ -338,7 +354,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
           club.short = name.slice(0, 2)
           club.color = color
           club.accent = '#0f172a'
-          club.style = '二级联赛球队。'
+          club.style = '先锋联赛球队。'
           const team = sharedWorld.teams?.[club.id]
           if (team) {
             team.name = name
@@ -346,7 +362,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
             team.short = name.slice(0, 2)
             team.color = color
             team.accent = '#0f172a'
-            team.style = '二级联赛球队。'
+            team.style = '先锋联赛球队。'
           }
           if (club.conference) touchedDivisions.add(`d2-${club.conference}`)
         })
@@ -3021,7 +3037,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         if (!isVacantSeat(ownerId) && db.accounts.some((item) => item.id === ownerId)) {
           return json(res, 409, { error: '这支球队已经有人执教，请选择其他球队' })
         }
-        if (club.tier !== 'division2' && !isVacantSeat(ownerId)) return json(res, 400, { error: '只能选择空缺的二级球队或前任教练释放的球队' })
+        if (club.tier !== 'division2' && !isVacantSeat(ownerId)) return json(res, 400, { error: '只能选择空缺的先锋联赛球队或前任教练释放的球队' })
       } else {
         // 未指定球队时优先交接托管席，再选二级空位；满员才扩区。
         club = availableRegistrationClub()
