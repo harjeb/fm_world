@@ -111,6 +111,7 @@ type SeasonAchievementMetrics = {
   championsTitles: number
   maxSeasonPoints: number
   maxSeasonGoals: number
+  maxSeasonPlayerGoals: number
   invincibleSeasons: number
   maxWinStreak: number
   maxUnbeatenStreak: number
@@ -164,7 +165,102 @@ function ownClubIds(game: GameState): Set<string> {
   return ids
 }
 
-function computeSeasonMetrics(game: GameState, ownIds: Set<string>): SeasonAchievementMetrics {
+function statCanonicalPlayerId(ps: { sourceId?: string; playerId: string; side: 'home' | 'away' }): string {
+  if (ps.sourceId) return ps.sourceId
+  const prefix = `${ps.side}:`
+  return ps.playerId.startsWith(prefix) ? ps.playerId.slice(prefix.length) : ps.playerId
+}
+
+/** 统计单赛季内（联赛 + 杯赛合计，不含友谊赛/传奇/巅峰）我方单名球员最高总进球数。 */
+function computeMaxSeasonPlayerGoals(game: GameState, ownIds: Set<string>, matches: MatchRecord[]): number {
+  const bySeason = new Map<number, Map<string, number>>()
+  const addGoal = (seasonIdx: number, playerId: string, goals: number) => {
+    const g = Math.max(0, Math.floor(goals))
+    if (!playerId || g <= 0) return
+    let map = bySeason.get(seasonIdx)
+    if (!map) {
+      map = new Map<string, number>()
+      bySeason.set(seasonIdx, map)
+    }
+    map.set(playerId, (map.get(playerId) ?? 0) + g)
+  }
+
+  const coveredLeagueRounds = new Set<string>()
+  const coveredCupMatchIds = new Set<string>()
+  const coveredCupFixtureIds = new Set<string>()
+
+  // 1. 优先统计已保存的联赛与杯赛战报（含旧杯赛与正式赛季杯赛）
+  for (const rec of matches) {
+    const isLeague = rec.isLeague === true
+    const isCup = !isLeague && rec.mode === 'cup'
+    if (!isLeague && !isCup) continue
+    const isHome = ownIds.has(rec.homeId)
+    const isAway = !isHome && ownIds.has(rec.awayId)
+    if (!isHome && !isAway) continue
+    const mySide = isHome ? 'home' : 'away'
+    const seasonIdx = Number.isInteger(rec.seasonIndex) ? rec.seasonIndex! : 1
+    if (isLeague && Number.isInteger(rec.round)) {
+      coveredLeagueRounds.add(`${seasonIdx}:${rec.round}`)
+    }
+    if (isCup) {
+      coveredCupMatchIds.add(rec.id)
+      if (rec.cupFixtureId) coveredCupFixtureIds.add(`${seasonIdx}:${rec.cupFixtureId}`)
+    }
+    for (const ps of rec.playerStats ?? []) {
+      if (!ps || ps.side !== mySide) continue
+      addGoal(seasonIdx, statCanonicalPlayerId(ps), ps.goals ?? 0)
+    }
+  }
+
+  // 2. 补充战报已裁减或联机结算的联赛赛程 scorers（不与已统计轮次重复）
+  for (const season of allSeasons(game)) {
+    const seasonIdx = season.index
+    for (const f of season.fixtures ?? []) {
+      if (!f.played || !f.scorers?.length) continue
+      if (!(f.isPlayer || ownIds.has(f.homeId) || ownIds.has(f.awayId))) continue
+      if (coveredLeagueRounds.has(`${seasonIdx}:${f.round}`)) continue
+      for (const s of f.scorers) {
+        if (s.teamId && !ownIds.has(s.teamId)) continue
+        addGoal(seasonIdx, s.playerId, s.goals)
+      }
+    }
+  }
+
+  // 3. 补充正式赛季杯赛历史与当季赛程 scorers（不与已统计杯赛战报重复）
+  const cupBySeason = new Map<number, NonNullable<NonNullable<GameState['world']>['seasonCups']>>()
+  for (const sc of game.world?.seasonCupHistory ?? []) {
+    if (sc && Number.isInteger(sc.seasonIndex)) cupBySeason.set(sc.seasonIndex, sc)
+  }
+  if (game.world?.seasonCups && Number.isInteger(game.world.seasonCups.seasonIndex)) {
+    cupBySeason.set(game.world.seasonCups.seasonIndex, game.world.seasonCups)
+  }
+  for (const sc of cupBySeason.values()) {
+    const seasonIdx = sc.seasonIndex
+    for (const cup of sc.cups ?? []) {
+      for (const round of cup.rounds ?? []) {
+        for (const fix of round.fixtures ?? []) {
+          if (!fix.played || !fix.scorers?.length) continue
+          if (!ownIds.has(fix.homeId) && !ownIds.has(fix.awayId)) continue
+          if ((fix.matchId && coveredCupMatchIds.has(fix.matchId)) || coveredCupFixtureIds.has(`${seasonIdx}:${fix.id}`)) continue
+          for (const s of fix.scorers) {
+            if (s.teamId && !ownIds.has(s.teamId)) continue
+            addGoal(seasonIdx, s.playerId, s.goals)
+          }
+        }
+      }
+    }
+  }
+
+  let best = 0
+  for (const map of bySeason.values()) {
+    for (const goals of map.values()) {
+      if (goals > best) best = goals
+    }
+  }
+  return best
+}
+
+function computeSeasonMetrics(game: GameState, ownIds: Set<string>, matches: MatchRecord[]): SeasonAchievementMetrics {
   let leagueWins = 0
   let highestTier = 1
   let leagueTitles = 0
@@ -231,6 +327,7 @@ function computeSeasonMetrics(game: GameState, ownIds: Set<string>): SeasonAchie
     championsTitles,
     maxSeasonPoints,
     maxSeasonGoals,
+    maxSeasonPlayerGoals: computeMaxSeasonPlayerGoals(game, ownIds, matches),
     invincibleSeasons,
     maxWinStreak,
     maxUnbeatenStreak,
@@ -252,7 +349,7 @@ function deduplicatedMatches(game: GameState): MatchRecord[] {
   return out
 }
 
-function computeMatchMetrics(game: GameState, ownIds: Set<string>): MatchAchievementMetrics {
+function computeMatchMetrics(matches: MatchRecord[], ownIds: Set<string>): MatchAchievementMetrics {
   const m: MatchAchievementMetrics = {
     maxPlayerGoals: 0,
     maxTeamGoals: 0,
@@ -276,7 +373,7 @@ function computeMatchMetrics(game: GameState, ownIds: Set<string>): MatchAchieve
     highPassAccuracyWins: 0,
   }
 
-  for (const rec of deduplicatedMatches(game)) {
+  for (const rec of matches) {
     const isHome = ownIds.has(rec.homeId)
     const isAway = !isHome && ownIds.has(rec.awayId)
     if (!isHome && !isAway) continue
@@ -396,6 +493,7 @@ export function buildAchievementContext(game: GameState): AchievementContext {
   const boardGradeS = (game.board?.history ?? []).filter((h) => h.grade === 'S').length
     + (game.board?.lastGrade === 'S' && !(game.board?.history ?? []).some((h) => h.grade === 'S') ? 1 : 0)
 
+  const matches = deduplicatedMatches(game)
   return {
     game,
     peakCleared: Math.max(0, Math.floor(game.pve?.peak?.cleared ?? 0)),
@@ -410,13 +508,13 @@ export function buildAchievementContext(game: GameState): AchievementContext {
     trophies: Array.isArray(game.pve?.trophies) ? game.pve!.trophies.length : 0,
     rainbowBooks,
     boardGradeS,
-    season: computeSeasonMetrics(game, ownIds),
-    match: computeMatchMetrics(game, ownIds),
+    season: computeSeasonMetrics(game, ownIds, matches),
+    match: computeMatchMetrics(matches, ownIds),
   }
 }
 
 export const ACHIEVEMENTS: readonly AchievementDef[] = [
-  /* ===================== 常规成就（24 项） ===================== */
+  /* ===================== 常规成就（28 项） ===================== */
 
   // 1.0 特别福利成就
   {
@@ -687,10 +785,30 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
     reward: { ceilingBonus: ACHIEVEMENT_CEILING_BONUSES.feat_league_streak_10 },
     progressOf: (ctx) => ctx.season.maxWinStreak,
   },
+  {
+    id: 'feat_season_player_50_goals',
+    category: 'honors',
+    title: '单季五十球神迹',
+    desc: '单赛季（联赛与杯赛合计）我方单名球员打进 50 球及以上（主属性上限与其他上限成就、奖杯独立叠加）',
+    target: 50,
+    unit: '球',
+    reward: { ceilingBonus: ACHIEVEMENT_CEILING_BONUSES.feat_season_player_50_goals },
+    progressOf: (ctx) => ctx.season.maxSeasonPlayerGoals,
+  },
+  {
+    id: 'feat_five_goals_player',
+    category: 'honors',
+    title: '五子登科',
+    desc: '单场比赛中我方单名球员打进 5 球及以上（主属性上限与其他上限成就、奖杯独立叠加）',
+    target: 5,
+    unit: '球',
+    reward: { ceilingBonus: ACHIEVEMENT_CEILING_BONUSES.feat_five_goals_player },
+    progressOf: (ctx) => ctx.match.maxPlayerGoals,
+  },
 
-  /* ===================== 隐藏高难挑战成就（48 项，奖励待后续配置） ===================== */
+  /* ===================== 隐藏高难挑战成就（47 项，奖励待后续配置） ===================== */
 
-  // 1. 单场进攻神迹（12 项）
+  // 1. 单场进攻神迹（11 项）
   {
     id: 'feat_hat_trick',
     category: 'match_attack',
@@ -708,17 +826,6 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
     title: '大四喜',
     desc: '单场比赛中我方单名球员打进 4 球及以上',
     target: 4,
-    unit: '球',
-    reward: {},
-    hidden: true,
-    progressOf: (ctx) => ctx.match.maxPlayerGoals,
-  },
-  {
-    id: 'feat_five_goals_player',
-    category: 'match_attack',
-    title: '五子登科',
-    desc: '单场比赛中我方单名球员打进 5 球及以上',
-    target: 5,
     unit: '球',
     reward: {},
     hidden: true,

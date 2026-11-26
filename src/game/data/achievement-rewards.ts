@@ -7,6 +7,8 @@ import type { AchievementState } from '../types.ts'
 export const ACHIEVEMENT_CEILING_BONUSES: Readonly<Record<string, number>> = {
   feat_league_streak_5: 50,
   feat_league_streak_10: 100,
+  feat_season_player_50_goals: 50,
+  feat_five_goals_player: 50,
 }
 
 export const MAX_ACHIEVEMENT_CEILING_BONUS = Object.values(ACHIEVEMENT_CEILING_BONUSES).reduce(

@@ -327,17 +327,17 @@ describe('v1.0 UI：成就页、总览联赛/杯赛分色、友谊赛五星实�
   })
 })
 
-describe('48 项高难隐藏成就（未解锁显示 ？？？，奖励待配置）', () => {
-  it('共包含 26 项常规成就与 48 项隐藏挑战，未解锁时 UI 与对外视图均以 ？？？ 脱敏展示', () => {
+describe('47 项高难隐藏成就（未解锁显示 ？？？，奖励待配置）', () => {
+  it('共包含 28 项常规成就与 47 项隐藏挑战，未解锁时 UI 与对外视图均以 ？？？ 脱敏展示', () => {
     const standard = ACHIEVEMENTS.filter((a) => !a.hidden)
     const hidden = ACHIEVEMENTS.filter((a) => a.hidden)
-    expect(standard).toHaveLength(26)
-    expect(hidden).toHaveLength(48)
-    expect(ACHIEVEMENTS).toHaveLength(74)
+    expect(standard).toHaveLength(28)
+    expect(hidden).toHaveLength(47)
+    expect(ACHIEVEMENTS).toHaveLength(75)
 
     const game = createWorldGame(1007)
     const pub = publicAchievementSummary(game)
-    expect(pub.hiddenTotal).toBe(48)
+    expect(pub.hiddenTotal).toBe(47)
     expect(pub.hiddenUnlocked).toBe(0)
     const tenGoalPub = pub.items.find((i) => i.id === 'feat_team_10_goals')!
     expect(tenGoalPub.title).toBe('？？？')
@@ -434,7 +434,7 @@ describe('48 项高难隐藏成就（未解锁显示 ？？？，奖励待配置
     const byId = new Map(summary.items.map((i) => [i.id, i]))
 
     const mustBeUnlocked = [
-      'feat_hat_trick', 'feat_poker', 'feat_five_goals_player', 'feat_six_goals_player',
+      'feat_hat_trick', 'feat_poker', 'feat_six_goals_player',
       'feat_team_5_goals', 'feat_team_8_goals', 'feat_team_10_goals',
       'feat_margin_5', 'feat_margin_8', 'feat_assist_3', 'feat_assist_4', 'feat_goal_assist_double',
       'feat_shootout_win', 'feat_rating_95', 'feat_rating_10',
@@ -452,10 +452,13 @@ describe('48 项高难隐藏成就（未解锁显示 ？？？，奖励待配置
       expect(byId.get(id)?.claimable, id).toBe(false)
       expect(claimAchievement(game, id).ok, id).toBe(false)
     }
-    // 联赛 5 连胜已配置主属性上限 +50 奖励，达成后可直接领取
+    // 联赛 5 连胜与单场五子登科已配置主属性上限 +50 奖励，达成后可直接领取
     expect(byId.get('feat_league_streak_5')?.unlocked).toBe(true)
     expect(byId.get('feat_league_streak_5')?.claimable).toBe(true)
     expect(byId.get('feat_league_streak_5')?.reward.ceilingBonus).toBe(50)
+    expect(byId.get('feat_five_goals_player')?.unlocked).toBe(true)
+    expect(byId.get('feat_five_goals_player')?.claimable).toBe(true)
+    expect(byId.get('feat_five_goals_player')?.reward.ceilingBonus).toBe(50)
 
     // 即使清空历史战报，已永久记账的 unlocked 仍保持揭晓状态
     game.matchHistory = []
@@ -492,7 +495,7 @@ describe('48 项高难隐藏成就（未解锁显示 ？？？，奖励待配置
     const beforeClaim5 = achievementSummary(game)
     expect(beforeClaim5.pendingCeilingBonus).toBe(50)
     expect(beforeClaim5.earnedCeilingBonus).toBe(0)
-    expect(beforeClaim5.maxCeilingBonus).toBe(150)
+    expect(beforeClaim5.maxCeilingBonus).toBe(250)
 
     const claim5 = claimAchievement(game, 'feat_league_streak_5', 50_000)
     expect(claim5.ok).toBe(true)
@@ -539,5 +542,92 @@ describe('48 项高难隐藏成就（未解锁显示 ？？？，奖励待配置
     expect(html).toContain('主属性上限 +50')
     expect(html).toContain('主属性上限 +100')
     expect(html).toContain('+150')
+  })
+
+  it('单季五十球神迹（联赛+杯赛合计，不含友谊/巅峰）与五子登科各奖 +50 上限，全部成就+星联杯总计 +500', () => {
+    const game = createWorldGame(1010)
+    const striker = game.roster.find((item) => item.positions.GK === 0)!
+    const own = game.world!.clubs.find((c) => c.id === 'player')!.squadKey!
+    const mkStat = (playerId: string, goals: number) => ({
+      playerId: `home:${playerId}`,
+      sourceId: playerId,
+      name: striker.name,
+      side: 'home' as const,
+      minutes: 90,
+      passes: 20,
+      passesCompleted: 18,
+      shots: goals + 2,
+      goals,
+      assists: 0,
+      tackles: 0,
+      interceptions: 0,
+      distance: 10,
+      staminaLeft: 60,
+      touches: 30,
+    })
+
+    // 友谊赛 40 球不计入单季五十球；第 2 赛季 20 球不与第 1 赛季合并
+    game.challengeHistory.push(
+      { id: 'fr-1', isLeague: false, mode: 'friendly', seasonIndex: 1, homeId: 'player', awayId: 'a1', score: { home: 40, away: 0 }, result: 'win', playerStats: [mkStat(striker.id, 40)] } as MatchRecord,
+      { id: 'cup-s2', isLeague: false, mode: 'cup', seasonIndex: 2, homeId: 'player', awayId: 'a2', score: { home: 20, away: 0 }, result: 'win', playerStats: [mkStat(striker.id, 20)] } as MatchRecord,
+    )
+    // 第 1 赛季：联赛战报 30 球（第 1 轮，同步写入赛程 scorers 验证不重复计入）+ 赛程回退 8 球（第 2 轮无战报）+ 杯赛战报 7 球 + 赛季杯赛赛程 5 球 = 50 球
+    game.matchHistory.push(
+      { id: 'lg-r1', isLeague: true, round: 1, seasonIndex: 1, homeId: 'player', awayId: 'a1', score: { home: 30, away: 0 }, result: 'win', playerStats: [mkStat(striker.id, 30)] } as MatchRecord,
+    )
+    game.challengeHistory.push(
+      { id: 'cup-m1', isLeague: false, mode: 'cup', cupFixtureId: 'cf-1', seasonIndex: 1, homeId: 'player', awayId: 'a2', score: { home: 7, away: 0 }, result: 'win', playerStats: [mkStat(striker.id, 7)] } as MatchRecord,
+    )
+    const pFixtures = game.season.fixtures.filter((f) => f.isPlayer)
+    pFixtures[0].played = true
+    pFixtures[0].round = 1
+    pFixtures[0].scorers = [{ playerId: striker.id, name: striker.name, goals: 30, teamId: 'player' }]
+    pFixtures[1].played = true
+    pFixtures[1].round = 2
+    pFixtures[1].scorers = [{ playerId: striker.id, name: striker.name, goals: 8, teamId: 'player' }]
+    game.world!.seasonCups = {
+      version: 1,
+      seasonIndex: 1,
+      qualificationRound: 6,
+      createdAt: 1000,
+      delayedLeagueRounds: [],
+      cups: [{
+        id: 'community',
+        name: '社区杯',
+        entrants: [own, 'd2s_01'],
+        dates: [2000],
+        rounds: [{
+          round: 1,
+          kickoffAt: 2000,
+          byes: [],
+          fixtures: [
+            // cf-1 已在 challengeHistory 计入 7 球，不能重复计
+            { id: 'cf-1', cupId: 'community', round: 1, homeId: own, awayId: 'd2s_01', kickoffAt: 2000, played: true, matchId: 'cup-m1', scorers: [{ playerId: striker.id, name: striker.name, goals: 7, teamId: own }] },
+            // cf-2 仅在赛季杯赛程中存在，补计 5 球
+            { id: 'cf-2', cupId: 'community', round: 1, homeId: own, awayId: 'd2s_01', kickoffAt: 2000, played: true, scorers: [{ playerId: striker.id, name: striker.name, goals: 5, teamId: own }] },
+          ],
+        }],
+      }],
+    }
+
+    // 同时凑齐联赛 10 连胜
+    for (const f of pFixtures.slice(0, 10)) {
+      f.played = true
+      f.score = f.homeId === 'player' ? { home: 2, away: 0 } : { home: 0, away: 2 }
+    }
+
+    const summary = achievementSummary(game)
+    const byId = new Map(summary.items.map((i) => [i.id, i]))
+    expect(byId.get('feat_season_player_50_goals')?.current).toBe(50)
+    expect(byId.get('feat_season_player_50_goals')?.unlocked).toBe(true)
+    expect(byId.get('feat_season_player_50_goals')?.claimable).toBe(true)
+    expect(byId.get('feat_five_goals_player')?.unlocked).toBe(true)
+    expect(byId.get('feat_five_goals_player')?.claimable).toBe(true)
+
+    const claimed = claimAllAchievements(game, 90_000)
+    expect(claimed.ok).toBe(true)
+    expect(achievementCeilingBonus(game)).toBe(250)
+    expect(applyCupCeilingReward(game, 'cross')).toBe(250)
+    expect(clubCeilingBonus(game)).toBe(500)
   })
 })
