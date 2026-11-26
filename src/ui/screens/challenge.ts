@@ -20,7 +20,7 @@ import { legendBookLabel } from '../../game/legend-books.ts'
 import { cupTeam } from '../../game/cup-run.ts'
 import { clubRatings, lineupRating } from '../../game/club-rating.ts'
 import { pveContentReady } from '../../game/pve-content.ts'
-import { assetUrl, bookTitle, caHeat, clubName, icon, ownName, pageHead, panel, recordResult, resultPill, tag, tile } from '../components.ts'
+import { assetUrl, bookArt, bookTitle, breakthroughCardArt, caHeat, clubName, icon, ownName, pageHead, panel, recordResult, resultPill, tag, tile } from '../components.ts'
 import { tipAttrs } from '../tooltip.ts'
 import { aiTeamTacticLabel, countdownText, esc, playerCA } from '../format.ts'
 import { divisionRatings } from '../club-view.ts'
@@ -101,7 +101,7 @@ function legendBooksPanel(): string {
     return `<div class="book-card tier-${book.tier}" role="listitem" ${tip} data-book-id="${esc(book.id)}" data-book-tier="${book.tier}">
       <div class="book-cover">
         <span class="book-spine" aria-hidden="true"></span>
-        <span class="book-emblem" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.2 5.4L20 10l-4.5 3.7L16.9 20 12 16.7 7.1 20l1.4-6.3L4 10l5.8-1.6z"/></svg></span>
+        <span class="book-emblem" aria-hidden="true">${bookArt(book.tier, 36)}</span>
         <span class="book-cover-title">${bookTitle(label, book.tier)}</span>
         <span class="book-cover-rule" aria-hidden="true"></span>
       </div>
@@ -168,10 +168,10 @@ function peakBreakthroughPanel(): string {
   ui.peakCardPlayerId = player.id
   const attrs = mainAttrsFor(player.positions.GK > 0)
   if (!ui.peakCardAttr || !attrs.includes(ui.peakCardAttr)) ui.peakCardAttr = attrs[0]
-  return panel(`属性突破卡 <small>${cards}</small>`, `<p class="hint pad">每张卡让一名球员的一项主属性上限 +100；只加上限，不直接加当前属性。</p>
+  return panel(`属性突破卡 <small>${cards}</small>`, `<div class="breakthrough-box">${breakthroughCardArt(76)}<div class="breakthrough-body"><p class="hint">每张卡让一名球员的一项主属性上限 +100；只加上限，不直接加当前属性。</p>
     <div class="form-row"><label for="peak-card-player">球员</label><select id="peak-card-player" data-peak-card-player>${game.roster.map((item) => `<option value="${esc(item.id)}" ${item.id === player.id ? 'selected' : ''}>${esc(item.name)}</option>`).join('')}</select></div>
     <div class="form-row"><label for="peak-card-attr">属性</label><select id="peak-card-attr" data-peak-card-attr>${attrs.map((key) => `<option value="${key}" ${key === ui.peakCardAttr ? 'selected' : ''}>${esc(attrLabel(key))}</option>`).join('')}</select></div>
-    <button class="btn primary" data-action="use-peak-card" ${game.activeMatch ? 'disabled' : ''}>使用 1 张</button>`, { flush: true })
+    <button class="btn primary" data-action="use-peak-card" ${game.activeMatch ? 'disabled' : ''}>使用 1 张</button></div></div>`, { flush: true })
 }
 
 function peakRewardHtml(stage: number): string {

@@ -8,7 +8,8 @@
 .youth-card { border: 1px solid var(--line); border-radius: 8px; padding: 18px; min-width: 0; }
 .youth-genius { border-color: var(--gold, #bda065); background: linear-gradient(135deg, rgba(189,160,101,.08), transparent); }
 .youth-card-head { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
-.youth-card-head small { display: block; margin-top: 6px; color: var(--muted); }
+.youth-card-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.youth-card-head small { display: block; margin-top: 4px; color: var(--muted); }
 .youth-badge { display: inline-block; font-size: 10px; line-height: 16px; padding: 0 4px; margin-left: 5px; border: 1px solid currentColor; border-radius: 3px; color: var(--good, #8ac7a0); font-weight: 500; white-space: nowrap; vertical-align: middle; }
 .youth-status { display: flex; align-items: center; gap: 10px; margin: 14px 0; font-size: 12px; color: var(--muted); }
 .youth-plan { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }

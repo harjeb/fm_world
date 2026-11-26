@@ -15,7 +15,7 @@ import { getSkillTier } from '../../game/inheritance.ts'
 import { bookKey, bookLearnChance, bookName, bookRequirementText, canChooseTrainingBook, eventForSession, legendStarTriggersUsed, trainingSkillChance } from '../../game/legend-learning.ts'
 import { isPassiveTrainingBook, LEGEND_STAR_MAX_TRIGGERS } from '../../game/data/legend-cup-skill.ts'
 import { keyAttrsOf } from '../../game/data/key-attrs.ts'
-import { activityColor, attrColor, attributeRadar, attrHeat, bookTitle, caHeat, cardName, cardSelect, icon, mainAttrs, meter, pageHead, panel, posBadge, primaryPosition, skillGroups, tag, tile, traitLabel } from '../components.ts'
+import { activityColor, assetUrl, attrColor, attributeRadar, attrHeat, bookArt, bookTitle, caHeat, cardName, cardSelect, icon, mainAttrs, meter, pageHead, panel, playerPortrait, posBadge, primaryPosition, skillGroups, tag, tile, traitLabel } from '../components.ts'
 import { attrLabel, attrValue, caDelta, displayEventHint, esc, gainHtml, gainText, pct, playerCA, positionLabel, skillName, trainingLogText } from '../format.ts'
 import { game, ui } from '../state.ts'
 import { currentEnergy } from '../../game/energy.ts'
@@ -116,6 +116,9 @@ export function renderTraining(): string {
       kicker: '培养',
       title: '培养角色卡',
       actions: playerSelect(),
+      banner: assetUrl('assets/banners/banner-training.webp'),
+      bannerPosition: '76% 50%',
+      accent: '#cdf33f',
     })}
     ${sessionStrip()}
     ${selected ? renderTrainingPlayer(selected) : `<p class="hint">先选择球员，再在开始培养前配置携带的技能书（支持银、金、彩多种稀有度）。</p>${overviewTable()}`}
@@ -323,6 +326,7 @@ function bookPicker(player: Player): string {
       : `要求 ${bookRequirementText(book)} · 起点成功率 ${Math.round(bookLearnChance(base, book) * 100)}%${reason}`
     return `<label class="check-field training-book-option tier-${book.tier} ${check.ok && !duplicate ? '' : 'muted'}" title="${esc(reason)}">
       <input type="checkbox" data-training-book="${esc(key)}" ${checked ? 'checked' : ''} ${!checked && (!check.ok || duplicate || selected.size >= maxBooks) ? 'disabled' : ''}>
+      ${bookArt(book.tier, 34)}
       <span><span class="book-option-head">${bookTitle(bookName(book.id), book.tier)}</span><small>${esc(SKILLS[book.id]?.desc ?? '')} ${esc(skillEffectText(book.id, book.tier))}</small><small class="muted">${esc(metaText)}</small></span>
     </label>`
   }).join('')
@@ -429,6 +433,7 @@ function trainingHeader(current: Player, session: TrainingSession, cand: Player)
   return `<section class="train-head">
     <div class="train-lead">
       <div class="train-id">
+        ${playerPortrait(current, 50)}
         ${posBadge(primaryPosition(current))}
         <div>
           <h2>${esc(current.name)} <small>${esc(current.enName)}</small>${campNow ? ` ${tag(`国外特训 ×${OVERSEAS_CAMP_MULTIPLIER}`, 'gold')}` : ''}</h2>

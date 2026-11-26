@@ -6,7 +6,7 @@ import { SEASON_CUP_REWARDS } from '../game/data/season-cup-rewards.ts'
 import { seasonCupLeaders, type CupLeaderKind } from '../game/season-cup-stats.ts'
 import { CUP_DEFS } from '../game/data/cup-config.ts'
 import { buildSeasonCupBracket, type CupBracketNode } from './season-cup-bracket.ts'
-import { assetUrl, bookTitle, clubName, emptyState, pageHead, panel, tag } from './components.ts'
+import { assetUrl, bookTitle, clubName, emptyState, pageHead, panel, tag, trophyImage } from './components.ts'
 import { cupRoundLabel, esc, kickoffTimeLabel } from './format.ts'
 
 const CUP_ORDER: SeasonCupId[] = ['community', 'league', 'champions', 'cross', 'legend', 'promotion']
@@ -288,6 +288,7 @@ function cupStatusLabel(cup: SeasonCup, ownId: string): string {
 /** 独立杯赛页只读取服务器已公布的签表和统计，不模拟或报名。 */
 export function renderSeasonCups(game: GameState, selected: SeasonCupId = 'community'): string {
   const heading = pageHead({
+    lead: trophyImage(selected, 54, SEASON_CUP_NAMES[selected]),
     kicker: `第 ${game.season.index} 赛季 · 正式赛事`,
     title: '杯赛',
     sub: '在北京时间 12:00 / 20:00（5 项赛事并行季启用 16:00，必要时补 08:00）加赛，联赛固定走每天 6 轮不顺延。赛前 30 分钟锁阵，杯赛消耗体能并产生伤病。',

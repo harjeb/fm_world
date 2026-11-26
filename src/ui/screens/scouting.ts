@@ -6,6 +6,7 @@ import { ROLES } from '../../game/data/roles.ts'
 import { isMainAttr } from '../../game/scale.ts'
 import { serverNow } from '../../online.ts'
 import { game } from '../state.ts'
+import { staffAvatar } from '../components.ts'
 import { attrLabel, countdownText, esc } from '../format.ts'
 import { starRating } from '../stars.ts'
 
@@ -35,11 +36,11 @@ export function renderScoutControls(playerId: string, source: ScoutSource, clubI
   const now = serverNow()
   const reports = (game.scoutReports ?? []).filter(r => r.playerId === playerId && r.source === source && (r.clubId ?? '') === (clubId ?? '')).sort((a, b) => b.startedAt - a.startedAt)
   const pending = reports.some(r => r.readyAt > now)
-  return `<section class="scout-section"><h3>球探考察</h3><p class="hint">${source === 'club' ? '考察当前装备版本。' : '考察可购买的原始版本。'}隐藏属性为估计值，误差可能影响星级；考察不保证签约成功。</p><div class="scout-controls"><label>球探等级 <select data-scout-level data-keep-value>${SCOUT_LEVELS.map(x => `<option value="${x.level}">${x.level}级 · ${x.fee.toLocaleString()} · ${x.hours}小时 · ±${x.maxError}</option>`).join('')}</select></label><button class="btn small primary" data-action="scout-start" data-player="${esc(playerId)}" data-source="${source}"${clubId ? ` data-club="${esc(clubId)}"` : ''} ${pending ? 'disabled' : ''}>确认考察</button></div>${reports.map(r => renderScoutReport(r, game.roster, now)).join('')}</section>`
+  return `<section class="scout-section"><div class="staff-lead">${staffAvatar('scout', 38, '首席球探')}<div><h3>球探考察</h3><p class="hint">${source === 'club' ? '考察当前装备版本。' : '考察可购买的原始版本。'}隐藏属性为估计值，误差可能影响星级；考察不保证签约成功。</p></div></div><div class="scout-controls"><label>球探等级 <select data-scout-level data-keep-value>${SCOUT_LEVELS.map(x => `<option value="${x.level}">${x.level}级 · ${x.fee.toLocaleString()} · ${x.hours}小时 · ±${x.maxError}</option>`).join('')}</select></label><button class="btn small primary" data-action="scout-start" data-player="${esc(playerId)}" data-source="${source}"${clubId ? ` data-club="${esc(clubId)}"` : ''} ${pending ? 'disabled' : ''}>确认考察</button></div>${reports.map(r => renderScoutReport(r, game.roster, now)).join('')}</section>`
 }
 
 export function renderScoutPanel(): string {
   const now = serverNow()
   const reports = [...(game.scoutReports ?? [])].sort((a, b) => b.startedAt - a.startedAt)
-  return `<section class="panel scout-panel"><h2>球探报告 <button class="btn small" data-action="scout-refresh">刷新报告</button></h2><p class="hint">报告容量 ${reports.length}/${MAX_SCOUT_REPORTS}（含进行中）；满额后请删除已完成报告再委托。删除不返费，可能结束该报告的市场暂留。</p>${reports.length ? reports.map(r => renderScoutReport(r, game.roster, now)).join('') : '<p class="muted">暂无球探报告。</p>'}</section>`
+  return `<section class="panel scout-panel"><div class="staff-lead">${staffAvatar('scout', 42, '首席球探')}<div class="staff-lead-body"><h2>球探报告 <button class="btn small" data-action="scout-refresh">刷新报告</button></h2><p class="hint">报告容量 ${reports.length}/${MAX_SCOUT_REPORTS}（含进行中）；满额后请删除已完成报告再委托。删除不返费，可能结束该报告的市场暂留。</p></div></div>${reports.length ? reports.map(r => renderScoutReport(r, game.roster, now)).join('') : '<p class="muted">暂无球探报告。</p>'}</section>`
 }

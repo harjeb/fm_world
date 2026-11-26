@@ -17,7 +17,7 @@ import { previewClubSigning } from '../../game/market.ts'
 import { releaseChance, SQUAD_STATUS_LABELS } from '../../game/transfer-rules.ts'
 import { economyOf } from '../../game/economy.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, TIER_LABELS, negotiationDemands, negotiationTerms, type SeasonGoal, type SquadRole } from '../../game/negotiation.ts'
-import { CA_STOPS, attrHeadCell, attributeRadar, attrHeat, caHeat, cardName, cardRoute, countryLabel, crest, eraLabel, findAnyPlayer, heatLegend, icon, injuryLabel, mainAttrs, meter, positionMap, posBadge, primaryPosition, skillGroups, skillTag, tag, traitLabel } from '../components.ts'
+import { CA_STOPS, attrHeadCell, attributeRadar, attrHeat, caHeat, cardName, cardRoute, countryLabel, crest, eraLabel, findAnyPlayer, heatLegend, icon, injuryLabel, mainAttrs, meter, playerPortrait, positionMap, posBadge, primaryPosition, skillGroups, skillTag, tag, traitLabel } from '../components.ts'
 import { attrLabel, esc, playerCA, trainingLogText } from '../format.ts'
 import { game, ui } from '../state.ts'
 import { careerStats, fixtureTotals, isOwnPlayer, seasonStats } from '../../game/player-stats.ts'
@@ -101,7 +101,7 @@ export function renderDetailOverlay(): string {
   const offer = isOnlineMode() && ui.screen === 'transfer' && ui.transferTab === 'ai' && !game.roster.some((item) => item.id === ui.detailPlayerId)
     ? aiTransferMarket.offers.find((item) => item.player.id === ui.detailPlayerId) : undefined
   const offered = offer?.player
-  if (offered) return `<div class="overlay" data-action="close-detail"><div class="modal profile" data-stop="true" role="dialog" aria-modal="true" aria-label="${esc(offered.name)} 球员详情"><button class="modal-close" data-action="close-detail" aria-label="关闭">${icon('close', 16)}</button><h1>${esc(offered.name)} <small>${esc(offered.enName)}</small></h1><p class="hint">转会预览：展示球员的原始属性，不含球员卡。</p>${publicPlayerPanel(offered)}${renderScoutControls(offered.id, 'transfer', offer!.teamId)}</div></div>`
+  if (offered) return `<div class="overlay" data-action="close-detail"><div class="modal profile" data-stop="true" role="dialog" aria-modal="true" aria-label="${esc(offered.name)} 球员详情"><button class="modal-close" data-action="close-detail" aria-label="关闭">${icon('close', 16)}</button><div class="profile-id">${playerPortrait(offered, 52)}<div><h1>${esc(offered.name)} <small>${esc(offered.enName)}</small></h1><p class="hint">转会预览：展示球员的原始属性，不含球员卡。</p></div></div>${publicPlayerPanel(offered)}${renderScoutControls(offered.id, 'transfer', offer!.teamId)}</div></div>`
   const source = findAnyPlayer(ui.detailPlayerId)
   if (!source) return ''
   const owned = game.roster.some((item) => item.id === source.id)
@@ -113,7 +113,7 @@ export function renderDetailOverlay(): string {
   const youthMember = ui.screen === 'youth' ? [...(game.youth?.members ?? []), ...(game.youth?.intake.candidates ?? [])].find(m => m.player.id === player.id) : undefined
   const detailOwned = owned && !youthMember
   const head = `<header class="profile-head">
-    <div class="profile-id">${posBadge(primaryPosition(player))}<div>
+    <div class="profile-id">${playerPortrait(player, 56, { youth: !!youthMember })}${posBadge(primaryPosition(player))}<div>
       <h1>${esc(player.name)}${youthBadge(player)} <small>${esc(player.enName)}</small></h1>
       <p class="muted">球员详情 · ${[countryLabel(player), player.era === 'random' ? '' : player.era, gk ? '门将' : '外场'].filter(Boolean).map(esc).join(' · ')}</p>
     </div></div>

@@ -354,6 +354,115 @@ export function assetUrl(path: string): string {
   return `${base.endsWith('/') ? base : `${base}/`}${clean}`
 }
 
+/* ---------- 美术资源组件（球员肖像 / 奖杯 / 技能书 / 勋章 / 职员） ---------- */
+
+type PortraitRegion = 'ea' | 'eu' | 'lat' | 'af' | 'mena'
+
+const EA_COUNTRIES = new Set(['中国', '日本', '韩国', '中华台北', '中国香港', '朝鲜', '泰国', '越南', '印尼', '马来西亚', '新加坡'])
+const LAT_COUNTRIES = new Set(['西班牙', '意大利', '葡萄牙', '巴西', '阿根廷', '乌拉圭', '哥伦比亚', '智利', '墨西哥', '秘鲁', '巴拉圭', '厄瓜多尔', '委内瑞拉', '哥斯达黎加', '希腊'])
+const AF_COUNTRIES = new Set(['尼日利亚', '塞内加尔', '加纳', '喀麦隆', '科特迪瓦', '马里', '南非', '刚果', '几内亚', '布基纳法索', '赞比亚', '安哥拉', '马达加斯加'])
+const MENA_COUNTRIES = new Set(['土耳其', '摩洛哥', '印度', '埃及', '阿尔及利亚', '突尼斯', '伊朗', '沙特', '伊拉克', '卡塔尔', '阿联酋', '叙利亚', '约旦', '以色列', '巴基斯坦'])
+
+const PORTRAIT_POOLS: Record<PortraitRegion, { field: readonly string[]; gk: readonly string[]; youth: readonly string[] }> = {
+  ea: {
+    field: ['assets/portraits/portrait-ea-field-1.webp', 'assets/portraits/portrait-ea-field-2.webp'],
+    gk: ['assets/portraits/portrait-ea-gk-1.webp'],
+    youth: ['assets/portraits/portrait-ea-youth-1.webp'],
+  },
+  eu: {
+    field: ['assets/portraits/portrait-eu-field-1.webp', 'assets/portraits/portrait-eu-field-2.webp'],
+    gk: ['assets/portraits/portrait-eu-gk-1.webp'],
+    youth: ['assets/portraits/portrait-eu-youth-1.webp'],
+  },
+  lat: {
+    field: ['assets/portraits/portrait-lat-field-1.webp', 'assets/portraits/portrait-lat-field-2.webp'],
+    gk: ['assets/portraits/portrait-lat-gk-1.webp'],
+    youth: ['assets/portraits/portrait-lat-youth-1.webp'],
+  },
+  af: {
+    field: ['assets/portraits/portrait-af-field-1.webp', 'assets/portraits/portrait-af-youth-1.webp'],
+    gk: ['assets/portraits/portrait-af-youth-1.webp', 'assets/portraits/portrait-af-field-1.webp'],
+    youth: ['assets/portraits/portrait-af-youth-1.webp'],
+  },
+  mena: {
+    field: ['assets/portraits/portrait-mena-field-1.webp', 'assets/portraits/portrait-mena-youth-1.webp'],
+    gk: ['assets/portraits/portrait-mena-field-1.webp'],
+    youth: ['assets/portraits/portrait-mena-youth-1.webp'],
+  },
+}
+
+const ALL_REGIONS: readonly PortraitRegion[] = ['ea', 'eu', 'lat', 'af', 'mena']
+
+function portraitRegionOf(country: string | undefined, seedHash: number): PortraitRegion {
+  if (!country || country === '随机青训') return ALL_REGIONS[seedHash % ALL_REGIONS.length]
+  if (EA_COUNTRIES.has(country)) return 'ea'
+  if (LAT_COUNTRIES.has(country)) return 'lat'
+  if (AF_COUNTRIES.has(country)) return 'af'
+  if (MENA_COUNTRIES.has(country)) return 'mena'
+  return 'eu'
+}
+
+export function playerPortraitUrl(
+  player: Pick<Player, 'id' | 'name' | 'country' | 'age'> & { positions?: Partial<Record<Position, number>>; basePositions?: Partial<Record<Position, number>> },
+  options: { youth?: boolean } = {},
+): string {
+  const h = hashOf(player.id || player.name)
+  const region = portraitRegionOf(player.country, h)
+  const pool = PORTRAIT_POOLS[region]
+  const gk = ((player.positions?.GK ?? player.basePositions?.GK ?? 0) > 0)
+  const isYouth = options.youth === true || (typeof player.age === 'number' && player.age <= 18)
+  const list = isYouth ? pool.youth : gk ? pool.gk : pool.field
+  const pick = list[(h >>> 3) % list.length]
+  return assetUrl(pick)
+}
+
+/** 虚构球员半身定妆头像（按国籍地区、位置与年龄自动稳定匹配，无真实球星肖像权风险）。 */
+export function playerPortrait(
+  player: Pick<Player, 'id' | 'name' | 'country' | 'age'> & { positions?: Partial<Record<Position, number>>; basePositions?: Partial<Record<Position, number>> },
+  size = 44,
+  options: { youth?: boolean; className?: string } = {},
+): string {
+  const url = playerPortraitUrl(player, options)
+  const cls = options.className ? ` ${options.className}` : ''
+  return `<span class="player-portrait${cls}" style="--portrait-size:${size}px"><img src="${esc(url)}" alt="${esc(player.name)}" loading="lazy" decoding="async"></span>`
+}
+
+const TROPHY_FILES: Record<string, string> = {
+  community: 'assets/trophies/trophy-community.webp',
+  league: 'assets/trophies/trophy-league.webp',
+  champions: 'assets/trophies/trophy-champions.webp',
+  cross: 'assets/trophies/trophy-cross.webp',
+  legend: 'assets/trophies/trophy-legend.webp',
+  promotion: 'assets/trophies/trophy-promotion.webp',
+}
+
+export function trophyImage(cupId: string, size = 44, alt = ''): string {
+  const path = TROPHY_FILES[cupId] ?? TROPHY_FILES.champions
+  return `<img class="trophy-art" src="${esc(assetUrl(path))}" alt="${esc(alt)}" width="${size}" height="${size}" loading="lazy" decoding="async">`
+}
+
+export function bookArt(tier: SkillTier, size = 40, alt = ''): string {
+  const safeTier = tier === 'rainbow' || tier === 'gold' ? tier : 'silver'
+  return `<img class="book-art tier-${safeTier}" src="${esc(assetUrl(`assets/items/book-${safeTier}.webp`))}" alt="${esc(alt)}" width="${size}" height="${size}" loading="lazy" decoding="async">`
+}
+
+export function breakthroughCardArt(size = 72): string {
+  return `<img class="item-art" src="${esc(assetUrl('assets/items/item-breakthrough-card.webp'))}" alt="属性突破卡" width="${size}" height="${size}" loading="lazy" decoding="async">`
+}
+
+export type AchievementBadgeKind = 'standard' | 'welfare' | 'hidden-locked' | 'hidden-unlocked'
+
+export function achievementBadgeArt(kind: AchievementBadgeKind, size = 38, locked = false): string {
+  const cls = `ach-badge-art${locked ? ' is-locked' : ''}`
+  return `<img class="${cls}" src="${esc(assetUrl(`assets/badges/badge-ach-${kind}.webp`))}" alt="" width="${size}" height="${size}" loading="lazy" decoding="async" aria-hidden="true">`
+}
+
+export type StaffRole = 'chairman' | 'scout' | 'youth-director'
+
+export function staffAvatar(role: StaffRole, size = 44, alt = ''): string {
+  return `<span class="staff-avatar" style="--staff-size:${size}px"><img src="${esc(assetUrl(`assets/staff/staff-${role}.webp`))}" alt="${esc(alt)}" loading="lazy" decoding="async"></span>`
+}
+
 export function pageHead(options: {
   kicker?: string
   title: string

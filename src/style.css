@@ -232,6 +232,25 @@ abbr[title] { text-decoration: none; cursor: help; }
 .page-head.has-banner h1 { font-size: 24px; color: #f3f6fa; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.65); }
 .page-head.has-banner .own-name { color: #cdf33f; }
 .page-head.has-banner .page-sub { color: rgba(215, 224, 234, 0.84); max-width: 56ch; }
+.page-head.has-banner .page-actions label { color: rgba(226, 234, 244, 0.9); }
+.page-head.has-banner .page-actions .btn.ghost,
+.page-head.has-banner .page-actions select {
+  background: rgba(13, 16, 20, 0.72);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #edf2f7;
+  backdrop-filter: blur(4px);
+}
+.page-head.has-banner .page-actions select option { background: #14191f; color: #edf2f7; }
+.page-head.has-banner .page-actions .btn.ghost:hover:not(:disabled) {
+  background: rgba(28, 34, 42, 0.88);
+  border-color: rgba(255, 255, 255, 0.34);
+  color: #ffffff;
+}
+.page-head.has-banner .page-lead .trophy-art {
+  width: 56px;
+  height: 56px;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6));
+}
 
 /* ---------- 按钮与表单 ---------- */
 .btn {
@@ -2969,7 +2988,146 @@ circle.pm-5 { fill: var(--h6); }
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
 }
 :root[data-theme="light"] .facility-metrics > div { background: var(--panel-2); }
+
+/* ---------- 第二阶段视觉资产（启动背景 / 头像 / 奖杯 / 技能书 / 突破卡 / 勋章 / 职员） ---------- */
+.overlay.boot-gate,
+:root[data-theme="light"] .overlay.boot-gate {
+  background: #090c10;
+}
+.overlay.boot-gate::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(10, 14, 19, 0.24) 0%, rgba(7, 10, 14, 0.66) 64%, rgba(6, 8, 12, 0.88) 100%);
+}
+.boot-gate-bg {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 46%;
+  z-index: 0;
+  pointer-events: none;
+}
+.boot-gate .boot-modal {
+  position: relative;
+  z-index: 2;
+  background: rgba(20, 25, 31, 0.84);
+  border-color: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65);
+}
+:root[data-theme="light"] .boot-gate .boot-modal {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(15, 23, 42, 0.16);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.34);
+}
+
+.player-portrait,
+.staff-avatar {
+  flex: none;
+  display: inline-block;
+  width: var(--portrait-size, var(--staff-size, 44px));
+  height: var(--portrait-size, var(--staff-size, 44px));
+  border-radius: 6px;
+  overflow: hidden;
+  background: #161b21;
+  border: 1px solid var(--line-2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+}
+.staff-avatar { border-radius: 50%; }
+.player-portrait img,
+.staff-avatar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: center 20%;
+}
+:root[data-theme="light"] .player-portrait,
+:root[data-theme="light"] .staff-avatar {
+  border-color: rgba(15, 23, 42, 0.18);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.14);
+}
+
+.trophy-art,
+.book-art,
+.item-art,
+.ach-badge-art {
+  flex: none;
+  display: block;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.36));
+}
+:root[data-theme="light"] .trophy-art,
+:root[data-theme="light"] .book-art,
+:root[data-theme="light"] .item-art,
+:root[data-theme="light"] .ach-badge-art {
+  filter: drop-shadow(0 2px 5px rgba(15, 23, 42, 0.22));
+}
+.ach-badge-art.is-locked {
+  opacity: 0.48;
+  filter: grayscale(0.85) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.22));
+}
+
+.shop-card-lead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+.book-cover .book-emblem {
+  width: auto;
+  height: auto;
+  padding: 0;
+  background: none;
+  border: 0;
+}
+.book-cover .book-emblem .book-art { width: 38px; height: 38px; }
+.training-book-option { align-items: center; }
+.training-book-option .book-art { width: 34px; height: 34px; }
+
+.breakthrough-box {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+}
+.breakthrough-box .item-art { width: 76px; height: 76px; }
+.breakthrough-body { flex: 1; min-width: 0; display: grid; gap: 8px; }
+.breakthrough-body .hint { margin-top: 0; }
+.breakthrough-body .btn { justify-self: start; }
+
+.board-conf-lead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+.staff-lead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.staff-lead-body { flex: 1; min-width: 0; }
+.staff-lead h2,
+.staff-lead h3 { margin: 0 0 2px; }
+.staff-lead .hint { margin: 0; }
+
+.trophy-card { gap: 10px; padding: 10px 12px; }
+.trophy-row .trophy-art { width: 24px; height: 24px; }
+.ach-card-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+
 @media (max-width: 760px) {
+  .breakthrough-box { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .breakthrough-box .item-art { width: 62px; height: 62px; }
   :root[data-theme="light"] .dt.squad th:nth-child(2),
   :root[data-theme="light"] .dt.squad td:nth-child(2) { box-shadow: 2px 0 6px rgba(15, 23, 42, 0.12); }
 }
+

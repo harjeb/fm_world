@@ -11,7 +11,7 @@ import { worldTransferTeams, worldWageBill } from '../../game/world.ts'
 import { boardEffectiveWageCap, isBoardBudgetActive } from '../../game/board.ts'
 import { isLocalFreeAgentAvailable } from '../../game/free-market.ts'
 import { initialDisplayCA } from '../../game/rating.ts'
-import { caHeat, clubName, countryLabel, emptyState, icon, ownName, pageHead, panel, posBadge, primaryPosition, tag, traitLabel } from '../components.ts'
+import { assetUrl, caHeat, clubName, countryLabel, emptyState, icon, ownName, pageHead, panel, posBadge, primaryPosition, tag, traitLabel } from '../components.ts'
 import { countdownText, esc } from '../format.ts'
 import { aiTransferMarket, isOnlineMode, marketState, onlineState, serverNow } from '../../online.ts'
 import { game, ui, type TransferTab } from '../state.ts'
@@ -287,7 +287,14 @@ export function renderTransfer(): string {
   const body = tab === 'free' ? freeTab() : tab === 'ai' ? aiTab() : tab === 'offers' ? offersTab() : marketTab()
   const pendingCount = (game.transferOffers ?? []).filter((offer) => offer.status === 'pending').length
   return `
-    ${pageHead({ kicker: '经营', title: '转会市场', sub: '交易展示原始 CA，培养出的球员卡不随转会转移。' })}
+    ${pageHead({
+      kicker: '经营',
+      title: '转会市场',
+      sub: '交易展示原始 CA，培养出的球员卡不随转会转移。',
+      banner: assetUrl('assets/banners/banner-transfer.webp'),
+      bannerPosition: '80% 52%',
+      accent: '#62aef5',
+    })}
     <div class="tabs" role="tablist">
       ${TABS.map((item) => `<button class="tab ${tab === item.id ? 'active' : ''}" role="tab" aria-selected="${tab === item.id}" data-transfer-tab="${item.id}">${item.id === 'free' && isOnlineMode() ? '全服竞拍' : item.label}${item.id === 'offers' && pendingCount ? ` <span class="badge">${pendingCount}</span>` : ''}</button>`).join('')}
     </div>

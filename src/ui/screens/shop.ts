@@ -17,7 +17,7 @@ import {
 } from '../../game/shop.ts'
 import type { TierId } from '../../game/types.ts'
 import { worldTierLabel } from '../../game/world.ts'
-import { bookTitle, pageHead, panel, tag, tile } from '../components.ts'
+import { assetUrl, bookArt, bookTitle, pageHead, panel, tag, tile } from '../components.ts'
 import { esc } from '../format.ts'
 import { icon } from '../icons.ts'
 import { game } from '../state.ts'
@@ -40,11 +40,14 @@ function renderOfferCard(offer: ShopOffer, points: number): string {
   const originTag = offer.isDebut ? tag('首发', 'gold') : tag('返场', '')
   return `<article class="shop-card ${owned ? 'owned' : ''}" data-shop-book="${esc(offer.id)}">
     <div class="shop-card-head">
-      <div class="shop-card-title">
-        ${bookTitle(def.name, 'gold')}
-        ${originTag}
-        ${tag(SHOP_GROUP_LABELS[offer.group], badgeTone)}
-        ${offer.category === 'auxiliary' ? tag('辅助槽', '') : ''}
+      <div class="shop-card-lead">
+        ${bookArt('gold', 44, def.name)}
+        <div class="shop-card-title">
+          ${bookTitle(def.name, 'gold')}
+          ${originTag}
+          ${tag(SHOP_GROUP_LABELS[offer.group], badgeTone)}
+          ${offer.category === 'auxiliary' ? tag('辅助槽', '') : ''}
+        </div>
       </div>
       <span class="shop-price">${owned ? tag('已入库', 'good') : `<b>${offer.price}</b> 点`}</span>
     </div>
@@ -120,6 +123,9 @@ export function renderShop(): string {
       title: '技能书商店',
       sub: '每赛季上架 8 本外场、2 本守门员与 2 本辅助技能书（共 12 本，统一 100 点）；S4 起一半返场、一半从对策备用池首发。购买后永久入库，不消耗。',
       actions: `<button class="btn ghost" data-nav="achievements">${icon('star', 13)}前往成就领点券</button><button class="btn ghost" data-nav="training">前往培养配置技能卡 ${icon('right', 13)}</button>`,
+      banner: assetUrl('assets/banners/banner-shop.webp'),
+      bannerPosition: '80% 48%',
+      accent: '#f2b84b',
     })}
     ${backfillNote}
     <div class="kpi-row">

@@ -31,7 +31,7 @@ import { CATEGORY_BONUS_PER_LEVEL, STADIUM_BONUS_PER_LEVEL } from '../../game/tr
 import { achievementCeilingBonus, cupCeilingBonus } from '../../game/cup-rewards.ts'
 import { legendBookLabel } from '../../game/legend-books.ts'
 import { bestMarketValue, transferWindowOpen } from '../../game/market.ts'
-import { assetUrl, caHeat, icon, meter, ownName, pageHead, panel, posBadge, primaryPosition, tag, tile } from '../components.ts'
+import { assetUrl, caHeat, icon, meter, ownName, pageHead, panel, posBadge, primaryPosition, staffAvatar, tag, tile, trophyImage } from '../components.ts'
 import { esc, playerCA } from '../format.ts'
 import type { IconName } from '../icons.ts'
 import { game, ui, type ClubTab } from '../state.ts'
@@ -86,9 +86,9 @@ function trophyCabinet(): string {
   if (trophies.length === 0) {
     return panel('荣誉橱窗', '<p class="muted pad">还没有奖杯。赢得杯赛冠军后，奖杯和决赛记录会陈列在这里。</p>', { flush: true, aside })
   }
-  const counts = new Map<string, { name: string; count: number; last: number }>()
+  const counts = new Map<string, { cupId: string; name: string; count: number; last: number }>()
   for (const trophy of trophies) {
-    const row = counts.get(trophy.cupId) ?? { name: trophy.cupName, count: 0, last: 0 }
+    const row = counts.get(trophy.cupId) ?? { cupId: trophy.cupId, name: trophy.cupName, count: 0, last: 0 }
     row.count += 1
     row.last = Math.max(row.last, trophy.seasonIndex)
     counts.set(trophy.cupId, row)
@@ -96,13 +96,13 @@ function trophyCabinet(): string {
   return panel(`荣誉橱窗 <small>${trophies.length}</small>`, `
     <div class="trophy-grid">
       ${[...counts.values()].map((row) => `<div class="trophy-card">
-        ${icon('star', 20)}
+        ${trophyImage(row.cupId, 46, row.name)}
         <div><b>${esc(row.name)}</b><span class="muted small">×${row.count} · 最近第 ${row.last} 赛季</span></div>
       </div>`).join('')}
     </div>
     <div class="rows trophy-list">
       ${trophies.map((trophy) => `<div class="row trophy-row">
-        ${icon('star', 14)}
+        ${trophyImage(trophy.cupId, 24, trophy.cupName)}
         <span class="result-teams"><b>${esc(trophy.cupName)}</b> <span class="muted">第 ${trophy.seasonIndex} 赛季 · 决赛 ${esc(trophy.finalOpponent)}</span>${trophy.ceilingBonus ? ` <span class="tag gold">主属性上限 +${trophy.ceilingBonus}</span>` : ''}${trophy.rewardBook ? ` ${tag(esc(legendBookLabel(trophy.rewardBook)), 'skill-rainbow')}` : ''}${trophy.goldPrize ? ` <span class="tag gold">夺冠金币 ${trophy.goldPrize.toLocaleString()}</span>` : ''}</span>
         <span class="num"><b>${trophy.finalScore.home}:${trophy.finalScore.away}</b>${trophy.finalShootout ? ` <small class="muted">点球 ${trophy.finalShootout.home}:${trophy.finalShootout.away}</small>` : ''}</span>
         ${trophy.matchId && game.challengeHistory.some((record) => record.id === trophy.matchId) ? `<button class="btn small ghost" data-action="open-review" data-record="${esc(trophy.matchId)}">决赛战报</button>` : ''}
@@ -243,14 +243,17 @@ function boardTab(): string {
 
   const headerCard = panel('董事会信任度与政策', `
     <div class="board-conf-row">
-      <div class="board-conf-main">
-        <div class="board-conf-title">
-          <span class="muted small">当前信任度</span>
-          <b class="board-conf-num">${board.confidence} <small>/ 100</small></b>
-          ${tag(confMeta.text, confMeta.tone)}
-          ${lastGrade ? tag(`上季考核 ${lastGrade.label}`, lastGrade.tone) : tag('首次考核将于第 2 赛季末进行', 'info')}
+      <div class="board-conf-lead">
+        ${staffAvatar('chairman', 48, '董事会代表')}
+        <div class="board-conf-main">
+          <div class="board-conf-title">
+            <span class="muted small">当前信任度</span>
+            <b class="board-conf-num">${board.confidence} <small>/ 100</small></b>
+            ${tag(confMeta.text, confMeta.tone)}
+            ${lastGrade ? tag(`上季考核 ${lastGrade.label}`, lastGrade.tone) : tag('首次考核将于第 2 赛季末进行', 'info')}
+          </div>
+          ${meter(board.confidence)}
         </div>
-        ${meter(board.confidence)}
       </div>
       <div class="board-policy-pills">
         <div><span class="muted small">卖人收入归属</span><b>100% 进俱乐部余额</b></div>

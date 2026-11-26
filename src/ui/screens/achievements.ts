@@ -6,7 +6,7 @@ import {
 } from '../../game/achievements.ts'
 import { legendBookLabel } from '../../game/legend-books.ts'
 import { SHOP_BOOK_PRICE, shopPointsOf } from '../../game/shop.ts'
-import { bookTitle, icon, pageHead, panel, tag, tile } from '../components.ts'
+import { achievementBadgeArt, assetUrl, bookTitle, icon, pageHead, panel, tag, tile } from '../components.ts'
 import { esc } from '../format.ts'
 import { game, ui, type AchievementFilter } from '../state.ts'
 
@@ -48,6 +48,7 @@ function renderCard(item: AchievementItemView): string {
     return `<article class="ach-card is-hidden-locked" data-achievement-card="${esc(item.id)}">
       <div class="ach-card-head">
         <div class="ach-card-title">
+          ${achievementBadgeArt('hidden-locked', 34)}
           ${tag('隐藏', '')}
           <b class="ach-mystery-title">？？？</b>
         </div>
@@ -73,6 +74,7 @@ function renderCard(item: AchievementItemView): string {
       : item.unlocked
         ? tag('已解锁', 'good')
         : `<span class="muted small">进行中</span>`
+  const badgeKind = isWelfare ? 'welfare' : item.hidden ? 'hidden-unlocked' : 'standard'
   const cls = [
     'ach-card',
     isWelfare ? 'is-welfare' : '',
@@ -83,6 +85,7 @@ function renderCard(item: AchievementItemView): string {
   return `<article class="${cls}" data-achievement-card="${esc(item.id)}">
     <div class="ach-card-head">
       <div class="ach-card-title">
+        ${achievementBadgeArt(badgeKind, 34, !item.unlocked)}
         ${isWelfare ? tag('1.0 福利', 'gold') : item.hidden ? tag('隐藏已揭晓', 'gold') : ''}
         <b>${esc(item.title)}</b>
       </div>
@@ -153,6 +156,9 @@ export function renderAchievements(): string {
       title: '俱乐部成就',
       sub: `常规成就奖励商店点券、主属性上限（独立叠加）与 1.0 福利；另有 ${summary.hiddenTotal} 项高难隐藏挑战（未解锁前显示为「？？？」），达成后自动揭晓，后续将开放球迷、彩虹技能书等专属奖励。`,
       actions: `${claimAllBtn}<button class="btn ghost" data-nav="shop">前往技能书商店 ${icon('right', 13)}</button>`,
+      banner: assetUrl('assets/banners/banner-achievements.webp'),
+      bannerPosition: '78% 48%',
+      accent: '#f2b84b',
     })}
     ${backfillBanner}
     <div class="kpi-row club-kpis">

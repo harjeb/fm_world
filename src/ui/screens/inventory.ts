@@ -4,7 +4,7 @@ import { CARD_NAME_LIMIT, baseBuild, cardRecyclePoints, cardsOf, playerCards, re
 import { DETAILED_POSITIONS, DETAILED_POSITION_LABELS, DETAILED_TO_POSITION, detailedPositionValue } from '../../game/detailed-positions.ts'
 import { initialDisplayCA } from '../../game/rating.ts'
 import { saveGame } from '../../game/state.ts'
-import { attrHeat, caHeat, cardRoute, emptyState, findAnyPlayer, icon, mainAttrs, meter, pageHead, panel, posBadge, primaryPosition, skillTag, tag } from '../components.ts'
+import { attrHeat, caHeat, cardRoute, emptyState, findAnyPlayer, icon, mainAttrs, meter, pageHead, panel, playerPortrait, posBadge, primaryPosition, skillTag, tag } from '../components.ts'
 import { attrLabel, esc, playerCA, positionClass, positionLabel, skillName } from '../format.ts'
 import { morph } from '../morph.ts'
 import { game, ui } from '../state.ts'
@@ -203,7 +203,10 @@ function baseTile(owner: Player): string {
 
 function groupHead(group: Group): string {
   const { owner } = group
+  const known = owner ?? findAnyPlayer(group.playerId)
+  const avatar = known ? playerPortrait(known, 34) : ''
   return `<header class="card-owner">
+    ${avatar}
     ${posBadge(group.position)}
     ${owner ? `<button class="name-btn" data-action="detail" data-player="${esc(owner.id)}">${esc(group.name)}</button>` : `<b>${esc(group.name)}</b>`}
     <span class="muted small">${group.cards.length} 张卡</span>

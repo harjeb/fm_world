@@ -86,7 +86,7 @@ import { adjustBoardBudgetOnline, aiTransferMarket, bidOnline, buyFromAIClubOnli
 import { agentHandoffText } from './agent-handoff.ts'
 import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
 import { UNHAPPY_HOURS } from '../game/transfer-rules.ts'
-import { cardName, findAnyPlayer } from './components.ts'
+import { assetUrl, cardName, findAnyPlayer } from './components.ts'
 import { clockText, countdownText, esc, pct } from './format.ts'
 import { icon } from './icons.ts'
 import { morph } from './morph.ts'
@@ -617,11 +617,12 @@ async function submitAccount(): Promise<void> {
  * 不写进存档，也不记住选择——刷新页面会再问。
  */
 function renderBootGate(): string {
-  if (restoringGame) return `<div class="overlay boot-gate"><div class="modal boot-modal" role="status"><h1>正在读取联机存档…</h1><p class="hint">正在向服务器获取最新进度。</p></div></div>`
+  const bootBgImg = `<img class="boot-gate-bg" src="${esc(assetUrl('assets/banners/bg-welcome-mode.webp'))}" alt="" aria-hidden="true">`
+  if (restoringGame) return `<div class="overlay boot-gate">${bootBgImg}<div class="modal boot-modal" role="status"><h1>正在读取联机存档…</h1><p class="hint">正在向服务器获取最新进度。</p></div></div>`
   const online = hasOnlineSession()
   const name = onlineState.user ? esc(onlineState.user.username) : ''
   const light = isLightTheme()
-  return `<div class="overlay boot-gate">
+  return `<div class="overlay boot-gate">${bootBgImg}
     <div class="modal boot-modal" data-stop="true" role="dialog" aria-modal="true" aria-label="选择游戏模式">
       <div class="boot-head">
         <div class="kicker">FM 世界</div>
