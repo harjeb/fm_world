@@ -324,8 +324,33 @@ export function findAnyPlayer(id: string): Player | undefined {
 
 /* ---------- 布局件 ---------- */
 
-export function pageHead(options: { kicker?: string; title: string; sub?: string; lead?: string; actions?: string }): string {
-  return `<div class="page-head">
+/** 兼容 Vite dev 与 GitHub Pages 相对路径（base: './'）的静态资源地址。 */
+export function assetUrl(path: string): string {
+  const base = (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? './'
+  const clean = path.replace(/^\/+/, '')
+  return `${base.endsWith('/') ? base : `${base}/`}${clean}`
+}
+
+export function pageHead(options: {
+  kicker?: string
+  title: string
+  sub?: string
+  lead?: string
+  actions?: string
+  banner?: string
+  bannerPosition?: string
+  accent?: string
+}): string {
+  const hasBanner = !!options.banner
+  const styleParts: string[] = []
+  if (options.accent) styleParts.push(`--banner-accent:${esc(options.accent)}`)
+  if (options.bannerPosition) styleParts.push(`--banner-pos:${esc(options.bannerPosition)}`)
+  const styleAttr = styleParts.length ? ` style="${styleParts.join(';')}"` : ''
+  const bannerHtml = options.banner
+    ? `<div class="page-banner" aria-hidden="true"><img src="${esc(options.banner)}" alt="" loading="eager" decoding="async"></div>`
+    : ''
+  return `<div class="page-head${hasBanner ? ' has-banner' : ''}"${styleAttr}>
+    ${bannerHtml}
     ${options.lead ? `<div class="page-lead">${options.lead}</div>` : ''}
     <div class="page-title">
       ${options.kicker ? `<div class="kicker">${options.kicker}</div>` : ''}

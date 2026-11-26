@@ -10,7 +10,7 @@ import { BOARD_AMBITION_META, BOARD_CHOICE_MAX_ROUND, canSwitchCurrentBoardAmbit
 import { achievementSummary } from '../../game/achievements.ts'
 import { legendCupMetaById } from '../../game/data/legend-cup-teams.ts'
 import { isOnlineMode, serverNow } from '../../online.ts'
-import { boardMarkings, boardSpot, caHeat, clubLook, crest, emptyState, formPills, humanMark, icon, injuryLabel, leagueTable, meter, ownName, pageHead, panel, recordResult, resultPill, tag, teamForm, tile } from '../components.ts'
+import { assetUrl, boardMarkings, boardSpot, caHeat, clubLook, crest, emptyState, formPills, humanMark, icon, injuryLabel, leagueTable, meter, ownName, pageHead, panel, recordResult, resultPill, tag, teamForm, tile } from '../components.ts'
 import { isHighOffer } from '../../game/transfers.ts'
 import { countdownText, cupRoundLabel, esc, kickoffTimeLabel, matchModeLabel, playerCA, pveModeLabel, shortName } from '../format.ts'
 import { game, ui } from '../state.ts'
@@ -393,9 +393,12 @@ export function renderHome(): string {
   const look = clubLook(PLAYER_TEAM_ID)
   return `
     ${pageHead({
-      lead: crest(look, 46),
+      lead: crest(look, 52),
       kicker: `第 ${game.season.index} 赛季 · ${esc(divisionText())}`,
       title: ownName(game.clubName),
+      banner: assetUrl('assets/banners/banner-home-matchday.webp'),
+      bannerPosition: '78% 58%',
+      accent: look.color,
     })}
     ${wageArrearsAlert()}
     ${offerAlert()}
