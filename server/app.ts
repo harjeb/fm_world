@@ -63,7 +63,7 @@ import { absorbFreeAgents, aiClubIdOf, committedFunds, leadingBid, minimumBid, p
 import { isOnMarketToday } from '../src/game/market-window.ts'
 import { lineupRating } from '../src/game/club-rating.ts'
 import { runAIAuctionMarket } from '../src/game/ai-auction-market.ts'
-import { AI_SQUAD_LIMIT, advanceAIClub, releaseDepthSurplus, backfillAICardSkills, backfillAITierIncome, createAIClub, recordAISigning, seedAIClubs } from '../src/game/ai-club.ts'
+import { AI_SQUAD_LIMIT, advanceAIClub, releaseDepthSurplus, backfillAICardSkills, backfillAITierIncome, createAIClub, grantAllAISeasonShopBooks, recordAISigning, seedAIClubs } from '../src/game/ai-club.ts'
 import { agentView, applyAgentAction, playerView, type AgentOptions } from './agent.ts'
 import { clubNameError, normalizeClubName } from '../src/game/club-name.ts'
 import { negotiationDemands, SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../src/game/negotiation.ts'
@@ -489,6 +489,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
     sharedWorld.aiTierIncomeBackfillVersion = 1
   }
+  // 赛季初商店技能书幂等补发：旧服重启升级后，当季无主 AI 球队立刻拿到对应级别的当季商店金书。
+  const grantedAIShopBooks = grantAllAISeasonShopBooks(sharedWorld.world, sharedWorld.aiClubs, sharedWorld.seed, sharedWorld.owners) > 0
   // 以前 AI 买进来的球员没排进首发（只修“不合法”的阵容），一直坐在名单外：无主的 AI 球队按名单重排一次。
   // 有教练的球队阵容是教练自己排的，不动。
   refreshAILineups(Object.entries(sharedWorld.teams ?? {}).filter(([clubId]) => !sharedWorld.owners[clubId]).map(([, team]) => team))
@@ -505,7 +507,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   let sharedWorldVersion = 1
   let sharedTeamsPublicVersion = 1
   let sharedMatchBookVersion = 1
-  let worldDirty = rescaledLegacyRandoms || backfilledAICardSkills || backfilledAITierIncome
+  let worldDirty = rescaledLegacyRandoms || backfilledAICardSkills || backfilledAITierIncome || grantedAIShopBooks
   let worldWriteUrgent = false
   let worldWriteGen = 0
   let worldWriteTimer: ReturnType<typeof setTimeout> | null = null
@@ -900,7 +902,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const state = (book[club.id] ??= createAIClub(club, splitSeed(sharedWorld.seed, `ai-club-${club.id}`)))
       const team = sharedWorld.teams?.[club.id]
       const before = `${state.economy.balance}|${state.trained}|${state.upgrades}`
-      advanceAIClub(state, club, team, rounds, splitSeed(sharedWorld.seed, `ai-advance-${club.id}-${round}`), true, sharedWorld.world.seasonIndex)
+      advanceAIClub(state, club, team, rounds, splitSeed(sharedWorld.seed, `ai-advance-${club.id}-${round}`), true, sharedWorld.world.seasonIndex, sharedWorld.seed)
       if (team && releaseDepthSurplus(team, state, club, market.pool, serverSeason(), round)) releases++
       if (syncClubLiveTactics(club, team)) changed = true
       if (`${state.economy.balance}|${state.trained}|${state.upgrades}` !== before) changed = true
@@ -2710,8 +2712,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       sharedWorld.matchBook!.suspensions = {}
       sharedWorld.matchBook!.yellowCounts = {}
       sharedWorld.matchBook!.cupDiscipline = {}
-      // 电脑球队也过了一个赛季：清掉已经并进名单的签入，账本和设施继续滚。
+      // 电脑球队也过了一个赛季：清掉已经并进名单的签入，账本和设施继续滚，并按新赛季级别发放商店技能书。
       for (const state of Object.values(sharedWorld.aiClubs ?? {})) state.signings = []
+      grantAllAISeasonShopBooks(next, sharedWorld.aiClubs, sharedWorld.seed, sharedWorld.owners)
       persistWorld({ world: true, teams: true, matchBook: true, immediate: true })
       for (const { account } of drafts) {
         if (isAccountOnlineNow(account)) account.lastOnlineSeason = next.seasonIndex
@@ -2938,7 +2941,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const team = sharedWorld.teams[item.id]
       const state = sharedWorld.aiClubs[item.id]
       for (let round = 1; round <= aiRounds; round++) {
-        advanceAIClub(state, item, team, 1, splitSeed(sharedWorld.seed, `ai-advance-${item.id}-${round}`), true, sharedWorld.world.seasonIndex)
+        advanceAIClub(state, item, team, 1, splitSeed(sharedWorld.seed, `ai-advance-${item.id}-${round}`), true, sharedWorld.world.seasonIndex, sharedWorld.seed)
       }
       if (team) {
         refreshAILineup(team)

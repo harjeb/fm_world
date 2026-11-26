@@ -9,11 +9,13 @@ import { untrainedPlayer } from './cards.ts'
 import { isOnMarketToday } from './market-window.ts'
 import { attrHardLimit, attrMax, isMainAttr } from './scale.ts'
 import { cupCeilingBonusFromClaims } from './cup-rewards.ts'
-import { ALL_ATTRIBUTES, type AICard, type AIClubState, type AITeam, type AttrKey, type Attributes, type FacilityId, type GameState, type Player, type SkillId, type SkillTier, type TierId, type WorldClub, type WorldState } from './types.ts'
+import { ALL_ATTRIBUTES, type AICard, type AIClubState, type AITeam, type AttrKey, type Attributes, type FacilityId, type GameState, type LegendBook, type Player, type SkillId, type SkillTier, type TierId, type WorldClub, type WorldState } from './types.ts'
 import { FULL_SQUAD, refreshAILineup } from './squad.ts'
 import { cachedOwnerlessTeams } from './world.ts'
 import { aiBuysLeft, noteAIBuy } from './transfer-rules.ts'
 import { simulateAITrainingRound } from './ai-training.ts'
+import { shopCatalog } from './shop.ts'
+import { bookKey } from './legend-learning.ts'
 
 /**
  * 电脑球队的经营。
@@ -55,6 +57,87 @@ const TIER_PROFILE: Record<TierId, TierProfile> = {
 }
 
 export const aiTierProfile = (tier: TierId): TierProfile => TIER_PROFILE[tier]
+
+/** 每个赛季初 AI 按联赛级别从当季商店货架领取的金色技能书数量（级别越高越多）。 */
+export const AI_SEASON_SHOP_BOOKS: Record<TierId, number> = {
+  division2: 2,
+  division1: 4,
+  champions: 6,
+}
+
+function shuffleWith<T>(items: readonly T[], rng: ReturnType<typeof derivedRng>): T[] {
+  const out = [...items]
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = rng.int(i + 1)
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
+}
+
+/**
+ * 赛季初按联赛级别从当季商店货架（shopCatalog）为 AI 发放金色技能书（永久入库、幂等不重发）：
+ * - 先锋联赛 2 本 / 季，精英联赛 4 本 / 季，冠军联赛 6 本 / 季；
+ * - 自动跳过库存里已有的书；4 本及以上时保证外场、门将、辅助均衡覆盖。
+ */
+export function grantAISeasonShopBooks(
+  state: AIClubState,
+  club: Pick<WorldClub, 'id' | 'tier'>,
+  worldSeed: number,
+  seasonIndex: number,
+): number {
+  const season = Math.max(1, Math.floor(Number.isFinite(seasonIndex) ? seasonIndex : 1))
+  if ((state.booksSeason ?? 0) >= season) return 0
+  const count = AI_SEASON_SHOP_BOOKS[club.tier] ?? AI_SEASON_SHOP_BOOKS.division2
+  const catalog = shopCatalog(worldSeed, season)
+  const existing = state.books ?? []
+  const owned = new Set(existing.map((book) => bookKey(book)))
+  const available = catalog.filter((offer) => !owned.has(bookKey(offer)))
+  const rng = derivedRng(worldSeed, 'ai-shop-books', club.id, season)
+  const outfield = shuffleWith(available.filter((offer) => offer.category === 'main' && offer.scope === 'field'), rng)
+  const gk = shuffleWith(available.filter((offer) => offer.category === 'main' && offer.scope === 'gk'), rng)
+  const aux = shuffleWith(available.filter((offer) => offer.category === 'auxiliary'), rng)
+
+  const picked: LegendBook[] = []
+  const take = (pool: typeof available, max: number) => {
+    while (picked.length < count && max > 0 && pool.length > 0) {
+      const offer = pool.shift()!
+      picked.push({ id: offer.id, tier: offer.tier })
+      max--
+    }
+  }
+  if (count >= 4) {
+    take(gk, 1)
+    take(aux, 1)
+    take(outfield, count - picked.length)
+  } else {
+    take(outfield, 1)
+  }
+  if (picked.length < count) {
+    const rest = shuffleWith([...outfield, ...gk, ...aux], rng)
+    take(rest, count - picked.length)
+  }
+  if (picked.length) state.books = [...existing, ...picked]
+  state.booksSeason = season
+  return picked.length
+}
+
+/** 给世界里全部非玩家（且联机无主）的 AI 俱乐部幂等发放当季商店技能书。 */
+export function grantAllAISeasonShopBooks(
+  world: Pick<WorldState, 'clubs' | 'seasonIndex'>,
+  aiClubs: Record<string, AIClubState> | undefined,
+  worldSeed: number,
+  owners: Readonly<Record<string, string>> = {},
+): number {
+  if (!aiClubs) return 0
+  let total = 0
+  for (const club of world.clubs) {
+    if (club.isPlayer || owners[club.id]) continue
+    const state = aiClubs[club.id]
+    if (!state) continue
+    total += grantAISeasonShopBooks(state, club, worldSeed, world.seasonIndex)
+  }
+  return total
+}
 
 /**
  * 设施升级留底：本赛季还有买人名额且未满员时，按 `reserve * upgradeFloor` 先给转会留足可用现金；
@@ -146,7 +229,9 @@ export function seedAIClubs(world: WorldState, seed: number): Record<string, AIC
   const clubs: Record<string, AIClubState> = {}
   for (const club of world.clubs) {
     if (club.isPlayer) continue
-    clubs[club.id] = createAIClub(club, splitSeed(seed, `ai-club-${club.id}`))
+    const state = createAIClub(club, splitSeed(seed, `ai-club-${club.id}`))
+    grantAISeasonShopBooks(state, club, seed, world.seasonIndex)
+    clubs[club.id] = state
   }
   return clubs
 }
@@ -155,7 +240,9 @@ export function aiClubOf(aiClubs: Record<string, AIClubState> | undefined, world
   const club = world.clubs.find((item) => item.id === clubId)
   if (!club) return undefined
   const book = (aiClubs ??= {})
-  return (book[clubId] ??= createAIClub(club, splitSeed(seed, `ai-club-${clubId}`)))
+  const state = (book[clubId] ??= createAIClub(club, splitSeed(seed, `ai-club-${clubId}`)))
+  grantAISeasonShopBooks(state, club, seed, world.seasonIndex)
+  return state
 }
 
 /* ---------------------------------------------------------------- 培养、装备 */
@@ -408,8 +495,9 @@ export type AIAdvanceResult = { trained: number; upgrades: number }
  * `applyToTeam = false` 时只练卡片，不动当季名单（服务器用：名册改动要等赛季滚动再统一生效，
  * 否则每个 tick 都会改动全服名册、把每个教练的存档版本推高）。
  */
-export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | 'tier'>, team: AITeam | undefined, rounds: number, seed: number, applyToTeam = true, seasonIndex = 1): AIAdvanceResult {
+export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | 'tier'>, team: AITeam | undefined, rounds: number, seed: number, applyToTeam = true, seasonIndex = 1, worldSeed = seed): AIAdvanceResult {
   if (rounds <= 0) return { trained: 0, upgrades: 0 }
+  grantAISeasonShopBooks(state, club, worldSeed, seasonIndex)
   const profile = TIER_PROFILE[club.tier] ?? TIER_PROFILE.division2
   // 收入：和玩家同一套公式（基本收入 + 球迷 + 设施 + 级别转播分成），按轮结算。
   state.economy.balance = Math.min(AI_BALANCE_CAP, state.economy.balance + projectedRoundIncome(state.economy, club.tier) * rounds)
@@ -432,7 +520,7 @@ export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | '
     // 没有当季名单（其他分区）就不练：账本里的卡等下赛季随名单重建，免得把 GK 属性练到场上球员身上。
     if (!base) break
     const card = cardOf(state, slot, base)
-    // 真实培养：从原始属性开始跑完当季培养时段（30 / 40 / 44）、事件与周一交流赛队友技能传承，产出本轮候选卡。
+    // 真实培养：从原始属性开始跑完当季培养时段（30 / 40 / 50）、6 名正常陪练、商店技能书、事件与周一交流赛技能学习。
     const trainedPlayer = simulateAITrainingRound(
       base,
       splitSeed(seed, `program-${state.trained}-${slot}`),
@@ -440,6 +528,7 @@ export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | '
       seasonIndex,
       cupCeilingBonusFromClaims(state.cupCeilingClaims),
       players,
+      state.books,
     )
     state.trained += 1
     trained += 1
@@ -520,6 +609,7 @@ export function backfillAICardSkills(
       seasonIndex,
       cupBonus,
       players,
+      state.books,
     )
     const trainedSkills = [...trained.skills]
     const trainedSkillTiers = trained.skillTiers ? { ...trained.skillTiers } : {}
@@ -619,7 +709,7 @@ export function advanceAIClubs(game: { world?: WorldState; aiTeams?: AITeam[]; a
     const own = teams.get(club.id)
     // 其他分区没有存档名单：用种子复原的名单当培养对象，只练账本里的卡，不动任何名单。
     const team = own ?? (ownerless ??= cachedOwnerlessTeams(game.world, game.seed, game.aiClubs))[club.id]
-    advanceAIClub(state, club, team, rounds, splitSeed(game.seed, `ai-advance-${club.id}-${game.season?.round ?? 1}-${rounds}`), !!own, game.world.seasonIndex)
+    advanceAIClub(state, club, team, rounds, splitSeed(game.seed, `ai-advance-${club.id}-${game.season?.round ?? 1}-${rounds}`), !!own, game.world.seasonIndex, game.seed)
   }
   return true
 }

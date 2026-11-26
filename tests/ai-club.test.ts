@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ALL_ATTRIBUTES, type AIClubState, type Player } from '../src/game/types.ts'
 import {
+  AI_SEASON_SHOP_BOOKS,
   AI_SQUAD_LIMIT,
   advanceAIClub,
   advanceAIClubs,
@@ -14,6 +15,8 @@ import {
   backfillAITierIncome,
   createAIClub,
   equipAICards,
+  grantAISeasonShopBooks,
+  grantAllAISeasonShopBooks,
   playerCa,
   playerValue,
   primaryPosition,
@@ -25,7 +28,9 @@ import { AI_BID_PREFIX, AUCTION_DURATION_MS, placeAIBid, settleAuctions, type Fr
 import { facilityUpgradeCost, facilityLevel, projectedRoundIncome } from '../src/game/economy.ts'
 import { AVERAGE_ROUND_GAME_DAYS } from '../src/game/calendar.ts'
 import { cachedOwnerlessTeams, createWorldGame } from '../src/game/world.ts'
-import { simulateAITrainingRound } from '../src/game/ai-training.ts'
+import { pickAIPartners, pickAITrainingBooks, simulateAITrainingRound, simulateAITrainingSession } from '../src/game/ai-training.ts'
+import { shopCatalog } from '../src/game/shop.ts'
+import { bookScopeMatches } from '../src/game/legend-learning.ts'
 import { untrainedPlayer } from '../src/game/cards.ts'
 import { initialDisplayCA } from '../src/game/rating.ts'
 import { caCeilingOf } from '../src/game/ca.ts'
@@ -712,5 +717,114 @@ describe('AI 培养卡技能保存、装备与队友传承', () => {
 
     // 二次调用幂等
     expect(backfillAICardSkills(ai, team, 2026, 2)).toBe(false)
+  })
+
+  it('AI 培养自动选 6 名正常陪练、避开已满上限属性并兼顾隐藏属性', () => {
+    const base = game()
+    const team = structuredClone(base.aiTeams[0])
+    const fieldTarget = team.players.find((p) => p.positions.GK === 0)!
+    const gkTarget = team.players.find((p) => p.positions.GK > 0)!
+
+    // 外场球员带 6 名陪练（含 1 名门将、不含本人），门将带 6 名外场陪练
+    const fieldPartners = pickAIPartners(fieldTarget, team.players, 101)
+    expect(fieldPartners).toHaveLength(6)
+    expect(fieldPartners).not.toContain(fieldTarget.id)
+    expect(fieldPartners.some((id) => team.players.find((p) => p.id === id)!.positions.GK > 0)).toBe(true)
+
+    const gkPartners = pickAIPartners(gkTarget, team.players, 101)
+    expect(gkPartners).toHaveLength(6)
+    expect(gkPartners).not.toContain(gkTarget.id)
+    expect(gkPartners.every((id) => team.players.find((p) => p.id === id)!.positions.GK === 0)).toBe(true)
+
+    // 把这名球员的传球、盘带、速度、加速直接顶到上限，验证 AI 会转练其余未满主属性与隐藏属性而非空转
+    const almostCapped = structuredClone(fieldTarget)
+    almostCapped.baseAttrs = structuredClone(almostCapped.attrs)
+    for (const key of ['passing', 'dribbling', 'speed', 'acceleration'] as const) {
+      almostCapped.attrs[key] = almostCapped.ceilings[key]
+      almostCapped.baseAttrs[key] = almostCapped.ceilings[key]
+    }
+    const maxEco = { stadium: 25, academy: 25, medical: 25, shop: 25, sponsor: 25, psychology: 25, tactics: 25 }
+    const session = simulateAITrainingSession(almostCapped, 2026, maxEco, 3, 0, team.players)
+    expect(session.partnerIds).toHaveLength(6)
+    const zeroGainDrills = session.log.filter(
+      (entry) => entry.kind === 'action'
+        && !entry.title.includes('休息')
+        && !entry.title.includes('恢复')
+        && !entry.title.includes('休整')
+        && !entry.title.includes('失败')
+        && !entry.title.includes('导师')
+        && !entry.title.includes('交流赛')
+        && !entry.title.includes('队内比赛')
+        && Object.values(entry.gains ?? {}).every((v) => !v || v <= 0.01),
+    )
+    expect(zeroGainDrills).toHaveLength(0)
+    expect(session.candidate.attrs.shooting + session.candidate.attrs.tackling + session.candidate.attrs.strength)
+      .toBeGreaterThan(almostCapped.attrs.shooting + almostCapped.attrs.tackling + almostCapped.attrs.strength + 300)
+  })
+
+  it('赛季初按联赛级别从当季商店货架给 AI 发金书，级别越高越多，幂等且可在培养中学到', () => {
+    const world = game().world!
+    const seed = 7777
+    const book = seedAIClubs(world, seed)
+
+    const sampleByTier = (tier: 'division2' | 'division1' | 'champions') => {
+      const club = world.clubs.find((c) => !c.isPlayer && c.tier === tier)!
+      return { club, state: book[club.id] }
+    }
+    const d2 = sampleByTier('division2')
+    const d1 = sampleByTier('division1')
+    const ch = sampleByTier('champions')
+
+    expect(d2.state.books).toHaveLength(AI_SEASON_SHOP_BOOKS.division2)
+    expect(d1.state.books).toHaveLength(AI_SEASON_SHOP_BOOKS.division1)
+    expect(ch.state.books).toHaveLength(AI_SEASON_SHOP_BOOKS.champions)
+    expect(AI_SEASON_SHOP_BOOKS.division2).toBeLessThan(AI_SEASON_SHOP_BOOKS.division1)
+    expect(AI_SEASON_SHOP_BOOKS.division1).toBeLessThan(AI_SEASON_SHOP_BOOKS.champions)
+
+    // 所发技能书全部来自当季商店货架（金书）
+    const s1Ids = new Set(shopCatalog(seed, 1).map((o) => o.id))
+    for (const item of [d2, d1, ch]) {
+      expect(item.state.booksSeason).toBe(1)
+      for (const b of item.state.books ?? []) {
+        expect(b.tier).toBe('gold')
+        expect(s1Ids.has(b.id as any)).toBe(true)
+      }
+      // 同赛季重复调用幂等
+      expect(grantAISeasonShopBooks(item.state, item.club, seed, 1)).toBe(0)
+    }
+
+    // 第 2、3 赛季滚动后继续从对应赛季商店货架累进发放，不重复
+    world.seasonIndex = 2
+    expect(grantAllAISeasonShopBooks(world, book, seed)).toBeGreaterThan(0)
+    expect(d2.state.books).toHaveLength(AI_SEASON_SHOP_BOOKS.division2 * 2)
+    expect(d1.state.books).toHaveLength(AI_SEASON_SHOP_BOOKS.division1 * 2)
+    expect(ch.state.books).toHaveLength(AI_SEASON_SHOP_BOOKS.champions * 2)
+    world.seasonIndex = 3
+    grantAllAISeasonShopBooks(world, book, seed)
+    expect(ch.state.books).toHaveLength(AI_SEASON_SHOP_BOOKS.champions * 3)
+    const uniqueChKeys = new Set((ch.state.books ?? []).map((b) => `${b.id}:${b.tier}`))
+    expect(uniqueChKeys.size).toBe(ch.state.books!.length)
+
+    // AI 培养选书遵循赛季书槽上限与位置匹配，并能实际从商店金书学会金色技能
+    const team = structuredClone(game().aiTeams[0])
+    const fieldPlayer = team.players.find((p) => p.positions.GK === 0)!
+    const pickedS1 = pickAITrainingBooks(fieldPlayer, ch.state.books, 1, 99)
+    const pickedS3 = pickAITrainingBooks(fieldPlayer, ch.state.books, 3, 99)
+    expect(pickedS1).toHaveLength(4)
+    expect(pickedS3).toHaveLength(5)
+    for (const b of pickedS3) expect(bookScopeMatches(fieldPlayer, b)).toBe(true)
+
+    const chIds = new Set((ch.state.books ?? []).map((b) => b.id))
+    const maxEco = { stadium: 25, academy: 25, medical: 25, shop: 25, sponsor: 25, psychology: 25, tactics: 25 }
+    let learnedShopGold = false
+    for (let s = 1; s <= 15; s++) {
+      const sess = simulateAITrainingSession(fieldPlayer, s * 37, maxEco, 3, 0, team.players, ch.state.books)
+      expect(sess.books?.length).toBeGreaterThan(0)
+      if (sess.candidate.skills.some((id) => chIds.has(id as any) && sess.candidate.skillTiers?.[id] === 'gold')) {
+        learnedShopGold = true
+        break
+      }
+    }
+    expect(learnedShopGold).toBe(true)
   })
 })

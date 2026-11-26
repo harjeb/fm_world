@@ -24,7 +24,7 @@ import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION } from './names.ts'
 import { FULL_SQUAD, MIN_SQUAD, autoFillLineup, refreshAILineup, repairLineup, validateLineup } from './squad.ts'
 import { applyAITacticsToLineup } from './ai-tactics.ts'
 import { inferStyleForInstructions } from './pes/tactics.ts'
-import { equipAICards, mergeSignings, seedAIClubs } from './ai-club.ts'
+import { equipAICards, grantAllAISeasonShopBooks, mergeSignings, seedAIClubs } from './ai-club.ts'
 import { caOf } from './ca.ts'
 import { derivedRng, splitSeed, hashString } from './rng.ts'
 import { simulateAIvsAIState } from './match/setup.ts'
@@ -1897,8 +1897,9 @@ export function advanceWorldSeason(game: GameState, now = Date.now(), protectedC
   game.season = next
   const teams = buildWorldDivisionTeams(world, playerDivision, splitSeed(game.seed, `world-teams-${world.seasonIndex}`), { roster: game.roster, lineup: game.lineup, reserved: game.freeStars }, game.aiClubs)
   game.aiTeams = teams.aiTeams
-  // 签入的人已经并进新赛季名单，账本不再重复合并。
+  // 签入的人已经并进新赛季名单，账本不再重复合并；同时按新赛季级别发放商店技能书。
   for (const state of Object.values(game.aiClubs ?? {})) state.signings = []
+  grantAllAISeasonShopBooks(world, game.aiClubs, game.seed)
   game.clubName = teams.playerTeam.name
   const repaired = repairLineup(game.roster, game.lineup)
   if (repaired.changed && validateLineup(game.roster, repaired.lineup).valid) game.lineup = repaired.lineup

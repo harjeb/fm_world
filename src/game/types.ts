@@ -1591,6 +1591,10 @@ export type AIClubState = {
    * 全队都练过一遍后清空重新开一圈；球员离队后自然从名单里剔除。
    */
   trainedOwners?: string[]
+  /** 电脑球队的技能书库存：每个赛季初按级别从当季商店货架领取若干本金书，永久保留。 */
+  books?: LegendBook[]
+  /** 最近一次按赛季发放商店技能书的赛季号，用于幂等防重复发放。 */
+  booksSeason?: number
 }
 
 export type MatchContext = {
