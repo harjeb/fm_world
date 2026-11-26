@@ -129,4 +129,36 @@ describe('球员数据与射手榜', () => {
     // 扑救成功率只按“扑救和失球同场已知”的两场计算：8 / (8 + 3)
     expect(totals.saveRate).toBeCloseTo(8 / 11)
   })
+
+  it('球员赛季与生涯统计只计入联赛和正式赛季杯赛，排除友谊赛、传奇挑战、巅峰之路与 PvE 杯赛挑战', () => {
+    const game = createWorldGame(8181)
+    const player = game.roster.find((item) => item.positions.GK <= 0)!
+    const gk = game.roster.find((item) => item.positions.GK > 0)!
+    const mk = (id: string, goals: number, assists: number, saves = 0, goalsConceded = 0): PlayerMatchStats => ({
+      playerId: `home:${id}`, sourceId: id, name: id, side: 'home',
+      minutes: 90, passes: 20, passesCompleted: 15, shots: goals, goals, assists,
+      tackles: 2, interceptions: 1, distance: 5000, touches: 30, staminaLeft: 80,
+      ...(id === gk.id ? { saves, goalsConceded } : {}),
+    })
+    game.season.index = 2
+    game.matchHistory = [
+      { id: 'lg-s1', isLeague: true, seasonIndex: 1, score: { home: 2, away: 1 }, result: 'win', playerStats: [mk(player.id, 1, 1), mk(gk.id, 0, 0, 3, 1)] } as MatchRecord,
+      { id: 'lg-s2', isLeague: true, seasonIndex: 2, score: { home: 2, away: 0 }, result: 'win', playerStats: [mk(player.id, 2, 0), mk(gk.id, 0, 0, 4, 0)] } as MatchRecord,
+    ]
+    game.challengeHistory = [
+      { id: 'sc-s2', isLeague: false, mode: 'cup', cupId: 'season-community', seasonIndex: 2, score: { home: 1, away: 0 }, result: 'win', playerStats: [mk(player.id, 1, 2), mk(gk.id, 0, 0, 2, 0)] } as MatchRecord,
+      { id: 'sc-s1', isLeague: false, mode: 'cup', cupId: 'season-champions', seasonIndex: 1, score: { home: 1, away: 2 }, result: 'loss', playerStats: [mk(player.id, 1, 0), mk(gk.id, 0, 0, 5, 2)] } as MatchRecord,
+      { id: 'fr-s2', isLeague: false, mode: 'friendly', seasonIndex: 2, score: { home: 50, away: 0 }, result: 'win', playerStats: [mk(player.id, 50, 10), mk(gk.id, 0, 0, 40, 0)] } as MatchRecord,
+      { id: 'le-s2', isLeague: false, mode: 'legend', seasonIndex: 2, score: { home: 30, away: 0 }, result: 'win', playerStats: [mk(player.id, 30, 10), mk(gk.id, 0, 0, 30, 0)] } as MatchRecord,
+      { id: 'pk-s2', isLeague: false, mode: 'peak', stage: 10, seasonIndex: 2, score: { home: 20, away: 0 }, result: 'win', playerStats: [mk(player.id, 20, 10), mk(gk.id, 0, 0, 20, 0)] } as MatchRecord,
+      { id: 'pve-cup-1', isLeague: false, mode: 'cup', cupId: 'community', seasonIndex: 2, score: { home: 15, away: 0 }, result: 'win', playerStats: [mk(player.id, 15, 5), mk(gk.id, 0, 0, 15, 0)] } as MatchRecord,
+      { id: 'pve-cup-2', isLeague: false, mode: 'cup', seasonIndex: 2, score: { home: 12, away: 0 }, result: 'win', playerStats: [mk(player.id, 12, 5), mk(gk.id, 0, 0, 12, 0)] } as MatchRecord,
+      { id: 'legacy-non-league', isLeague: false, seasonIndex: 2, score: { home: 9, away: 0 }, result: 'win', playerStats: [mk(player.id, 9, 3), mk(gk.id, 0, 0, 9, 0)] } as MatchRecord,
+    ]
+
+    expect(seasonStats(game, player.id)).toMatchObject({ apps: 2, goals: 3, assists: 2, minutes: 180 })
+    expect(careerStats(game, player.id)).toMatchObject({ apps: 4, goals: 5, assists: 3, minutes: 360 })
+    expect(seasonStats(game, gk.id)).toMatchObject({ apps: 2, saves: 6, goalsConceded: 0, cleanSheets: 2 })
+    expect(careerStats(game, gk.id)).toMatchObject({ apps: 4, saves: 14, goalsConceded: 3, cleanSheets: 2 })
+  })
 })

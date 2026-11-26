@@ -16,11 +16,17 @@ afterEach(() => {
 function setup() {
   const game = createInitialGame(771)
   setGame(game)
-  const [player, other] = game.roster
+  const [player, other] = game.roster.filter((p) => p.positions.GK === 0)
   Object.assign(ui, { detailPlayerId: player.id, playerDetailView: 'profile', playerCompareId: other.id, playerCompareTab: 'overview', playerPerformancePeriod: 'season', playerPerformanceCompetition: 'all', screen: 'home' })
   const row = (id: string, goals: number): PlayerMatchStats => ({ playerId: `home:${id}`, sourceId: id, name: id, side: 'home', minutes: 90, goals, assists: 1, shots: 4, passes: 10, passesCompleted: 8, tackles: 2, interceptions: 1, distance: 600, touches: 14, staminaLeft: 70, yellowCards: 0, redCards: 0 })
   game.matchHistory = [{ id: 'league-one', seasonIndex: game.season.index, isLeague: true, score: { home: 2, away: 0 }, playerStats: [row(player.id, 2), row(other.id, 0)] } as MatchRecord]
-  game.challengeHistory = [{ id: 'cup-one', seasonIndex: game.season.index, isLeague: false, mode: 'cup', score: { home: 0, away: 1 }, playerStats: [row(player.id, 0)] } as MatchRecord]
+  game.challengeHistory = [
+    { id: 'cup-one', seasonIndex: game.season.index, isLeague: false, mode: 'cup', cupId: 'season-community', score: { home: 0, away: 1 }, playerStats: [row(player.id, 0)] } as MatchRecord,
+    { id: 'ch-friendly', seasonIndex: game.season.index, isLeague: false, mode: 'friendly', score: { home: 9, away: 0 }, playerStats: [row(player.id, 99), row(other.id, 99)] } as MatchRecord,
+    { id: 'ch-legend', seasonIndex: game.season.index, isLeague: false, mode: 'legend', score: { home: 9, away: 0 }, playerStats: [row(player.id, 99), row(other.id, 99)] } as MatchRecord,
+    { id: 'ch-peak', seasonIndex: game.season.index, isLeague: false, mode: 'peak', stage: 1, score: { home: 9, away: 0 }, playerStats: [row(player.id, 99), row(other.id, 99)] } as MatchRecord,
+    { id: 'ch-pve-cup', seasonIndex: game.season.index, isLeague: false, mode: 'cup', cupId: 'champions', score: { home: 9, away: 0 }, playerStats: [row(player.id, 99), row(other.id, 99)] } as MatchRecord,
+  ]
   return { game, player, other }
 }
 

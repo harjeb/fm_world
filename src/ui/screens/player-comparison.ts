@@ -133,7 +133,7 @@ function statTable(p: Player, other?: Player): string {
             ]
           : []),
       ]
-  return `<p class="pc-muted">仅统计本赛季已保存的战报；新增数据只汇总有记录的场次，括号为已记录 / 出场场次；缺失数据以 — 显示。评分为游戏事件估算。</p><div class="pc-table-wrap"><table class="pc-table"><thead><tr><th>本赛季数据</th><th>${esc(p.name)}</th><th>${other ? esc(other.name) : '对比球员'}</th></tr></thead><tbody>${rows.map(([label, a, b]) => `<tr><th>${label}</th><td>${a}</td><td>${b}</td></tr>`).join('')}</tbody></table></div>`
+  return `<p class="pc-muted">仅统计本赛季正式赛事（联赛与赛季杯赛）的已保存战报，不计入挑战数据；新增数据只汇总有记录的场次，括号为已记录 / 出场场次；缺失数据以 — 显示。评分为游戏事件估算。</p><div class="pc-table-wrap"><table class="pc-table"><thead><tr><th>本赛季数据</th><th>${esc(p.name)}</th><th>${other ? esc(other.name) : '对比球员'}</th></tr></thead><tbody>${rows.map(([label, a, b]) => `<tr><th>${label}</th><td>${a}</td><td>${b}</td></tr>`).join('')}</tbody></table></div>`
 }
 function diffArrow(dir: 'up' | 'down', title: string): string {
   const path = dir === 'up' ? 'M1.8 6.6 5 3.4 8.2 6.6' : 'M1.8 3.4 5 6.6 8.2 3.4'

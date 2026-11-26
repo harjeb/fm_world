@@ -1282,7 +1282,7 @@ document.addEventListener('click', async (event) => {
   const competition = target.closest<HTMLElement>('[data-performance-competition]')
   if (competition?.dataset.performanceCompetition) {
     const value = competition.dataset.performanceCompetition
-    if (value === 'all' || value === 'league' || value === 'friendly' || value === 'legend' || value === 'cup' || value === 'peak') ui.playerPerformanceCompetition = value
+    if (value === 'all' || value === 'league' || value === 'cup') ui.playerPerformanceCompetition = value
     render()
     return
   }

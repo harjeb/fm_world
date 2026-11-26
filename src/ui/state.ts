@@ -108,7 +108,7 @@ export type UIState = {
   playerCompareId: string | null
   playerCompareTab: 'overview' | 'attributes' | 'stats' | 'positions'
   playerPerformancePeriod: 'season' | 'career'
-  playerPerformanceCompetition: 'all' | 'league' | 'friendly' | 'legend' | 'cup' | 'peak'
+  playerPerformanceCompetition: 'all' | 'league' | 'cup'
   /** 任意界面点开的球队（世界里的 club id，玩家球队为 player）。 */
   clubViewId: string | null
   /** 球队详情里选中的球员。 */

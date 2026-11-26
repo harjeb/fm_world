@@ -142,6 +142,11 @@ function finish(totals: StatTotals, rate: RateAcc): StatTotals {
   }
 }
 
+/** 是否为正式赛事（联赛或正式赛季杯赛），排除挑战页里的友谊赛、传奇挑战、巅峰之路与 PvE 杯赛挑战。 */
+export function isOfficialPlayerStatRecord(record: Pick<MatchRecord, 'isLeague' | 'mode' | 'cupId'>): boolean {
+  return record.isLeague || (record.mode === 'cup' && Boolean(record.cupId?.startsWith('season-')))
+}
+
 /** 这条战报里这名球员的数据。playerId 用存档里的球员 ID。 */
 function statsOf(record: MatchRecord, playerId: string): PlayerMatchStats | undefined {
   return record.playerStats.find((stats) => (stats.sourceId ?? stats.playerId.split(':').slice(1).join(':')) === playerId)
@@ -151,6 +156,7 @@ function playerRecords(game: GameState, playerId: string): { record: MatchRecord
   const rows: { record: MatchRecord; stats: PlayerMatchStats }[] = []
   const seen = new Set<string>()
   for (const record of [...game.matchHistory, ...game.challengeHistory]) {
+    if (!isOfficialPlayerStatRecord(record)) continue
     if (record.id && seen.has(record.id)) continue
     const stats = statsOf(record, playerId)
     if (!stats || !(stats.minutes > 0)) continue
@@ -160,7 +166,7 @@ function playerRecords(game: GameState, playerId: string): { record: MatchRecord
   return rows
 }
 
-/** 本赛季（联赛 + 友谊赛）的数据。 */
+/** 本赛季正式赛事（联赛 + 赛季杯赛）的数据，不计入挑战。 */
 export function seasonStats(game: GameState, playerId: string): StatTotals {
   const index = game.season.index
   const totals = { ...EMPTY }
@@ -172,7 +178,7 @@ export function seasonStats(game: GameState, playerId: string): StatTotals {
   return finish(totals, rate)
 }
 
-/** 生涯累计（含友谊赛）。 */
+/** 生涯正式赛事累计（联赛 + 赛季杯赛），不计入挑战。 */
 export function careerStats(game: GameState, playerId: string): StatTotals {
   const totals = { ...EMPTY }
   const rate: RateAcc = { saves: 0, conceded: 0 }
