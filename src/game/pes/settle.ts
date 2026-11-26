@@ -10,7 +10,7 @@
  * 统计**只从事件流推出来**（`onEvent`）：每个事件对应的数字就是同一份数据，不会出现“事件说进球、统计没有”。
  * 只有跑动、触球、体力、控球这类物理量在 `finalize` 时从物理比赛里取。
  */
-import { STAR_TRAITS } from '../data/star-traits.generated.ts'
+import { starTraitOf } from '../data/star-traits.ts'
 import { derivedRng } from '../rng.ts'
 import { prepareMatchInjuries } from '../injury.ts'
 import { commentLog } from '../match/commentary.ts'
@@ -343,7 +343,7 @@ export class PesSettlement implements ContactModel {
   beatsOffside(m: PesMatch, receiver: PesPlayer): boolean {
     this.begin(m)
     const player = this.mp[receiver.pid]
-    const runner = STAR_TRAITS[player.traitId]
+    const runner = starTraitOf(player.traitId)
     return runner?.kind === 'onside' && this.ratings.traitRoll(player, 'onside', runner.chance)
   }
 
@@ -351,7 +351,7 @@ export class PesSettlement implements ContactModel {
   setPiecePreference(_m: PesMatch, player: PesPlayer, mode: 'fk_shot' | 'fk_cross' | 'corner'): number {
     const mp = this.mp[player.pid]
     if (!mp) return 0
-    const trait = STAR_TRAITS[mp.traitId]
+    const trait = starTraitOf(mp.traitId)
     if (mode === 'fk_shot') {
       let score = this.ratings.eff(mp, 'shooting') * 0.6 + this.ratings.eff(mp, 'composure') * 0.4
       if (trait?.kind === 'shot' && trait.scope === 'freeKick') score += 300
@@ -371,7 +371,7 @@ export class PesSettlement implements ContactModel {
     const mp = this.mp[player.pid]
     if (!mp) return 0
     if (mp.skills.includes('lg_knuckleball')) return 6
-    const trait = STAR_TRAITS[mp.traitId]
+    const trait = starTraitOf(mp.traitId)
     if (mp.skills.includes('sh_free_kick') || (trait?.kind === 'shot' && trait.scope === 'freeKick')) return 3
     return 0
   }

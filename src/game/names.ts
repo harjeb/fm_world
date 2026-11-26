@@ -5,6 +5,7 @@ import { createRandomPlayer } from './data/random-players.ts'
 import { derivedRng } from './rng.ts'
 import { HIDDEN_ATTR_MAX, HIDDEN_ATTR_SCALE, MAIN_ATTR_SCALE } from './scale.ts'
 import { starTraitId } from './data/star-traits.ts'
+import { tsubasaLoadoutFor } from './data/tsubasa-specials.ts'
 import { LEGACY_CLUB_RENAMES } from './data/world-clubs.ts'
 
 /**
@@ -14,8 +15,8 @@ import { LEGACY_CLUB_RENAMES } from './data/world-clubs.ts'
  * 第 3 版：同一个人不能同时出现在两个地方，见 removeDuplicatePeople。
  */
 export const NAMES_VERSION = 3
-/** 第 1 版：真实球星从 20 个通用特性换成每人一个专属特性。 */
-export const TRAITS_VERSION = 1
+/** 第 1 版：真实球星从 20 个通用特性换成每人一个专属特性；第 2 版：足球小将全明星升级为原著唯一特性与唯一彩虹技能。 */
+export const TRAITS_VERSION = 2
 /** 第 1 版：爆发（acceleration）从隐藏属性升成外场球员的主属性，存档单位从 0-20 换成 0-1500，比赛评分不变。 */
 export const ATTRS_VERSION = 1
 
@@ -66,8 +67,50 @@ function renamePlayer(player: Player): boolean {
   return true
 }
 
-/** 真实球星（包括他的下一代）换成专属特性；随机球员不变。 */
+function isTsubasaPlayer(player: Pick<Player, 'id' | 'seedId' | 'enName'>): boolean {
+  return !!tsubasaLoadoutFor(player.enName)
+    && (player.seedId?.startsWith('legend-captain-tsubasa-all-stars-') || player.id?.startsWith('legend-captain-tsubasa-all-stars-') || player.seedId === player.enName)
+}
+
+function upgradeTsubasaPlayer(player: Player): boolean {
+  if (!isTsubasaPlayer(player)) return false
+  const loadout = tsubasaLoadoutFor(player.enName)
+  if (!loadout) return false
+  let changed = false
+  if (player.traitId !== loadout.traitId) {
+    player.traitId = loadout.traitId
+    changed = true
+  }
+  const prevSig = player.signatureSkill
+  if (player.signatureSkill !== loadout.skillId) {
+    player.signatureSkill = loadout.skillId
+    changed = true
+  }
+  const replaceList = (list: typeof player.skills | undefined): typeof player.skills => {
+    const next = [...(list ?? [])]
+    if (!next.includes(loadout.skillId)) {
+      const idx = prevSig ? next.indexOf(prevSig) : -1
+      if (idx >= 0) next[idx] = loadout.skillId
+      else next.unshift(loadout.skillId)
+      changed = true
+    }
+    return next
+  }
+  player.skills = replaceList(player.skills)
+  player.baseSkills = [loadout.skillId]
+  const tiers = { ...(player.skillTiers ?? {}) }
+  if (prevSig && prevSig !== loadout.skillId && !player.skills.includes(prevSig)) delete tiers[prevSig]
+  if (tiers[loadout.skillId] !== 'rainbow') {
+    tiers[loadout.skillId] = 'rainbow'
+    changed = true
+  }
+  player.skillTiers = tiers
+  return changed
+}
+
+/** 真实球星（包括他的下一代）换成专属特性；足球小将换成原著唯一特性与技能；随机球员不变。 */
 function upgradeStarTrait(player: Player): boolean {
+  if (upgradeTsubasaPlayer(player)) return true
   const seed = seedById(player.seedId)
   if (!seed || seed.enName !== player.enName) return false
   const trait = starTraitId(seed.id)
@@ -212,7 +255,29 @@ function removeDuplicatePeople(game: GameState): void {
 export function upgradeStarTraits(game: GameState): boolean {
   if (game.traitsVersion === TRAITS_VERSION) return false
   game.traitsVersion = TRAITS_VERSION
-  for (const player of allPlayers(game)) upgradeStarTrait(player)
+  const tsubasaOwners = new Map<string, { loadout: NonNullable<ReturnType<typeof tsubasaLoadoutFor>>; prevSig?: Player['signatureSkill'] }>()
+  for (const player of allPlayers(game)) {
+    const prevSig = player.signatureSkill
+    upgradeStarTrait(player)
+    if (isTsubasaPlayer(player)) {
+      const loadout = tsubasaLoadoutFor(player.enName)
+      if (loadout) tsubasaOwners.set(player.id, { loadout, prevSig })
+    }
+  }
+  for (const card of game.cards ?? []) {
+    const owner = tsubasaOwners.get(card.playerId)
+    if (!owner) continue
+    const { loadout, prevSig } = owner
+    if (!card.skills.includes(loadout.skillId)) {
+      const idx = prevSig ? card.skills.indexOf(prevSig) : -1
+      if (idx >= 0) card.skills[idx] = loadout.skillId
+      else card.skills.unshift(loadout.skillId)
+    }
+    const tiers = { ...(card.skillTiers ?? {}) }
+    if (prevSig && prevSig !== loadout.skillId && !card.skills.includes(prevSig)) delete tiers[prevSig]
+    tiers[loadout.skillId] = 'rainbow'
+    card.skillTiers = tiers
+  }
   return true
 }
 

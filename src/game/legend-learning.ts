@@ -16,6 +16,7 @@ import {
   isPassiveTrainingBook,
 } from './data/legend-cup-skill.ts'
 import { basicBookDef } from './data/basic-skill-books.ts'
+import { isExclusiveSkill } from './data/tsubasa-specials.ts'
 import { effectiveClubCeilings, effectiveTrainingCeilings } from './cup-rewards.ts'
 import { attrHardLimit, mainAttrsFor } from './scale.ts'
 import { attrLabel } from './data/attributes.ts'
@@ -164,6 +165,7 @@ export function bookEvents(session: TrainingSession): EventDef[] {
 
 /** 新课程只提供位置匹配且尚未掌握的书技能；技能槽满时允许选择替换；被动彩书（如传奇之星）始终可带入书槽。 */
 export function canChooseTrainingBook(player: Pick<Player, 'positions' | 'skills' | 'skillTiers'>, book: LegendBook): { ok: boolean; reason?: string } {
+  if (isExclusiveSkill(book.id)) return { ok: false, reason: '角色唯一专属绝技' }
   if (!bookScopeMatches(player, book)) return { ok: false, reason: '位置不匹配' }
   if (isPassiveTrainingBook(book.id)) return { ok: true }
   if (player.skills.includes(book.id)) return { ok: false, reason: '已掌握该技能' }
@@ -198,7 +200,7 @@ export function drawTrainingSkills(session: TrainingSession, teammates: readonly
   const selected: Player[] = []
   while (people.length && selected.length < MAX_SKILL_TEACHERS) selected.push(people.splice(rng.int(people.length), 1)[0])
   const candidate = session.candidate
-  const allowed = (id: SkillId) => Object.hasOwn(SKILLS, id) && !isPassiveTrainingBook(id) && !candidate.skills.includes(id) && skillMatchesPlayer(candidate, id)
+  const allowed = (id: SkillId) => Object.hasOwn(SKILLS, id) && !isExclusiveSkill(id) && !isPassiveTrainingBook(id) && !candidate.skills.includes(id) && skillMatchesPlayer(candidate, id)
   const bookPool: TrainingSkillChoice[] = (session.books ?? []).filter((book) => !isPassiveTrainingBook(book.id) && canChooseTrainingBook(candidate, book).ok).map((book) => ({ source: 'book', ...book }))
   const teammatePool: TrainingSkillChoice[] = selected.flatMap((player) => player.skills.filter(allowed).map((id) => ({
     source: 'teammate' as const, id,
@@ -364,7 +366,7 @@ function legendStarInheritPool(session: TrainingSession): { star: PlayerSeed; sk
   const eligible = (seeds: readonly PlayerSeed[]) => seeds
     .filter((seed) => seed.era !== 'random' && seed.pos === pos)
     .map((star) => ({ star, skill: styleSkillFor(star.style) }))
-    .filter(({ skill }) => Object.hasOwn(SKILLS, skill) && !(candidate.skills.includes(skill) && getSkillTier(candidate, skill) === 'rainbow'))
+    .filter(({ skill }) => Object.hasOwn(SKILLS, skill) && !isExclusiveSkill(skill) && !(candidate.skills.includes(skill) && getSkillTier(candidate, skill) === 'rainbow'))
   const elite = eligible(PLAYER_SEEDS.filter((seed) => seed.tier >= 5))
   return elite.length ? elite : eligible(PLAYER_SEEDS)
 }

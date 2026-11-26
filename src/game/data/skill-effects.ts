@@ -4,6 +4,7 @@ import { TRAITS } from './skills.ts'
 import { LEGEND_SKILLS } from './legend-skills.ts'
 import { PEAK_SKILLS } from './peak-skills.ts'
 import { starTraitOf, starTraitText } from './star-traits.ts'
+import { isExclusiveSkill } from './tsubasa-specials.ts'
 
 /**
  * 给玩家看的技能和特性效果说明。
@@ -86,6 +87,22 @@ const SKILL_EFFECTS: Partial<Record<SkillId, (m: number) => string>> = {
   sh_aux_tired_grit: (m) => `体力低于 70% 时：敏捷与防守站位有效评分各 +${num(5 * m)}。`,
   sh_aux_discipline: (m) => `犯规后吃牌判定：黄牌与直红风险 -${num(25 * m)}%。`,
   lg_legend_star: () => '培养前带入书槽即全程生效（不占技能槽）：每次常规行动 10% 触发彩色事件，从 2 项随机未满主属性中二选一 +100（每轮最多 3 次）。',
+  ct_sggk: (m) => `门将在位面对射门：扑救评分 +${num(6.5 * m)}；扑救后抱住球的概率 +${num(10 * m)}%。`,
+  ct_razor_shot: (m) => `边路传中：传球评分 +${num(5.5 * m)}；偏侧或小角度起脚：射正率 +${num(4.5 * m)}%，进球率 +${num(3 * m)}%。`,
+  ct_power_tackle: (m) => `防守对抗：抢断评分 +${num(5.5 * m)}；本方半场封堵射门 +${num(6 * m)}；高空争顶评分 +${num(4.5 * m)}。`,
+  ct_face_block: (m) => `封堵对手射门：封堵评分 +${num(8.5 * m)}；本方半场二点球争抢 +${num(5 * m)}。`,
+  ct_eagle_shot: (m) => `长传调度：传球评分 +${num(5.5 * m)}；禁区外远射：射正率 +${num(4.5 * m)}%，进球率 +${num(3.5 * m)}%。`,
+  ct_offside_trap: (m) => `拦截与抢断：防守评分 +${num(5.5 * m)}；本方半场二点球争抢 +${num(5 * m)}；头球攻门射正率 +${num(4 * m)}%。`,
+  ct_drive_shot: (m) => `禁区外起脚：射正率 +${num(5.5 * m)}%，进球率 +${num(4 * m)}%；中路传球调度评分 +${num(3 * m)}。`,
+  ct_boomerang_pass: (m) => `直塞或前场短传：传球评分 +${num(6 * m)}；边路传中：传球评分 +${num(5 * m)}。`,
+  ct_chokkaku_feint: (m) => `盘带突破：盘带评分 +${num(6 * m)}，成功率下限 +${num(6 * m)}%；边路回追防守评分 +${num(3.5 * m)}。`,
+  ct_tiger_shot: (m) => `起脚射门（非头球 / 点球）：压低门将评分 -${num(5 * m)}，射正率 +${num(4 * m)}%，进球率 +${num(4.5 * m)}%。`,
+  ct_falcon_shot: (m) => `禁区内起脚：射正率 +${num(4.5 * m)}%，进球率 +${num(3.5 * m)}%；接应直塞：传球配合评分 +${num(5 * m)}。`,
+  ct_triangle_jump: (m) => `门将在位面对单刀或近射：扑救评分 +${num(6 * m)}；门将高空球出击争顶 +${num(6.5 * m)}。`,
+  ct_toho_link: (m) => `短传配合：传球评分 +${num(5 * m)}；受压出球与盘带摆脱评分各 +${num(4 * m)}。`,
+  ct_aerial_command: (m) => `高空球争顶：争顶评分 +${num(6 * m)}；中路拦截传球：防守评分 +${num(5 * m)}。`,
+  ct_silver_poacher: (m) => `禁区内起脚：射正率 +${num(4.5 * m)}%，进球率 +${num(3.5 * m)}%；前场二点球争抢 +${num(5.5 * m)}。`,
+  ct_sideline_dribble: (m) => `边路盘带：盘带评分 +${num(5.5 * m)}；边路传中：传球评分 +${num(5.5 * m)}。`,
 }
 
 export function skillEffectText(id: SkillId, tier: SkillTier = 'silver'): string {
@@ -104,9 +121,11 @@ export function skillEffectText(id: SkillId, tier: SkillTier = 'silver'): string
   return `${text}（银/金 ×1 / 彩 ×1.4）`
 }
 
-/** 铁肺不是按倍数算的，单独说明。 */
+/** 铁肺不是按倍数算的，单独说明；角色唯一专属技能标明唯一属性。 */
 export function skillTierNote(id: SkillId): string {
-  return id === 'iron_lung' ? '等级效果：银 5% / 金 10% / 彩虹 15%' : '等级效果：银 ×1 / 金 ×1.2 / 彩虹 ×1.4'
+  if (id === 'iron_lung') return '等级效果：银 5% / 金 10% / 彩虹 15%'
+  if (isExclusiveSkill(id)) return '角色唯一专属绝技（默认彩虹档；倍率参考：银 ×1 / 金 ×1.2 / 彩虹 ×1.4）'
+  return '等级效果：银 ×1 / 金 ×1.2 / 彩虹 ×1.4'
 }
 
 /** Describe the attribute effect and value without exposing engine-scale labels. */

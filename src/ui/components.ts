@@ -236,7 +236,7 @@ export function skillTag(player: Pick<Player, 'skillTiers'>, skill: SkillId): st
 
 /** 特性名字带上效果提示；tag 为 true 时显示成标签。 */
 export function traitLabel(id: TraitId, asTag = false): string {
-  const tip = tipAttrs(`${traitName(id)} · ${id.startsWith('star_') ? '专属特性' : '特性'}`, traitEffectText(id))
+  const tip = tipAttrs(`${traitName(id)} · ${id.startsWith('star_') || id.startsWith('ct_trait_') ? '专属特性' : '特性'}`, traitEffectText(id))
   return asTag ? `<span class="tag gold" ${tip}>${esc(traitName(id))}</span>` : `<span class="has-tip" ${tip}>${esc(traitName(id))}</span>`
 }
 

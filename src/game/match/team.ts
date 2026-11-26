@@ -1,4 +1,4 @@
-import { STAR_TRAITS } from '../data/star-traits.generated.ts'
+import { starTraitOf } from '../data/star-traits.ts'
 import type { MatchTeamInput, MatchTeamState, MatchPlayerState, MatchSide } from './types.ts'
 import type { Attributes, Player, PlayerMatchStats } from '../types.ts'
 import { ALL_ATTRIBUTES } from '../types.ts'
@@ -175,6 +175,6 @@ export function opponentSide(side: MatchSide): MatchSide {
 /** Missing tiers on legacy players and match states retain the silver effect. */
 export function skillTierMultiplier(player: MatchPlayerState, skill: import('../types.ts').SkillId): number {
   const tier = player.skillTiers?.[skill] === 'rainbow' ? 1.4 : player.skillTiers?.[skill] === 'gold' ? 1.2 : 1
-  const star = STAR_TRAITS[player.traitId]
+  const star = starTraitOf(player.traitId)
   return star?.kind === 'skillBoost' ? tier * (1 + star.pct / 100) : tier
 }

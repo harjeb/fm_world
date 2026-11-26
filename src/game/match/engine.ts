@@ -1,4 +1,4 @@
-import { STAR_TRAITS } from '../data/star-traits.generated.ts'
+import { starTraitOf } from '../data/star-traits.ts'
 import type { ShotScope, TraitCondition } from '../data/star-traits.ts'
 import type { BaseTraitId } from '../types.ts'
 import { skillTierMultiplier } from './team.ts'
@@ -801,7 +801,7 @@ export class MatchEngine {
         if (player.skills.includes('iron_lung')) drain *= 1 - (0.05 + (skillTierMultiplier(player, 'iron_lung') - 1) * 0.25)
         if (player.position === 'GK') drain *= 0.5
         if (player.side === opp.side && presser === player.id) drain *= 1.12
-        const staminaTrait = STAR_TRAITS[player.traitId]
+        const staminaTrait = starTraitOf(player.traitId)
         if (staminaTrait?.kind === 'stamina' && this.traitConditionMet(player, staminaTrait.when)) drain *= 1 - staminaTrait.drain / 100
         player.stamina = Math.max(0, player.stamina - drain)
         if (staminaTrait?.kind === 'secondWind' && !player.traitUsed && player.stamina / Math.max(1, player.maxStamina) < 0.6) {
@@ -1462,7 +1462,7 @@ export class MatchEngine {
       if (player.skills.includes('iron_lung')) drain *= 1 - (0.05 + (skillTierMultiplier(player, 'iron_lung') - 1) * 0.25)
       if (player.position === 'GK') drain *= 0.5
       if (player.side === opp.side && presser === player.id) drain *= 1.12
-      const staminaTrait = STAR_TRAITS[player.traitId]
+      const staminaTrait = starTraitOf(player.traitId)
       if (staminaTrait?.kind === 'stamina' && this.traitConditionMet(player, staminaTrait.when)) drain *= 1 - staminaTrait.drain / 100
       player.stamina = Math.max(0, player.stamina - drain)
       if (staminaTrait?.kind === 'secondWind' && !player.traitUsed && player.stamina / Math.max(1, player.maxStamina) < 0.6) {
@@ -1757,7 +1757,7 @@ export class MatchEngine {
       this.statsOf(team).passesCompleted++
       this.state.ball = { x: receiver.x, y: receiver.y, ownerId: receiver.id, justReceived: true }
       this.state.possession = carrier.side
-      const runner = STAR_TRAITS[receiver.traitId]
+      const runner = starTraitOf(receiver.traitId)
       const beatsTheLine = runner?.kind === 'onside' && this.traitRoll(receiver, 'onside', runner.chance)
       if (this.offside && choice.type === 'through' && this.isOffside(receiver, opp, carrier.side) && !beatsTheLine) {
         const entry = this.log('out', carrier.side, `${receiver.name} 越位，进攻被吹停。`, {
@@ -2007,7 +2007,7 @@ export class MatchEngine {
       shooter.stats.goals++
       const assister = this.assistFor(shooter)
       if (assister) assister.stats.assists = (assister.stats.assists ?? 0) + 1
-      const scorerTrait = STAR_TRAITS[shooter.traitId]
+      const scorerTrait = starTraitOf(shooter.traitId)
       if (scorerTrait?.kind === 'goalRecover') shooter.stamina = Math.min(shooter.maxStamina, shooter.stamina + shooter.maxStamina * scorerTrait.stamina / 100)
       this.statsOf(team).goals++
       this.statsOf(team).shotsOnTarget++
@@ -2491,7 +2491,7 @@ export class MatchEngine {
       score -= distance(player, { x, y }) * 0.2
       // 带任意球特性或技能的人优先主罚，否则特性/技能可能一直用不上。
       if (freeKick) {
-        const trait = STAR_TRAITS[player.traitId]
+        const trait = starTraitOf(player.traitId)
         if ((mode === 'shoot' && trait?.kind === 'shot' && trait.scope === 'freeKick') || (mode === 'cross' && trait?.kind === 'pass' && trait.scope === 'freeKick')) score += 3000
         if (mode === 'shoot' && (player.skills.includes('lg_knuckleball') || player.skills.includes('sh_free_kick'))) score += 2500
         if (mode === 'cross' && (player.skills.includes('lg_set_piece_iq') || player.skills.includes('sh_dead_ball'))) score += 2500

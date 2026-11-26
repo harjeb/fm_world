@@ -2,6 +2,7 @@ import type { AttrKey, TraitId } from '../types.ts'
 import { ATTR_META } from './attributes.ts'
 import { TRAITS, type BaseTraitId } from './skills.ts'
 import { STAR_TRAITS } from './star-traits.generated.ts'
+import { TSUBASA_TRAITS, type TsubasaTraitId } from './tsubasa-specials.ts'
 
 /**
  * 球星专属特性：500 名真实球星每人一个，不重复。
@@ -127,11 +128,11 @@ export function starTraitId(seedId: string): TraitId {
 }
 
 export function starTraitOf(id: TraitId): StarTrait | undefined {
-  return STAR_TRAITS[id]
+  return STAR_TRAITS[id] ?? TSUBASA_TRAITS[id as TsubasaTraitId]
 }
 
 export function traitNameOf(id: TraitId): string {
-  return STAR_TRAITS[id]?.name ?? TRAITS[id as BaseTraitId]?.name ?? id
+  return starTraitOf(id)?.name ?? TRAITS[id as BaseTraitId]?.name ?? id
 }
 
 const label = (attr: AttrKey) => ATTR_META[attr].label

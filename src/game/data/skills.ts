@@ -3,6 +3,7 @@ import { LEGEND_SKILLS } from './legend-skills.ts'
 import { PEAK_SKILLS } from './peak-skills.ts'
 import { SHOP_SKILLS } from './shop-skills.ts'
 import { SPECIAL_BOOK_SKILLS } from './legend-cup-skill.ts'
+import { TSUBASA_SKILLS } from './tsubasa-specials.ts'
 
 export type { BaseTraitId }
 
@@ -36,6 +37,7 @@ export const SKILLS: Record<SkillId, SkillDef> = {
   ...PEAK_SKILLS,
   ...SPECIAL_BOOK_SKILLS,
   ...SHOP_SKILLS,
+  ...TSUBASA_SKILLS,
   through_ball: {
     id: 'through_ball',
     name: '穿线者',

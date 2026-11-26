@@ -151,6 +151,25 @@ export type SkillId =
   | 'lg_peak_keeper'
   | 'lg_legend_star'
   | ShopSkillId
+  | TsubasaSkillId
+
+export type TsubasaSkillId =
+  | 'ct_sggk'
+  | 'ct_razor_shot'
+  | 'ct_power_tackle'
+  | 'ct_face_block'
+  | 'ct_eagle_shot'
+  | 'ct_offside_trap'
+  | 'ct_drive_shot'
+  | 'ct_boomerang_pass'
+  | 'ct_chokkaku_feint'
+  | 'ct_tiger_shot'
+  | 'ct_falcon_shot'
+  | 'ct_triangle_jump'
+  | 'ct_toho_link'
+  | 'ct_aerial_command'
+  | 'ct_silver_poacher'
+  | 'ct_sideline_dribble'
 
 export type ShopSkillId =
   | 'sh_buildup'
@@ -246,7 +265,7 @@ export type BaseTraitId =
   | 'enforcer'
 
 /** 球星专属特性的 id 是 star_ 加种子 id，比如 star_p001。 */
-export type TraitId = BaseTraitId | `star_${string}`
+export type TraitId = BaseTraitId | `star_${string}` | `ct_trait_${string}`
 
 export type StyleId =
   | 'gk_wall'

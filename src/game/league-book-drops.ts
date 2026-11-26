@@ -1,5 +1,6 @@
 import type { GameState, LeagueBookDrop, Player, PlayerMatchStats, SkillId, SkillTier } from './types.ts'
 import { SKILLS } from './data/skills.ts'
+import { isExclusiveSkill } from './data/tsubasa-specials.ts'
 import { getSkillTier } from './inheritance.ts'
 import { addLegendBook, ensureLegendBooks, hasBookAtOrAbove } from './legend-books.ts'
 import { FULL_MATCH_MINUTES } from './condition.ts'
@@ -51,7 +52,7 @@ export function awardLeagueBookDrops(game: GameState, input: LeagueBookDropInput
     const player = roster.get(statPlayerId(stat))
     if (!player) continue
     const eligible = (player.skills ?? []).filter((id: SkillId) => {
-      if (!Object.hasOwn(SKILLS, id)) return false
+      if (!Object.hasOwn(SKILLS, id) || isExclusiveSkill(id)) return false
       const dropTier = cappedLeagueDropTier(getSkillTier(player, id))
       return !hasBookAtOrAbove(game, id, dropTier)
     })

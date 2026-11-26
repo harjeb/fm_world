@@ -9,6 +9,7 @@ import { bestRoleForPlayer, validateLineup } from './squad.ts'
 import { curatedProfileFor } from './data/profiles-curated.ts'
 import { fmProfileFor } from './data/fm-profiles.generated.ts'
 import { styleSkillFor, styleTraitFor, styleWeightsFor } from './data/players.ts'
+import { tsubasaLoadoutFor } from './data/tsubasa-specials.ts'
 import { frozenPveTeam } from './pve-content.ts'
 import { startingCa } from './pve-strength.ts'
 
@@ -238,7 +239,8 @@ function buildPlayer(def: LegendTeamDef, tuple: LegendPlayerTuple, index: number
     ambition: 80 + Math.round(random() * 14),
     adaptability: 74 + Math.round(random() * 18),
   }
-  const signatureSkill = styleSkillFor(style)
+  const tsubasa = def.id === 'captain-tsubasa-all-stars' ? tsubasaLoadoutFor(enName) : undefined
+  const signatureSkill = tsubasa?.skillId ?? styleSkillFor(style)
   const actualCa = Math.round(caOf(attrs, isGk) * 10) / 10
   return {
     id: `legend-${def.id}-${String(index + 1).padStart(2, '0')}`,
@@ -259,11 +261,12 @@ function buildPlayer(def: LegendTeamDef, tuple: LegendPlayerTuple, index: number
     baseDetailedPositionsVersion: 1,
     baseDetailedPositions: inferDetailedPositions({ positions, foot: foot ?? 'R', style }),
     personality,
-    traitId: styleTraitFor(style),
+    traitId: tsubasa?.traitId ?? styleTraitFor(style),
     style,
     skills: [signatureSkill],
     skillTiers: { [signatureSkill]: 'rainbow' },
     signatureSkill,
+    ...(tsubasa ? { baseSkills: [signatureSkill] } : {}),
     version: 0,
     condition: 100,
     energy: 100,

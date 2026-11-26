@@ -1,4 +1,4 @@
-import { STAR_TRAITS } from '../data/star-traits.generated.ts'
+import { starTraitOf } from '../data/star-traits.ts'
 import type { TraitCondition } from '../data/star-traits.ts'
 import type { AttrKey, BaseTraitId } from '../types.ts'
 import { MAIN_ATTR_SCALE, MAX_ATTR_RATING } from '../scale.ts'
@@ -52,7 +52,7 @@ export class MatchRatings {
         value += homeAtmosphereBonus(homeTeam.stadiumStage)
       }
     }
-    const star = STAR_TRAITS[player.traitId]
+    const star = starTraitOf(player.traitId)
     if (star?.kind === 'attr' && star.attr === key && this.traitConditionMet(player, star.when, ctx) && this.traitRoll(player, 'attr', star.chance)) value += star.bonus / MAIN_ATTR_SCALE
     if (star?.kind === 'hotStreak' && key === 'shooting') value += (star.bonus / MAIN_ATTR_SCALE) * player.stats.goals
     value += this.teamTraitBonus(player.side, key)
@@ -184,7 +184,7 @@ export class MatchRatings {
       const traits: Record<string, number> = {}
       for (const team of this.stateOf().teams) {
         for (const carrier of team.players) {
-          const trait = STAR_TRAITS[carrier.traitId]
+          const trait = starTraitOf(carrier.traitId)
           if (!carrier.onPitch || (trait?.kind !== 'aura' && trait?.kind !== 'intimidate')) continue
           if (!this.traitConditionMet(carrier, trait.when)) continue
           const target = `${trait.kind === 'aura' ? carrier.side : opponentSide(carrier.side)}|${trait.attr}`

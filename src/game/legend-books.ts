@@ -1,6 +1,7 @@
 import type { GameState, LegendBook, LegendBookTier, SkillBookId, SkillTier } from './types.ts'
 import { LEGEND_SKILL_DROPS } from './data/legend-skills.ts'
 import { SKILLS } from './data/skills.ts'
+import { isExclusiveSkill } from './data/tsubasa-specials.ts'
 import { LEGEND_TEAMS } from './data/legend-teams.ts'
 import { economyOf, MAX_FANS } from './economy.ts'
 
@@ -23,7 +24,7 @@ export function ensureLegendBooks(game: GameState): boolean {
   }
   const seen = new Set<string>()
   const valid = game.legendBooks.filter((book) => {
-    if (!book || !Object.hasOwn(SKILLS, book.id) || (book.tier !== 'silver' && book.tier !== 'gold' && book.tier !== 'rainbow')) return false
+    if (!book || !Object.hasOwn(SKILLS, book.id) || isExclusiveSkill(book.id) || (book.tier !== 'silver' && book.tier !== 'gold' && book.tier !== 'rainbow')) return false
     const key = `${book.id}:${book.tier}`
     if (seen.has(key)) return false
     seen.add(key)
