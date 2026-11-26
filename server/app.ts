@@ -26,7 +26,7 @@ import { addTrainedCard, ensureCards, equipCard, playerCards, recyclePlayerCards
 import { ensurePve } from '../src/game/pve.ts'
 import { loadPveContent } from '../src/game/pve-content.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION, upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
-import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, migrateLegacyExpandedTactics, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, repairInflatedContractWages, rolloverOwnerlessTeams, syncAllClubLiveTactics, syncClubLiveTactics, wageForPlayer, worldForClub, worldSlots, worldWageBill, type WorldForClubReadOnlyCache } from '../src/game/world.ts'
+import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, migrateLegacyExpandedTactics, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, reconcileWorldStars, repairInflatedContractWages, rolloverOwnerlessTeams, syncAllClubLiveTactics, syncClubLiveTactics, wageForPlayer, worldForClub, worldSlots, worldWageBill, type WorldForClubReadOnlyCache } from '../src/game/world.ts'
 import { INITIAL_CHAMPIONS_CLUB_IDS, WORLD_CLUB_DEFS, isClubPlayerLocked, pickExpandedZoneClubs } from '../src/game/data/world-clubs.ts'
 import { rescaleLegacyRandomPlayer } from '../src/game/data/players.ts'
 import { lineupLockState } from '../src/game/season.ts'
@@ -63,7 +63,7 @@ import { absorbFreeAgents, aiClubIdOf, committedFunds, leadingBid, minimumBid, p
 import { isOnMarketToday } from '../src/game/market-window.ts'
 import { lineupRating } from '../src/game/club-rating.ts'
 import { runAIAuctionMarket } from '../src/game/ai-auction-market.ts'
-import { AI_SQUAD_LIMIT, advanceAIClub, releaseDepthSurplus, backfillAICardSkills, backfillAITierIncome, createAIClub, grantAllAISeasonShopBooks, recordAISigning, seedAIClubs } from '../src/game/ai-club.ts'
+import { AI_SQUAD_LIMIT, advanceAIClub, releaseDepthSurplus, backfillAICardSkills, backfillAITierIncome, createAIClub, grantAllAISeasonShopBooks, isRealStar, recordAISigning, registerAIStar, seedAIClubs } from '../src/game/ai-club.ts'
 import { agentView, applyAgentAction, playerView, type AgentOptions } from './agent.ts'
 import { clubNameError, normalizeClubName } from '../src/game/club-name.ts'
 import { negotiationDemands, SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../src/game/negotiation.ts'
@@ -491,6 +491,24 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   }
   // 赛季初商店技能书幂等补发：旧服重启升级后，当季无主 AI 球队立刻拿到对应级别的当季商店金书。
   const grantedAIShopBooks = grantAllAISeasonShopBooks(sharedWorld.world, sharedWorld.aiClubs, sharedWorld.seed, sharedWorld.owners) > 0
+  // 启动时核对全服 500 名真实球星归属与守恒：同步 AI 购入但未登记的球星，并找回因旧版换季漏记失踪的球星。
+  sharedWorld.reserveStars ??= []
+  const startupOwnerIds = new Set(Object.values(sharedWorld.owners))
+  const starAudit = reconcileWorldStars({
+    world: sharedWorld.world,
+    teams: sharedWorld.teams,
+    humanRosters: db.accounts.filter((account) => startupOwnerIds.has(account.id)).map((account) => account.game?.roster ?? []),
+    marketPool: sharedWorld.freeStars,
+    reserveStars: sharedWorld.reserveStars,
+    owners: sharedWorld.owners,
+  })
+  if (starAudit.syncedClubStars > 0 || starAudit.recoveredStars > 0) {
+    console.info(`全服球星核对完成：同步 AI 球星归属 ${starAudit.syncedClubStars} 人，找回失踪球星 ${starAudit.recoveredStars} 人（当前守恒 ${starAudit.totalPresent}/${starAudit.totalSeeds}）`)
+    if (starAudit.recoveredStars > 0) {
+      sharedWorld.marketVersion = (sharedWorld.marketVersion ?? 1) + 1
+    }
+  }
+  const reconciledStars = starAudit.syncedClubStars > 0 || starAudit.recoveredStars > 0
   // 以前 AI 买进来的球员没排进首发（只修“不合法”的阵容），一直坐在名单外：无主的 AI 球队按名单重排一次。
   // 有教练的球队阵容是教练自己排的，不动。
   refreshAILineups(Object.entries(sharedWorld.teams ?? {}).filter(([clubId]) => !sharedWorld.owners[clubId]).map(([, team]) => team))
@@ -507,7 +525,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   let sharedWorldVersion = 1
   let sharedTeamsPublicVersion = 1
   let sharedMatchBookVersion = 1
-  let worldDirty = rescaledLegacyRandoms || backfilledAICardSkills || backfilledAITierIncome || grantedAIShopBooks
+  let worldDirty = rescaledLegacyRandoms || backfilledAICardSkills || backfilledAITierIncome || grantedAIShopBooks || reconciledStars
   let worldWriteUrgent = false
   let worldWriteGen = 0
   let worldWriteTimer: ReturnType<typeof setTimeout> | null = null
@@ -912,9 +930,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (worldWindowOpen()) {
       aiPoachRound({
         clubs: sharedMarketClubs(), season: serverSeason(), round, seed: sharedWorld.seed,
-        onMove: (move) => {
+        onMove: (move, player) => {
           const seller = sharedWorld.world.clubs.find((club) => club.id === move.sellerId)
           if (seller) seller.starPlayerIds = seller.starPlayerIds.filter((id) => id !== move.playerId)
+          registerAIStar(sharedWorld.world, move.buyerId, sharedWorld.teams?.[move.buyerId], player)
           publishDeal({ playerId: move.playerId, playerName: move.playerName, club: sharedWorld.teams?.[move.buyerId]?.name ?? move.buyerId, amount: move.amount, at: now(), kind: 'club', seller: seller?.name })
           changed = true
         },
@@ -1466,6 +1485,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       recordAISigning(state, signing, amount)
       noteAIBuy(state, serverSeason())
       team.players = [...team.players, signing]
+      registerAIStar(sharedWorld.world, clubId, team, signing)
       // 拍下的球员要能进首发：只修“不合法”的阵容会让他一直坐在名单外。
       refreshAILineup(team)
       const club = sharedWorld.world.clubs.find((item) => item.id === clubId)
@@ -1877,6 +1897,10 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     const result = respondToOffer(account.game, offerId, accept, now(), buyer, serverSeason())
     if (result.ok) {
       if (accept) {
+        if (offer && buyer) {
+          const moved = buyer.team.players.find((p) => p.id === offer.playerId)
+          if (moved) registerAIStar(sharedWorld.world, buyer.id, buyer.team, moved)
+        }
         publishAccountDeal(account)
         persistWorld()
       }
@@ -2582,6 +2606,16 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         const settled = syncPublishedMatches(account)
         if (settled.changed) persistAccount(account)
       }
+      // 换季前先同步全部无主 AI 现役真实球星到 old.clubs[].starPlayerIds，确保当季购入的球星在换季滚动中完整留存。
+      reconcileWorldStars({
+        world: old,
+        teams: sharedWorld.teams,
+        humanRosters: managed.map(({ account }) => account.game.roster),
+        marketPool: market.pool,
+        reserveStars: sharedWorld.reserveStars ?? [],
+        owners: sharedWorld.owners,
+        recoverMissing: false,
+      })
       const sample = managed.find(({ account }) => account.game.season.index === old.seasonIndex)
       const representativeId = sample?.clubId ?? old.clubs.find((club) => club.tier === 'division2')!.id
       let representative: GameState | null = sample
@@ -2712,9 +2746,36 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       sharedWorld.matchBook!.suspensions = {}
       sharedWorld.matchBook!.yellowCounts = {}
       sharedWorld.matchBook!.cupDiscipline = {}
-      // 电脑球队也过了一个赛季：清掉已经并进名单的签入，账本和设施继续滚，并按新赛季级别发放商店技能书。
+      // 电脑球队也过了一个赛季：清掉已经并进名单的签入，账本和设施继续滚，并按新赛季级别发放商店技能书、核对球星守恒。
       for (const state of Object.values(sharedWorld.aiClubs ?? {})) state.signings = []
       grantAllAISeasonShopBooks(next, sharedWorld.aiClubs, sharedWorld.seed, sharedWorld.owners)
+      sharedWorld.reserveStars ??= []
+      const rolledAudit = reconcileWorldStars({
+        world: next,
+        teams,
+        humanRosters: drafts.map(({ game }) => game.roster),
+        marketPool: market.pool,
+        reserveStars: sharedWorld.reserveStars,
+        owners: sharedWorld.owners,
+      })
+      // 自由市场真实球星不足 250 人时，从 150 人储备池顺次补入（与单机换季一致），避免多季买星后市场见底而储备闲置。
+      let marketStarCount = market.pool.filter(isRealStar).length
+      let reserveToppedUp = 0
+      while (marketStarCount < 250 && sharedWorld.reserveStars.length > 0) {
+        const star = sharedWorld.reserveStars.shift()!
+        star.releasedToMarket = true
+        market.pool.push(star)
+        if (isRealStar(star)) marketStarCount++
+        reserveToppedUp++
+      }
+      if (rolledAudit.recoveredStars > 0 || reserveToppedUp > 0) {
+        cachedFrozenReserveStars = null
+        const refreshedReserve = frozenSharedReserveStars()
+        for (const { game } of drafts) game.reserveStars = refreshedReserve
+        market.version++
+        persistMarket()
+        broadcastMarket()
+      }
       persistWorld({ world: true, teams: true, matchBook: true, immediate: true })
       for (const { account } of drafts) {
         if (isAccountOnlineNow(account)) account.lastOnlineSeason = next.seasonIndex

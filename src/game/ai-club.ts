@@ -168,6 +168,54 @@ const AI_DEPTH_TARGET = FULL_SQUAD + 4
 const AI_SIGNING_LIMIT = 6
 export const AI_BALANCE_CAP = 60_000_000
 
+/** 是否为真实球星（含退役重生球星），与随机填充普通人区分。 */
+export function isRealStar(player: Pick<Player, 'starKey' | 'era'>): boolean {
+  return Boolean(player.starKey || (player.era && player.era !== 'random'))
+}
+
+/**
+ * 同步 AI 俱乐部新签入/挖入的真实球星归属到 world.clubs[].starPlayerIds、team.starPlayerIds 与 world.starAges，
+ * 避免跨赛季滚动时因未登记而被当成无效球星丢弃。
+ */
+export function registerAIStar(
+  world: Pick<WorldState, 'clubs' | 'starAges'> | undefined,
+  clubId: string,
+  team: Pick<AITeam, 'starPlayerIds' | 'playerNames'> | undefined,
+  player: Pick<Player, 'id' | 'name' | 'age' | 'starKey' | 'era'>,
+): boolean {
+  if (!isRealStar(player)) return false
+  let changed = false
+  if (team) {
+    if (!team.starPlayerIds.includes(player.id)) {
+      team.starPlayerIds = [...team.starPlayerIds, player.id]
+      changed = true
+    }
+    if (!team.playerNames.includes(player.name)) {
+      team.playerNames = [...team.playerNames, player.name]
+      changed = true
+    }
+  }
+  if (world) {
+    for (const other of world.clubs) {
+      if (other.id === clubId) continue
+      if (other.starPlayerIds.includes(player.id)) {
+        other.starPlayerIds = other.starPlayerIds.filter((id) => id !== player.id)
+        changed = true
+      }
+    }
+    const club = world.clubs.find((item) => item.id === clubId)
+    if (club && !club.starPlayerIds.includes(player.id)) {
+      club.starPlayerIds = [...club.starPlayerIds, player.id]
+      changed = true
+    }
+    if (world.starAges[player.id] === undefined) {
+      world.starAges[player.id] = player.age ?? 24
+      changed = true
+    }
+  }
+  return changed
+}
+
 /** 电脑球队眼里的身价：和市场估值同一份曲线，出价才不会总是低于起拍价。 */
 export function playerValue(player: Pick<Player, 'attrs' | 'positions'>): number {
   return playerMarketValue(player)
@@ -413,11 +461,12 @@ function equipSlot(state: AIClubState, players: Player[], slot: number): boolean
   return false
 }
 
-/** 把签下的球员塞进阵容：同位置挑最弱的换掉，位置不合适就补一个空位。 */
+/** 把签下的球员塞进阵容：按原始 CA 与球星身份挑最弱的普通人换掉，避免未培养新援被已练过的普通人压制。 */
 export function mergeSignings(state: AIClubState, players: Player[]): Player[] {
   if (!state.signings.length) return players
   const squad = [...players]
-  const pending = [...state.signings].sort((a, b) => playerCa(b) - playerCa(a)).slice(0, AI_SIGNING_LIMIT)
+  const rankScore = (p: Player) => (isRealStar(p) ? 1000 : 0) + originalCa(p)
+  const pending = [...state.signings].sort((a, b) => rankScore(b) - rankScore(a)).slice(0, AI_SIGNING_LIMIT)
   for (const signing of pending) {
     // 当季名单可能已经并入这笔签约，重建球队时不能重复添加同一名球员。
     if (squad.some((player) => player.id === signing.id)) continue
@@ -427,16 +476,31 @@ export function mergeSignings(state: AIClubState, players: Player[]): Player[] {
     }
     const position = primaryPosition(signing)
     let weakestIndex = -1
-    let weakest = Infinity
+    let weakestScore = Infinity
     for (let index = 0; index < squad.length; index++) {
       if (primaryPosition(squad[index]) !== position) continue
-      const rating = playerCa(squad[index])
-      if (rating < weakest) {
-        weakest = rating
+      const score = rankScore(squad[index])
+      if (score < weakestScore) {
+        weakestScore = score
         weakestIndex = index
       }
     }
-    if (weakestIndex >= 0 && playerCa(signing) > weakest) squad[weakestIndex] = signing
+    // 同位置全是更强球星时，若新援是真实球星，也允许替掉全队最弱的一名普通人（同场外/门将类别）。
+    if ((weakestIndex < 0 || rankScore(signing) <= weakestScore) && isRealStar(signing)) {
+      const signingGk = signing.positions.GK > 0
+      weakestIndex = -1
+      weakestScore = Infinity
+      for (let index = 0; index < squad.length; index++) {
+        const candidate = squad[index]
+        if (isRealStar(candidate) || (candidate.positions.GK > 0) !== signingGk) continue
+        const score = rankScore(candidate)
+        if (score < weakestScore) {
+          weakestScore = score
+          weakestIndex = index
+        }
+      }
+    }
+    if (weakestIndex >= 0 && rankScore(signing) > weakestScore) squad[weakestIndex] = signing
   }
   return squad
 }
@@ -773,25 +837,32 @@ export function aiBidFor(input: AIBidInput): number | null {
   }
 
   const gk = player.positions.GK > 0
+  // 转会不带培养卡：队内球员统一按原始 CA 与原始身价比较，避免练出培养卡的普通人把未培养的市场球星全部拦死。
   const ca = caOf(player.attrs, gk)
   const position = primaryPosition(player)
   const same = squad.filter((item) => primaryPosition(item) === position)
-  const weakest = same.length ? Math.min(...same.map((item) => playerCa(item))) : 0
+  const weakest = same.length ? Math.min(...same.map((item) => originalCa(item))) : 0
   const need = ca - weakest
-  const averageValue = squad.length ? squad.reduce((sum, item) => sum + playerValue(item), 0) / squad.length : 0
+  const randomsAtPos = same.filter((item) => !isRealStar(item))
+  const starUpgradesRandom = isRealStar(player)
+    && randomsAtPos.length > 0
+    && ca > Math.min(...randomsAtPos.map((item) => originalCa(item))) + 5
+  const averageValue = squad.length ? squad.reduce((sum, item) => sum + basePlayerMarketValue(item), 0) / squad.length : 0
 
   const reasons: string[] = []
   if (same.length === 0) reasons.push('missing')
-  else if (need >= Math.max(12, ca * 0.04)) reasons.push('upgrade')
+  else if (need >= Math.max(12, ca * 0.04) || starUpgradesRandom) reasons.push('upgrade')
   if (averageValue > 0 && value <= averageValue * 0.8) reasons.push('bargain')
   if (squad.length < AI_DEPTH_TARGET) reasons.push('depth')
   if (!reasons.length) return null
   // 明显不如现有球员、也不缺人，就不花这个钱。
-  if (need < -ca * 0.03 && !reasons.includes('depth') && !reasons.includes('missing')) return null
+  if (need < -ca * 0.03 && !starUpgradesRandom && !reasons.includes('depth') && !reasons.includes('missing')) return null
 
   const big = reasons.includes('upgrade') || reasons.includes('missing')
+  // 用真实球星替换普通随机人时，单笔允许动用更高比例的可用现金（65%），让有钱的顶级/一级队买得起大牌。
+  const cashRatio = big && starUpgradesRandom ? 0.65 : 0.4
   const cap = Math.min(
-    Math.floor(spendable * 0.4),
+    Math.floor(spendable * cashRatio),
     Math.round(value * profile.overpay * (big ? 1.1 : 1)),
   )
   if (cap < minimum) return null
@@ -815,14 +886,28 @@ export function strongestFirst(a: { price: number; ca: number; player: Player },
   return b.ca - a.ca || a.price - b.price || a.player.id.localeCompare(b.player.id)
 }
 
-/** 每队每轮最多释放一名冗员；绝不通过裁人减少两套阵容的实际覆盖数。 */
+/**
+ * 每队每轮最多释放一名冗员；绝不通过裁人减少两套阵容的实际覆盖数。
+ * - 两套阵容尚有缺口（depth.missing > 0）时，释放可替代的非首发球员腾位置；
+ * - 两套阵容已齐但阵容逼近上限（顶级/一级 ≥ 27 人、二级满编 29 人）时，
+ *   同样释放最弱的非首发普通随机人（绝不释放真实球星），留出空位持续用市场球星替换普通人。
+ */
 export function releaseDepthSurplus(team: AITeam, state: AIClubState, club: WorldClub, pool: Player[], season: number, round: number): Player | undefined {
   if (team.players.length <= 22 || state.lastDepthRelease === `${season}:${round}`) return
   const depth = analyzeAIDepth(team)
-  if (!depth.missing) return
+  const trimForUpgrade = !depth.missing && (
+    team.players.length >= AI_SQUAD_LIMIT
+    || (club.tier !== 'division2' && team.players.length >= AI_SQUAD_LIMIT - 2)
+  )
+  if (!depth.missing && !trimForUpgrade) return
   const starters = new Set(team.lineup.starters.map(s => s.playerId))
-  const p = team.players.filter(p => depth.expendable.has(p.id) && !starters.has(p.id) && !pool.some(f => f.id === p.id))
-    .sort((a, b) => Number(!!a.starKey) - Number(!!b.starKey) || originalCa(a) - originalCa(b) || a.id.localeCompare(b.id))[0]
+  const p = team.players.filter(p =>
+    depth.expendable.has(p.id)
+    && !starters.has(p.id)
+    && !pool.some(f => f.id === p.id)
+    && (!trimForUpgrade || !isRealStar(p)),
+  )
+    .sort((a, b) => Number(isRealStar(a)) - Number(isRealStar(b)) || originalCa(a) - originalCa(b) || a.id.localeCompare(b.id))[0]
   if (!p) return
   team.players = team.players.filter(x => x.id !== p.id)
   team.starPlayerIds = team.starPlayerIds.filter(id => id !== p.id)
@@ -877,6 +962,7 @@ export function aiSignFreeAgents(game: Pick<GameState, 'transferNews'> & { world
       noteAIBuy(state, season)
       taken.add(pick.player.id); signed++
       club.players = [...club.players, pick.player]
+      registerAIStar(game.world, club.id, club, pick.player)
       refreshAILineup(club)
       depth = analyzeAIDepth(club)
       if (fillingGap && !depth.missing) break

@@ -17,17 +17,24 @@ import {
   equipAICards,
   grantAISeasonShopBooks,
   grantAllAISeasonShopBooks,
+  isRealStar,
+  mergeSignings,
   playerCa,
   playerValue,
   primaryPosition,
   recordAISigning,
+  registerAIStar,
+  releaseDepthSurplus,
   runAIClubs,
   seedAIClubs,
 } from '../src/game/ai-club.ts'
 import { AI_BID_PREFIX, AUCTION_DURATION_MS, placeAIBid, settleAuctions, type FreeMarket } from '../src/game/auction.ts'
 import { facilityUpgradeCost, facilityLevel, projectedRoundIncome } from '../src/game/economy.ts'
 import { AVERAGE_ROUND_GAME_DAYS } from '../src/game/calendar.ts'
-import { cachedOwnerlessTeams, createWorldGame } from '../src/game/world.ts'
+import { buildOwnerlessTeams, cachedOwnerlessTeams, createOwnerlessWorld, createWorldGame, reconcileWorldStars, rolloverOwnerlessTeams } from '../src/game/world.ts'
+import { PLAYER_SEEDS } from '../src/game/data/players.ts'
+import { basePlayerMarketValue } from '../src/game/pricing.ts'
+import { analyzeAIDepth } from '../src/game/ai-depth.ts'
 import { pickAIPartners, pickAITrainingBooks, simulateAITrainingRound, simulateAITrainingSession } from '../src/game/ai-training.ts'
 import { shopCatalog } from '../src/game/shop.ts'
 import { bookScopeMatches } from '../src/game/legend-learning.ts'
@@ -826,5 +833,196 @@ describe('AI 培养卡技能保存、装备与队友传承', () => {
       }
     }
     expect(learnedShopGold).toBe(true)
+  })
+})
+
+describe('顶级队引援买星与全服球星守恒', () => {
+  it('经过多轮培养的高 CA 顶级队仍按原始 CA 与原始身价评估，积极竞购市场顶级球星替换普通人', () => {
+    const { world, freeStars } = createOwnerlessWorld(2026)
+    const teams = buildOwnerlessTeams(world, 2026)
+    const club = world.clubs.find((c) => c.tier === 'champions')!
+    const team = structuredClone(teams[club.id])
+    const ai = state(30_000_000, 'champions')
+
+    // 模拟已培养 5 轮：队内普通球员的现役 CA 涨到 600~800，而市场球星未培养仅 ~280
+    advanceAIClub(ai, { id: club.id, tier: 'champions' }, team, 5, 2026, true, 1)
+    const randomPlayers = team.players.filter((p) => !isRealStar(p))
+    expect(randomPlayers.some((p) => playerCa(p) > 450)).toBe(true)
+
+    // 先把缺位（若有）补齐到两套深度完整，再验证满深度下仍会积极买顶级市场球星替换普通人
+    const squad = [...team.players]
+    let depth = analyzeAIDepth({ lineup: team.lineup, players: squad })
+    for (const star of [...freeStars].sort((a, b) => playerCa(b) - playerCa(a))) {
+      if (depth.missing === 0) break
+      if (!depth.improves(star)) continue
+      const val = basePlayerMarketValue(star)
+      const bid = aiBidFor({ state: ai, tier: 'champions', player: untrainedPlayer(star), squad, depth, value: val, minimum: val })
+      expect(bid).not.toBeNull()
+      squad.push(untrainedPlayer(star))
+      depth = analyzeAIDepth({ lineup: team.lineup, players: squad })
+    }
+    expect(depth.missing).toBe(0)
+    expect(squad.length).toBeLessThan(AI_SQUAD_LIMIT)
+
+    // 两套深度齐全、且队内普通人已经练到高 CA 的情况下，仍按原始 CA 与原始身价积极竞购市场头牌球星
+    const inSquad = new Set(squad.map((p) => p.id))
+    const topStars = [...freeStars]
+      .filter((s) => !inSquad.has(s.id))
+      .sort((a, b) => playerCa(b) - playerCa(a))
+      .slice(0, 12)
+    const willingBids = topStars.filter((star) => {
+      const value = basePlayerMarketValue(star)
+      const bid = aiBidFor({
+        state: ai,
+        tier: 'champions',
+        player: untrainedPlayer(star),
+        squad,
+        depth,
+        value,
+        minimum: value,
+      })
+      return bid !== null
+    })
+    expect(willingBids.length).toBeGreaterThanOrEqual(8)
+  })
+
+  it('顶级/一级队接近满编时每轮解约 1 名非主力普通人腾位，不误伤球星且不破坏两套深度；满编合并时球星优先替换普通人', () => {
+    const { world, freeStars } = createOwnerlessWorld(2026)
+    const teams = buildOwnerlessTeams(world, 2026)
+    const club = world.clubs.find((c) => c.tier === 'champions')!
+    const team = structuredClone(teams[club.id])
+    const ai = state(25_000_000, 'champions')
+    // 先把阵容塞满到 29 人（补入普通外场球员，确保两套深度完整）
+    const extraRandoms = Object.values(teams)
+      .filter((t) => t.id !== club.id)
+      .flatMap((t) => t.players.filter((p) => !isRealStar(p) && p.positions.GK === 0))
+    while (team.players.length < AI_SQUAD_LIMIT && extraRandoms.length > 0) {
+      const filler = structuredClone(extraRandoms.shift()!)
+      filler.id = `extra-filler-${team.players.length}`
+      team.players.push(filler)
+    }
+    expect(team.players.length).toBe(AI_SQUAD_LIMIT)
+    const starsBefore = team.players.filter(isRealStar).map((p) => p.id)
+
+    // 解约 1 名冗余普通人腾出买星空间，且不放走真实球星、不降低两套位置覆盖
+    const depthBefore = analyzeAIDepth(team)
+    const releasePool: Player[] = []
+    const released = releaseDepthSurplus(team, ai, club, releasePool, 1, 5)
+    expect(released).toBeDefined()
+    expect(isRealStar(released!)).toBe(false)
+    expect(releasePool).toHaveLength(1)
+    expect(team.players.length).toBe(AI_SQUAD_LIMIT - 1)
+    expect(team.players.filter(isRealStar).map((p) => p.id)).toEqual(starsBefore)
+    expect(analyzeAIDepth(team).missing).toBeLessThanOrEqual(depthBefore.missing)
+    // 同轮幂等：不重复放人
+    expect(releaseDepthSurplus(team, ai, club, releasePool, 1, 5)).toBeUndefined()
+
+    // 满编合并测试：把队内普通球员都大幅培养到高 CA，新签入一名未培养真实球星仍应替换普通人进队
+    const fullTeam = structuredClone(teams[club.id])
+    while (fullTeam.players.length < AI_SQUAD_LIMIT && extraRandoms.length > 0) {
+      const filler = structuredClone(extraRandoms.shift()!)
+      filler.id = `full-filler-${fullTeam.players.length}`
+      fullTeam.players.push(filler)
+    }
+    const trainedFull = fullTeam.players.map((p) => (isRealStar(p) ? p : scale(p, 2.2)))
+    const starSigning = freeStars.find((p) => isRealStar(p) && p.positions.GK === 0)!
+    const aiMerge = state(20_000_000, 'champions')
+    recordAISigning(aiMerge, starSigning, 5_000_000)
+    const merged = mergeSignings(aiMerge, trainedFull)
+    expect(merged.length).toBe(AI_SQUAD_LIMIT)
+    expect(merged.some((p) => p.id === starSigning.id)).toBe(true)
+  })
+
+  it('AI 购入的真实球星同步登记后，跨 S1→S2→S3 换季滚动完整留存不消失', () => {
+    const { world, freeStars } = createOwnerlessWorld(2026)
+    const teams = buildOwnerlessTeams(world, 2026)
+    const aiClubs = seedAIClubs(world, 2026)
+    const club = world.clubs.find((c) => c.tier === 'champions')!
+    const team = teams[club.id]
+    const bought = freeStars.shift()!
+
+    // S1 购入球星并同步归属
+    team.players.push(untrainedPlayer(bought))
+    recordAISigning(aiClubs[club.id], bought, 8_000_000)
+    expect(registerAIStar(world, club.id, team, bought)).toBe(true)
+    expect(club.starPlayerIds).toContain(bought.id)
+
+    // S1 -> S2 滚动并清掉已合并的 postings
+    world.seasonIndex = 2
+    const s2Teams = rolloverOwnerlessTeams(world, 2026 + 2, teams, aiClubs, new Set(freeStars.map((p) => p.id)))
+    for (const s of Object.values(aiClubs)) s.signings = []
+    expect(s2Teams[club.id].players.some((p) => p.id === bought.id)).toBe(true)
+
+    // S2 -> S3 滚动：此前 signings 清空后会把未登记球星抹掉；修复后必须完整留存
+    world.seasonIndex = 3
+    const s3Teams = rolloverOwnerlessTeams(world, 2026 + 3, s2Teams, aiClubs, new Set(freeStars.map((p) => p.id)))
+    expect(s3Teams[club.id].players.some((p) => p.id === bought.id)).toBe(true)
+    expect(world.clubs.find((c) => c.id === club.id)!.starPlayerIds).toContain(bought.id)
+  })
+
+  it('reconcileWorldStars 核对全服 500 名真实球星守恒：同步漏记归属、找回失踪球星、不重复玩家球星与重生且幂等', () => {
+    const { world, freeStars, reserveStars } = createOwnerlessWorld(2026)
+    const teams = buildOwnerlessTeams(world, 2026)
+    const club = world.clubs.find((c) => c.tier === 'champions')!
+    const team = teams[club.id]
+
+    // 1. 模拟旧版未登记购入球星（在 team.players 里但不在 club.starPlayerIds 里）
+    const unregistered = freeStars.shift()!
+    team.players.push(untrainedPlayer(unregistered))
+
+    // 2. 模拟 3 名因旧版换季卡丢的失踪球星（既不在任何球队，也不在市场/储备池）
+    const vanished = [freeStars.shift()!, freeStars.shift()!, reserveStars.shift()!]
+
+    // 3. 模拟 1 名由真人玩家持有的球星（不能被重复补回）
+    const humanStar = freeStars.shift()!
+
+    // 4. 模拟 1 名已退役并重生为 regen 的球星（按 starKey 计为同一位，不重复补回）
+    const retiredOrig = freeStars.shift()!
+    const regenStar: Player = {
+      ...structuredClone(retiredOrig),
+      id: `regen-${retiredOrig.starKey}-1`,
+      age: 16,
+      generation: 1,
+    }
+    freeStars.push(regenStar)
+
+    const audit1 = reconcileWorldStars({
+      world,
+      teams,
+      humanRosters: [[humanStar]],
+      marketPool: freeStars,
+      reserveStars,
+    })
+    expect(audit1.syncedClubStars).toBeGreaterThanOrEqual(1)
+    expect(audit1.recoveredStars).toBe(vanished.length)
+    expect(audit1.totalPresent).toBe(PLAYER_SEEDS.length)
+    expect(audit1.totalSeeds).toBe(PLAYER_SEEDS.length)
+    expect(club.starPlayerIds).toContain(unregistered.id)
+
+    // 找回的球星全部回到市场池或储备池，且无任何重复 starKey
+    const allStars = [
+      humanStar,
+      ...Object.values(teams).flatMap((t) => t.players.filter(isRealStar)),
+      ...freeStars.filter(isRealStar),
+      ...reserveStars.filter(isRealStar),
+    ]
+    const allKeys = allStars.map((p) => p.starKey!)
+    expect(allKeys.length).toBe(PLAYER_SEEDS.length)
+    expect(new Set(allKeys).size).toBe(PLAYER_SEEDS.length)
+    for (const v of vanished) {
+      expect(allKeys).toContain(v.starKey!)
+    }
+
+    // 二次调用完全幂等
+    const audit2 = reconcileWorldStars({
+      world,
+      teams,
+      humanRosters: [[humanStar]],
+      marketPool: freeStars,
+      reserveStars,
+    })
+    expect(audit2.syncedClubStars).toBe(0)
+    expect(audit2.recoveredStars).toBe(0)
+    expect(audit2.totalPresent).toBe(PLAYER_SEEDS.length)
   })
 })

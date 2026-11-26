@@ -12,8 +12,9 @@ import type { AIClubState, AITeam, GameState, Player, TierId, TransferOffer } fr
 import { recordTransfer } from './transfer-news.ts'
 import { analyzeAIDepth } from './ai-depth.ts'
 import { caOf } from './ca.ts'
-import { AI_SQUAD_LIMIT, aiBidFor, aiTransferCashBudget, recordAISigning, strongestFirst } from './ai-club.ts'
-import { playerMarketValue } from './pricing.ts'
+import { AI_SQUAD_LIMIT, aiBidFor, aiTransferCashBudget, recordAISigning, registerAIStar, strongestFirst } from './ai-club.ts'
+import { untrainedPlayer } from './cards.ts'
+import { basePlayerMarketValue, playerMarketValue } from './pricing.ts'
 import { MIN_SQUAD, refreshAILineup, repairLineup, validateLineup } from './squad.ts'
 import { sellerSquadError, transferWindowOpen } from './market.ts'
 import { youthTransferBlocked } from './youth.ts'
@@ -47,13 +48,15 @@ function repairTeam(team: AITeam): void {
 }
 
 /** 一名球员进 AI 球队：名单、阵容、账本（扣钱、记进签约名单、占一个买进名额）。 */
-export function joinAIClub(buyer: MarketClub, player: Player, amount: number, season: number): void {
-  delete player.contract
-  delete player.unhappy
-  buyer.team.players = [...buyer.team.players.filter((item) => item.id !== player.id), player]
+export function joinAIClub(buyer: MarketClub, player: Player, amount: number, season: number, world?: Pick<import('./types.ts').WorldState, 'clubs' | 'starAges'>): void {
+  const clean = untrainedPlayer(player)
+  delete clean.contract
+  delete clean.unhappy
+  buyer.team.players = [...buyer.team.players.filter((item) => item.id !== clean.id), clean]
+  registerAIStar(world, buyer.id, buyer.team, clean)
   // 新援要能进首发：只修“不合法”的阵容会让他一直坐在名单外。
   refreshAILineup(buyer.team)
-  recordAISigning(buyer.state, player, amount)
+  recordAISigning(buyer.state, clean, amount)
   noteAIBuy(buyer.state, season)
 }
 
@@ -92,7 +95,7 @@ export function aiPoachRound(input: {
     const depth = analyzeAIDepth(seller.team)
     return seller.team.players.flatMap(player => {
       if (sellerSquadError(seller.team, player, depth)) return []
-      const value = playerMarketValue(player)
+      const value = basePlayerMarketValue(player)
       const depthShortage = !depth.expendable.has(player.id) && !seller.team.lineup.starters.some((starter) => starter.playerId === player.id)
       const terms = assessRelease({ player, lineup: seller.team.lineup, minutes: input.appearances?.[player.id], value, depthShortage })
       return terms.asking === null ? [] : [{ seller, player, price: terms.asking, value, terms, ca: caOfPlayer(player), depthShortage }]
@@ -108,7 +111,7 @@ export function aiPoachRound(input: {
     for (const { seller, player, price, value, terms, depthShortage } of listed) {
       if (seller === buyer || TIER_RANK[seller.tier] > TIER_RANK[buyer.tier] || !seller.team.players.includes(player)) continue
       const amount = price
-      if (!aiBidFor({ state: buyer.state, tier: buyer.tier, player, squad, depth, value, minimum: amount, buysLeft, committed: buyer.committed })) continue
+      if (!aiBidFor({ state: buyer.state, tier: buyer.tier, player: untrainedPlayer(player), squad, depth, value, minimum: amount, buysLeft, committed: buyer.committed })) continue
       const sellerDepth = analyzeAIDepth(seller.team)
       if (sellerSquadError(seller.team, player, sellerDepth) || (!depthShortage && !sellerDepth.expendable.has(player.id))) continue
       if (!releaseRoll(splitSeed(input.seed, `poach-${season}-${round}-${buyer.id}`), player.id, amount, releaseChance(terms, amount))) continue
@@ -153,7 +156,7 @@ export function generateAIOffers(input: { game: GameState; clubs: MarketClub[]; 
   if (game.roster.length <= MIN_SQUAD) return null
   const seen = new Set((game.transferOffers ?? []).map(o => o.id))
   const targets = game.roster.filter(player => !youthTransferBlocked(player, now) && !(game.training[player.id] && !game.training[player.id].completed))
-    .map(player => ({ player, terms: humanSaleTerms(game, player), value: playerMarketValue(player), ca: caOfPlayer(player) }))
+    .map(player => ({ player, terms: humanSaleTerms(game, player), value: basePlayerMarketValue(player), ca: caOfPlayer(player) }))
   let first: TransferOffer | null = null
   for (const buyer of clubs) {
     const orders = pending.filter(o => o.clubId === buyer.id)
@@ -175,7 +178,7 @@ export function generateAIOffers(input: { game: GameState; clubs: MarketClub[]; 
       if (seen.has(id)) continue
       // 玩家决定是否放人：估值只用于衡量预算，不因其在玩家队里是主力而禁止询价。
       if (price > budget) continue
-      if (!aiBidFor({ state: buyer.state, tier: buyer.tier, player, squad, depth, value, minimum: value, committed, buysLeft })) continue
+      if (!aiBidFor({ state: buyer.state, tier: buyer.tier, player: untrainedPlayer(player), squad, depth, value, minimum: value, committed, buysLeft })) continue
       const offer: TransferOffer = { id, clubId: buyer.id, clubName: buyer.name, tier: buyer.tier, playerId: player.id, playerName: player.name,
         amount: price, value, createdAt: now, expiresAt: now + OFFER_RESPONSE_MS, status: 'pending' }
       ;(game.transferOffers ??= []).push(offer)
@@ -263,7 +266,7 @@ export function respondToOffer(game: GameState, offerId: string, accept: boolean
   }
   economyOf(game).balance += offer.amount
   creditTransferSale(game, offer.amount)
-  joinAIClub(buyer, player, offer.amount, season)
+  joinAIClub(buyer, player, offer.amount, season, game.world)
   offer.status = 'accepted'
   offer.resolvedAt = now
   recordTransfer(game, player, buyer.name, offer.amount, 'offer', game.clubName, now, offer.value)
@@ -305,6 +308,8 @@ export function runLocalTransfers(game: GameState, round: number, now: number): 
       recordTransfer(game, player, buyerName, move.amount, 'club', sellerName, now)
       const seller = game.world?.clubs.find((club) => club.id === move.sellerId)
       if (seller) seller.starPlayerIds = seller.starPlayerIds.filter((id) => id !== move.playerId)
+      const buyerClub = clubs.find((club) => club.id === move.buyerId)
+      registerAIStar(game.world, move.buyerId, buyerClub?.team, player)
     },
   })
   generateAIOffers({ game, clubs, season, round, now, seed: game.seed })

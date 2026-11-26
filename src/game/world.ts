@@ -24,7 +24,8 @@ import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION } from './names.ts'
 import { FULL_SQUAD, MIN_SQUAD, autoFillLineup, refreshAILineup, repairLineup, validateLineup } from './squad.ts'
 import { applyAITacticsToLineup } from './ai-tactics.ts'
 import { inferStyleForInstructions } from './pes/tactics.ts'
-import { equipAICards, grantAllAISeasonShopBooks, mergeSignings, seedAIClubs } from './ai-club.ts'
+import { equipAICards, grantAllAISeasonShopBooks, isRealStar, mergeSignings, registerAIStar, seedAIClubs } from './ai-club.ts'
+import { untrainedPlayer } from './cards.ts'
 import { caOf } from './ca.ts'
 import { derivedRng, splitSeed, hashString } from './rng.ts'
 import { simulateAIvsAIState } from './match/setup.ts'
@@ -591,7 +592,8 @@ export function rolloverOwnerlessTeams(
     })
     const check = validateLineup(squad, lineup)
     if (!check.valid) throw new Error(`球队 ${club.name} 阵容不合法：${check.errors.join('；')}`)
-    const starNames = club.starPlayerIds.map((id) => seedById(id)?.name).filter((name): name is string => !!name)
+    const squadById = new Map(squad.map((p) => [p.id, p]))
+    const starNames = club.starPlayerIds.map((id) => squadById.get(id)?.name ?? seedById(id)?.name).filter((name): name is string => !!name)
     return { ...club, players: squad, lineup, playerNames: starNames }
   }
 
@@ -662,6 +664,139 @@ export function rolloverOwnerlessTeams(
     out[club.id] = buildAITeam(club, kept)
   }
   return out
+}
+
+export type StarReconcileResult = {
+  syncedClubStars: number
+  recoveredStars: number
+  totalPresent: number
+  totalSeeds: number
+}
+
+function starKeyOf(player: Pick<Player, 'id' | 'seedId' | 'starKey'>): string | undefined {
+  if (player.starKey) return player.starKey
+  if (player.seedId && seedById(player.seedId)) return player.seedId
+  if (seedById(player.id)) return player.id
+  return undefined
+}
+
+/**
+ * 全服 500 名真实球星归属同步与守恒自愈（幂等）：
+ * 1. 将无主 AI 现役名单中的真实球星同步回 club.starPlayerIds / team.starPlayerIds / world.starAges，
+ *    避免 AI 通过竞拍/自由市场/挖人购入的球星在跨季滚动时被误清；
+ * 2. 统计所有玩家名单、AI 名单、市场池与储备池中现存球星的 starKey（含退役重生）；
+ * 3. 若有真实球星因历史换季漏记而完全失踪，按原版补回市场池/储备池，保证 500 名球星严格守恒且不重复。
+ */
+export function reconcileWorldStars(input: {
+  world: WorldState
+  teams?: Readonly<Record<string, AITeam>>
+  humanRosters?: readonly (readonly Player[])[]
+  marketPool: Player[]
+  reserveStars: Player[]
+  owners?: Readonly<Record<string, string>>
+  /** 单机模式仅加载玩家所在赛区的 teams，其他赛区俱乐部以 club.starPlayerIds 为准。 */
+  allowUnloadedClubStars?: boolean
+  /** 默认 true；设为 false 时仅同步 AI 队内现役球星归属，不向市场/储备池补回失踪球星。 */
+  recoverMissing?: boolean
+}): StarReconcileResult {
+  const {
+    world,
+    teams,
+    humanRosters = [],
+    marketPool,
+    reserveStars,
+    owners = {},
+    allowUnloadedClubStars = false,
+    recoverMissing = true,
+  } = input
+  const presentKeys = new Set<string>()
+  const humanStarIds = new Set<string>()
+  const humanStarKeys = new Set<string>()
+
+  for (const roster of humanRosters) {
+    for (const player of roster) {
+      if (!isRealStar(player)) continue
+      humanStarIds.add(player.id)
+      const key = starKeyOf(player)
+      if (key) {
+        humanStarKeys.add(key)
+        presentKeys.add(key)
+      }
+    }
+  }
+
+  let syncedClubStars = 0
+  if (teams) {
+    for (const club of world.clubs) {
+      if (club.isPlayer || owners[club.id]) continue
+      const team = teams[club.id]
+      if (!team) continue
+      const liveIds = new Set(team.players.map((p) => p.id))
+      const validIds = club.starPlayerIds.filter((id) => liveIds.has(id) && !humanStarIds.has(id))
+      if (validIds.length !== club.starPlayerIds.length) {
+        club.starPlayerIds = validIds
+        team.starPlayerIds = [...validIds]
+        syncedClubStars++
+      }
+      for (const player of team.players) {
+        if (!isRealStar(player)) continue
+        const key = starKeyOf(player)
+        if (humanStarIds.has(player.id) || (key && humanStarKeys.has(key))) continue
+        if (registerAIStar(world, club.id, team, player)) syncedClubStars++
+        if (key) presentKeys.add(key)
+      }
+    }
+  }
+
+  if (allowUnloadedClubStars) {
+    for (const club of world.clubs) {
+      if (club.isPlayer || owners[club.id]) continue
+      if (teams && teams[club.id]) continue
+      for (const id of club.starPlayerIds) {
+        if (humanStarIds.has(id)) continue
+        const key = seedById(id)?.id ?? (id.startsWith('regen-') ? id.replace(/^regen-/, '').replace(/-\d+$/, '') : undefined)
+        if (key) presentKeys.add(key)
+      }
+    }
+  }
+
+  let marketStarCount = 0
+  for (const player of marketPool) {
+    if (!isRealStar(player)) continue
+    marketStarCount++
+    const key = starKeyOf(player)
+    if (key) presentKeys.add(key)
+  }
+  for (const player of reserveStars) {
+    if (!isRealStar(player)) continue
+    const key = starKeyOf(player)
+    if (key) presentKeys.add(key)
+  }
+
+  let recoveredStars = 0
+  if (recoverMissing) {
+    for (const seed of PLAYER_SEEDS) {
+      if (presentKeys.has(seed.id)) continue
+      const recovered = createPlayerFromSeed(seed)
+      world.starAges[recovered.id] = recovered.age ?? 24
+      if (marketStarCount < 250) {
+        recovered.releasedToMarket = true
+        marketPool.push(recovered)
+        marketStarCount++
+      } else {
+        reserveStars.push(recovered)
+      }
+      presentKeys.add(seed.id)
+      recoveredStars++
+    }
+  }
+
+  return {
+    syncedClubStars,
+    recoveredStars,
+    totalPresent: presentKeys.size,
+    totalSeeds: PLAYER_SEEDS.length,
+  }
 }
 
 /** 用于服务器共享世界的无主世界：保留 80 支原始球队，不替换玩家球队。 */
@@ -1661,28 +1796,33 @@ function promoteAndRelegate(game: GameState, protectedClubs: ReadonlySet<string>
   for (const club of world.clubs) {
     club.starCount = club.tier === 'champions' ? (club.strength >= 4 ? 4 : 3) : club.tier === 'division1' ? (club.strength >= 3 ? 2 : 1) : 0
   }
-  // 顶级/一级球星名额重新分配，二级不保留真实球星。
-  for (const club of world.clubs) {
-    if (club.isPlayer || protectedClubs.has(club.id)) continue
-    while (club.starPlayerIds.length > club.starCount) {
-      const surplus = club.starPlayerIds.pop()!
-      const existing = game.freeStars.find((p) => p.id === surplus) ?? game.reserveStars?.find((p) => p.id === surplus)
-      if (existing) {
-        if (!game.freeStars.some((p) => p.id === existing.id)) game.freeStars.push(existing)
-        game.reserveStars = (game.reserveStars ?? []).filter((p) => p.id !== existing.id)
-      } else {
-        const p = starPlayer(surplus, world)
-        if (p && !game.freeStars.some((x) => x.id === p.id)) game.freeStars.push(p)
-      }
+  const relegated = new Set([...champsBottom, ...d1Bottom])
+  const findLiveStar = (starId: string): Player | undefined => {
+    for (const team of game.aiTeams) {
+      const found = team.players.find((p) => p.id === starId)
+      if (found) return untrainedPlayer(found)
     }
-    if (club.tier === 'division2' && !club.isPlayer) {
-      for (const starId of club.starPlayerIds) {
-        const free = game.reserveStars?.find((p) => p.id === starId) ?? game.freeStars.find((p) => p.id === starId)
-        if (!free) {
-          const p = starPlayer(starId, world)
-          if (p) game.freeStars.push(p)
-        }
-      }
+    return undefined
+  }
+  const releaseStarToFree = (starId: string) => {
+    const existing = game.freeStars.find((p) => p.id === starId) ?? game.reserveStars?.find((p) => p.id === starId)
+    if (existing) {
+      if (!game.freeStars.some((p) => p.id === existing.id)) game.freeStars.push(existing)
+      game.reserveStars = (game.reserveStars ?? []).filter((p) => p.id !== existing.id)
+      return
+    }
+    const p = findLiveStar(starId) ?? starPlayer(starId, world)
+    if (p && !game.freeStars.some((x) => x.id === p.id)) game.freeStars.push(p)
+  }
+  // 只有降级球队才按新级别名额释放多余球星（降入二级清零、降入一级裁到目标名额）；
+  // 保级/升级球队自己花钱买进的球星不再被强行收走踢回市场。
+  for (const club of world.clubs) {
+    if (club.isPlayer || protectedClubs.has(club.id) || !relegated.has(club.id)) continue
+    while (club.starPlayerIds.length > club.starCount) {
+      releaseStarToFree(club.starPlayerIds.pop()!)
+    }
+    if (club.tier === 'division2') {
+      for (const starId of club.starPlayerIds) releaseStarToFree(starId)
       club.starPlayerIds = []
     }
   }
@@ -1897,9 +2037,20 @@ export function advanceWorldSeason(game: GameState, now = Date.now(), protectedC
   game.season = next
   const teams = buildWorldDivisionTeams(world, playerDivision, splitSeed(game.seed, `world-teams-${world.seasonIndex}`), { roster: game.roster, lineup: game.lineup, reserved: game.freeStars }, game.aiClubs)
   game.aiTeams = teams.aiTeams
-  // 签入的人已经并进新赛季名单，账本不再重复合并；同时按新赛季级别发放商店技能书。
+  // 签入的人已经并进新赛季名单，账本不再重复合并；同时按新赛季级别发放商店技能书并核对球星守恒。
   for (const state of Object.values(game.aiClubs ?? {})) state.signings = []
   grantAllAISeasonShopBooks(world, game.aiClubs, game.seed)
+  game.reserveStars ??= []
+  if (fillMarket) {
+    reconcileWorldStars({
+      world,
+      teams: Object.fromEntries(game.aiTeams.map((t) => [t.id, t])),
+      humanRosters: [game.roster],
+      marketPool: game.freeStars,
+      reserveStars: game.reserveStars,
+      allowUnloadedClubStars: true,
+    })
+  }
   game.clubName = teams.playerTeam.name
   const repaired = repairLineup(game.roster, game.lineup)
   if (repaired.changed && validateLineup(game.roster, repaired.lineup).valid) game.lineup = repaired.lineup
