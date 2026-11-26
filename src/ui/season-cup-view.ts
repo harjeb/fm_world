@@ -6,7 +6,7 @@ import { SEASON_CUP_REWARDS } from '../game/data/season-cup-rewards.ts'
 import { seasonCupLeaders, type CupLeaderKind } from '../game/season-cup-stats.ts'
 import { CUP_DEFS } from '../game/data/cup-config.ts'
 import { buildSeasonCupBracket, type CupBracketNode } from './season-cup-bracket.ts'
-import { bookTitle, clubName, emptyState, pageHead, panel, tag } from './components.ts'
+import { assetUrl, bookTitle, clubName, emptyState, pageHead, panel, tag } from './components.ts'
 import { cupRoundLabel, esc, kickoffTimeLabel } from './format.ts'
 
 const CUP_ORDER: SeasonCupId[] = ['community', 'league', 'champions', 'cross', 'legend', 'promotion']
@@ -287,7 +287,14 @@ function cupStatusLabel(cup: SeasonCup, ownId: string): string {
 
 /** 独立杯赛页只读取服务器已公布的签表和统计，不模拟或报名。 */
 export function renderSeasonCups(game: GameState, selected: SeasonCupId = 'community'): string {
-  const heading = pageHead({ kicker: `第 ${game.season.index} 赛季 · 正式赛事`, title: '杯赛', sub: '在北京时间 12:00 / 20:00（5 项赛事并行季启用 16:00，必要时补 08:00）加赛，联赛固定走每天 6 轮不顺延。赛前 30 分钟锁阵，杯赛消耗体能并产生伤病。' })
+  const heading = pageHead({
+    kicker: `第 ${game.season.index} 赛季 · 正式赛事`,
+    title: '杯赛',
+    sub: '在北京时间 12:00 / 20:00（5 项赛事并行季启用 16:00，必要时补 08:00）加赛，联赛固定走每天 6 轮不顺延。赛前 30 分钟锁阵，杯赛消耗体能并产生伤病。',
+    banner: assetUrl('assets/banners/banner-season-cups.webp'),
+    bannerPosition: '82% 38%',
+    accent: '#f2b84b',
+  })
   if (game.world?.seasonCupMode !== 1) return heading + panel('赛季杯赛', '<p class="hint pad">正式赛季杯赛目前仅在联机共享世界开放。</p>', { flush: true })
   const season = game.world.seasonCups
   const ownId = game.world.clubs.find(club => club.id === 'player')?.squadKey ?? 'player'

@@ -231,7 +231,7 @@ abbr[title] { text-decoration: none; cursor: help; }
 .page-head.has-banner .kicker { color: rgba(226, 234, 244, 0.78); letter-spacing: 0.03em; }
 .page-head.has-banner h1 { font-size: 24px; color: #f3f6fa; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.65); }
 .page-head.has-banner .own-name { color: #cdf33f; }
-.page-head.has-banner .page-sub { color: rgba(215, 224, 234, 0.84); }
+.page-head.has-banner .page-sub { color: rgba(215, 224, 234, 0.84); max-width: 56ch; }
 
 /* ---------- 按钮与表单 ---------- */
 .btn {
@@ -684,8 +684,49 @@ h3:first-child { margin-top: 0; }
 .human-mark { flex: none; display: inline-grid; place-items: center; margin-left: 3px; color: var(--good); vertical-align: -1px; }
 .human-mark.ai-takeover { color: var(--warn); }
 .human-mark .ico { display: block; stroke-width: 2.2; }
-.crest { flex: none; display: block; }
-.crest text { font-family: var(--font); }
+.crest {
+  position: relative;
+  flex: none;
+  display: inline-block;
+  width: var(--crest-size, 22px);
+  height: var(--crest-size, 22px);
+  isolation: isolate;
+  user-select: none;
+  vertical-align: middle;
+}
+.crest-metal,
+.crest-fill {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+.crest-metal { object-fit: contain; }
+.crest-fill {
+  mix-blend-mode: multiply;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+.crest-letter {
+  position: absolute;
+  left: 50%;
+  top: var(--crest-cy, 48%);
+  transform: translate(-50%, -50%);
+  color: var(--crest-ink, #fff);
+  font-family: var(--font);
+  font-weight: 700;
+  font-size: max(8.5px, calc(var(--crest-size, 22px) * var(--crest-fs, 0.35)));
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.42);
+  pointer-events: none;
+}
+.crest[data-crest-ink="dark"] .crest-letter { text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35); }
 
 .form { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 2px; font-size: 10.5px; font-weight: 600; color: #fff; }
 .f-W { background: #1f9d5c; }
@@ -1650,7 +1691,7 @@ circle.pm-5 { fill: var(--h6); }
   .nm-team-text { width: 100%; justify-items: center; }
   .nm-team-text b { max-width: 100%; font-size: 14px; }
   .nm-team.right .form-pills { justify-content: center; }
-  .nm-team .crest { width: 40px; height: 45px; }
+  .nm-team .crest { --crest-size: 46px; }
   .nm-center { grid-column: 1 / -1; grid-row: 2; padding: 8px 0 0; border-top: 1px solid var(--line); }
   .nm-vs { font-size: 16px; }
   .nm-live { flex-wrap: wrap; padding: 14px 12px; min-height: 0; gap: 10px; }
@@ -1682,7 +1723,7 @@ circle.pm-5 { fill: var(--h6); }
   .score-team.away { flex-direction: column-reverse; text-align: center; gap: 4px; }
   .score-team-text { width: 100%; }
   .score-team-text b { max-width: 100%; font-size: 13px; }
-  .score-team .crest { width: 28px; height: 32px; }
+  .score-team .crest { --crest-size: 32px; }
   .score-main > b { font-size: 26px; }
   .match-controls .steps { margin-left: 0; width: 100%; }
   .match-main { display: contents; }
@@ -2799,6 +2840,7 @@ circle.pm-5 { fill: var(--h6); }
   border-color: rgba(15, 23, 42, 0.16);
   box-shadow: 0 6px 20px rgba(15, 23, 42, 0.14);
 }
+:root[data-theme="light"] .crest { filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.24)); }
 @media (max-width: 760px) {
   :root[data-theme="light"] .dt.squad th:nth-child(2),
   :root[data-theme="light"] .dt.squad td:nth-child(2) { box-shadow: 2px 0 6px rgba(15, 23, 42, 0.12); }

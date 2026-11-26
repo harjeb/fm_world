@@ -20,7 +20,7 @@ import { legendBookLabel } from '../../game/legend-books.ts'
 import { cupTeam } from '../../game/cup-run.ts'
 import { clubRatings, lineupRating } from '../../game/club-rating.ts'
 import { pveContentReady } from '../../game/pve-content.ts'
-import { bookTitle, caHeat, clubName, icon, ownName, pageHead, panel, recordResult, resultPill, tag, tile } from '../components.ts'
+import { assetUrl, bookTitle, caHeat, clubName, icon, ownName, pageHead, panel, recordResult, resultPill, tag, tile } from '../components.ts'
 import { tipAttrs } from '../tooltip.ts'
 import { aiTeamTacticLabel, countdownText, esc, playerCA } from '../format.ts'
 import { divisionRatings } from '../club-view.ts'
@@ -40,6 +40,12 @@ const MODE_SUB = {
   cup: '两个 16 队杯和一个 32 队杯。世界球队 + 随机队，小组循环后淘汰赛；决赛单场。',
   peak: '100 关，对手 RANK 3850→14300。前 80 关生成/特别，最后 20 关世界杯国家队，所有玩家对手相同。',
 }
+const MODE_BANNER = {
+  friendly: { path: 'assets/banners/banner-challenge-friendly.webp', position: '84% 56%', accent: '#4fd08a' },
+  legend: { path: 'assets/banners/banner-challenge-legend.webp', position: '76% 52%', accent: '#b57bff' },
+  cup: { path: 'assets/banners/banner-challenge-cup.webp', position: '82% 38%', accent: '#f2b84b' },
+  peak: { path: 'assets/banners/banner-challenge-peak.webp', position: '78% 52%', accent: '#cdf33f' },
+} as const
 
 function recordsPanel(records: MatchRecord[], title = '挑战记录'): string {
   return panel(`${title} <small>${records.length}</small>`, records.length ? `<div class="rows">${records.slice(0, 30).map((record) => `<button class="row-btn result-row" data-action="open-review" data-record="${esc(record.id)}">${resultPill(recordResult(record.result))}<span class="result-teams">${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)} <b>${record.score.home}:${record.score.away}</b> ${ownName(record.awayName, record.awayId === PLAYER_TEAM_ID)}${record.shootout ? ` <small>点球 ${record.shootout.home}:${record.shootout.away}</small>` : ''}</span>${icon('right', 12)}</button>`).join('')}</div>` : '<p class="muted pad">还没有挑战记录。</p>', { flush: true })
@@ -235,7 +241,15 @@ export function renderChallenge(): string {
   const mode = seasonCupsEnabled && ui.challengeMode === 'cup' ? 'friendly' : ui.challengeMode
   const loaded = mode === 'friendly' || (mode === 'cup' ? !game.pve?.cupSeasonDeferred || game.pve.cupSeason?.seasonIndex === game.season.index : pveContentReady())
   const body = !loaded ? '<p class="banner info" role="status">正在加载对手名单，请稍候；加载失败时可重新选择此模式。</p>' : mode === 'friendly' ? renderFriendly() : mode === 'legend' ? renderLegend() : mode === 'cup' ? renderCup() : renderPeak()
-  return `${pageHead({ kicker: '挑战 · 纯 PvE', title: MODE_LABEL[mode], sub: MODE_SUB[mode] })}
+  const banner = MODE_BANNER[mode]
+  return `${pageHead({
+    kicker: '挑战 · 纯 PvE',
+    title: MODE_LABEL[mode],
+    sub: MODE_SUB[mode],
+    banner: assetUrl(banner.path),
+    bannerPosition: banner.position,
+    accent: banner.accent,
+  })}
     <div class="seg challenge-mode-tabs" aria-label="挑战模式">${(Object.keys(MODE_LABEL) as (keyof typeof MODE_LABEL)[]).filter(key => !seasonCupsEnabled || key !== 'cup').map((key) => `<button data-challenge-mode="${key}" class="${key === mode ? 'active' : ''}">${MODE_LABEL[key]}</button>`).join('')}</div>
     ${body}${loaded ? selectedRoster() : ''}`
 }

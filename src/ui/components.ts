@@ -87,13 +87,27 @@ export function distinctKit(color: string, against: string): string {
   return ALTERNATE_KITS.find((alt) => kitDistance(alt, against) >= 110) ?? color
 }
 
-const SHIELD = 'M16 1.5 29.5 5v13.2C29.5 26.6 23 31.6 16 34.5 9 31.6 2.5 26.6 2.5 18.2V5Z'
-const CREST_PATTERNS = [
-  '',
-  'M16 1.5 29.5 5v13.2C29.5 26.6 23 31.6 16 34.5Z',
-  'M2.5 5 16 1.5 29.5 5v7H2.5Z',
-  'M2.5 16.5 29.5 6.5v7.8L2.5 24.3Z',
+type CrestVariant = {
+  id: 'classic' | 'modern' | 'crown' | 'laurel'
+  cy: number
+  letterScale: number
+}
+
+const CREST_VARIANTS: readonly CrestVariant[] = [
+  { id: 'classic', cy: 47.5, letterScale: 0.36 },
+  { id: 'modern', cy: 45, letterScale: 0.36 },
+  { id: 'crown', cy: 53.5, letterScale: 0.32 },
+  { id: 'laurel', cy: 45, letterScale: 0.29 },
 ]
+
+function crestPatternBg(color: string, dark: string, pattern: number): string {
+  switch (pattern) {
+    case 1: return `linear-gradient(90deg, ${color} 0 50%, ${dark} 50% 100%)`
+    case 2: return `linear-gradient(180deg, ${dark} 0 38%, ${color} 38% 100%)`
+    case 3: return `linear-gradient(135deg, ${color} 0 40%, ${dark} 40% 60%, ${color} 60% 100%)`
+    default: return `linear-gradient(160deg, ${color} 0%, ${dark} 100%)`
+  }
+}
 
 function hashOf(text: string): number {
   let hash = 0
@@ -101,12 +115,21 @@ function hashOf(text: string): number {
   return hash
 }
 
-/** 由俱乐部名和主色生成的原创队徽。 */
+/** 由俱乐部名和主色生成的立体金属盾牌队徽（4 套盾形 × 4 种纹样 + 动态主色珐琅层）。 */
 export function crest(look: Pick<ClubLook, 'name' | 'color'>, size = 18): string {
   const color = parseHex(look.color) ? look.color : FALLBACK_COLOR
-  const pattern = CREST_PATTERNS[hashOf(look.name) % CREST_PATTERNS.length]
+  const dark = darken(color, 0.22)
+  const hash = hashOf(look.name)
+  const variant = CREST_VARIANTS[hash % CREST_VARIANTS.length]
+  const pattern = (hash >>> 2) % 4
   const letter = esc([...look.name][0] ?? '?')
-  return `<svg class="crest" width="${Math.round((size * 32) / 36)}" height="${size}" viewBox="0 0 32 36" aria-hidden="true"><path d="${SHIELD}" fill="${color}"/>${pattern ? `<path d="${pattern}" fill="${darken(color, 0.24)}"/>` : ''}<path d="${SHIELD}" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1.2"/><text x="16" y="23.4" text-anchor="middle" font-size="15" font-weight="700" fill="${inkOn(color)}">${letter}</text></svg>`
+  const ink = inkOn(color)
+  const renderSize = size <= 20 ? Math.round(size * 1.2) : size
+  const metalUrl = assetUrl(`assets/crests/crest-${variant.id}.webp`)
+  const maskUrl = assetUrl(`assets/crests/crest-${variant.id}-mask.webp`)
+  const fillBg = crestPatternBg(color, dark, pattern)
+  const inkTone = ink === '#10141a' ? 'dark' : 'light'
+  return `<span class="crest" data-crest-variant="${variant.id}" data-crest-ink="${inkTone}" style="--crest-size:${renderSize}px;--crest-cy:${variant.cy}%;--crest-fs:${variant.letterScale};--crest-ink:${ink}" aria-hidden="true"><img class="crest-metal" src="${esc(metalUrl)}" alt="" decoding="async"><span class="crest-fill" style="background:${fillBg};-webkit-mask-image:url('${esc(maskUrl)}');mask-image:url('${esc(maskUrl)}')"></span><span class="crest-letter">${letter}</span></span>`
 }
 
 /** 这支球队由真实玩家执教：自己的球队，或联机时有教练接管的球队。 */
