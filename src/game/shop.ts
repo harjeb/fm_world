@@ -1,8 +1,11 @@
 import type { GameState, LegendBook, ShopState, TierId } from './types.ts'
 import {
-  SHOP_AUX_CATALOG_IDS,
-  SHOP_GK_SKILL_IDS,
-  SHOP_OUTFIELD_SKILL_IDS,
+  SHOP_BASE_AUX_CATALOG_IDS,
+  SHOP_BASE_GK_SKILL_IDS,
+  SHOP_BASE_OUTFIELD_SKILL_IDS,
+  SHOP_RESERVE_AUX_SKILL_IDS,
+  SHOP_RESERVE_GK_SKILL_IDS,
+  SHOP_RESERVE_OUTFIELD_SKILL_IDS,
   SHOP_SKILLS,
   type ShopCatalogSkillId,
   type ShopSkillGroup,
@@ -59,6 +62,8 @@ export type ShopOffer = {
   scope: ShopSkillScope
   group: ShopSkillGroup
   category: 'main' | 'auxiliary'
+  /** 是否为该世界首次在商店上架的新书（true=首发，false=返场）。 */
+  isDebut: boolean
 }
 
 export type ShopBuyResult =
@@ -125,43 +130,153 @@ export function shopSeasonIndex(game: Pick<GameState, 'season' | 'world'>): numb
 }
 
 /**
+ * 单类别的赛季货架调度：
+ * - S1–S3：沿用基础池洗牌（与历史版本完全一致，保证老服 S1–S3 货架不变），每本均为首发；
+ * - S4 起：采用「一半返场 + 一半全新」——
+ *   - 返场半区：从 3 个赛季前（S(n-3)）的货架中随机抽一半返场（过滤上一季已上架项，保证相邻赛季零重复）；
+ *   - 全新半区：从尚未在本世界上架过的备用池（含基础池剩余项 + 60 本对策备用池）纯随机依次首发；
+ *   - 备用池全部首发完毕后（外场/门将 S14+、辅助 S20+），将全池并入大轮换，优先挑选最久未上架的书，相邻赛季仍零重复。
+ */
+function buildCategorySeason<T extends string>(
+  basePool: readonly T[],
+  reservePool: readonly T[],
+  perSeason: number,
+  worldSeed: number,
+  label: string,
+  targetSeason: number,
+): { id: T; isDebut: boolean }[] {
+  const baseOrder = cycleOrder(basePool, worldSeed, label, 0, perSeason)
+  const history: T[][] = []
+  const seen = new Set<T>()
+  const lastSeen = new Map<T, number>()
+
+  // S1–S3：完整基础池首轮（与既有逻辑逐项一致）
+  const initSeasons = Math.min(3, targetSeason)
+  for (let s = 1; s <= initSeasons; s++) {
+    const start = (s - 1) * perSeason
+    const ids = baseOrder.slice(start, start + perSeason)
+    if (s === targetSeason) {
+      return ids.map((id) => ({ id, isDebut: !seen.has(id) }))
+    }
+    history[s] = ids
+    for (const id of ids) {
+      seen.add(id)
+      lastSeen.set(id, s)
+    }
+  }
+
+  // S4+：构建纯随机的新书首发队列（基础池在 S1–S3 未登场项 + 备用池全部项）
+  const remainingBase = basePool.filter((id) => !seen.has(id))
+  const debutQueue = shuffleWith<T>([...remainingBase, ...reservePool], derivedRng(worldSeed, `${label}-reserve-debut`))
+  const fullPool: T[] = [...basePool, ...reservePool]
+  const rerunCount = Math.floor(perSeason / 2)
+
+  for (let s = 4; s <= targetSeason; s++) {
+    const prev = new Set(history[s - 1] ?? [])
+    const source = history[s - 3] ?? []
+    const rerunRng = derivedRng(worldSeed, `${label}-rerun`, s)
+    const rerunCandidates = shuffleWith(source.filter((id) => !prev.has(id)), rerunRng)
+    const reruns: T[] = rerunCandidates.slice(0, rerunCount)
+    const chosen = new Set<T>(reruns)
+
+    // 极端情况下若 S(n-3) 有效候补不足一半，从历史上已出现且不在上一季的书里补齐返场名额
+    if (reruns.length < rerunCount) {
+      const extraSeen = shuffleWith(
+        [...seen].filter((id) => !prev.has(id) && !chosen.has(id)),
+        rerunRng,
+      ).sort((a, b) => (lastSeen.get(a) ?? 0) - (lastSeen.get(b) ?? 0))
+      for (const id of extraSeen) {
+        if (reruns.length >= rerunCount) break
+        reruns.push(id)
+        chosen.add(id)
+      }
+    }
+
+    const freshNeed = perSeason - reruns.length
+    const fresh: T[] = []
+    while (fresh.length < freshNeed && debutQueue.length > 0) {
+      const next = debutQueue.shift()!
+      if (prev.has(next) || chosen.has(next)) continue
+      fresh.push(next)
+      chosen.add(next)
+    }
+
+    // 备用池全部首发完之后，按“最久未上架”顺序 + 纯随机同阶打散补足另一半
+    if (fresh.length < freshNeed) {
+      const postRng = derivedRng(worldSeed, `${label}-post`, s)
+      const candidates = shuffleWith(fullPool.filter((id) => !prev.has(id) && !chosen.has(id)), postRng)
+      candidates.sort((a, b) => (lastSeen.get(a) ?? 0) - (lastSeen.get(b) ?? 0))
+      for (const id of candidates) {
+        if (fresh.length >= freshNeed) break
+        fresh.push(id)
+        chosen.add(id)
+      }
+    }
+
+    // 新书（首发）排在前面，返场书排在后面，界面一眼区分
+    const combined = [...fresh, ...reruns]
+    if (s === targetSeason) {
+      return combined.map((id) => ({ id, isDebut: !seen.has(id) }))
+    }
+    history[s] = combined
+    for (const id of combined) {
+      seen.add(id)
+      lastSeen.set(id, s)
+    }
+  }
+  return []
+}
+
+/**
  * 指定世界种子与赛季号的商店货架（8 本外场金书 + 2 本门将金书 + 2 本辅助金书 = 12 本）。
- * 联机模式下同一世界所有俱乐部共享同一 `worldSeed`，因此全服同赛季上架相同的 12 本。
+ * - S1–S3：基础池首轮轮换；
+ * - S4 起：每类一半从 S(n-3) 返场、一半从备用池全新首发；
+ * - 联机模式下同一世界所有俱乐部共享同一 `worldSeed`，因此全服同赛季上架相同的 12 本。
  */
 export function shopCatalog(worldSeed: number, seasonIndex: number): ShopOffer[] {
   const season = Math.max(1, Math.floor(Number.isFinite(seasonIndex) ? seasonIndex : 1))
-  const outfieldPerCycle = Math.max(1, Math.floor(SHOP_OUTFIELD_SKILL_IDS.length / SHOP_OUTFIELD_COUNT))
-  const gkPerCycle = Math.max(1, Math.floor(SHOP_GK_SKILL_IDS.length / SHOP_GK_COUNT))
-  const auxPerCycle = Math.max(1, Math.floor(SHOP_AUX_CATALOG_IDS.length / SHOP_AUX_COUNT))
-  const outfieldCycle = Math.floor((season - 1) / outfieldPerCycle)
-  const outfieldSlot = (season - 1) % outfieldPerCycle
-  const gkCycle = Math.floor((season - 1) / gkPerCycle)
-  const gkSlot = (season - 1) % gkPerCycle
-  const auxCycle = Math.floor((season - 1) / auxPerCycle)
-  const auxSlot = (season - 1) % auxPerCycle
+  const outfield = buildCategorySeason(
+    SHOP_BASE_OUTFIELD_SKILL_IDS,
+    SHOP_RESERVE_OUTFIELD_SKILL_IDS,
+    SHOP_OUTFIELD_COUNT,
+    worldSeed,
+    'shop-outfield-cycle',
+    season,
+  )
+  const gk = buildCategorySeason(
+    SHOP_BASE_GK_SKILL_IDS,
+    SHOP_RESERVE_GK_SKILL_IDS,
+    SHOP_GK_COUNT,
+    worldSeed,
+    'shop-gk-cycle',
+    season,
+  )
+  const aux = buildCategorySeason(
+    SHOP_BASE_AUX_CATALOG_IDS,
+    SHOP_RESERVE_AUX_SKILL_IDS,
+    SHOP_AUX_COUNT,
+    worldSeed,
+    'shop-aux-cycle',
+    season,
+  )
 
-  const outfield = cycleOrder(SHOP_OUTFIELD_SKILL_IDS, worldSeed, 'shop-outfield-cycle', outfieldCycle, SHOP_OUTFIELD_COUNT)
-    .slice(outfieldSlot * SHOP_OUTFIELD_COUNT, (outfieldSlot + 1) * SHOP_OUTFIELD_COUNT)
-  const gk = cycleOrder(SHOP_GK_SKILL_IDS, worldSeed, 'shop-gk-cycle', gkCycle, SHOP_GK_COUNT)
-    .slice(gkSlot * SHOP_GK_COUNT, (gkSlot + 1) * SHOP_GK_COUNT)
-  const aux = cycleOrder(SHOP_AUX_CATALOG_IDS, worldSeed, 'shop-aux-cycle', auxCycle, SHOP_AUX_COUNT)
-    .slice(auxSlot * SHOP_AUX_COUNT, (auxSlot + 1) * SHOP_AUX_COUNT)
-
-  const mainOffers: ShopOffer[] = [...outfield, ...gk].map((id) => ({
+  const mainOffers: ShopOffer[] = [...outfield, ...gk].map(({ id, isDebut }) => ({
     id,
     tier: 'gold',
     price: SHOP_BOOK_PRICE,
     scope: SHOP_SKILLS[id].scope,
     group: SHOP_SKILLS[id].group,
     category: 'main',
+    isDebut,
   }))
-  const auxOffers: ShopOffer[] = aux.map((id) => ({
+  const auxOffers: ShopOffer[] = aux.map(({ id, isDebut }) => ({
     id,
     tier: 'gold',
     price: SHOP_BOOK_PRICE,
     scope: 'any',
     group: 'auxiliary',
     category: 'auxiliary',
+    isDebut,
   }))
   return [...mainOffers, ...auxOffers]
 }

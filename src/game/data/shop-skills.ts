@@ -1,5 +1,20 @@
 import type { AttrKey, ShopAuxSkillId, ShopSkillId } from '../types.ts'
 import { isMainAttr } from '../scale.ts'
+import {
+  SHOP_RESERVE_AUX_SKILL_IDS,
+  SHOP_RESERVE_GK_SKILL_IDS,
+  SHOP_RESERVE_OUTFIELD_SKILL_IDS,
+  SHOP_RESERVE_SKILL_IDS,
+  SHOP_RESERVE_SKILLS,
+} from './shop-reserve-skills.ts'
+
+export {
+  SHOP_RESERVE_AUX_SKILL_IDS,
+  SHOP_RESERVE_GK_SKILL_IDS,
+  SHOP_RESERVE_OUTFIELD_SKILL_IDS,
+  SHOP_RESERVE_SKILL_IDS,
+  SHOP_RESERVE_SKILLS,
+}
 
 export type ShopSkillScope = 'field' | 'gk' | 'any'
 export type ShopSkillGroup = 'defense' | 'midfield' | 'wing' | 'forward' | 'gk' | 'auxiliary'
@@ -55,8 +70,8 @@ function shopSkill(
   }
 }
 
-/** 30 个非传奇、非巅峰的商店技能（24 外场 + 6 门将），每赛季轮换上架 8 外场 + 2 门将金书。 */
-export const SHOP_SKILLS: Record<ShopSkillId, ShopSkillDef> = {
+/** 40 个 S1–S3 基础池商店技能（24 外场 + 6 门将 + 10 辅助）。 */
+export const SHOP_BASE_SKILLS: Record<Exclude<ShopSkillId, keyof typeof SHOP_RESERVE_SKILLS>, ShopSkillDef> = {
   // 防线（6）
   sh_buildup: shopSkill('sh_buildup', '后场出球', 'field', 'defense', 'passing', '低', '在本方半场发起短传或长传出球时更稳健。', '本方半场短传 / 长传'),
   sh_box_defense: shopSkill('sh_box_defense', '禁区铁闸', 'field', 'defense', 'tackling', '中', '在本方禁区附近防守对手盘带时更具压迫力。', '本方禁区附近防守盘带'),
@@ -110,9 +125,22 @@ export const SHOP_SKILLS: Record<ShopSkillId, ShopSkillDef> = {
   sh_aux_discipline: shopSkill('sh_aux_discipline', '纪律严明', 'any', 'auxiliary', 'decisions', '低', '动作尺度拿捏老道，犯规后领黄牌与直红风险明显降低。', '犯规后吃牌判定', 'auxiliary'),
 }
 
+/** 全部 100 个商店技能（S1–S3 基础池 40 个 + S4+ 对策备用池 60 个）。 */
+export const SHOP_SKILLS: Record<ShopSkillId, ShopSkillDef> = {
+  ...SHOP_BASE_SKILLS,
+  ...SHOP_RESERVE_SKILLS,
+}
+
+export const SHOP_BASE_SKILL_IDS = Object.keys(SHOP_BASE_SKILLS) as (keyof typeof SHOP_BASE_SKILLS)[]
+export const SHOP_BASE_OUTFIELD_SKILL_IDS = SHOP_BASE_SKILL_IDS.filter((id) => SHOP_BASE_SKILLS[id].category === 'main' && SHOP_BASE_SKILLS[id].scope === 'field')
+export const SHOP_BASE_GK_SKILL_IDS = SHOP_BASE_SKILL_IDS.filter((id) => SHOP_BASE_SKILLS[id].category === 'main' && SHOP_BASE_SKILLS[id].scope === 'gk')
+export const SHOP_BASE_AUX_NEW_SKILL_IDS = SHOP_BASE_SKILL_IDS.filter((id) => SHOP_BASE_SKILLS[id].category === 'auxiliary') as ShopAuxSkillId[]
+/** S1–S3 基础辅助池（共 12 本：10 个基础辅助 + 伤病预防/伤病韧性）。 */
+export const SHOP_BASE_AUX_CATALOG_IDS: readonly ShopCatalogSkillId[] = [...SHOP_BASE_AUX_NEW_SKILL_IDS, 'injury_prevention', 'injury_resilience']
+
 export const SHOP_SKILL_IDS = Object.keys(SHOP_SKILLS) as ShopSkillId[]
 export const SHOP_OUTFIELD_SKILL_IDS = SHOP_SKILL_IDS.filter((id) => SHOP_SKILLS[id].category === 'main' && SHOP_SKILLS[id].scope === 'field')
 export const SHOP_GK_SKILL_IDS = SHOP_SKILL_IDS.filter((id) => SHOP_SKILLS[id].category === 'main' && SHOP_SKILLS[id].scope === 'gk')
 export const SHOP_AUX_NEW_SKILL_IDS = SHOP_SKILL_IDS.filter((id) => SHOP_SKILLS[id].category === 'auxiliary') as ShopAuxSkillId[]
-/** 商店辅助金书轮换池（共 12 本：10 个场上/纪律辅助新技能 + 伤病预防/伤病韧性金书）。 */
-export const SHOP_AUX_CATALOG_IDS: readonly ShopCatalogSkillId[] = [...SHOP_AUX_NEW_SKILL_IDS, 'injury_prevention', 'injury_resilience']
+/** 全部商店辅助金书池（共 22 本：12 基础 + 10 备用对策）。 */
+export const SHOP_AUX_CATALOG_IDS: readonly ShopCatalogSkillId[] = [...SHOP_BASE_AUX_CATALOG_IDS, ...SHOP_RESERVE_AUX_SKILL_IDS]

@@ -12,7 +12,8 @@ import { homeAtmosphereBonus } from '../economy.ts'
 import { isHighIntensityTactics } from '../age-profile.ts'
 import { opponentSide, skillTierMultiplier } from './team.ts'
 import { clamp, progressOf, wideZone } from './pitch.ts'
-import type { MatchEventContext, MatchPlayerState, MatchSide, MatchState } from './types.ts'
+import { reserveAuxAttrBonus } from './tactical-counters.ts'
+import type { MatchEventContext, MatchPlayerState, MatchSide, MatchState, MatchTeamState } from './types.ts'
 
 /**
  * 评分所需的比赛状态。MatchState 满足它；别的引擎（比如新的 2D 物理引擎）只要提供这几个字段就能复用同一套评分。
@@ -34,6 +35,18 @@ export class MatchRatings {
     if (a.side !== b.side || a.sourceId === b.sourceId) return 0
     const team = this.stateOf().teams[a.side === 'home' ? 0 : 1]
     return team.chemistry?.[chemistryKey(a.sourceId, b.sourceId)] ?? 0
+  }
+
+  teamOf(side: MatchSide): MatchTeamState | undefined {
+    return this.stateOf().teams[side === 'home' ? 0 : 1]
+  }
+
+  opponentTeamOf(side: MatchSide): MatchTeamState | undefined {
+    return this.stateOf().teams[side === 'home' ? 1 : 0]
+  }
+
+  scoreOf(side: MatchSide): number {
+    return this.stateOf().score[side] ?? 0
   }
 
   activeShout(player: MatchPlayerState): MatchPlayerState['shoutState'] | undefined {
@@ -91,6 +104,7 @@ export class MatchRatings {
     if ((key === 'agility' || key === 'defPos') && player.skills.includes('sh_aux_tired_grit') && this.traitConditionMet(player, 'tired', ctx)) {
       value += 5 * skillTierMultiplier(player, 'sh_aux_tired_grit')
     }
+    value += reserveAuxAttrBonus(player, key, this.teamOf(player.side), this.opponentTeamOf(player.side))
     const trait = TRAITS[player.traitId as BaseTraitId]
     if (trait) {
       switch (trait.effect) {

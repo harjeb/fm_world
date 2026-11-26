@@ -37,10 +37,12 @@ function renderOfferCard(offer: ShopOffer, points: number): string {
     ? `<button class="btn small" disabled>已拥有</button>`
     : `<button class="btn small ${affordable ? 'primary' : ''}" data-action="buy-shop-book" data-skill="${esc(offer.id)}" ${affordable ? '' : 'disabled'}>${affordable ? `兑换（${offer.price} 点）` : `需 ${offer.price} 点`}</button>`
   const badgeTone = offer.category === 'auxiliary' ? 'good' : offer.scope === 'gk' ? 'info' : ''
+  const originTag = offer.isDebut ? tag('首发', 'gold') : tag('返场', '')
   return `<article class="shop-card ${owned ? 'owned' : ''}" data-shop-book="${esc(offer.id)}">
     <div class="shop-card-head">
       <div class="shop-card-title">
         ${bookTitle(def.name, 'gold')}
+        ${originTag}
         ${tag(SHOP_GROUP_LABELS[offer.group], badgeTone)}
         ${offer.category === 'auxiliary' ? tag('辅助槽', '') : ''}
       </div>
@@ -116,7 +118,7 @@ export function renderShop(): string {
     ${pageHead({
       kicker: '经营 · 每赛季更新',
       title: '技能书商店',
-      sub: '每赛季轮换上架 8 本外场、2 本守门员与 2 本辅助技能书（共 12 本）；购买后永久入库，不消耗。',
+      sub: '每赛季上架 8 本外场、2 本守门员与 2 本辅助技能书（共 12 本，统一 100 点）；S4 起一半返场、一半从对策备用池首发。购买后永久入库，不消耗。',
       actions: `<button class="btn ghost" data-nav="achievements">${icon('star', 13)}前往成就领点券</button><button class="btn ghost" data-nav="training">前往培养配置技能卡 ${icon('right', 13)}</button>`,
     })}
     ${backfillNote}

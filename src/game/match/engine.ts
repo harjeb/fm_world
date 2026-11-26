@@ -4,6 +4,7 @@ import type { BaseTraitId } from '../types.ts'
 import { skillTierMultiplier } from './team.ts'
 import { recordChance, recordChanceGoal, recordConceded, recordSave, recordShot, recordTackleAttempt } from './performance.ts'
 import { MatchRatings } from './ratings.ts'
+import { reserveStaminaDrainScale } from './tactical-counters.ts'
 import { FREE_KICK_DELIVERY_RANGE, FREE_KICK_SHOT_RANGE, PRESS_LEVEL, SettlementKernel, pickByWeight, totalWeight } from './resolution.ts'
 import type { PassModel, PassType, ShotModel } from './resolution.ts'
 import type {
@@ -799,6 +800,7 @@ export class MatchEngine {
         let drain = (moved * 0.028 + 0.018 * (dt / 4.1)) * pressIntensity * this.staminaFactor(player) / enduranceFactor
         if (!this.legacyRules) drain *= 0.77
         if (player.skills.includes('iron_lung')) drain *= 1 - (0.05 + (skillTierMultiplier(player, 'iron_lung') - 1) * 0.25)
+        if (!this.legacyRules) drain *= reserveStaminaDrainScale(player, this.state.teams[player.side === 'home' ? 1 : 0])
         if (player.position === 'GK') drain *= 0.5
         if (player.side === opp.side && presser === player.id) drain *= 1.12
         const staminaTrait = starTraitOf(player.traitId)
@@ -1460,6 +1462,7 @@ export class MatchEngine {
       let drain = (move * 0.028 + 0.018) * pressIntensity * this.staminaFactor(player) / enduranceFactor
       if (!this.legacyRules) drain *= 0.77 // 更密集的动作不应使终场体力按步数额外翻倍。
       if (player.skills.includes('iron_lung')) drain *= 1 - (0.05 + (skillTierMultiplier(player, 'iron_lung') - 1) * 0.25)
+      if (!this.legacyRules) drain *= reserveStaminaDrainScale(player, this.state.teams[player.side === 'home' ? 1 : 0])
       if (player.position === 'GK') drain *= 0.5
       if (player.side === opp.side && presser === player.id) drain *= 1.12
       const staminaTrait = starTraitOf(player.traitId)

@@ -2,11 +2,27 @@ import { describe, expect, it } from 'vitest'
 import {
   SHOP_AUX_CATALOG_IDS,
   SHOP_AUX_NEW_SKILL_IDS,
+  SHOP_BASE_AUX_CATALOG_IDS,
+  SHOP_BASE_AUX_NEW_SKILL_IDS,
+  SHOP_BASE_GK_SKILL_IDS,
+  SHOP_BASE_OUTFIELD_SKILL_IDS,
+  SHOP_BASE_SKILL_IDS,
   SHOP_GK_SKILL_IDS,
   SHOP_OUTFIELD_SKILL_IDS,
+  SHOP_RESERVE_AUX_SKILL_IDS,
+  SHOP_RESERVE_GK_SKILL_IDS,
+  SHOP_RESERVE_OUTFIELD_SKILL_IDS,
+  SHOP_RESERVE_SKILL_IDS,
   SHOP_SKILL_IDS,
   SHOP_SKILLS,
 } from '../src/game/data/shop-skills.ts'
+import { skillEffectText } from '../src/game/data/skill-effects.ts'
+import { MatchRatings } from '../src/game/match/ratings.ts'
+import { SettlementKernel } from '../src/game/match/resolution.ts'
+import { buildMatchTeam } from '../src/game/match/team.ts'
+import { teamInputFromLineup } from '../src/game/match/setup.ts'
+import type { MatchState } from '../src/game/match/types.ts'
+import { STYLES } from '../src/game/pes/tactics.ts'
 import { LEGEND_SKILL_IDS } from '../src/game/data/legend-skills.ts'
 import { PEAK_SKILL_IDS } from '../src/game/data/peak-skills.ts'
 import { POSITION_BASIC_SKILLS, SKILLS, canLearnSkill, skillCategory } from '../src/game/data/skills.ts'
@@ -38,12 +54,24 @@ import { loadPveContent } from '../src/game/pve-content.ts'
 import type { MatchRecord } from '../src/game/types.ts'
 
 describe('技能书商店与点数系统', () => {
-  it('40 个新增商店技能（24 外场 + 6 门将 + 10 辅助）独立于传奇/巅峰/基础池，且具备合法门槛与槽位分类', () => {
-    expect(SHOP_OUTFIELD_SKILL_IDS).toHaveLength(24)
-    expect(SHOP_GK_SKILL_IDS).toHaveLength(6)
-    expect(SHOP_AUX_NEW_SKILL_IDS).toHaveLength(10)
-    expect(SHOP_AUX_CATALOG_IDS).toHaveLength(12)
-    expect(SHOP_SKILL_IDS).toHaveLength(40)
+  it('100 个商店技能（40 基础 + 60 对策备用池）独立于传奇/巅峰/基础池，且全部具备合法门槛、槽位与效果说明', () => {
+    expect(SHOP_BASE_OUTFIELD_SKILL_IDS).toHaveLength(24)
+    expect(SHOP_BASE_GK_SKILL_IDS).toHaveLength(6)
+    expect(SHOP_BASE_AUX_NEW_SKILL_IDS).toHaveLength(10)
+    expect(SHOP_BASE_AUX_CATALOG_IDS).toHaveLength(12)
+    expect(SHOP_BASE_SKILL_IDS).toHaveLength(40)
+
+    expect(SHOP_RESERVE_OUTFIELD_SKILL_IDS).toHaveLength(40)
+    expect(SHOP_RESERVE_GK_SKILL_IDS).toHaveLength(10)
+    expect(SHOP_RESERVE_AUX_SKILL_IDS).toHaveLength(10)
+    expect(SHOP_RESERVE_SKILL_IDS).toHaveLength(60)
+
+    expect(SHOP_OUTFIELD_SKILL_IDS).toHaveLength(64)
+    expect(SHOP_GK_SKILL_IDS).toHaveLength(16)
+    expect(SHOP_AUX_NEW_SKILL_IDS).toHaveLength(20)
+    expect(SHOP_AUX_CATALOG_IDS).toHaveLength(22)
+    expect(SHOP_SKILL_IDS).toHaveLength(100)
+
     const legendSet = new Set<string>(LEGEND_SKILL_IDS)
     const peakSet = new Set<string>(PEAK_SKILL_IDS)
     const basicSet = new Set<string>(Object.values(POSITION_BASIC_SKILLS).flat())
@@ -54,23 +82,28 @@ describe('技能书商店与点数系统', () => {
       expect(basicSet.has(id)).toBe(false)
       expect(skillCategory(id)).toBe(SHOP_SKILLS[id].category)
       expect(bookRequirementText({ id, tier: 'gold' })).toMatch(/\d+/)
+      expect(skillEffectText(id, 'gold').length).toBeGreaterThan(8)
     }
     // 4 个主技能满槽时，仍可继续学习 2 个辅助技能；辅助满 2 个后再学辅助受限
     const fourMains = SHOP_OUTFIELD_SKILL_IDS.slice(0, 4)
     expect(canLearnSkill(fourMains, SHOP_OUTFIELD_SKILL_IDS[4])).toBe(false)
     expect(canLearnSkill(fourMains, 'sh_aux_penalty_calm')).toBe(true)
-    const fullBoth = [...fourMains, 'sh_aux_penalty_calm' as const, 'sh_aux_comeback' as const]
+    expect(canLearnSkill(fourMains, 'sh_aux_r_anti_press_aura')).toBe(true)
+    const fullBoth = [...fourMains, 'sh_aux_penalty_calm' as const, 'sh_aux_r_anti_press_aura' as const]
     expect(canLearnSkill(fullBoth, 'sh_aux_discipline')).toBe(false)
   })
 
-  it('每赛季上架 8 外场 + 2 门将 + 2 辅助金书（共 12 本）；周期完整轮换；相邻赛季零重复；同世界共享', () => {
+  it('S1–S3 走基础池；S4 起每季一半 S(n-3) 返场 + 一半全新首发；相邻赛季零重复；备用池耗尽后无缝大轮换', () => {
     const seed = 424242
     const seenOutfield = new Set<string>()
     const seenGk = new Set<string>()
     const seenAux = new Set<string>()
+    const bySeason = new Map<number, ReturnType<typeof shopCatalog>>()
     let prevIds = new Set<string>()
-    for (let season = 1; season <= 7; season++) {
+
+    for (let season = 1; season <= 20; season++) {
       const offers = shopCatalog(seed, season)
+      bySeason.set(season, offers)
       expect(offers).toHaveLength(SHOP_OUTFIELD_COUNT + SHOP_GK_COUNT + SHOP_AUX_COUNT)
       expect(offers.every((offer) => offer.tier === 'gold' && offer.price === SHOP_BOOK_PRICE)).toBe(true)
       const outfield = offers.filter((offer) => offer.category === 'main' && offer.scope === 'field')
@@ -81,20 +114,47 @@ describe('技能书商店与点数系统', () => {
       expect(aux).toHaveLength(2)
       // 同世界同赛季确定性一致（联机全服共享）
       expect(shopCatalog(seed, season)).toEqual(offers)
-      // 与上一赛季零重复（含跨周期 S3 -> S4、S6 -> S7）
+      // 相邻赛季零重复
       for (const offer of offers) expect(prevIds.has(offer.id), `season ${season} repeated ${offer.id}`).toBe(false)
       prevIds = new Set(offers.map((offer) => offer.id))
+
       if (season <= 3) {
-        for (const offer of outfield) seenOutfield.add(offer.id)
-        for (const offer of gk) seenGk.add(offer.id)
+        expect(offers.every((o) => o.isDebut)).toBe(true)
+      } else if (season <= 13) {
+        // S4–S13：外场 4 首发 + 4 返场（来自 S(n-3)），门将 1 首发 + 1 返场，辅助 1 首发 + 1 返场
+        const src = new Set(bySeason.get(season - 3)!.map((o) => o.id))
+        expect(outfield.filter((o) => o.isDebut)).toHaveLength(4)
+        expect(outfield.filter((o) => !o.isDebut)).toHaveLength(4)
+        expect(outfield.filter((o) => !o.isDebut).every((o) => src.has(o.id))).toBe(true)
+        expect(gk.filter((o) => o.isDebut)).toHaveLength(1)
+        expect(gk.filter((o) => !o.isDebut)).toHaveLength(1)
+        expect(gk.filter((o) => !o.isDebut).every((o) => src.has(o.id))).toBe(true)
+        expect(aux.filter((o) => o.isDebut)).toHaveLength(1)
+        expect(aux.filter((o) => !o.isDebut)).toHaveLength(1)
+        expect(aux.filter((o) => !o.isDebut).every((o) => src.has(o.id))).toBe(true)
       }
-      if (season <= 6) {
-        for (const offer of aux) seenAux.add(offer.id)
+
+      for (const o of outfield) seenOutfield.add(o.id)
+      for (const o of gk) seenGk.add(o.id)
+      for (const o of aux) seenAux.add(o.id)
+
+      if (season === 3) {
+        // S1–S3 恰好覆盖全部 24 基础外场与 6 基础门将
+        expect(seenOutfield.size).toBe(24)
+        expect(seenGk.size).toBe(6)
+      }
+      if (season === 13) {
+        // 到 S13 结束，全部 64 外场与 16 门将均已首发完毕
+        expect(seenOutfield.size).toBe(64)
+        expect(seenGk.size).toBe(16)
+      }
+      if (season === 19) {
+        // 到 S19 结束，全部 22 辅助均已首发完毕
+        expect(seenAux.size).toBe(22)
       }
     }
-    expect(seenOutfield.size).toBe(24)
-    expect(seenGk.size).toBe(6)
-    expect(seenAux.size).toBe(12)
+    // S20 起全池已首发完毕，全部标返场且仍正常出 12 本
+    expect(bySeason.get(20)!.every((o) => !o.isDebut)).toBe(true)
   })
 
   it('赛季排名点数严格按联赛级别与排名递增，满足二级上游 4 本、顶级上游全换 10 本的比例', () => {
@@ -250,11 +310,85 @@ describe('技能书商店与点数系统', () => {
     expect(html).toContain('先锋联赛')
     expect(html).toContain('精英联赛')
     expect(html).toContain('冠军联赛')
+    expect(html).toContain('首发')
+
+    // S4 货架应同时出现「首发」和「返场」标签，且不显示任何稀有度字样
+    const origSeason = uiGame.season.index
+    const origWorldSeason = uiGame.world?.seasonIndex
+    try {
+      uiGame.season.index = 4
+      if (uiGame.world) uiGame.world.seasonIndex = 4
+      const s4Html = renderShop()
+      expect(s4Html).toContain('首发')
+      expect(s4Html).toContain('返场')
+      expect(s4Html).not.toContain('王牌')
+      expect(s4Html).not.toContain('稀有')
+    } finally {
+      uiGame.season.index = origSeason
+      if (uiGame.world && origWorldSeason !== undefined) uiGame.world.seasonIndex = origWorldSeason
+    }
 
     await loadPveContent()
     ui.challengeMode = 'peak'
     ui.peakPreviewStage = 1
     const challengeHtml = renderChallenge()
     expect(challengeHtml).toContain('商店点数 +15')
+  })
+
+  it('S4+ 对策型技能书在比赛结算内核中只对被克制战术生效，形成真实克制关系', () => {
+    const game = createInitialGame(2026)
+    const home = buildMatchTeam(teamInputFromLineup(structuredClone(game.roster), structuredClone(game.lineup), { id: 'h', name: '主队', color: '#111', accent: '#fff' }), 'home')
+    const away = buildMatchTeam(teamInputFromLineup(structuredClone(game.roster), structuredClone(game.lineup), { id: 'a', name: '客队', color: '#222', accent: '#eee' }), 'away')
+    const state = {
+      seed: 1,
+      step: 10,
+      clock: 1800,
+      score: { home: 0, away: 0 },
+      teams: [home, away],
+      teamTraits: {},
+      teamTraitStep: -1,
+    } as unknown as MatchState
+    const ratings = new MatchRatings(() => state, () => 5400)
+    const kernel = new SettlementKernel(ratings, { markSkill: () => {}, legacyRules: false, simV2: true })
+
+    const striker = home.players.find((p) => p.onPitch && p.position === 'ST')!
+    const mid = home.players.find((p) => p.onPitch && p.position === 'CM')!
+    const mate = home.players.find((p) => p.onPitch && p.position !== 'GK' && p.id !== mid.id)!
+    const oppGk = away.players.find((p) => p.onPitch && p.position === 'GK')!
+    const oppDef = away.players.find((p) => p.onPitch && p.position === 'CB')!
+    // 把防守方摆离球门，构造干净单刀点位与远射点位
+    oppGk.x = 97; oppGk.y = 32
+    for (const p of away.players) if (p.position !== 'GK') { p.x = 40; p.y = 32 }
+
+    // 1. 高位线屠夫：对高位防线爆发，对低位防线不触发
+    striker.skills = ['sh_r_highline_assassin']
+    striker.skillTiers = { sh_r_highline_assassin: 'gold' }
+    away.instructions = structuredClone(STYLES.highPress.instructions)
+    const vsHigh = kernel.shotModel(striker, home, away, { point: { x: 88, y: 32 }, header: false, penalty: false, freeKick: false })
+    away.instructions = structuredClone(STYLES.parkBus.instructions)
+    const vsLow = kernel.shotModel(striker, home, away, { point: { x: 88, y: 32 }, header: false, penalty: false, freeKick: false })
+    expect(vsHigh.pGoal).toBeGreaterThan(vsLow.pGoal + 0.05)
+
+    // 2. 破大巴重炮：对低位防线远射爆发，对高位防线不触发
+    striker.skills = ['sh_r_bus_breaker_cannon']
+    striker.skillTiers = { sh_r_bus_breaker_cannon: 'gold' }
+    away.instructions = structuredClone(STYLES.parkBus.instructions)
+    const cannonVsLow = kernel.shotModel(striker, home, away, { point: { x: 76, y: 32 }, header: false, penalty: false, freeKick: false })
+    away.instructions = structuredClone(STYLES.highPress.instructions)
+    const cannonVsHigh = kernel.shotModel(striker, home, away, { point: { x: 76, y: 32 }, header: false, penalty: false, freeKick: false })
+    expect(cannonVsLow.pGoal).toBeGreaterThan(cannonVsHigh.pGoal + 0.04)
+
+    // 3. 反压迫指挥（全队光环）+ 破逼抢大师：仅对高压逼抢生效
+    mid.skills = ['sh_r_press_breaker', 'sh_aux_r_anti_press_aura']
+    mid.skillTiers = { sh_r_press_breaker: 'gold', sh_aux_r_anti_press_aura: 'gold' }
+    away.instructions = structuredClone(STYLES.highPress.instructions)
+    const auraCompHigh = ratings.eff(mate, 'composure')
+    oppDef.x = mid.x + 2; oppDef.y = mid.y
+    const dribVsPress = kernel.dribbleModel(mid, oppDef, false)
+    away.instructions = structuredClone(STYLES.parkBus.instructions)
+    const auraCompLow = ratings.eff(mate, 'composure')
+    const dribVsBus = kernel.dribbleModel(mid, oppDef, false)
+    expect(auraCompHigh).toBeGreaterThan(auraCompLow + 4)
+    expect(dribVsPress.a).toBeGreaterThan(dribVsBus.a + 7)
   })
 })

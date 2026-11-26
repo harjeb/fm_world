@@ -5,6 +5,7 @@ import { LEGEND_SKILLS } from './legend-skills.ts'
 import { PEAK_SKILLS } from './peak-skills.ts'
 import { starTraitOf, starTraitText } from './star-traits.ts'
 import { isExclusiveSkill } from './tsubasa-specials.ts'
+import { SHOP_RESERVE_SKILL_EFFECTS } from './shop-reserve-skills.ts'
 
 /**
  * 给玩家看的技能和特性效果说明。
@@ -86,6 +87,7 @@ const SKILL_EFFECTS: Partial<Record<SkillId, (m: number) => string>> = {
   sh_aux_away_steel: (m) => `客场比赛时：镇定与第一脚触球有效评分各 +${num(5 * m)}。`,
   sh_aux_tired_grit: (m) => `体力低于 70% 时：敏捷与防守站位有效评分各 +${num(5 * m)}。`,
   sh_aux_discipline: (m) => `犯规后吃牌判定：黄牌与直红风险 -${num(25 * m)}%。`,
+  ...SHOP_RESERVE_SKILL_EFFECTS,
   lg_legend_star: () => '培养前带入书槽即全程生效（不占技能槽）：每次常规行动 10% 触发彩色事件，从 2 项随机未满主属性中二选一 +100（每轮最多 3 次）。',
   ct_sggk: (m) => `门将在位面对射门：扑救评分 +${num(6.5 * m)}；扑救后抱住球的概率 +${num(10 * m)}%。`,
   ct_razor_shot: (m) => `边路传中：传球评分 +${num(5.5 * m)}；偏侧或小角度起脚：射正率 +${num(4.5 * m)}%，进球率 +${num(3 * m)}%。`,

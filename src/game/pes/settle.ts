@@ -17,6 +17,7 @@ import { commentLog } from '../match/commentary.ts'
 import { shotPositionText, shotTargetText } from '../match/shooting.ts'
 import { recordChance, recordChanceGoal, recordClaim, recordConceded, recordSave, recordShot, recordTackleAttempt } from '../match/performance.ts'
 import { MatchRatings } from '../match/ratings.ts'
+import { reserveStaminaDrainScale } from '../match/tactical-counters.ts'
 import { SettlementKernel, pickByWeight, totalWeight } from '../match/resolution.ts'
 import { GOAL_Y, PITCH_LENGTH, PITCH_WIDTH, buildMatchTeam, skillTierMultiplier } from '../match/team.ts'
 import { distanceToSegment, goalXOf } from '../match/pitch.ts'
@@ -390,6 +391,7 @@ export class PesSettlement implements ContactModel {
       const cut = Math.min(0.4, 0.15 * legendMultiplier(mp, 'lg_second_half_legs'))
       scale *= 1 - cut
     }
+    scale *= reserveStaminaDrainScale(mp, this.teamOf(1 - player.ti))
     return scale
   }
 
