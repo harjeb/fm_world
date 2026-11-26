@@ -31,19 +31,19 @@ import { CATEGORY_BONUS_PER_LEVEL, STADIUM_BONUS_PER_LEVEL } from '../../game/tr
 import { achievementCeilingBonus, cupCeilingBonus } from '../../game/cup-rewards.ts'
 import { legendBookLabel } from '../../game/legend-books.ts'
 import { bestMarketValue, transferWindowOpen } from '../../game/market.ts'
-import { caHeat, icon, meter, ownName, pageHead, panel, posBadge, primaryPosition, tag, tile } from '../components.ts'
+import { assetUrl, caHeat, icon, meter, ownName, pageHead, panel, posBadge, primaryPosition, tag, tile } from '../components.ts'
 import { esc, playerCA } from '../format.ts'
 import type { IconName } from '../icons.ts'
 import { game, ui, type ClubTab } from '../state.ts'
 
-const FACILITY_INFO: Record<FacilityId, { label: string; icon: IconName; effect: string }> = {
-  stadium: { label: '球场', icon: 'stadium', effect: `所有属性成长 +${STADIUM_BONUS_PER_LEVEL} / 等级` },
-  academy: { label: '青训设施', icon: 'cap', effect: `技术属性成长 +${CATEGORY_BONUS_PER_LEVEL} / 等级；更容易发现高潜力苗子` },
-  medical: { label: '医疗设施', icon: 'cross', effect: `身体属性成长 +${CATEGORY_BONUS_PER_LEVEL} / 等级；另缩短新伤恢复` },
-  psychology: { label: '心理辅导室', icon: 'psychology', effect: `决断、团队合作、镇定成长 +${CATEGORY_BONUS_PER_LEVEL} / 等级` },
-  tactics: { label: '战术研究室', icon: 'tactics', effect: `视野、预判、无球跑动、防守站位成长 +${CATEGORY_BONUS_PER_LEVEL} / 等级` },
-  shop: { label: '球迷商店', icon: 'bag', effect: '只提高每轮余额收入，不加属性' },
-  sponsor: { label: '赞助商', icon: 'badge', effect: '只提高每轮余额收入，不加属性' },
+const FACILITY_INFO: Record<FacilityId, { label: string; icon: IconName; badge: string; image: string; effect: string }> = {
+  stadium: { label: '球场', icon: 'stadium', badge: '核心主场 · 全属性', image: 'assets/facilities/facility-stadium.webp', effect: `所有属性成长 +${STADIUM_BONUS_PER_LEVEL} / 等级` },
+  academy: { label: '青训设施', icon: 'cap', badge: '培养加成 · 技术', image: 'assets/facilities/facility-academy.webp', effect: `技术属性成长 +${CATEGORY_BONUS_PER_LEVEL} / 等级；更容易发现高潜力苗子` },
+  medical: { label: '医疗设施', icon: 'cross', badge: '培养加成 · 身体', image: 'assets/facilities/facility-medical.webp', effect: `身体属性成长 +${CATEGORY_BONUS_PER_LEVEL} / 等级；另缩短新伤恢复` },
+  psychology: { label: '心理辅导室', icon: 'psychology', badge: '培养加成 · 心理', image: 'assets/facilities/facility-psychology.webp', effect: `决断、团队合作、镇定成长 +${CATEGORY_BONUS_PER_LEVEL} / 等级` },
+  tactics: { label: '战术研究室', icon: 'tactics', badge: '培养加成 · 意识', image: 'assets/facilities/facility-tactics.webp', effect: `视野、预判、无球跑动、防守站位成长 +${CATEGORY_BONUS_PER_LEVEL} / 等级` },
+  shop: { label: '球迷商店', icon: 'bag', badge: '商业收入 · 工资帽', image: 'assets/facilities/facility-shop.webp', effect: '只提高每轮余额收入，不加属性' },
+  sponsor: { label: '赞助商', icon: 'badge', badge: '商业收入 · 工资帽', image: 'assets/facilities/facility-sponsor.webp', effect: '只提高每轮余额收入，不加属性' },
 }
 
 /** 只有这几座设施参与培养加成；球迷商店和赞助商只影响收入。 */
@@ -449,7 +449,7 @@ function facilitiesTab(): string {
   const boardActive = isBoardBudgetActive(game)
   const facilityBudget = boardActive ? game.board!.current!.facilityBudget : null
   const initialFacilityBudget = boardActive ? game.board!.current!.initialFacilityBudget : null
-  const rows = (Object.keys(FACILITIES) as FacilityId[]).map((id) => {
+  const cards = (Object.keys(FACILITIES) as FacilityId[]).map((id) => {
     const info = FACILITY_INFO[id]
     const stage = economy[id]
     const level = facilityLevel(stage)
@@ -459,9 +459,10 @@ function facilitiesTab(): string {
     const effectText = id === 'stadium'
       ? `${info.effect}；仅主场收门票，主场全队约 +${Math.round(homeAtmosphereBonus(stage) * MAIN_ATTR_SCALE)} 主属性氛围`
       : info.effect
-    const incomeCell = income
-      ? `${income.toLocaleString()}${id === 'stadium' ? '<small class="muted"> / 主场</small>' : ''}`
+    const incomeValue = income
+      ? `${income.toLocaleString()}<small class="muted">${id === 'stadium' ? ' / 主场' : ' / 轮'}</small>`
       : '<span class="muted">—</span>'
+    const chanceValue = GROWTH_FACILITIES.has(id) ? `${chance}%` : '<span class="muted">—</span>'
     const availBudget = facilityBudget ?? 0
     const lackedFunds = cost !== null && availBudget + economy.balance < cost
     const disabledReason = cost === null ? '已满级' : lackedFunds ? (availBudget > 0 ? '设施预算与余额合计不足' : '余额不足') : ''
@@ -472,14 +473,33 @@ function facilitiesTab(): string {
           ? `扣除剩余设施预算 ${availBudget.toLocaleString()} + 余额 ${(cost - availBudget).toLocaleString()}`
           : `设施预算已用完，使用俱乐部余额 ${cost.toLocaleString()} 升级`
       : ''
-    return `<tr>
-      <td><span class="facility-name">${icon(info.icon, 16)}<b>${info.label}</b><span class="lv">LV${level}</span></span></td>
-      <td>${stagePips(stage)}<small class="muted stage-count">${facilityStageInLevel(stage)} / ${STAGES_PER_LEVEL}</small></td>
-      <td class="num">${GROWTH_FACILITIES.has(id) ? `${chance}%` : '<span class="muted">—</span>'}</td>
-      <td class="num">${incomeCell}</td>
-      <td class="dim wrap">${effectText}</td>
-      <td class="num"><button class="btn small" data-action="club-upgrade" data-facility="${id}" ${disabledReason ? `disabled title="${esc(disabledReason)}"` : payHint ? `title="${esc(payHint)}"` : ''}>${cost === null ? '已满级' : `升级 · ${cost.toLocaleString()}`}</button></td>
-    </tr>`
+    const imgUrl = assetUrl(info.image)
+    const featured = id === 'stadium'
+    const isMax = cost === null
+    const canUpgrade = !disabledReason
+    return `<article class="facility-card${featured ? ' is-featured' : ''}${isMax ? ' is-max' : ''}" data-facility-card="${id}">
+      <div class="facility-media">
+        <img src="${esc(imgUrl)}" alt="${esc(info.label)}" loading="lazy" decoding="async">
+        <span class="facility-badge">${esc(info.badge)}</span>
+        <div class="facility-media-title">
+          <span class="facility-name">${icon(info.icon, 15)}<b>${info.label}</b><span class="lv">LV${level}</span></span>
+        </div>
+      </div>
+      <div class="facility-body">
+        <div class="facility-progress">
+          ${stagePips(stage)}
+          <small class="muted stage-count">${facilityStageInLevel(stage)} / ${STAGES_PER_LEVEL} 阶段</small>
+        </div>
+        <div class="facility-metrics">
+          <div><span class="muted small">成长概率</span><b class="num-text">${chanceValue}</b></div>
+          <div><span class="muted small">${id === 'stadium' ? '主场门票收入' : '每轮收入'}</span><b class="num-text">${incomeValue}</b></div>
+        </div>
+        <p class="facility-effect dim">${effectText}</p>
+        <div class="facility-foot">
+          <button class="btn small ${canUpgrade ? 'primary' : ''}" data-action="club-upgrade" data-facility="${id}" ${disabledReason ? `disabled title="${esc(disabledReason)}"` : payHint ? `title="${esc(payHint)}"` : ''}>${isMax ? '已满级' : `升级 · ${cost.toLocaleString()}`}</button>
+        </div>
+      </div>
+    </article>`
   }).join('')
   const minAtmo = Math.round(HOME_ATMOSPHERE_BASE * MAIN_ATTR_SCALE)
   const maxAtmo = Math.round((HOME_ATMOSPHERE_BASE + HOME_STADIUM_MAX_BONUS) * MAIN_ATTR_SCALE)
@@ -487,7 +507,7 @@ function facilitiesTab(): string {
     ? `<div class="banner ${facilityBudget! > 0 ? 'info' : 'gold'}">${icon('coin', 16)}<b>本赛季独立设施预算：剩余 ${facilityBudget!.toLocaleString()} / 初始 ${initialFacilityBudget!.toLocaleString()}</b><span>升级设施优先扣除独立设施预算（不扣余额）；设施预算不足或用完后，自动使用俱乐部余额补足，两者互不冲突。</span><button class="btn small ghost" data-action="go-club" data-tab="board">查看董事会</button></div>`
     : ''
   return `${budgetBanner}<div class="grid club-grid">
-    ${panel('俱乐部设施', `<div class="table-scroll"><table class="dt"><thead><tr><th>设施</th><th>阶段</th><th class="num">成长概率</th><th class="num">每轮 / 主场收入</th><th>加成效果</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`, { flush: true })}
+    ${panel('俱乐部设施', `<div class="facility-cards">${cards}</div>`)}
     ${panel('设施规则', `<ul class="rule-list">
       <li>${icon('coin', 13)}每轮保底 ${BASE_ROUND_INCOME.toLocaleString()}；球迷每人贡献 2，球场、商店、赞助收入随球迷规模增长（最多按 4 倍计算）；其中<b>球场门票仅联赛主场发放</b>。</li>
       <li>${icon('stadium', 13)}球场在联赛/杯赛主场为全队提供微弱主场氛围加成（LV1 约 +${minAtmo} 至 LV5 满级约 +${maxAtmo} 主属性有效值），客场及中立挑战赛不生效。</li>

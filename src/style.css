@@ -321,7 +321,7 @@ h3:first-child { margin-top: 0; }
 .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .season-grid { grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr); }
 .season-bottom { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.club-grid { grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); }
+.club-grid { grid-template-columns: minmax(0, 1.85fr) minmax(270px, 0.95fr); }
 .challenge-grid { grid-template-columns: minmax(0, 1fr) 280px; }
 .dash { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; align-items: start; }
 .span-4 { grid-column: span 4; }
@@ -1051,6 +1051,129 @@ button.nm-recent:hover { background: var(--raised); }
 .pips { display: inline-flex; gap: 2px; }
 .pips i { width: 13px; height: 6px; border-radius: 1px; background: var(--raised); }
 .pips i.on { background: var(--accent); }
+
+/* 俱乐部 7 大设施图文卡片 */
+.facility-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.facility-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color 140ms ease, transform 140ms ease;
+}
+.facility-card:hover { border-color: var(--line-2); }
+.facility-card.is-featured {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+}
+.facility-media {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #0d1014;
+  overflow: hidden;
+}
+.facility-card.is-featured .facility-media {
+  aspect-ratio: auto;
+  min-height: 186px;
+  height: 100%;
+}
+.facility-media img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  transition: transform 280ms ease;
+}
+.facility-card:hover .facility-media img { transform: scale(1.03); }
+.facility-media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(10, 13, 17, 0.22) 0%, rgba(10, 13, 17, 0.06) 44%, rgba(10, 13, 17, 0.86) 100%);
+}
+.facility-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  padding: 2px 7px;
+  border-radius: 2px;
+  background: rgba(13, 16, 20, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(233, 237, 242, 0.92);
+  font-size: 11px;
+  line-height: 1.35;
+  backdrop-filter: blur(4px);
+}
+.facility-media-title {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 8px;
+  z-index: 1;
+}
+.facility-media-title .facility-name { color: #f3f6fa; gap: 7px; }
+.facility-media-title .facility-name .ico { color: #cdf33f; }
+.facility-media-title .facility-name b { font-size: 14.5px; font-weight: 600; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.75); }
+.facility-media-title .facility-name .lv {
+  color: #cdf33f;
+  background: rgba(13, 16, 20, 0.72);
+  border-color: rgba(205, 243, 63, 0.55);
+}
+.facility-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+}
+.facility-progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.facility-progress .stage-count { margin-left: 0; }
+.facility-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.facility-metrics > div {
+  display: grid;
+  gap: 1px;
+  padding: 6px 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+.facility-metrics b { font-size: 14px; font-weight: 600; }
+.facility-effect {
+  font-size: 12px;
+  line-height: 1.48;
+  margin: 0;
+  flex: 1;
+}
+.facility-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
+}
+.facility-foot .btn { min-width: 112px; }
+@media (max-width: 760px) {
+  .facility-cards { grid-template-columns: minmax(0, 1fr); }
+  .facility-card.is-featured { display: flex; flex-direction: column; }
+  .facility-card.is-featured .facility-media { aspect-ratio: 16 / 9; min-height: 0; height: auto; }
+  .facility-foot .btn { width: 100%; }
+}
 
 /* ---------- 复盘 ---------- */
 .replay-score { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; padding: 4px 0 12px; }
@@ -2841,6 +2964,11 @@ circle.pm-5 { fill: var(--h6); }
   box-shadow: 0 6px 20px rgba(15, 23, 42, 0.14);
 }
 :root[data-theme="light"] .crest { filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.24)); }
+:root[data-theme="light"] .facility-card {
+  background: var(--panel);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+:root[data-theme="light"] .facility-metrics > div { background: var(--panel-2); }
 @media (max-width: 760px) {
   :root[data-theme="light"] .dt.squad th:nth-child(2),
   :root[data-theme="light"] .dt.squad td:nth-child(2) { box-shadow: 2px 0 6px rgba(15, 23, 42, 0.12); }
