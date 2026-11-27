@@ -649,6 +649,7 @@ html.pk-modal-lock body {
   font-weight: 700;
   color: #eef5fb;
   max-width: 118px;
+  min-width: 0;
 }
 .hl3d-sb-team > b {
   overflow: hidden;
@@ -656,6 +657,8 @@ html.pk-modal-lock body {
   white-space: nowrap;
 }
 .hl3d-sb-score {
+  flex: none;
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -672,6 +675,8 @@ html.pk-modal-lock body {
   color: #0b131b;
 }
 .hl3d-sb-clock {
+  flex: none;
+  white-space: nowrap;
   padding-left: 7px;
   border-left: 1px solid rgba(255, 255, 255, 0.14);
   color: #cdf33f;
@@ -920,6 +925,7 @@ html.pk-modal-lock body {
     left: 50%;
     right: auto;
     transform: translateX(-50%);
+    width: max-content;
     max-width: calc(100% - 14px);
     padding: 4px 8px;
     gap: 5px;
@@ -934,7 +940,7 @@ html.pk-modal-lock body {
     flex: none;
   }
   .highlight3d-lab .hl3d-sb-score {
-    min-width: 40px;
+    min-width: 44px;
     padding: 2px 6px;
     font-size: 12.5px;
   }
