@@ -6,6 +6,7 @@ import { SKILLS } from './data/skills.ts'
 import { displayClock, LOGIC_MATCH_SECONDS } from './match/time.ts'
 import { extractMatchHighlights } from './review.ts'
 import { mainAttrsFor } from './scale.ts'
+import { playerAppearanceId } from './appearance.ts'
 
 /** 全服聊天：内存中与落盘均只保留最新的 50 条消息。 */
 export const CHAT_HISTORY_LIMIT = 50
@@ -26,6 +27,8 @@ export type ChatSharedCard = {
   playerName: string
   cardTitle: string
   routeId?: RouteId
+  appearanceId?: string
+  height?: number
   ca: number
   country?: string
   age?: number
@@ -41,6 +44,12 @@ export type ChatSharedGoal = {
   playerName: string
   side: 'home' | 'away'
   assistName?: string
+  appearanceId?: string
+  height?: number
+  number?: number
+  assistAppearanceId?: string
+  assistHeight?: number
+  assistNumber?: number
   origin?: { x: number; y: number }
   distance?: number
   bodyPart?: 'left' | 'right' | 'head'
@@ -160,6 +169,7 @@ export function buildChatSharedCard(game: GameState, cardId: string): ChatShared
     playerName: card.playerName || owner?.name || '未知球员',
     cardTitle: cardDisplayName(card),
     ...(card.routeId ? { routeId: card.routeId } : {}),
+    ...(owner ? { appearanceId: playerAppearanceId(owner), height: owner.height } : {}),
     ca: Math.round(caOf(card.attrs, isGk) * 10) / 10,
     ...(owner?.country ? { country: owner.country } : {}),
     ...(typeof owner?.age === 'number' ? { age: owner.age } : {}),
@@ -195,13 +205,37 @@ export function buildChatSharedMatch(
   colors: { homeColor: string; awayColor: string },
 ): ChatSharedMatch {
   const duration = record.durationSeconds ?? LOGIC_MATCH_SECONDS
+  const statByPlayer = new Map<string, MatchRecord['playerStats'][number]>()
+  for (const s of record.playerStats ?? []) {
+    statByPlayer.set(s.playerId, s)
+    if (s.sourceId) statByPlayer.set(s.sourceId, s)
+    statByPlayer.set(`${s.side}:${s.name}`, s)
+  }
   const goals: ChatSharedGoal[] = (record.goalDetails ?? []).slice(0, 12).map((g) => {
     const m = Math.max(1, Math.min(90, Math.floor(displayClock(g.clock, duration) / 60) + 1))
+    const scStat = statByPlayer.get(g.playerId) ?? statByPlayer.get(`${g.side}:${g.playerName}`)
+    const astStat = g.assistId
+      ? statByPlayer.get(g.assistId)
+      : g.assistName
+        ? statByPlayer.get(`${g.side}:${g.assistName}`)
+        : undefined
+    const appId = g.appearanceId ?? scStat?.appearanceId
+    const hCm = g.height ?? scStat?.height
+    const num = g.number ?? scStat?.number
+    const astAppId = g.assistAppearanceId ?? astStat?.appearanceId
+    const astHCm = g.assistHeight ?? astStat?.height
+    const astNum = g.assistNumber ?? astStat?.number
     return {
       minute: `${m}'`,
       playerName: g.playerName,
       side: g.side,
       ...(g.assistName ? { assistName: g.assistName } : {}),
+      ...(appId ? { appearanceId: appId } : {}),
+      ...(hCm ? { height: hCm } : {}),
+      ...(num ? { number: num } : {}),
+      ...(astAppId ? { assistAppearanceId: astAppId } : {}),
+      ...(astHCm ? { assistHeight: astHCm } : {}),
+      ...(astNum ? { assistNumber: astNum } : {}),
       origin: { x: Math.round(g.origin.x * 10) / 10, y: Math.round(g.origin.y * 10) / 10 },
       distance: Math.round(g.distance * 10) / 10,
       bodyPart: g.bodyPart,

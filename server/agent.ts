@@ -28,6 +28,7 @@ import { PEAK_DAILY_LIMIT, peakDailyStatus } from '../src/game/peak-attempts.ts'
 import { LEGEND_DAILY_LIMIT, legendDailyStatus } from '../src/game/legend-attempts.ts'
 import { peakStageReward } from '../src/game/data/peak-rewards.ts'
 import { peakSkillForStage } from '../src/game/data/peak-skills.ts'
+import { playerAppearanceId } from '../src/game/appearance.ts'
 import { applyPeakBreakthrough } from '../src/game/peak-milestones.ts'
 import { PEAK_REWARD_STAGE, claimPeakReward, peakRewardReady } from '../src/game/peak-reward.ts'
 import { LEGEND_TEAMS } from '../src/game/data/legend-teams.ts'
@@ -263,6 +264,7 @@ export function playerView(player: GameState['roster'][number], game: GameState,
     number: player.number,
     foot: player.foot,
     height: player.height,
+    appearanceId: playerAppearanceId(player),
     primaryPosition: primaryPosition(player),
     ca: displayCA(caOf(player.attrs, isGk)),
     initialCA: initialDisplayCA(player),

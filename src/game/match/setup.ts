@@ -214,7 +214,32 @@ export function createMatchRecord(game: { season?: { index: number }; lineup: Li
     failureStats,
     keyEvents: keyEvents.map((entry) => ({ ...entry })),
     commentary: state.commentary?.map((entry) => ({ ...entry, score: { ...entry.score }, ...(entry.shootoutScore ? { shootoutScore: { ...entry.shootoutScore } } : {}) })),
-    goalDetails: state.log.flatMap((entry) => entry.goal ? [{ ...entry.goal, origin: { ...entry.goal.origin } }] : []),
+    goalDetails: (() => {
+      const mpLookup = new Map<string, { appearanceId?: string; height: number; number: number }>()
+      for (const team of state.teams) {
+        for (const mp of [...team.players, ...team.bench]) {
+          const info = { appearanceId: mp.stats.appearanceId, height: mp.height, number: mp.number }
+          mpLookup.set(mp.id, info)
+          mpLookup.set(mp.sourceId, info)
+        }
+      }
+      return state.log.flatMap((entry) => {
+        if (!entry.goal) return []
+        const g = entry.goal
+        const sc = mpLookup.get(g.playerId)
+        const ast = g.assistId ? mpLookup.get(g.assistId) : undefined
+        return [{
+          ...g,
+          origin: { ...g.origin },
+          ...(sc?.appearanceId ? { appearanceId: sc.appearanceId } : {}),
+          ...(sc?.height ? { height: sc.height } : {}),
+          ...(sc?.number ? { number: sc.number } : {}),
+          ...(ast?.appearanceId ? { assistAppearanceId: ast.appearanceId } : {}),
+          ...(ast?.height ? { assistHeight: ast.height } : {}),
+          ...(ast?.number ? { assistNumber: ast.number } : {}),
+        }]
+      })
+    })(),
     instructions: [...state.instructions],
     lineup: structuredClone(game.lineup),
     opponentId: context.opponentId,

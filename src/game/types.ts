@@ -393,6 +393,8 @@ export type Player = {
   number: number
   foot: Foot
   height: number
+  /** 绑定的人物 3D 外观模型编码（肤色/发型/发色/体型/胡须/发带/战靴），跨回放与训练恒定不变。 */
+  appearanceId?: string
   attrs: Attributes
   ceilings: Attributes
   pa: number
@@ -866,6 +868,9 @@ export type PlayerMatchStats = {
   sourceId?: string
   name: string
   side: 'home' | 'away'
+  number?: number
+  height?: number
+  appearanceId?: string
   minutes: number
   /** Display minutes (0-90), used to measure actual overlap between teammates. */
   onMinute?: number
@@ -950,6 +955,12 @@ export type GoalDetail = {
   /** 助攻者；点球、单干或对方失误造成的进球没有。 */
   assistId?: string
   assistName?: string
+  appearanceId?: string
+  height?: number
+  number?: number
+  assistAppearanceId?: string
+  assistHeight?: number
+  assistNumber?: number
 }
 
 export type CommentaryEntry = {

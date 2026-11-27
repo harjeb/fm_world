@@ -4,40 +4,215 @@ import modelUrl from './art/matchday.glb?url'
 import type { Player } from '../../game/types.ts'
 import { assetUrl, distinctKit, inkOn, type ClubLook } from '../components.ts'
 import { clamp, GLOVE_Z, SPOT, type keeperAt } from '../../game/penalty/practice.ts'
+import { resolve3DAppearance } from '../../game/appearance.ts'
 
 export type Team = Pick<ClubLook, 'name' | 'color'>
-export type Wearer = Pick<Player, 'id' | 'name' | 'number' | 'height'>
-const keeperColor = (home: string) => distinctKit('#f2b632', home)
-
-// Deterministic player look templates: skin tones, hair styles/colors, subtle head proportions & pro cleat colorways.
-const SKIN_TONES = ['#e7bea0', '#dbb08d', '#d29e79', '#c48d68', '#b57b57', '#9e6746', '#825136', '#633b27']
-const HAIR_TONES = ['#1a191c', '#2a201b', '#3f2d21', '#5a3f2b', '#7b5b39', '#b89a67', '#6a3824']
-const HEAD_SHAPES: readonly [number, number, number][] = [
-  [1.0, 1.0, 1.0],
-  [0.95, 1.03, 0.99],
-  [1.04, 0.97, 1.01],
-  [0.97, 0.99, 1.03],
-  [1.02, 1.02, 0.97],
-]
-const BOOT_STYLES: readonly { main: string; accent: string; sole: string }[] = [
-  { main: '#182028', accent: '#cdf33f', sole: '#10151c' }, // Stealth Black / Volt Lime
-  { main: '#eef2f7', accent: '#e83a48', sole: '#1c2430' }, // Pure White / Crimson
-  { main: '#16b4f0', accent: '#0e1d34', sole: '#0b1626' }, // Electric Cyan / Navy
-  { main: '#ff691a', accent: '#161c24', sole: '#1a1d24' }, // Solar Orange / Carbon
-  { main: '#b9f22c', accent: '#171f26', sole: '#141a21' }, // Neon Volt / Obsidian
-  { main: '#e2b232', accent: '#1b2128', sole: '#171b22' }, // Royal Gold / Matte Black
-  { main: '#df3374', accent: '#f4f7fb', sole: '#1d1c28' }, // Hyper Pink / White
-  { main: '#c2cbd6', accent: '#256ae0', sole: '#182233' }, // Metallic Silver / Cobalt
-]
-const HAIR_COUNT = 6
-
-function hashSeed(input: string) {
-  let h = 2166136261
-  for (const ch of input) h = Math.imul(h ^ ch.codePointAt(0)!, 16777619)
-  return h >>> 0
+export type Wearer = Pick<Player, 'id' | 'name' | 'number' | 'height'> & {
+  seedId?: string
+  enName?: string
+  country?: string
+  appearanceId?: string
+  attrs?: { strength?: number; speed?: number }
 }
-function nextHash(h: number) {
-  return (Math.imul(h, 1664525) + 1013904223) >>> 0
+const keeperColor = (home: string) => distinctKit('#f2b632', home)
+const GLB_HAIR_COUNT = 6
+
+/**
+ * 为 Head 骨骼构建 8 款高辨识度扩展 3D 发型节点（索引 6..13；索引 14 为利落光头）：
+ * 6: afro (蓬松爆炸头)
+ * 7: dreads (垂肩脏辫)
+ * 8: mohawk (莫西干战斧)
+ * 9: topknot (武士丸子头)
+ * 10: ponytail (飘逸马尾辫)
+ * 11: curls_band (运动发带卷发)
+ * 12: mane_band (运动发带飘逸长发)
+ * 13: spiky (锋芒刺猬头)
+ *
+ * Head 局部坐标：x ∈ [-0.106, +0.106]，y ∈ [-0.123, +0.129]（颅顶 +0.129），
+ * -z 为正脸方向（-0.124），+z 为后脑勺方向（+0.106）。
+ */
+function buildProceduralHairStyles(
+  hairMat: T.Material,
+  bandMat: T.Material,
+  trackGeo: <G extends T.BufferGeometry>(g: G) => G,
+): T.Group[] {
+  const mkMesh = (geo: T.BufferGeometry, mat: T.Material = hairMat) => {
+    const m = new T.Mesh(geo, mat)
+    m.castShadow = true
+    m.receiveShadow = true
+    return m
+  }
+
+  const capGeo = trackGeo(new T.SphereGeometry(0.106, 14, 10))
+  const bandGeo = trackGeo(new T.TorusGeometry(0.103, 0.0155, 10, 26))
+  const tieGeo = trackGeo(new T.TorusGeometry(0.025, 0.0085, 8, 16))
+
+  // 6: Afro (蓬松爆炸头)
+  const gAfro = new T.Group()
+  const afroMain = mkMesh(trackGeo(new T.SphereGeometry(0.146, 16, 12)))
+  afroMain.position.set(0, 0.072, 0.022)
+  afroMain.scale.set(1.08, 0.96, 1.08)
+  gAfro.add(afroMain)
+  const puffGeo = trackGeo(new T.SphereGeometry(0.068, 10, 8))
+  for (const [px, py, pz] of [
+    [-0.088, 0.078, 0.018],
+    [0.088, 0.078, 0.018],
+    [-0.062, 0.138, -0.012],
+    [0.062, 0.138, -0.012],
+    [0, 0.148, 0.042],
+    [0, 0.048, 0.105],
+  ] as const) {
+    const p = mkMesh(puffGeo)
+    p.position.set(px, py, pz)
+    gAfro.add(p)
+  }
+
+  // 7: Dreadlocks (垂肩脏辫)
+  const gDreads = new T.Group()
+  const dreadCap = mkMesh(capGeo)
+  dreadCap.position.set(0, 0.044, 0.012)
+  dreadCap.scale.set(1.01, 0.95, 1.04)
+  gDreads.add(dreadCap)
+  const dreadTie = mkMesh(trackGeo(new T.TorusGeometry(0.082, 0.011, 8, 20)), bandMat)
+  dreadTie.position.set(0, 0.056, 0.036)
+  dreadTie.rotation.x = Math.PI * 0.42
+  gDreads.add(dreadTie)
+  const lockGeo = trackGeo(new T.CapsuleGeometry(0.0165, 0.165, 4, 7))
+  for (let i = 0; i < 13; i++) {
+    const u = i / 12 // 0..1 around left -> back -> right
+    const angle = -Math.PI * 0.58 + u * Math.PI * 1.16 // centered at +Z (back of head)
+    const rx = Math.sin(angle) * 0.098
+    const rz = Math.cos(angle) * 0.102 + 0.02
+    const lock = mkMesh(lockGeo)
+    lock.position.set(rx, -0.038 - (i % 2) * 0.018, rz)
+    lock.rotation.set(0.24 + Math.cos(angle) * 0.1, 0, -Math.sin(angle) * 0.22)
+    gDreads.add(lock)
+  }
+
+  // 8: Mohawk (莫西干战斧)
+  const gMohawk = new T.Group()
+  const bladeGeo = trackGeo(new T.ConeGeometry(0.032, 0.092, 5))
+  for (let i = 0; i < 7; i++) {
+    const t = -0.78 + (i / 6) * 1.85 // front (-z) over crown to back (+z)
+    const by = Math.cos(t * 0.85) * 0.145 + 0.018
+    const bz = Math.sin(t * 0.85) * 0.125 + 0.012
+    const blade = mkMesh(bladeGeo)
+    blade.position.set(0, by, bz)
+    blade.scale.set(0.54, 1.05, 1.28)
+    blade.rotation.x = t * 0.82
+    gMohawk.add(blade)
+  }
+
+  // 9: Top-Knot (武士丸子头)
+  const gTopknot = new T.Group()
+  const tkCap = mkMesh(capGeo)
+  tkCap.position.set(0, 0.04, 0.014)
+  tkCap.scale.set(0.99, 0.94, 1.04)
+  gTopknot.add(tkCap)
+  const tkTie = mkMesh(tieGeo, bandMat)
+  tkTie.position.set(0, 0.128, 0.085)
+  tkTie.rotation.x = 0.72
+  gTopknot.add(tkTie)
+  const bun = mkMesh(trackGeo(new T.SphereGeometry(0.044, 12, 10)))
+  bun.position.set(0, 0.156, 0.112)
+  bun.scale.set(0.96, 0.94, 1.12)
+  gTopknot.add(bun)
+  const tkTail = mkMesh(trackGeo(new T.ConeGeometry(0.026, 0.082, 7)))
+  tkTail.position.set(0, 0.122, 0.148)
+  tkTail.rotation.x = -2.25
+  gTopknot.add(tkTail)
+
+  // 10: Ponytail (飘逸马尾辫)
+  const gPonytail = new T.Group()
+  const ptCap = mkMesh(capGeo)
+  ptCap.position.set(0, 0.042, 0.014)
+  ptCap.scale.set(1.0, 0.95, 1.04)
+  gPonytail.add(ptCap)
+  const ptTie = mkMesh(tieGeo, bandMat)
+  ptTie.position.set(0, 0.028, 0.108)
+  ptTie.rotation.x = 1.38
+  gPonytail.add(ptTie)
+  const ptBody = mkMesh(trackGeo(new T.CapsuleGeometry(0.026, 0.115, 4, 8)))
+  ptBody.position.set(0, -0.036, 0.146)
+  ptBody.rotation.x = 0.42
+  gPonytail.add(ptBody)
+  const ptTip = mkMesh(trackGeo(new T.ConeGeometry(0.025, 0.09, 7)))
+  ptTip.position.set(0, -0.118, 0.168)
+  ptTip.rotation.x = Math.PI - 0.18
+  gPonytail.add(ptTip)
+
+  // 11: Headband + Fluffy Curls (运动发带卷发)
+  const gCurlsBand = new T.Group()
+  const cbBand = mkMesh(bandGeo, bandMat)
+  cbBand.position.set(0, 0.056, 0.002)
+  cbBand.rotation.x = Math.PI * 0.5 - 0.16
+  gCurlsBand.add(cbBand)
+  const curlGeo = trackGeo(new T.SphereGeometry(0.05, 10, 8))
+  for (const [cx, cy, cz] of [
+    [0, 0.138, -0.042],
+    [-0.054, 0.128, -0.028],
+    [0.054, 0.128, -0.028],
+    [-0.072, 0.112, 0.022],
+    [0.072, 0.112, 0.022],
+    [0, 0.148, 0.02],
+    [-0.048, 0.125, 0.072],
+    [0.048, 0.125, 0.072],
+    [0, 0.098, 0.095],
+  ] as const) {
+    const c = mkMesh(curlGeo)
+    c.position.set(cx, cy, cz)
+    gCurlsBand.add(c)
+  }
+
+  // 12: Headband + Flowing Mane (运动发带飘逸长发)
+  const gManeBand = new T.Group()
+  const mbCap = mkMesh(capGeo)
+  mbCap.position.set(0, 0.046, 0.014)
+  mbCap.scale.set(1.02, 0.96, 1.05)
+  gManeBand.add(mbCap)
+  const mbBand = mkMesh(bandGeo, bandMat)
+  mbBand.position.set(0, 0.055, 0.002)
+  mbBand.rotation.x = Math.PI * 0.5 - 0.15
+  gManeBand.add(mbBand)
+  const maneGeo = trackGeo(new T.CapsuleGeometry(0.026, 0.15, 4, 8))
+  for (let i = 0; i < 9; i++) {
+    const u = i / 8
+    const angle = -Math.PI * 0.52 + u * Math.PI * 1.04
+    const mx = Math.sin(angle) * 0.095
+    const mz = Math.cos(angle) * 0.098 + 0.022
+    const strand = mkMesh(maneGeo)
+    strand.position.set(mx, -0.032, mz)
+    strand.rotation.set(0.22, 0, -Math.sin(angle) * 0.18)
+    gManeBand.add(strand)
+  }
+
+  // 13: Spiky Striker (锋芒刺猬头)
+  const gSpiky = new T.Group()
+  const spCap = mkMesh(capGeo)
+  spCap.position.set(0, 0.044, 0.012)
+  spCap.scale.set(1.0, 0.95, 1.03)
+  gSpiky.add(spCap)
+  const spikeGeo = trackGeo(new T.ConeGeometry(0.033, 0.105, 5))
+  for (const [sx, sy, sz, rx, rz] of [
+    [0, 0.165, -0.035, -0.35, 0],
+    [-0.055, 0.152, -0.02, -0.25, 0.45],
+    [0.055, 0.152, -0.02, -0.25, -0.45],
+    [0, 0.176, 0.025, 0.25, 0],
+    [-0.072, 0.132, 0.028, 0.2, 0.72],
+    [0.072, 0.132, 0.028, 0.2, -0.72],
+    [-0.048, 0.155, 0.078, 0.68, 0.38],
+    [0.048, 0.155, 0.078, 0.68, -0.38],
+    [0, 0.142, 0.105, 0.92, 0],
+    [-0.075, 0.092, 0.085, 0.85, 0.68],
+    [0.075, 0.092, 0.085, 0.85, -0.68],
+  ] as const) {
+    const sp = mkMesh(spikeGeo)
+    sp.position.set(sx, sy, sz)
+    sp.rotation.set(rx, 0, rz)
+    gSpiky.add(sp)
+  }
+
+  return [gAfro, gDreads, gMohawk, gTopknot, gPonytail, gCurlsBand, gManeBand, gSpiky]
 }
 
 // Both sides of the training drill belong to the user's roster. GK wears a contrast shirt, not an away club's kit.
@@ -282,15 +457,31 @@ export async function loadMatchday(club: Team) {
     textures.add(fabric)
     mats.get('shirt')!.map = fabric
 
+    const bandMat = new T.MeshStandardMaterial({
+      color: '#f5f8fc',
+      roughness: 0.72,
+      metalness: 0.04,
+    })
+    materials.add(bandMat)
+
     const gloveTrimMats: T.MeshStandardMaterial[] = []
     const head = root.getObjectByName('Head')!,
-      hairs = Array.from({ length: HAIR_COUNT }, (_, i) => root.getObjectByName('Hair' + i)!),
+      glbHairs = Array.from({ length: GLB_HAIR_COUNT }, (_, i) => root.getObjectByName('Hair' + i)!),
+      extraHairs = buildProceduralHairStyles(mats.get('hair')!, bandMat, (g) => {
+        geometries.add(g)
+        return g
+      }),
+      hairs: T.Object3D[] = [...glbHairs, ...extraHairs],
       beard = root.getObjectByName('Beard')!,
       legs = ['L', 'R'].map((s) => root.getObjectByName('Hip' + s)!),
       knees = ['L', 'R'].map((s) => root.getObjectByName('Knee' + s)!),
       ankles = ['L', 'R'].map((s) => root.getObjectByName('Ankle' + s)!),
       arms = ['L', 'R'].map((s) => root.getObjectByName('Shoulder' + s)!),
       elbows = ['L', 'R'].map((s) => root.getObjectByName('Elbow' + s)!)
+    for (const eh of extraHairs) {
+      eh.visible = false
+      head.add(eh)
+    }
     const gloves = isKeeper
       ? ['L', 'R'].map((s) => {
           root.getObjectByName('Hand' + s)!.visible = false
@@ -329,36 +520,34 @@ export async function loadMatchday(club: Team) {
       tailor(ctx, targetClub, p, isKeeper, targetBadge)
       fabric.needsUpdate = true
 
-      // Seed deterministic multi-trait player template (head shape, hairstyle, beard, skin, hair color, boot colorway)
-      let h = hashSeed(`${p?.id ?? (isKeeper ? 'gk-default' : 'st-default')}|${p?.name ?? ''}`)
-      const skinIdx = h % SKIN_TONES.length
-      h = nextHash(h)
-      const hairStyle = h % HAIR_COUNT
-      h = nextHash(h)
-      // Keep natural pairing: darker skin tones lean toward darker hair while preserving occasional stylish bleach
-      const hairColorIdx =
-        skinIdx >= 5 && h % 7 !== 0 ? h % 3 : h % HAIR_TONES.length
-      h = nextHash(h)
-      const headShape = HEAD_SHAPES[h % HEAD_SHAPES.length]
-      h = nextHash(h)
-      const hasBeard = h % 10 < 4
-      h = nextHash(h)
-      const bootStyle = BOOT_STYLES[h % BOOT_STYLES.length]
+      // Resolve bound 3D appearance (skin tone, 15 hairstyles incl. bald, 10 hair colors, 4 builds, stature, headband & boots)
+      const app = resolve3DAppearance(
+        p ?? { id: isKeeper ? 'gk-default' : 'st-default' },
+        isKeeper,
+      )
 
-      mats.get('skin')!.color.set(SKIN_TONES[skinIdx])
-      mats.get('hair')!.color.set(HAIR_TONES[hairColorIdx])
-      mats.get('boot')!.color.set(bootStyle.main)
-      mats.get('bootAccent')!.color.set(bootStyle.accent)
-      mats.get('bootSole')!.color.set(bootStyle.sole)
+      mats.get('skin')!.color.set(app.skinHex)
+      mats.get('hair')!.color.set(app.hairColorHex)
+      bandMat.color.set(app.bandColorHex)
+      mats.get('boot')!.color.set(app.boot.main)
+      mats.get('bootAccent')!.color.set(app.boot.accent)
+      mats.get('bootSole')!.color.set(app.boot.sole)
 
-      head.scale.set(headShape[0], headShape[1], headShape[2])
+      root.scale.set(app.scaleXZ, app.scaleY, app.scaleXZ)
+      // Counter-scale head X/Z slightly when body build is wide/lean so head & hair stay naturally proportioned
+      const invWidth = app.scaleY / Math.max(0.5, app.scaleXZ)
+      const compXZ = 1 + (invWidth - 1) * 0.65
+      head.scale.set(app.headShape[0] * compXZ, app.headShape[1], app.headShape[2] * compXZ)
+
+      // app.hairIdx === 14 ('bald') hides all 0..13 hair groups cleanly
       hairs.forEach((node, idx) => {
-        node.visible = idx === hairStyle
+        node.visible = idx === app.hairIdx
       })
-      beard.visible = hasBeard
-
-      root.scale.setScalar(clamp((p?.height || 180) / 180, 0.93, 1.09))
+      beard.visible = app.hasBeard
     }
+
+    const wearerKey = (c: Team, p?: Wearer) =>
+      `${c.name}|${c.color}|${p?.id ?? ''}|${p?.name ?? ''}|${p?.number ?? ''}|${p?.height ?? ''}|${p?.appearanceId ?? ''}|${p?.country ?? ''}`
 
     // Initialize default kit colors right away
     const initTone = isKeeper ? keeperColor(initialClub.color) : initialClub.color
@@ -370,12 +559,12 @@ export async function loadMatchday(club: Team) {
     function dress(p?: Wearer) {
       if (p === current) return
       current = p
-      currentKey = `${figClub.name}|${figClub.color}|${p?.id ?? ''}|${p?.name ?? ''}|${p?.number ?? ''}|${p?.height ?? ''}`
+      currentKey = wearerKey(figClub, p)
       applyColorsAndAppearance(figClub, figBadge, p)
     }
 
     async function rekit(nextClub: Team, p?: Wearer) {
-      const nextKey = `${nextClub.name}|${nextClub.color}|${p?.id ?? ''}|${p?.name ?? ''}|${p?.number ?? ''}|${p?.height ?? ''}`
+      const nextKey = wearerKey(nextClub, p)
       if (nextKey === currentKey) return
       const nextBadge = await clubBadge(nextClub)
       figClub = nextClub

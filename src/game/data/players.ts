@@ -10,6 +10,7 @@ import { fmProfileFor } from './fm-profiles.generated.ts'
 import { curatedProfileFor } from './profiles-curated.ts'
 import { canLearnSkill, TRAITS } from './skills.ts'
 import { EXTRA_SEEDS } from './extra-stars.ts'
+import { deriveAppearanceId } from '../appearance.ts'
 
 export type PlayerSeed = {
   id: string
@@ -551,6 +552,15 @@ export function createPlayerFromSeed(seed: PlayerSeed): Player {
     number: Number(seed.id.slice(1)) % 99 + 1,
     foot: seed.foot,
     height: seed.height,
+    appearanceId: deriveAppearanceId({
+      id: seed.id,
+      seedId: seed.id,
+      name: seed.name,
+      enName: seed.enName,
+      country: seed.country,
+      height: seed.height,
+      attrs,
+    }),
     attrs,
     ceilings: finalCeilings,
     pa,

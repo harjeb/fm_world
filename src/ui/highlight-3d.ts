@@ -14,6 +14,7 @@ import {
   type ActorPose3D,
   type Highlight3DClip,
   type Highlight3DTeam,
+  type RosterActorHint,
 } from '../game/highlight-3d.ts'
 import { clamp } from '../game/penalty/practice.ts'
 import { PLAYER_TEAM_ID } from '../game/season.ts'
@@ -607,6 +608,33 @@ export async function openHighlight3DTheater(opts: Highlight3DTheaterOptions): P
   rafId = requestAnimationFrame(tick)
 }
 
+function buildWorldRosterLookup(): Map<string, RosterActorHint> {
+  const map = new Map<string, RosterActorHint>()
+  const register = (p: Player, teamName?: string) => {
+    const hint: RosterActorHint = {
+      id: p.id,
+      seedId: p.seedId,
+      name: p.name,
+      enName: p.enName,
+      country: p.country,
+      number: p.number,
+      height: p.height,
+      appearanceId: p.appearanceId,
+      attrs: { strength: p.attrs.strength, speed: p.attrs.speed },
+    }
+    map.set(p.id, hint)
+    if (teamName) map.set(`${teamName}:${p.name}`, hint)
+    if (!map.has(`name:${p.name}`)) map.set(`name:${p.name}`, hint)
+  }
+  for (const p of game?.roster ?? []) register(p, game?.clubName)
+  for (const m of game?.youth?.members ?? []) register(m.player, game?.clubName)
+  for (const t of game?.aiTeams ?? []) {
+    for (const p of t.players) register(p, t.name)
+  }
+  for (const p of game?.freeStars ?? []) register(p)
+  return map
+}
+
 /** 从赛后复盘战报打开 3D 高光剧场（可选直接定位到第 goalIndex 粒进球）。 */
 export async function openRecordHighlight3D(record: MatchRecord, goalIndex?: number): Promise<void> {
   const homeRaw = clubLook(record.homeId).color
@@ -616,11 +644,7 @@ export async function openRecordHighlight3D(record: MatchRecord, goalIndex?: num
       ? { home: homeRaw, away: distinctKit(awayRaw, homeRaw) }
       : { home: distinctKit(homeRaw, awayRaw), away: awayRaw }
 
-  const rosterLookup = new Map<string, Pick<Player, 'id' | 'name' | 'number' | 'height'>>()
-  for (const p of game?.roster ?? []) {
-    rosterLookup.set(p.id, { id: p.id, name: p.name, number: p.number, height: p.height })
-  }
-
+  const rosterLookup = buildWorldRosterLookup()
   const clips = buildHighlight3DClipsFromRecord(record, kits, rosterLookup)
   let initialIndex = 0
   if (goalIndex !== undefined && goalIndex >= 0) {
@@ -643,7 +667,8 @@ export async function openRecordHighlight3D(record: MatchRecord, goalIndex?: num
 export async function openSharedMatchHighlight3D(match: ChatSharedMatch, goalIndex?: number): Promise<void> {
   const homeKit = sanitizeChatColor(match.homeColor)
   const awayKit = distinctKit(sanitizeChatColor(match.awayColor), homeKit)
-  const clips = buildHighlight3DClipsFromSharedMatch(match, { home: homeKit, away: awayKit })
+  const rosterLookup = buildWorldRosterLookup()
+  const clips = buildHighlight3DClipsFromSharedMatch(match, { home: homeKit, away: awayKit }, rosterLookup)
   const initialIndex = goalIndex !== undefined ? clamp(goalIndex, 0, Math.max(0, clips.length - 1)) : 0
   await openHighlight3DTheater({
     competitionLabel: match.competition,

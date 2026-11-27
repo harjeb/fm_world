@@ -116,9 +116,9 @@ describe('CA / PA 与初始数据', () => {
     }
   })
 
-  it('33 个事件、3 条各 3 段链、4 条主线', () => {
-    expect(EVENT_BY_ID.size).toBe(33)
-    for (const chain of ['passing', 'defending', 'finishing']) {
+  it('42 个事件、6 条各 3 段链、4 条主线', () => {
+    expect(EVENT_BY_ID.size).toBe(42)
+    for (const chain of ['passing', 'defending', 'finishing', 'wing', 'aerial', 'goalkeeping']) {
       expect([...EVENT_BY_ID.values()].filter((event) => event.chain === chain && event.stage).length).toBe(3)
     }
     expect([...EVENT_BY_ID.values()].filter((event) => event.category === 'mainline').length).toBe(4)

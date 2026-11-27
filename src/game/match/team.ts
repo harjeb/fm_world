@@ -8,6 +8,7 @@ import { customSpotFor } from '../squad.ts'
 import { FORMATIONS } from '../data/formations.ts'
 import { detailedPositionForSlot } from '../detailed-positions.ts'
 import { cloneInstructions, instructionsFromLegacyTactics } from '../pes/tactics.ts'
+import { playerAppearanceId } from '../appearance.ts'
 
 export const PITCH_LENGTH = 100
 export const PITCH_WIDTH = 64
@@ -20,6 +21,9 @@ export function emptyPlayerStats(player: Player, side: MatchSide): PlayerMatchSt
     sourceId: player.id,
     name: player.name,
     side,
+    number: player.number,
+    height: player.height,
+    appearanceId: playerAppearanceId(player),
     minutes: 0,
     passes: 0,
     passesCompleted: 0,

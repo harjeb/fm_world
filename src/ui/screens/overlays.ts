@@ -28,6 +28,7 @@ import { publicPlayerPanel } from '../club-view.ts'
 import { renderPlayerPerformance } from './player-performance.ts'
 import { renderRelativePositionRatings, renderScoutControls } from './scouting.ts'
 import { ageProfileOf } from '../../game/age-profile.ts'
+import { appearanceSummaryText } from '../../game/appearance.ts'
 
 function cardRows(player: Player): string {
   const cards = playerCards(game, player.id)
@@ -155,6 +156,7 @@ export function renderDetailOverlay(): string {
     ['年代', esc(eraLabel(player.era))],
     ['惯用脚', esc(player.foot)],
     ['身高', `${player.height} cm`],
+    ['3D 外观', esc(appearanceSummaryText(player))],
     ['特性', traitLabel(player.traitId)],
     ['当前属性', worn ? cardName(worn) : player.version === 0 ? '原始属性' : '培养过'],
     ['估值', bestMarketValue(game, player).toLocaleString()],

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
+import {
+  deriveAppearanceId,
+  formatAppearanceId,
+  HAIR_STYLES,
+  resolve3DAppearance,
+  SKIN_PALETTE,
+} from '../src/game/appearance.ts'
 import { buildChatSharedMatch, type ChatSharedMatch } from '../src/game/chat.ts'
+import { createPlayerFromSeed, PLAYER_SEEDS } from '../src/game/data/players.ts'
 import {
   buildHighlight3DClipsFromRecord,
   buildHighlight3DClipsFromSharedMatch,
@@ -318,3 +326,118 @@ describe('3D Highlight Theater Synthesizer & Frame Sampler', () => {
     expect(headerPeak.striker.lift).toBeGreaterThan(0.4)
   })
 })
+
+describe('Player 3D Appearance Models & Persistent ID Binding', () => {
+  it('supports 15 distinct hairstyles, 8 high-contrast skin tones, 4 body builds, and pronounced height scaling', () => {
+    expect(HAIR_STYLES.length).toBe(15)
+    expect(SKIN_PALETTE.length).toBe(8)
+
+    // Verify all 15 hairstyle indices round-trip cleanly via appearanceId
+    for (let h = 0; h < HAIR_STYLES.length; h++) {
+      const code = formatAppearanceId({ s: h % 8, h, c: h % 10, b: h % 4, f: h % 2, d: h % 6, k: h % 8 })
+      const resolved = resolve3DAppearance({ id: `test-${h}`, height: 180, appearanceId: code })
+      expect(resolved.appearanceId).toBe(code)
+      expect(resolved.hairIdx).toBe(h)
+      expect(resolved.hairId).toBe(HAIR_STYLES[h].id)
+    }
+
+    // Tall (199cm muscular) vs Short (165cm lean) produces visibly unmistakable stature & shoulder width
+    const shortLean = resolve3DAppearance({
+      id: 'p-short',
+      height: 165,
+      appearanceId: formatAppearanceId({ s: 0, h: 13, c: 0, b: 0, f: 0, d: 0, k: 1 }),
+    })
+    const tallPower = resolve3DAppearance({
+      id: 'p-tall',
+      height: 199,
+      appearanceId: formatAppearanceId({ s: 7, h: 7, c: 0, b: 2, f: 1, d: 2, k: 0 }),
+    })
+    expect(shortLean.scaleY).toBeLessThan(0.89)
+    expect(tallPower.scaleY).toBeGreaterThan(1.14)
+    expect(tallPower.scaleXZ / shortLean.scaleXZ).toBeGreaterThan(1.45)
+    expect(shortLean.skinHex).not.toBe(tallPower.skinHex)
+  })
+
+  it('stamps permanent appearanceId onto created Players and iconic stars, and spans diverse skin & hair across seeds', () => {
+    const samplePlayers = PLAYER_SEEDS.slice(0, 60).map((s) => createPlayerFromSeed(s))
+    const uniqueSkins = new Set(samplePlayers.map((p) => resolve3DAppearance(p).skinIdx))
+    const uniqueHairs = new Set(samplePlayers.map((p) => resolve3DAppearance(p).hairId))
+    expect(samplePlayers.every((p) => p.appearanceId?.startsWith('ap1:'))).toBe(true)
+    expect(uniqueSkins.size).toBeGreaterThanOrEqual(5)
+    expect(uniqueHairs.size).toBeGreaterThanOrEqual(8)
+
+    // Iconic legend presets match recognizable silhouettes
+    expect(resolve3DAppearance({ enName: 'Ruud Gullit', country: '荷兰' }).hairId).toBe('dreads')
+    expect(resolve3DAppearance({ enName: 'Carlos Valderrama', country: '哥伦比亚' }).hairId).toBe('afro')
+    expect(resolve3DAppearance({ enName: 'Zinedine Zidane', country: '法国' }).hairId).toBe('bald')
+    expect(resolve3DAppearance({ enName: 'Roberto Baggio', country: '意大利' }).hairId).toBe('ponytail')
+    expect(resolve3DAppearance({ enName: 'Erling Haaland', country: '挪威' }).hairId).toBe('topknot')
+    expect(resolve3DAppearance({ enName: 'Luka Modrić', country: '克罗地亚' }).hairId).toBe('mane_band')
+  })
+
+  it('guarantees the exact same player keeps identical appearanceId & height across multiple clips, replays, and chat shares', () => {
+    const linFengApp = deriveAppearanceId({ id: 'p-st', name: '林风', country: '中国', height: 186 })
+    const rec = makeMockRecord()
+    rec.goalDetails![0].appearanceId = linFengApp
+    rec.goalDetails![0].height = 186
+    rec.goalDetails![3].appearanceId = linFengApp
+    rec.goalDetails![3].height = 186
+    rec.playerStats.push({
+      playerId: 'home:p-st',
+      sourceId: 'p-st',
+      name: '林风',
+      side: 'home',
+      number: 9,
+      height: 186,
+      appearanceId: linFengApp,
+      minutes: 90,
+      touches: 32,
+      passes: 18,
+      passesCompleted: 14,
+      shots: 5,
+      goals: 2,
+      assists: 0,
+      tackles: 1,
+      interceptions: 0,
+      distance: 10.1,
+      staminaLeft: 65,
+      rating: 8.6,
+    })
+
+    const clips = buildHighlight3DClipsFromRecord(rec, { home: '#2474ff', away: '#e63946' })
+    const linClips = clips.filter((c) => c.striker.name === '林风')
+    expect(linClips.length).toBe(3) // Open goal + Woodwork + Penalty goal!
+    for (const c of linClips) {
+      expect(c.striker.appearanceId).toBe(linFengApp)
+      expect(c.striker.height).toBe(186)
+      expect(c.striker.number).toBe(9)
+    }
+
+    // Defenders of the same side also keep identical appearances across all clips in the match
+    const awayDefClips = clips.filter((c) => c.side === 'home')
+    expect(awayDefClips[0].defenders.map((d) => d.appearanceId)).toEqual(
+      awayDefClips[1].defenders.map((d) => d.appearanceId),
+    )
+
+    // Chat share preserves exact bound appearanceId & height for multi-goal scorers
+    const shared = buildChatSharedMatch(rec, { homeColor: '#2474ff', awayColor: '#e63946' })
+    const chatClips = buildHighlight3DClipsFromSharedMatch(shared, { home: '#2474ff', away: '#e63946' })
+    expect(chatClips[0].striker.appearanceId).toBe(linFengApp)
+    expect(chatClips[3].striker.appearanceId).toBe(linFengApp)
+    expect(chatClips[0].striker.height).toBe(186)
+
+    // Even legacy minimal ChatSharedMatch (without appearanceId) binds same player name on same club to identical appearance
+    const legacyBrace: ChatSharedMatch = {
+      ...shared,
+      goals: [
+        { minute: "12'", playerName: '传奇射手', side: 'home' },
+        { minute: "79'", playerName: '传奇射手', side: 'home' },
+      ],
+    }
+    const braceClips = buildHighlight3DClipsFromSharedMatch(legacyBrace, { home: '#2474ff', away: '#e63946' })
+    expect(braceClips[0].striker.appearanceId).toBe(braceClips[1].striker.appearanceId)
+    expect(braceClips[0].striker.height).toBe(braceClips[1].striker.height)
+    expect(braceClips[0].striker.number).toBe(braceClips[1].striker.number)
+  })
+})
+
