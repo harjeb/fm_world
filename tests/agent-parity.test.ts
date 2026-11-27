@@ -149,8 +149,14 @@ describe('Agent API 和手动界面能做的事一致', () => {
     expect(session.autoTraining.mode).toBe('max')
   })
 
-  it('可以约战全服任意一支球队', async () => {
-    const { action } = await setup()
+  it('可以约战全服任意一支球队，且 Agent 接口公开 12 条路线目录、助教诊断/高光与战报分享', async () => {
+    const { action, state } = await setup()
+    const initial = await state()
+    expect(initial.routes).toHaveLength(12)
+    expect(initial.routes.map((r: any) => r.id)).toEqual(expect.arrayContaining([
+      'wing_overdrive', 'pinpoint_cross', 'target_pivot', 'power_shield', 'shot_stopper', 'sweeper_keeper',
+    ]))
+
     const world = (await action({ action: 'get_world' })).body.result
     const opponent = world.clubs.find((club: any) => club.id !== world.ownClubId && club.tier !== 'division2') ?? world.clubs.find((club: any) => club.id !== world.ownClubId)
     expect((await action({ action: 'start_world_friendly', clubId: world.ownClubId })).status).toBe(400)
@@ -160,6 +166,21 @@ describe('Agent API 和手动界面能做的事一致', () => {
     const finished = await action({ action: 'play_match' })
     expect(finished.status).toBe(200)
     expect(finished.body.game.activeMatch).toBeNull()
+    expect(Array.isArray(finished.body.result.review)).toBe(true)
+    expect(Array.isArray(finished.body.result.assistantDiagnosis)).toBe(true)
+    expect(finished.body.result.assistantDiagnosis.length).toBeGreaterThan(0)
+    expect(Array.isArray(finished.body.result.highlights)).toBe(true)
+
+    const matchId = finished.body.result.id
+    const detail = await action({ action: 'get_match', matchId })
+    expect(detail.status).toBe(200)
+    expect(detail.body.result.assistantDiagnosis).toEqual(finished.body.result.assistantDiagnosis)
+    expect(detail.body.result.highlights).toEqual(finished.body.result.highlights)
+
+    // Agent 通过 send_chat 直接晒刚刚踢完的战报（省略 text 时由服务器自动填充默认文案）
+    const shared = await action({ action: 'send_chat', share: { kind: 'match', recordId: matchId } })
+    expect(shared.status, shared.body.error).toBe(200)
+    expect(shared.body.result.message.share).toMatchObject({ kind: 'match', recordId: matchId })
   })
 })
 

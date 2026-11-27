@@ -321,7 +321,7 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     maxSteps: z.number().int().min(1).max(200).optional().describe('最多推进几步，默认 120（足够跑完第 3 赛季 50 时段及事件）'),
   }, (args) => action('run_auto_training', args))
 
-  register('equip_card', '给球员换卡', '把球员自己的一张球员卡装备到他身上；cardId 为 null 换回原始属性。比赛进行中不能换；体能、精力、伤病和停赛不受换卡影响。', {
+  register('equip_card', '给球员换卡', '把球员自己的一张球员卡装备到他身上；cardId 为 null 换回原始属性。换卡同步激活该卡携带的培养路线球风烙印（routeId，共 12 条路线、不占 4+2 技能槽、直通 2D 引擎）；比赛进行中不能换，体能、精力、伤病和停赛不受换卡影响。', {
     playerId: z.string(),
     cardId: z.string().nullable().describe('来自 get_state 的 cards[].id；null 表示原始属性'),
   }, (args) => action('equip_card', args))
@@ -380,17 +380,29 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
 
   register('get_world', '查看全服世界', '读取全服所有球队（名单、RANK、是否有教练执教、电脑球队设施）以及各分区的积分榜和赛程，和世界页 / 球队详情一致。', {}, () => action('get_world'))
 
-  register('get_chat', '读取全服聊天', '读取最新最多 50 条全服聊天，含教练、俱乐部、文字和时间。', {}, () => action('get_chat'))
+  register('get_chat', '读取全服聊天', '读取最新最多 50 条全服聊天，含教练、俱乐部、文字、时间及可选内嵌分享名片 share（角色卡 kind=card 或比赛战报 kind=match）。', {}, () => action('get_chat'))
 
-  register('send_chat', '发送全服聊天', '发送一条最多 200 字的全服聊天消息，受发言间隔限制。', {
-    text: z.string().min(1).max(200),
+  const chatShareSchema = z.discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('card'),
+      cardId: z.string().min(1).describe('要晒出的角色卡 ID，来自 get_state.cards[].id'),
+    }),
+    z.object({
+      kind: z.literal('match'),
+      recordId: z.string().min(1).describe('要晒出的比赛战报 ID，来自 get_state.matchHistory[].id 或 challengeHistory[].id'),
+    }),
+  ])
+
+  register('send_chat', '发送全服聊天 / 晒卡晒战报', '发送一条最多 200 字的全服聊天消息，或附带 share 晒出一张角色卡名片 / 一场比赛战报卡片（由服务器权威提取公开数据，传 share 时 text 可省略或留空），受发言间隔限制。', {
+    text: z.string().max(200).optional().describe('聊天文字（最多 200 字）；不传 share 时必填非空，传 share 时可省略自动配默认文案'),
+    share: chatShareSchema.optional().describe('可选：附带晒角色卡名片（{kind:"card",cardId}）或晒比赛战报（{kind:"match",recordId}）'),
   }, (args) => action('send_chat', args))
 
   register('rename_club', '俱乐部改名', '联机时修改俱乐部名字：最多 8 个字，不能和全服已有球队（AI 球队或其他教练的球队）重名；比赛进行中不能改。', {
     name: z.string().min(1).max(8),
   }, (args) => action('rename_club', args))
 
-  register('get_match', '查看比赛', '不传 matchId 时读取当前进行中比赛（含联机 10 分钟直播中的联赛与杯赛）的比分、时钟、统计、场上球员情绪 mood、喊话状态 shouts、替补、战术和最近事件；传 matchId 时读取完整比赛记录和复盘建议。', {
+  register('get_match', '查看比赛', '不传 matchId 时读取当前进行中比赛（含联机 10 分钟直播中的联赛与杯赛）的比分、时钟、统计、场上球员情绪 mood、喊话状态 shouts、替补、战术和最近事件；传 matchId 时读取完整比赛记录 record、复盘建议 review、首席助教三句话诊断 assistantDiagnosis 与关键高光镜头锚点 highlights。', {
     matchId: z.string().optional().describe('比赛记录 ID；不填则读取当前比赛'),
   }, (args) => action('get_match', args))
 
@@ -418,7 +430,7 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
 
   register('coach_pause', '教练暂停', '适用于友谊赛、巅峰之路与传奇挑战：使用一次教练暂停（最多 3 次）。联赛不停表，可以直接调整战术或换人。', {}, () => action('coach_pause'))
 
-  register('play_match', '结束挑战赛 / 友谊赛', '将已开始的友谊赛、巅峰之路或传奇挑战模拟至终场并结算；联赛不能跳过。返回比分、球员数据与复盘建议。', {}, () => action('play_match'))
+  register('play_match', '结束挑战赛 / 友谊赛', '将已开始的友谊赛、巅峰之路或传奇挑战模拟至终场并结算；联赛不能跳过。返回比分、球员数据、复盘 review、首席助教诊断 assistantDiagnosis 与高光镜头 highlights。', {}, () => action('play_match'))
 
   register('simulate_round', '模拟本轮 AI 比赛', '只模拟本轮其他 AI 球队的比赛；玩家本轮比赛未完成时会报错。', {}, () => action('simulate_round'))
 

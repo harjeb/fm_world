@@ -1,4 +1,4 @@
-import type { AITeam, AttrKey, DetailedPosition, EventDef, FormationId, GameState, Lineup, PlayerCard, Position, RoleId, Tactics, TrainingAutoConfig, TrainingSession } from '../src/game/types.ts'
+import type { AITeam, AttrKey, DetailedPosition, EventDef, FormationId, GameState, Lineup, PlayerCard, Position, RoleId, RouteId, Tactics, TrainingAutoConfig, TrainingSession } from '../src/game/types.ts'
 import {
   BOARD_CHOICE_MAX_ROUND,
   BOARD_WAGE_SLIDER_ROUNDS,
@@ -40,6 +40,7 @@ import { applyYouthAction } from '../src/game/youth-actions.ts'
 import type { TrainingRequest } from '../src/game/training.ts'
 import { isOverseasCampAction, trainingDate, trainingOptions, type TrainingActivityId } from '../src/game/training-calendar.ts'
 import type { SkillId } from '../src/game/types.ts'
+import { ROUTE_EFFECT_DESC, ROUTE_LABELS, ROUTE_SKILL } from '../src/game/data/events.ts'
 import { SKILLS, canLearnSkill, skillCategory } from '../src/game/data/skills.ts'
 import { economyOf, payWageArrears, upgradeFacility, FACILITIES, facilityLevel, facilityRoundIncome, facilityStageChance, facilityStageInLevel, facilityUpgradeCost, homeAtmosphereBonus, type FacilityId } from '../src/game/economy.ts'
 import { aiTransferOffers, previewClubSigning, bestMarketValue, buyFreeAgent, listPlayer, cancelListing, releasePlayer, renewContract, signClubPlayer, transferWindowOpen } from '../src/game/market.ts'
@@ -93,7 +94,7 @@ import {
 } from '../src/game/match/shouts.ts'
 import { injuryUntil } from '../src/game/injury.ts'
 import { currentEnergy } from '../src/game/energy.ts'
-import { buildReview } from '../src/game/review.ts'
+import { buildAssistantDiagnosis, buildReview, extractMatchHighlights } from '../src/game/review.ts'
 import { cardDisplayName, cardRecyclePoints, cardsOf, playerCards, recyclePlayerCards, renameCard, setCardRecycleLock, untrainedPlayer } from '../src/game/cards.ts'
 import { skillEffectText, traitEffectText } from '../src/game/data/skill-effects.ts'
 import { hasBookAtOrAbove } from '../src/game/legend-books.ts'
@@ -190,6 +191,8 @@ function cardView(card: PlayerCard, game: GameState) {
     customName: card.customName?.trim() || null,
     serial: card.serial,
     routeId: card.routeId,
+    routeName: card.routeId ? ROUTE_LABELS[card.routeId] : null,
+    routeEffect: card.routeId ? ROUTE_EFFECT_DESC[card.routeId] : null,
     ca: displayCA(caOf(card.attrs, gk)),
     attrs,
     positions: card.positions,
@@ -248,6 +251,7 @@ function visibleGains(gains: Partial<Record<AttrKey, number>>, gk: boolean) {
 
 export function playerView(player: GameState['roster'][number], game: GameState, now: number) {
   const isGk = player.positions.GK > 0
+  const activeRoute = player.routeId ?? null
   return {
     id: player.id,
     name: player.name,
@@ -270,6 +274,9 @@ export function playerView(player: GameState['roster'][number], game: GameState,
     traitId: player.traitId,
     traitName: traitNameOf(player.traitId),
     traitEffect: traitEffectText(player.traitId),
+    routeId: activeRoute,
+    routeName: activeRoute ? ROUTE_LABELS[activeRoute] : null,
+    routeEffect: activeRoute ? ROUTE_EFFECT_DESC[activeRoute] : null,
     style: player.style,
     skills: player.skills,
     skillTiers: player.skillTiers ?? {},
@@ -344,6 +351,7 @@ function matchPlayerView(
     number: number
     position: Position
     role: RoleId
+    routeId?: RouteId
     stamina: number
     maxStamina: number
     injured?: boolean
@@ -365,6 +373,7 @@ function matchPlayerView(
     number: player.number,
     position: player.position,
     role: player.role,
+    routeId: player.routeId ?? null,
     stamina: player.maxStamina > 0 ? Math.round((player.stamina / player.maxStamina) * 1000) / 10 : 0,
     injured: !!player.injured,
     yellowCards: player.yellowCards ?? 0,
@@ -648,6 +657,8 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
       completed: session.completed,
       cardId: session.cardId ?? null,
       routeId: session.routeId,
+      routeName: session.routeId ? ROUTE_LABELS[session.routeId] : null,
+      routeEffect: session.routeId ? ROUTE_EFFECT_DESC[session.routeId] : null,
       routePoints: session.routePoints,
       qualityBonusPoints: session.qualityBonusPoints ?? 0,
       qualityChances: trainingQualityChances(session),
@@ -796,6 +807,13 @@ export function agentView(game: GameState, now = Date.now(), options: AgentOptio
       sample: tpl.build(`slot-${tpl.id}`),
     })),
     roles: ROLES_BY_POSITION,
+    routes: (Object.keys(ROUTE_LABELS) as RouteId[]).map((id) => ({
+      id,
+      name: ROUTE_LABELS[id],
+      effect: ROUTE_EFFECT_DESC[id],
+      skillId: ROUTE_SKILL[id],
+      skillName: SKILLS[ROUTE_SKILL[id]]?.name ?? ROUTE_SKILL[id],
+    })),
     trainingSessions: sessionView,
     achievements: publicAchievementSummary(game),
     shop: {
@@ -1069,6 +1087,8 @@ function matchResult(record: NonNullable<ReturnType<typeof finishMatch>>) {
     goalDetails: (record.goalDetails ?? []).map((goal) => ({ ...goal, clock: displayClock(goal.clock, duration) })),
     commentary: (record.commentary ?? []).map((entry) => ({ ...entry, clock: displayClock(entry.clock, duration) })),
     review: buildReview(record),
+    assistantDiagnosis: buildAssistantDiagnosis(record),
+    highlights: extractMatchHighlights(record),
   }
 }
 
@@ -1471,7 +1491,17 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
       if (matchId) {
         const raw = findRecord(game, matchId)
         const record = raw ? (options.resolveMatchRecord ? options.resolveMatchRecord(raw) : raw) : undefined
-        return record ? { ok: true, result: { record, review: buildReview(record) } } : { ok: false, error: '比赛记录不存在' }
+        return record
+          ? {
+              ok: true,
+              result: {
+                record,
+                review: buildReview(record),
+                assistantDiagnosis: buildAssistantDiagnosis(record),
+                highlights: extractMatchHighlights(record),
+              },
+            }
+          : { ok: false, error: '比赛记录不存在' }
       }
       const view = matchView(game, now)
       return view ? { ok: true, result: view } : { ok: false, error: '当前没有进行中的比赛' }

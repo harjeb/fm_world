@@ -24,7 +24,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 `/api/agent/action` 请求体统一为 `{ "action": "...", ...参数 }`。成功返回 `{ ok: true, revision, result, game }`；失败返回 HTTP 400、`{ ok: false, error, revision, game }`。`game` 是执行后的最新状态，可直接用于下一步决策。
 
-状态里和手动界面一致地公开：0–1500 原始主属性、位置与 `detailedPositions`、CA、年龄与年龄战术/动作曲线 `ageProfile`（不改动面板属性，仅影响个体战术执行度、受压出球、1v1 过人/抢断、终结与门将关键球扑救、吃牌控制及低体力稳定性；门将曲线延后 3 岁）、估值 `marketValue`、合同 `contract`（`wage`、`expiresSeason`）与续约预览 `renewal`、技能、性格、训练日志（最近 24 条）、待处理事件及成功率、自动培养设置 `autoTraining`、共享培养点 `trainingPoints` 与档位 `trainingPointTiers`、阵容合法性/位置折损/年龄结构建议 `lineupAnalysis.ageSummary`、8 种场边情绪喊话目录 `shoutKinds`、比赛历史、挑战历史、历年联赛成绩 `seasonHistory`（级别、名次、战绩、冠军）、前 5 轮赛程、转会窗口 `market.transferWindowOpen`、可谈判的 AI 球员 `market.clubOffers`、球探配置 `scouting` 和报告 `scoutReports`、成就进度与可领奖励 `achievements`、奖杯与俱乐部上限奖励 `honors`（含 `cupCeilingBonus`、`achievementCeilingBonus`、`clubCeilingBonus`）、以及巅峰之路与传奇挑战进度 `pve`（已通关数、今日剩余次数、属性突破卡、50 关奖励状态及传奇战绩）。全服其他球队和分区用 `get_world` 读取，巅峰 100 关与 50 支传奇队完整目录用 `get_pve` 读取。**球员的隐藏属性当前值不会返回给 Agent；事件提示、日志或球探估计可能提及相关成长。**
+状态里和手动界面一致地公开：0–1500 原始主属性、位置与 `detailedPositions`、CA、年龄与年龄战术/动作曲线 `ageProfile`（不改动面板属性，仅影响个体战术执行度、受压出球、1v1 过人/抢断、终结与门将关键球扑救、吃牌控制及低体力稳定性；门将曲线延后 3 岁）、估值 `marketValue`、合同 `contract`（`wage`、`expiresSeason`）与续约预览 `renewal`、技能、性格、当前激活的培养路线球风烙印 `routeId` / `routeName` / `routeEffect` 与全 12 条路线目录 `routes`、训练日志（最近 24 条）、待处理事件及成功率、自动培养设置 `autoTraining`、共享培养点 `trainingPoints` 与档位 `trainingPointTiers`、阵容合法性/位置折损/年龄结构建议 `lineupAnalysis.ageSummary`、8 种场边情绪喊话目录 `shoutKinds`、比赛历史、挑战历史、历年联赛成绩 `seasonHistory`（级别、名次、战绩、冠军）、前 5 轮赛程、转会窗口 `market.transferWindowOpen`、可谈判的 AI 球员 `market.clubOffers`、球探配置 `scouting` 和报告 `scoutReports`、成就进度与可领奖励 `achievements`、奖杯与俱乐部上限奖励 `honors`（含 `cupCeilingBonus`、`achievementCeilingBonus`、`clubCeilingBonus`）、以及巅峰之路与传奇挑战进度 `pve`（已通关数、今日剩余次数、属性突破卡、50 关奖励状态及传奇战绩）。全服其他球队和分区用 `get_world` 读取，巅峰 100 关与 50 支传奇队完整目录用 `get_pve` 读取。**球员的隐藏属性当前值不会返回给 Agent；事件提示、日志或球探估计可能提及相关成长。**
 
 ## 3. 动作
 
@@ -179,15 +179,17 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 ### 球员卡
 
-球员和球员卡是两种东西。球员是人：姓名、年龄、合同、`condition`（比赛体能）、`energy`（训练精力）、伤病和停赛都属于球员，换卡不会改变。球员卡是一轮培养的成果：属性、位置熟练度、性格和技能，生成后不再变化。
+球员和球员卡是两种东西。球员是人：姓名、年龄、合同、`condition`（比赛体能）、`energy`（训练精力）、伤病和停赛都属于球员，换卡不会改变。球员卡是一轮培养的成果：属性、位置熟练度、性格、技能和培养路线球风烙印（`routeId`），生成后不再变化。
 
 一轮培养结束时新卡自动进入库存 `state.cards`，换上之前球员继续用原来的卡；不处理培养结果也可以直接开始下一轮。每轮培养都从原始属性开始，卡和卡之间互不影响。
 
-`state.roster[]` 的 `attrs`、`positions`、`skills`、`personality` 始终是当前装备的卡（或原始属性）的值，另有 `equippedCardId`（`null` 表示原始属性）和 `cardIds`。`state.cards[]` 每张卡有 `id`、`playerId`、`playerName`、`name`（当前显示名，未改名时为默认卡名）、`customName`（自定义改名，`null` 表示使用默认名）、`serial`（这名球员的第几张）、`routeId`、`ca`、可见主属性 `attrs`、`positions`、`detailedPositions`、`personality`、`skills`、`skillTiers`、`equipped`、`ownerInSquad`、`recycleLocked` 和 `recyclePoints`（不可回收时为 `null`）。
+`state.roster[]` 的 `attrs`、`positions`、`skills`、`personality`、`routeId` / `routeName` / `routeEffect` 始终是当前装备的卡（或原始属性）的值，另有 `equippedCardId`（`null` 表示原始属性）和 `cardIds`。`state.cards[]` 每张卡有 `id`、`playerId`、`playerName`、`name`（当前显示名，未改名时为默认卡名）、`customName`（自定义改名，`null` 表示使用默认名）、`serial`（这名球员的第几张）、`routeId`、`routeName`、`routeEffect`、`ca`、可见主属性 `attrs`、`positions`、`detailedPositions`、`personality`、`skills`、`skillTiers`、`equipped`、`ownerInSquad`、`recycleLocked` 和 `recyclePoints`（不可回收时为 `null`）。
 
-- `equip_card` — 给球员换卡，只能装备他自己的卡。比赛进行中不能换。换卡不会让阵容失效，新卡在当前位置熟练度低只是属性折损更多。
+**培养路线球风烙印（`routeId`，见 `state.routes`）**：培养过程中通过三阶段剧情链锁定（共 6 条对称双分支链、12 条路线：外场传球 `safe_organization / through_passing`、防守 `hold_shape / press_hunt`、终结 `calm_finish / long_range`、边路 `wing_overdrive / pinpoint_cross`、支点 `target_pivot / power_shield`；门将专属 `shot_stopper / sweeper_keeper`，门将与外场剧情链严格隔离）。`routeId` **不占 4+2 技能槽**，随 `equip_card` / `confirm_training` 同步写入球员并在 2D 连续物理层与接触结算层提供专精加成与风格取舍（换回原始属性时清除，老存档读档自动回填）；阶段三还可选择额外学习该路线对应的银色实战技能。
+
+- `equip_card` — 给球员换卡（同步切换属性、技能与 `routeId` 球风烙印），只能装备他自己的卡。比赛进行中不能换。换卡不会让阵容失效，新卡在当前位置熟练度低只是属性折损更多。
   - `playerId`
-  - `cardId`: `state.cards[].id`；`null` 表示换回原始属性
+  - `cardId`: `state.cards[].id`；`null` 表示换回原始属性（同时清除 `routeId`）
 - `delete_card` — 从库存删除一张卡；正在装备的卡不能删。回收和删除都不返还费用/培养点，区别是回收会增加 `state.trainingPoints`。
   - `cardId`
 - `recycle_cards` — 回收未装备、未锁定且不在待处理培养结果中的卡，获得共享培养点（显示 CA 每 100 分 1 点，最低 1 点）。不可逆；已回收的卡不能再被旧存档写回。
@@ -261,7 +263,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 ### 比赛
 
 - `start_league` — 仅用于本地单机的手动开赛。联机接口始终拒绝：联赛开球前 30 分钟锁定完整快照，服务器逐场提前计算，开球后按现实时间“直播” 10 分钟（期间 `state.activeMatch` 与 `get_match` 均返回该场直播状态，且在第 85 分钟前支持调用 `match_shout` 触发实时重算；换人与战术心态仍须赛前配置），比分在开球 10 分钟后统一公布。
-- `get_match` — 不传 `matchId` 读取当前比赛（比分、90 分钟显示时钟、统计、场上球员、替补、战术、最近事件和截至当前的 `commentary`）；传 `matchId` 读取完整记录和复盘建议。
+- `get_match` — 不传 `matchId` 读取当前比赛（比分、90 分钟显示时钟、统计、场上球员、替补、战术、最近事件和截至当前的 `commentary`）；传 `matchId` 读取完整记录 `record`、基础复盘建议 `review`、**首席助教三句话诊断 `assistantDiagnosis`**（按优先级提炼 Top 3 败因/胜因与改进建议）以及**关键高光时间轴锚点 `highlights`**（标注进球、红牌、点球、绝佳机会与临场变阵时刻；`play_match` 与 `advance_match` 终场结果同样返回这两项）。
 - `advance_match` — 适用于友谊赛、巅峰之路与传奇挑战：按步推进（默认 1 步），终场时自动结算。联赛调用会报错。新引擎（`rulesVersion = 4`）一步约等于 1 个模拟秒（整场 900 步）；旧存档里进行中的 v3 比赛一步是一个动作。
   - `steps?`
 - `set_auto_shout` — 开关赛前「自动喊话」兜底：`{ "action": "set_auto_shout", "enabled": true }`（也可在 `set_lineup` 的 `lineup.autoShout` 中一并设置；赛前 30 分钟锁阵容后不可改）。开启后，离线或未观赛的联赛/杯赛会在关键节点自动按局势触发最稳妥的情绪喊话。
@@ -317,8 +319,10 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 ### 全服世界
 
 - `get_world` — 读取全服快照，和世界页 / 球队详情一致：`ownClubId`、`clubs[]`（`id`、`name`、`tier`、`conference`、`managed` 是否有教练执教、`rating` RANK、`players` 公开名单、电脑球队的 `facilities`）以及 `divisions[]`（各分区 `round`、`table`、`fixtures`）。只读。
-- `get_chat` — 读取全服聊天记录（最多返回最新的 50 条消息，含发送教练 `username`、所属俱乐部 `clubId` / `clubName`、消息 `text` 与时间戳 `at`）。只读。
-- `send_chat` — `text`：在全服聊天频道发送一条消息（单条最多 200 字，自动折叠换行，含发言间隔限制）。
+- `get_chat` — 读取全服聊天记录（最多返回最新的 50 条消息，含发送教练 `username`、所属俱乐部 `clubId` / `clubName`、消息 `text`、时间戳 `at`，以及可选内嵌分享名片 `share`——角色卡名片 `kind: "card"` 或比赛战报 `kind: "match"` 的权威公开快照）。只读。
+- `send_chat` — 在全服聊天频道发送消息，支持纯文字或附带晒角色卡 / 晒战报名片（含发言间隔限制）：
+  - `text?`：最多 200 字（自动折叠换行）；不传 `share` 时必填非空，传 `share` 时可省略或留空（服务器自动配默认分享文案）。
+  - `share?`：`{ "kind": "card", "cardId": "..." }`（来自 `state.cards[].id`）或 `{ "kind": "match", "recordId": "..." }`（来自 `state.matchHistory[].id` 或 `challengeHistory[].id`）。服务器直接从本账号库存/战报提取公开属性、CA、球风烙印、技能或比分/xG/进球明细，剥离隐藏属性且拒绝伪造。
 - `rename_club` — `name`：联机时修改俱乐部名字。最多 8 个字（按字符算），去掉首尾空格；不能和全服任何其他球队重名（AI 球队或其他教练的球队，比较时忽略大小写和空格）；比赛进行中不能改。改名后全服看到的都是新名字。普通存档保存不能修改俱乐部名字。
 球队只能在注册时选择，注册完成后不能换队，Agent 也不能例外。注册前可用 `GET /api/registration/clubs` 预览可接管的先锋联赛球队及连续两个完整赛季无人上线后释放的各级别球队名单，在 `POST /api/register` 中传入 `clubId` 确认；旧的 `choose_club` 操作与 `/api/world/choose-club` 接口均返回错误。注册只继承球队已经存在的全服战绩及已锁定比赛，不重算历史，不增加注册准备期，正式联赛固定在北京时间 02:00 / 06:00 / 10:00 / 14:00 / 18:00 / 22:00 开球。
 

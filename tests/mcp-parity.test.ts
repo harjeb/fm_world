@@ -154,6 +154,25 @@ describe('MCP 与 Agent API 完整同步校验', () => {
         playerId: 'p1',
         bookKeys: fiveBooks,
       })
+
+      // 8. send_chat 支持附带晒角色卡与晒战报 share（且传 share 时 text 可省略）
+      const r9 = await client.callTool({ name: 'send_chat', arguments: { share: { kind: 'card', cardId: 'card-7' } } })
+      expect(r9.isError).toBeFalsy()
+      expect(JSON.parse(String((fetchMock.mock.calls[8] as unknown as [string, RequestInit])[1].body))).toEqual({
+        action: 'send_chat',
+        share: { kind: 'card', cardId: 'card-7' },
+      })
+
+      const r10 = await client.callTool({
+        name: 'send_chat',
+        arguments: { text: '神级逆转！', share: { kind: 'match', recordId: 'match-99' } },
+      })
+      expect(r10.isError).toBeFalsy()
+      expect(JSON.parse(String((fetchMock.mock.calls[9] as unknown as [string, RequestInit])[1].body))).toEqual({
+        action: 'send_chat',
+        text: '神级逆转！',
+        share: { kind: 'match', recordId: 'match-99' },
+      })
     } finally {
       await close()
     }
