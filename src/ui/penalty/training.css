@@ -607,6 +607,10 @@ html.pk-modal-lock body {
 }
 
 /* === 3D 进球 / 高光特写剧场 (.highlight3d-lab) === */
+.hl3d-stage {
+  position: relative;
+  width: 100%;
+}
 .highlight3d-lab .ground {
   height: clamp(300px, 54dvh, 580px);
   cursor: grab;
@@ -782,6 +786,7 @@ html.pk-modal-lock body {
   accent-color: #cdf33f;
   cursor: pointer;
   margin: 0;
+  touch-action: pan-x;
 }
 .hl3d-impact-tick {
   position: absolute;
@@ -853,6 +858,8 @@ html.pk-modal-lock body {
   overflow-x: auto;
   padding: 2px 1px 4px;
   scrollbar-width: thin;
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
 }
 .hl3d-clip-pill {
   flex: none;
@@ -892,39 +899,195 @@ html.pk-modal-lock body {
   border-radius: 11px;
 }
 
-@media (max-width: 640px) {
-  .highlight3d-lab .ground {
-    height: clamp(230px, 40dvh, 340px);
+@media (max-width: 860px) {
+  .highlight3d-lab .pitch3 {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    touch-action: auto;
   }
-  .hl3d-scorebug {
-    top: 8px;
-    left: 8px;
+  .highlight3d-lab .hl3d-stage {
+    border-radius: 11px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+    touch-action: none;
+  }
+  .highlight3d-lab .hl3d-scorebug {
+    top: 7px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    max-width: calc(100% - 14px);
     padding: 4px 8px;
     gap: 5px;
   }
-  .hl3d-sb-team {
-    max-width: 72px;
-    font-size: 11px;
+  .highlight3d-lab .hl3d-sb-team {
+    max-width: 96px;
+    font-size: 11.5px;
   }
-  .hl3d-cambar {
-    top: 8px;
-    right: 8px;
-    gap: 3px;
+  .highlight3d-lab .hl3d-sb-team svg {
+    width: 16px;
+    height: 16px;
+    flex: none;
   }
-  .hl3d-lt-hint {
-    display: none;
-  }
-  .hl3d-lowerthird {
-    left: 8px;
-    right: 8px;
-    bottom: 8px;
-    padding: 7px 10px;
-  }
-  .hl3d-lt-title {
+  .highlight3d-lab .hl3d-sb-score {
+    min-width: 40px;
+    padding: 2px 6px;
     font-size: 12.5px;
   }
-  .hl3d-lt-sub {
+  .highlight3d-lab .hl3d-sb-clock {
+    padding-left: 5px;
     font-size: 11px;
+  }
+  .highlight3d-lab .hl3d-lowerthird {
+    position: static;
+    order: 2;
+    padding: 7px 10px;
+    border-radius: 10px;
+    background: rgba(14, 22, 33, 0.92);
+  }
+  .highlight3d-lab .hl3d-lt-hint {
+    display: none;
+  }
+  .highlight3d-lab .hl3d-lt-top {
+    gap: 5px;
+  }
+  .highlight3d-lab .hl3d-lt-title {
+    font-size: 12.5px;
+    line-height: 1.35;
+  }
+  .highlight3d-lab .hl3d-lt-sub {
+    font-size: 11px;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .highlight3d-lab .hl3d-cambar {
+    position: static;
+    order: 3;
+    max-width: none;
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 5px;
+    padding: 1px 0;
+    scrollbar-width: none;
+    touch-action: pan-x;
+    -webkit-overflow-scrolling: touch;
+  }
+  .highlight3d-lab .hl3d-cambar::-webkit-scrollbar,
+  .highlight3d-lab .hl3d-strip::-webkit-scrollbar {
+    display: none;
+  }
+  .highlight3d-lab .hl3d-cambar .cam-chip {
+    flex: none;
+    white-space: nowrap;
+    height: 28px;
+    padding: 0 10px;
+    font-size: 11.5px;
+  }
+}
+
+@media (max-width: 640px) {
+  .penalty-lab.highlight3d-lab {
+    width: calc(100vw - 12px);
+    max-width: 560px;
+    max-height: 96dvh;
+    padding: 9px 10px 10px;
+    border-radius: 14px;
+  }
+  .highlight3d-lab .hl3d-long {
+    display: none;
+  }
+  .highlight3d-lab .lab-head {
+    flex-wrap: nowrap;
+    gap: 8px;
+    margin-bottom: 7px;
+  }
+  .highlight3d-lab .lab-title {
+    flex: 1;
+    min-width: 0;
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+  .highlight3d-lab .lab-eyebrow {
+    flex: none;
+    padding: 2px 7px;
+    font-size: 10.5px;
+  }
+  .highlight3d-lab h2 {
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  .highlight3d-lab .leave {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+  .highlight3d-lab .ground {
+    height: clamp(210px, 36dvh, 300px);
+    border-radius: 10px;
+  }
+  .highlight3d-lab .hl3d-sb-team {
+    max-width: 78px;
+    font-size: 11px;
+  }
+  .highlight3d-lab .hl3d-controls {
+    margin-top: 7px;
+    gap: 6px;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .highlight3d-lab .hl3d-scrub-row {
+    gap: 8px;
+  }
+  .highlight3d-lab .hl3d-time {
+    min-width: 66px;
+    font-size: 11px;
+  }
+  .highlight3d-lab .hl3d-btn-bar {
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1.3fr) minmax(0, 1fr) 38px auto;
+    gap: 5px;
+    width: 100%;
+  }
+  .highlight3d-lab .hl3d-btn-group {
+    display: contents;
+  }
+  .highlight3d-lab .hl3d-btn {
+    height: 36px;
+    padding: 0 8px;
+    font-size: 12px;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .highlight3d-lab .hl3d-strip {
+    gap: 5px;
+    padding: 1px 0 2px;
+    scrollbar-width: none;
+  }
+  .highlight3d-lab .hl3d-clip-pill {
+    height: 30px;
+    padding: 0 9px;
+    font-size: 11.5px;
+  }
+}
+
+@media (max-height: 540px) {
+  .penalty-lab.highlight3d-lab {
+    overflow-y: auto;
+  }
+  .highlight3d-lab .ground {
+    height: clamp(160px, 42dvh, 220px);
   }
 }
 

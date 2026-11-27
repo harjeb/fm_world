@@ -22,13 +22,20 @@ export function lockSetPieceFrame(
     opts,
   )
 
-  // 2. Dialog frame & backdrop: block all touch dragging unless scrolling an overflowing .settings deck
+  // 2. Dialog frame & backdrop: block touch dragging unless interacting with range scrubber or scrollable strips/decks
   dialog.addEventListener(
     'touchmove',
     (e) => {
       const target = e.target instanceof Element ? e.target : null
-      const settings = target?.closest<HTMLElement>('.settings')
-      if (settings && settings.scrollHeight > settings.clientHeight + 2) {
+      if (target?.closest('input[type="range"]')) {
+        return
+      }
+      const hScroll = target?.closest<HTMLElement>('.hl3d-strip, .hl3d-cambar')
+      if (hScroll && hScroll.scrollWidth > hScroll.clientWidth + 2) {
+        return
+      }
+      const vScroll = target?.closest<HTMLElement>('.settings, .hl3d-controls')
+      if (vScroll && vScroll.scrollHeight > vScroll.clientHeight + 2) {
         return
       }
       if (e.cancelable) e.preventDefault()

@@ -205,20 +205,22 @@ export async function openHighlight3DTheater(opts: Highlight3DTheaterOptions): P
   d.innerHTML = `
     <header class="lab-head">
       <div class="lab-title">
-        <span class="lab-eyebrow">🎬 3D 高光特写剧场</span>
+        <span class="lab-eyebrow">🎬 3D<span class="hl3d-long"> 高光特写剧场</span></span>
         <h2 id="hl3d-dialog-title">${esc(opts.homeTeam.name)} vs ${esc(opts.awayTeam.name)}</h2>
         <span class="lab-club">${esc(opts.competitionLabel)} · 共 ${opts.clips.length} 镜</span>
       </div>
-      <button class="leave" type="button">关闭剧场</button>
+      <button class="leave" type="button">关闭<span class="hl3d-long">剧场</span></button>
     </header>
     <div class="pitch3">
-      <div class="ground"></div>
-      <div class="hl3d-loading" data-hl3d-loading>正在布置 3D 球场与双方球衣模型…</div>
-      <div class="hl3d-scorebug" data-hl3d-scorebug data-goal-flash="false">
-        <span class="hl3d-sb-team">${crest(opts.homeTeam, 20)}<b>${esc(opts.homeTeam.name)}</b></span>
-        <span class="hl3d-sb-score" data-hl3d-score>0 : 0</span>
-        <span class="hl3d-sb-team"><b>${esc(opts.awayTeam.name)}</b>${crest(opts.awayTeam, 20)}</span>
-        <span class="hl3d-sb-clock" data-hl3d-clock>1'</span>
+      <div class="hl3d-stage">
+        <div class="ground"></div>
+        <div class="hl3d-loading" data-hl3d-loading>正在布置 3D 球场与双方球衣模型…</div>
+        <div class="hl3d-scorebug" data-hl3d-scorebug data-goal-flash="false">
+          <span class="hl3d-sb-team">${crest(opts.homeTeam, 20)}<b>${esc(opts.homeTeam.name)}</b></span>
+          <span class="hl3d-sb-score" data-hl3d-score>0 : 0</span>
+          <span class="hl3d-sb-team"><b>${esc(opts.awayTeam.name)}</b>${crest(opts.awayTeam, 20)}</span>
+          <span class="hl3d-sb-clock" data-hl3d-clock>1'</span>
+        </div>
       </div>
       <div class="hl3d-cambar" role="toolbar" aria-label="3D 摄像机位">
         <button type="button" class="cam-chip is-active" data-cam-preset="default">🎬 导演跟拍</button>
@@ -248,13 +250,13 @@ export async function openHighlight3DTheater(opts: Highlight3DTheaterOptions): P
       </div>
       <div class="hl3d-btn-bar">
         <div class="hl3d-btn-group">
-          <button type="button" class="hl3d-btn" data-hl3d-act="prev" ${opts.clips.length <= 1 ? 'disabled' : ''}>⏮ 上一镜</button>
+          <button type="button" class="hl3d-btn" data-hl3d-act="prev" aria-label="上一镜" ${opts.clips.length <= 1 ? 'disabled' : ''}>⏮<span class="hl3d-long"> 上一镜</span></button>
           <button type="button" class="hl3d-btn is-primary" data-hl3d-act="toggle">⏸ 暂停</button>
-          <button type="button" class="hl3d-btn" data-hl3d-act="replay">↻ 重播本球</button>
-          <button type="button" class="hl3d-btn" data-hl3d-act="next" ${opts.clips.length <= 1 ? 'disabled' : ''}>下一镜 ⏭</button>
+          <button type="button" class="hl3d-btn" data-hl3d-act="replay" aria-label="重播本球">↻ 重播<span class="hl3d-long">本球</span></button>
+          <button type="button" class="hl3d-btn" data-hl3d-act="next" aria-label="下一镜" ${opts.clips.length <= 1 ? 'disabled' : ''}><span class="hl3d-long">下一镜 </span>⏭</button>
         </div>
         <div class="hl3d-btn-group">
-          <button type="button" class="hl3d-btn is-active" data-hl3d-act="auto" title="播完当前镜头后自动切到下一段高光">自动连播：开</button>
+          <button type="button" class="hl3d-btn is-active" data-hl3d-act="auto" title="播完当前镜头后自动切到下一段高光"><span class="hl3d-long">自动</span>连播：开</button>
         </div>
       </div>
       <div class="hl3d-strip" role="tablist" aria-label="高光镜头列表">
@@ -272,7 +274,7 @@ export async function openHighlight3DTheater(opts: Highlight3DTheaterOptions): P
   d.showModal()
 
   const abort = new AbortController()
-  const pitch = d.querySelector<HTMLElement>('.pitch3')!
+  const stageWrap = d.querySelector<HTMLElement>('.hl3d-stage')!
   const stage = d.querySelector<HTMLElement>('.ground')!
   const loadingEl = d.querySelector<HTMLElement>('[data-hl3d-loading]')!
   const scorebugEl = d.querySelector<HTMLElement>('[data-hl3d-scorebug]')!
@@ -291,7 +293,7 @@ export async function openHighlight3DTheater(opts: Highlight3DTheaterOptions): P
   const presetBtns = [...d.querySelectorAll<HTMLButtonElement>('[data-cam-preset]')]
   const clipBtns = [...d.querySelectorAll<HTMLButtonElement>('[data-hl3d-clip]')]
 
-  const unlockFrame = lockSetPieceFrame(d, pitch, abort.signal)
+  const unlockFrame = lockSetPieceFrame(d, stageWrap, abort.signal)
 
   let closed = false
   let rafId = 0
@@ -355,9 +357,9 @@ export async function openHighlight3DTheater(opts: Highlight3DTheaterOptions): P
   let activePreset: 'default' | 'behind_goal' | 'side' | 'bird' | 'free' = 'default'
 
   function syncButtons() {
-    toggleBtn.textContent = playing ? '⏸ 暂停' : elapsed >= opts.clips[clipIdx].totalSec - 0.02 ? '↻ 再播一次' : '▶ 继续'
+    toggleBtn.textContent = playing ? '⏸ 暂停' : elapsed >= opts.clips[clipIdx].totalSec - 0.02 ? '↻ 重播' : '▶ 继续'
     autoBtn.classList.toggle('is-active', autoAdvance)
-    autoBtn.textContent = autoAdvance ? '自动连播：开' : '自动连播：关'
+    autoBtn.innerHTML = autoAdvance ? '<span class="hl3d-long">自动</span>连播：开' : '<span class="hl3d-long">自动</span>连播：关'
     slowBtn.classList.toggle('is-active', slowMo)
     clipBtns.forEach((b, idx) => b.classList.toggle('is-active', idx === clipIdx))
     presetBtns.forEach((b) => b.classList.toggle('is-active', b.dataset.camPreset === activePreset))
