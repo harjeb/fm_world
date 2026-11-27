@@ -229,11 +229,12 @@ function renderSharedMatchModalBody(msg: ChatMessage, match: ChatSharedMatch): s
   const homeKit = sanitizeChatColor(match.homeColor)
   const awayKit = distinctKit(sanitizeChatColor(match.awayColor), homeKit)
   const canOpenOwnReview = [...(game?.matchHistory ?? []), ...(game?.challengeHistory ?? [])].some((r) => r.id === match.recordId)
-  const goalItems = match.goals.map((g) => `<div class="share-goal-row ${g.side}">
+  const goalItems = match.goals.map((g, idx) => `<div class="share-goal-row ${g.side}">
       <span class="share-goal-min num-text">${esc(g.minute)}</span>
       <b>${esc(g.playerName)}</b>
       ${g.assistName ? `<small class="muted">（${esc(g.assistName)} 助攻）</small>` : ''}
       <span class="tag">${g.side === 'home' ? esc(match.homeName) : esc(match.awayName)}</span>
+      <button type="button" class="btn small ghost share-goal-3d" data-action="chat-highlight-3d" data-msg-id="${esc(msg.id)}" data-goal-index="${idx}" title="3D 重演此粒进球">🎬 3D</button>
     </div>`).join('')
   const hlItems = match.highlights.map((h) => `<span class="hl-chip is-static"><span class="hl-chip-badge">${esc(h.badge)}</span><span>${esc(h.shortLabel)}</span></span>`).join('')
 
@@ -266,7 +267,10 @@ function renderSharedMatchModalBody(msg: ChatMessage, match: ChatSharedMatch): s
       </div>
     </div>
     ${hlItems ? `<div class="share-card-sec"><h3>关键高光时刻</h3><div class="rp-hl-chips">${hlItems}</div></div>` : ''}
-    ${canOpenOwnReview ? `<div class="share-modal-foot"><button type="button" class="btn primary" data-action="chat-open-own-review" data-record="${esc(match.recordId)}">${icon('play', 14)}打开完整复盘 / 2D 重看</button></div>` : ''}`
+    <div class="share-modal-foot">
+      <button type="button" class="btn hl3d-entry-btn" data-action="chat-highlight-3d" data-msg-id="${esc(msg.id)}" title="按战报坐标合成半场禁区 3D 进球重演">🎬 3D 进球剧场</button>
+      ${canOpenOwnReview ? `<button type="button" class="btn primary" data-action="chat-open-own-review" data-record="${esc(match.recordId)}">${icon('play', 14)}打开完整复盘 / 2D 重看</button>` : ''}
+    </div>`
 }
 
 /** 点击聊天室里的角色卡名片或战报卡片时弹出的详情预览层。 */

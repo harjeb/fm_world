@@ -3225,6 +3225,42 @@ document.addEventListener('click', async (event) => {
       ui.chatPreviewMsgId = null
       render()
       break
+    case 'open-highlight-3d': {
+      const targetRecordId = actionEl.dataset.record || ui.reviewId || ''
+      let rec = [...game.matchHistory, ...game.challengeHistory].find((item) => item.id === targetRecordId)
+      if (!rec) break
+      const rawGoalIdx = actionEl.dataset.goalIndex
+      const goalIdx = rawGoalIdx !== undefined ? Number(rawGoalIdx) : undefined
+      if (replay2d.playing) toggleReplay2D()
+      if (replay.playing) stopReplay()
+      try {
+        if (rec.detailDeferred && isOnlineMode()) {
+          rec = await loadMatchRecordOnline(rec.id)
+          applyLoadedMatchRecords(game)
+          render()
+        }
+        const { openRecordHighlight3D } = await import('./highlight-3d.ts')
+        await openRecordHighlight3D(rec, Number.isFinite(goalIdx) ? goalIdx : undefined)
+      } catch (err) {
+        showNotice(`打开 3D 高光剧场失败：${err instanceof Error ? err.message : String(err)}`)
+      }
+      break
+    }
+    case 'chat-highlight-3d': {
+      const msgId = actionEl.dataset.msgId || ui.chatPreviewMsgId || ''
+      const msg = chatState.messages.find((m) => m.id === msgId)
+      if (!msg || msg.share?.kind !== 'match') break
+      const rawGoalIdx = actionEl.dataset.goalIndex
+      const goalIdx = rawGoalIdx !== undefined ? Number(rawGoalIdx) : undefined
+      if (replay2d.playing) toggleReplay2D()
+      try {
+        const { openSharedMatchHighlight3D } = await import('./highlight-3d.ts')
+        await openSharedMatchHighlight3D(msg.share, Number.isFinite(goalIdx) ? goalIdx : undefined)
+      } catch (err) {
+        showNotice(`打开 3D 进球剧场失败：${err instanceof Error ? err.message : String(err)}`)
+      }
+      break
+    }
     case 'chat-open-own-review':
       if (recordId) {
         ui.chatPreviewMsgId = null

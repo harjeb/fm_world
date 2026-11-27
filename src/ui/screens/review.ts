@@ -108,6 +108,7 @@ function renderReplay(record: MatchRecord): string {
     <div class="replay-controls">
       <button class="btn primary" data-action="replay-toggle" ${count === 0 || replay.index >= count ? 'disabled' : ''}>${replay.playing ? `${icon('pause', 14)}暂停` : `${icon('play', 14)}开始 / 继续`}</button>
       <button class="btn ${replay.highlightsOnly ? 'active hl-mode-btn' : ''}" data-action="replay-highlights" title="折叠普通中场倒脚，只保留射门、进球、红牌与战术调整">只看关键镜头</button>
+      ${!hasReplay2D(record) ? `<button class="btn hl3d-entry-btn" data-action="open-highlight-3d" data-record="${esc(record.id)}" title="按射门坐标与落点合成半场 3D 进球与扑救特写">🎬 3D 高光剧场</button>` : ''}
       <button class="btn" data-action="replay-reset">重新播放</button>
       <button class="btn" data-action="replay-speed">${replay.speed}×</button>
       <span class="muted small">${entries ? '按比赛时钟逐条播放；比分随事件更新。' : '旧记录只有关键事件，历史比分不可用。'}</span>
@@ -156,17 +157,18 @@ function renderGoals(record: MatchRecord): string {
   const technique = { power: '力量', placed: '推射', header: '头球' }
   const situation = { open: '运动战', penalty: '点球', free_kick: '任意球' }
   const target = { top_left: '左上', top_center: '中上', top_right: '右上', bottom_left: '左下', bottom_center: '中下', bottom_right: '右下' }
-  const rows = record.goalDetails?.map((goal) => `<tr>
+  const rows = record.goalDetails?.map((goal, idx) => `<tr>
       <td class="num">${clockText(displayClock(goal.clock, duration))}</td>
       <td class="dim">${goal.half === 1 ? '上半场' : '下半场'}</td>
       <td><b>${esc(goal.playerName)}</b></td>
       <td class="dim">${goal.side === 'home' ? '主队' : '客队'}</td>
       <td class="dim">${esc(shotPositionText(goal))} (${goal.origin.x.toFixed(1)}, ${goal.origin.y.toFixed(1)}) · ${goal.distance.toFixed(1)} 米</td>
       <td class="dim">${body[goal.bodyPart]}${goal.technique === 'header' ? '' : ` · ${technique[goal.technique]}`} · ${situation[goal.situation]}${goal.chance ? ` · ${esc(goal.chance)}` : ' · 旧版未记录机会'} · 落点 ${target[goal.target]}</td>
+      <td class="num"><button type="button" class="btn small ghost" data-action="open-highlight-3d" data-record="${esc(record.id)}" data-goal-index="${idx}" title="在 3D 球场特写重演此粒进球">🎬 3D 重演</button></td>
     </tr>`).join('')
   return panel('进球详情', rows
-    ? `<div class="table-scroll"><table class="dt"><thead><tr><th class="num">时间</th><th>半场</th><th>球员</th><th>球队</th><th>位置 · 距离</th><th>方式</th></tr></thead><tbody>${rows}</tbody></table></div>`
-    : '<p class="muted pad">暂无记录。</p>', { flush: true, aside: '<span class="muted small">落点为进攻视角</span>' })
+    ? `<div class="table-scroll"><table class="dt"><thead><tr><th class="num">时间</th><th>半场</th><th>球员</th><th>球队</th><th>位置 · 距离</th><th>方式</th><th class="num">3D 特写</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    : '<p class="muted pad">暂无记录。</p>', { flush: true, aside: '<span class="muted small">落点为进攻视角 · 可逐球 3D 重演</span>' })
 }
 
 function renderBookDrops(record: MatchRecord): string {
@@ -189,7 +191,7 @@ function renderRecord(record: MatchRecord): string {
     ${pageHead({
       kicker: `<button class="link" data-action="back-review">${icon('left', 12)} 返回记录</button><span class="kicker-sep">${record.isLeague ? `联赛第 ${record.round} 轮` : pveModeLabel(record.mode, record.stage)} · 种子 ${record.seed}</span>`,
       title: `${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)} vs ${ownName(record.awayName, record.awayId === PLAYER_TEAM_ID)}`,
-      actions: `<button class="btn small ghost" data-action="chat-share-match" data-record="${esc(record.id)}" title="把这场战报分享到全服聊天">${icon('chat', 13)}晒战报到聊天</button>`,
+      actions: `<button class="btn small hl3d-entry-btn" data-action="open-highlight-3d" data-record="${esc(record.id)}" title="打开半场禁区 3D 进球与神扑特写剧场">🎬 3D 高光剧场</button><button class="btn small ghost" data-action="chat-share-match" data-record="${esc(record.id)}" title="把这场战报分享到全服聊天">${icon('chat', 13)}晒战报到聊天</button>`,
     })}
     ${record.aggregateScore ? `<p class="banner info">两回合总比分：${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)} ${record.aggregateScore.home}:${record.aggregateScore.away} ${ownName(record.awayName, record.awayId === PLAYER_TEAM_ID)}${record.shootout ? ` · 点球 ${record.shootout.home}:${record.shootout.away}` : ''}（不计客场进球）</p>` : ''}
     ${renderReplay2D(record)}

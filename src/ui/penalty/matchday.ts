@@ -2,7 +2,7 @@ import * as T from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import modelUrl from './art/matchday.glb?url'
 import type { Player } from '../../game/types.ts'
-import { crest, distinctKit, inkOn, type ClubLook } from '../components.ts'
+import { assetUrl, distinctKit, inkOn, type ClubLook } from '../components.ts'
 import { clamp, GLOVE_Z, SPOT, type keeperAt } from '../../game/penalty/practice.ts'
 
 export type Team = Pick<ClubLook, 'name' | 'color'>
@@ -46,7 +46,7 @@ function tailor(
   club: Team,
   p: Wearer | undefined,
   keeper: boolean,
-  badge: HTMLImageElement,
+  badge: CanvasImageSource,
 ) {
   const w = ctx.canvas.width,
     h = ctx.canvas.height,
@@ -137,12 +137,98 @@ function tailor(
   ctx.globalAlpha = 1
 }
 
-function clubBadge(club: Team) {
+const CREST_SHAPES = [
+  { id: 'classic', cy: 0.475, fs: 0.36 },
+  { id: 'modern', cy: 0.45, fs: 0.36 },
+  { id: 'crown', cy: 0.535, fs: 0.32 },
+  { id: 'laurel', cy: 0.45, fs: 0.29 },
+] as const
+
+const badgeCache = new Map<string, Promise<CanvasImageSource>>()
+
+function loadImg(url: string): Promise<HTMLImageElement> {
   const img = new Image()
-  img.src =
-    'data:image/svg+xml;charset=utf-8,' +
-    encodeURIComponent(crest(club, 160).replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" '))
+  img.crossOrigin = 'anonymous'
+  img.src = url
   return img.decode().then(() => img)
+}
+
+function clubBadge(club: Team): Promise<CanvasImageSource> {
+  const cacheKey = `${club.name}|${club.color}`
+  const hit = badgeCache.get(cacheKey)
+  if (hit) return hit
+
+  const task = (async (): Promise<CanvasImageSource> => {
+    const size = 160
+    const canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    const ctx = canvas.getContext('2d')!
+
+    let hash = 0
+    for (const ch of club.name) hash = (hash * 31 + (ch.codePointAt(0) ?? 0)) >>> 0
+    const shape = CREST_SHAPES[hash % CREST_SHAPES.length]
+    const baseColor = /^#[0-9a-fA-F]{3,8}$/.test(club.color) ? club.color : '#2a7de1'
+    const ink = inkOn(baseColor)
+    const letter = [...club.name][0] ?? '?'
+
+    try {
+      const [metal, mask] = await Promise.all([
+        loadImg(assetUrl(`assets/crests/crest-${shape.id}.webp`)),
+        loadImg(assetUrl(`assets/crests/crest-${shape.id}-mask.webp`)),
+      ])
+      ctx.drawImage(metal, 0, 0, size, size)
+
+      const fillCanvas = document.createElement('canvas')
+      fillCanvas.width = size
+      fillCanvas.height = size
+      const fctx = fillCanvas.getContext('2d')!
+      const grad = fctx.createLinearGradient(0, 0, size * 0.6, size)
+      grad.addColorStop(0, baseColor)
+      grad.addColorStop(1, '#101824')
+      fctx.fillStyle = grad
+      fctx.fillRect(0, 0, size, size)
+      fctx.globalCompositeOperation = 'destination-in'
+      fctx.drawImage(mask, 0, 0, size, size)
+
+      ctx.save()
+      ctx.globalCompositeOperation = 'multiply'
+      ctx.drawImage(fillCanvas, 0, 0)
+      ctx.restore()
+    } catch {
+      // Vector shield fallback if WebP assets are unavailable
+      ctx.save()
+      ctx.beginPath()
+      ctx.moveTo(size * 0.16, size * 0.12)
+      ctx.lineTo(size * 0.84, size * 0.12)
+      ctx.lineTo(size * 0.84, size * 0.54)
+      ctx.quadraticCurveTo(size * 0.84, size * 0.82, size * 0.5, size * 0.92)
+      ctx.quadraticCurveTo(size * 0.16, size * 0.82, size * 0.16, size * 0.54)
+      ctx.closePath()
+      ctx.fillStyle = baseColor
+      ctx.fill()
+      ctx.lineWidth = 7
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)'
+      ctx.stroke()
+      ctx.restore()
+    }
+
+    ctx.save()
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `800 ${Math.round(size * shape.fs)}px "PingFang SC", "Microsoft YaHei", system-ui, sans-serif`
+    ctx.fillStyle = ink
+    ctx.shadowColor = ink === '#10141a' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.52)'
+    ctx.shadowBlur = 4
+    ctx.shadowOffsetY = 2
+    ctx.fillText(letter, size * 0.5, size * shape.cy)
+    ctx.restore()
+
+    return canvas
+  })()
+
+  badgeCache.set(cacheKey, task)
+  return task
 }
 
 const down = new T.Vector3(0, -1, 0)
@@ -171,7 +257,7 @@ export async function loadMatchday(club: Team) {
     if (!original) throw Error('Missing matchday asset: ' + name)
     return original.clone(true)
   }
-  function figure(isKeeper: boolean) {
+  function figure(isKeeper: boolean, initialClub: Team = club, initialBadge: CanvasImageSource = badge) {
     const root = part('Athlete'),
       mats = new Map<string, T.MeshStandardMaterial>()
     root.traverse((n) => {
@@ -183,6 +269,8 @@ export async function loadMatchday(club: Team) {
           materials.add(copy)
         }
         n.material = mats.get(m.name)!
+        n.castShadow = true
+        n.receiveShadow = true
       }
     })
     const canvas = document.createElement('canvas')
@@ -193,12 +281,8 @@ export async function loadMatchday(club: Team) {
     fabric.colorSpace = T.SRGBColorSpace
     textures.add(fabric)
     mats.get('shirt')!.map = fabric
-    const tone = isKeeper ? keeperColor(club.color) : club.color
-    mats.get('sleeve')!.color.set(tone)
-    mats.get('trim')!.color.set(isKeeper ? club.color : inkOn(tone))
-    mats.get('sock')!.color.set(tone)
-    mats.get('shorts')!.color.set(isKeeper ? '#182430' : club.color).multiplyScalar(isKeeper ? 1 : 0.34)
 
+    const gloveTrimMats: T.MeshStandardMaterial[] = []
     const head = root.getObjectByName('Head')!,
       hairs = Array.from({ length: HAIR_COUNT }, (_, i) => root.getObjectByName('Hair' + i)!),
       beard = root.getObjectByName('Beard')!,
@@ -216,19 +300,33 @@ export async function loadMatchday(club: Team) {
             if (n instanceof T.Mesh) {
               const m = (n.material as T.MeshStandardMaterial).clone()
               materials.add(m)
-              if (m.name === 'trim') m.color.set(club.color)
+              if (m.name === 'trim') {
+                m.color.set(initialClub.color)
+                gloveTrimMats.push(m)
+              }
               n.material = m
+              n.castShadow = true
+              n.receiveShadow = true
             }
           })
           return g
         })
       : []
 
+    let figClub = initialClub
+    let figBadge = initialBadge
     let current: Wearer | undefined | null = null
-    function dress(p?: Wearer) {
-      if (p === current) return
-      current = p
-      tailor(ctx, club, p, isKeeper, badge)
+    let currentKey = ''
+
+    function applyColorsAndAppearance(targetClub: Team, targetBadge: CanvasImageSource, p?: Wearer) {
+      const tone = isKeeper ? keeperColor(targetClub.color) : targetClub.color
+      mats.get('sleeve')!.color.set(tone)
+      mats.get('trim')!.color.set(isKeeper ? targetClub.color : inkOn(tone))
+      mats.get('sock')!.color.set(tone)
+      mats.get('shorts')!.color.set(isKeeper ? '#182430' : targetClub.color).multiplyScalar(isKeeper ? 1 : 0.34)
+      for (const gm of gloveTrimMats) gm.color.set(targetClub.color)
+
+      tailor(ctx, targetClub, p, isKeeper, targetBadge)
       fabric.needsUpdate = true
 
       // Seed deterministic multi-trait player template (head shape, hairstyle, beard, skin, hair color, boot colorway)
@@ -261,7 +359,47 @@ export async function loadMatchday(club: Team) {
 
       root.scale.setScalar(clamp((p?.height || 180) / 180, 0.93, 1.09))
     }
-    return { root, legs, knees, ankles, arms, elbows, gloves, dress }
+
+    // Initialize default kit colors right away
+    const initTone = isKeeper ? keeperColor(initialClub.color) : initialClub.color
+    mats.get('sleeve')!.color.set(initTone)
+    mats.get('trim')!.color.set(isKeeper ? initialClub.color : inkOn(initTone))
+    mats.get('sock')!.color.set(initTone)
+    mats.get('shorts')!.color.set(isKeeper ? '#182430' : initialClub.color).multiplyScalar(isKeeper ? 1 : 0.34)
+
+    function dress(p?: Wearer) {
+      if (p === current) return
+      current = p
+      currentKey = `${figClub.name}|${figClub.color}|${p?.id ?? ''}|${p?.name ?? ''}|${p?.number ?? ''}|${p?.height ?? ''}`
+      applyColorsAndAppearance(figClub, figBadge, p)
+    }
+
+    async function rekit(nextClub: Team, p?: Wearer) {
+      const nextKey = `${nextClub.name}|${nextClub.color}|${p?.id ?? ''}|${p?.name ?? ''}|${p?.number ?? ''}|${p?.height ?? ''}`
+      if (nextKey === currentKey) return
+      const nextBadge = await clubBadge(nextClub)
+      figClub = nextClub
+      figBadge = nextBadge
+      current = p
+      currentKey = nextKey
+      applyColorsAndAppearance(nextClub, nextBadge, p)
+    }
+
+    const rig = {
+      root,
+      legs,
+      knees,
+      ankles,
+      arms,
+      elbows,
+      gloves,
+      dress,
+      rekit,
+      plant(lift = 0) {
+        plantFeetOnTurf(rig, lift)
+      },
+    }
+    return rig
   }
 
   const kicker = figure(false),
@@ -304,78 +442,10 @@ export async function loadMatchday(club: Team) {
     for (const g of keeper.gloves) g.visible = visible
   }
   async function spawnKitFigure(kitClub: Team, wearer?: Wearer) {
-    const kitBadge = kitClub.name === club.name && kitClub.color === club.color ? badge : await clubBadge(kitClub)
-    const root = part('Athlete'),
-      mats = new Map<string, T.MeshStandardMaterial>()
-    root.traverse((n) => {
-      if (n instanceof T.Mesh) {
-        const m = n.material as T.MeshStandardMaterial
-        if (!mats.has(m.name)) {
-          const copy = m.clone()
-          mats.set(m.name, copy)
-          materials.add(copy)
-        }
-        n.material = mats.get(m.name)!
-        n.castShadow = true
-        n.receiveShadow = true
-      }
-    })
-    const canvas = document.createElement('canvas')
-    canvas.width = 1024
-    canvas.height = 512
-    const ctx = canvas.getContext('2d')!,
-      fabric = new T.CanvasTexture(canvas)
-    fabric.colorSpace = T.SRGBColorSpace
-    textures.add(fabric)
-    mats.get('shirt')!.map = fabric
-    const tone = kitClub.color
-    mats.get('sleeve')!.color.set(tone)
-    mats.get('trim')!.color.set(inkOn(tone))
-    mats.get('sock')!.color.set(tone)
-    mats.get('shorts')!.color.set(tone).multiplyScalar(0.34)
-    tailor(ctx, kitClub, wearer, false, kitBadge)
-    fabric.needsUpdate = true
-
-    const head = root.getObjectByName('Head')!,
-      hairs = Array.from({ length: HAIR_COUNT }, (_, i) => root.getObjectByName('Hair' + i)!),
-      beard = root.getObjectByName('Beard')!,
-      legs = ['L', 'R'].map((s) => root.getObjectByName('Hip' + s)!),
-      knees = ['L', 'R'].map((s) => root.getObjectByName('Knee' + s)!),
-      ankles = ['L', 'R'].map((s) => root.getObjectByName('Ankle' + s)!),
-      arms = ['L', 'R'].map((s) => root.getObjectByName('Shoulder' + s)!),
-      elbows = ['L', 'R'].map((s) => root.getObjectByName('Elbow' + s)!)
-    let h = hashSeed(`${wearer?.id ?? 'extra'}|${wearer?.name ?? ''}`)
-    const skinIdx = h % SKIN_TONES.length
-    h = nextHash(h)
-    const hairStyle = h % HAIR_COUNT
-    h = nextHash(h)
-    const hairColorIdx = skinIdx >= 5 && h % 7 !== 0 ? h % 3 : h % HAIR_TONES.length
-    h = nextHash(h)
-    const headShape = HEAD_SHAPES[h % HEAD_SHAPES.length]
-    h = nextHash(h)
-    const hasBeard = h % 10 < 4
-    h = nextHash(h)
-    const bootStyle = BOOT_STYLES[h % BOOT_STYLES.length]
-    mats.get('skin')!.color.set(SKIN_TONES[skinIdx])
-    mats.get('hair')!.color.set(HAIR_TONES[hairColorIdx])
-    mats.get('boot')!.color.set(bootStyle.main)
-    mats.get('bootAccent')!.color.set(bootStyle.accent)
-    mats.get('bootSole')!.color.set(bootStyle.sole)
-    head.scale.set(headShape[0], headShape[1], headShape[2])
-    hairs.forEach((node, idx) => { node.visible = idx === hairStyle })
-    beard.visible = hasBeard
-    root.scale.setScalar(clamp((wearer?.height || 181) / 180, 0.93, 1.09))
-    return {
-      root,
-      legs,
-      knees,
-      ankles,
-      arms,
-      elbows,
-      gloves: [] as T.Object3D[],
-      dress: () => {},
-      plant: (lift = 0) => plantFeetOnTurf({ root, legs, knees, ankles, arms, elbows, gloves: [], dress: () => {} }, lift),
-    }
+    const kitBadge = await clubBadge(kitClub)
+    const fig = figure(false, kitClub, kitBadge)
+    fig.dress(wearer)
+    return fig
   }
 
   const target = new T.Vector3(),
@@ -498,6 +568,10 @@ export async function loadMatchday(club: Team) {
       plantFeetOnTurf(kicker, 0)
     }
 
+    poseKeeper(k, keeperLand)
+  }
+
+  function poseKeeper(k: ReturnType<typeof keeperAt>, keeperLand = 0) {
     // --- GOALKEEPER ---
     const diveMag = clamp(Math.max(Math.abs(k.body.x) / 1.35, keeperLand))
     const rootX = -0.14 * (1 - diveMag)
@@ -600,7 +674,10 @@ export async function loadMatchday(club: Team) {
     grass,
     kicker: kicker.root,
     keeper: keeper.root,
+    kickerRig: kicker,
+    keeperRig: keeper,
     pose,
+    poseKeeper,
     setBallHiVis,
     setKeeperVisible,
     spawnKitFigure,

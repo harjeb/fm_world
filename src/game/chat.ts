@@ -36,6 +36,19 @@ export type ChatSharedCard = {
   skillTiers?: Partial<Record<SkillId, SkillTier>>
 }
 
+export type ChatSharedGoal = {
+  minute: string
+  playerName: string
+  side: 'home' | 'away'
+  assistName?: string
+  origin?: { x: number; y: number }
+  distance?: number
+  bodyPart?: 'left' | 'right' | 'head'
+  technique?: 'power' | 'placed' | 'header'
+  situation?: 'open' | 'penalty' | 'free_kick'
+  target?: 'top_left' | 'top_center' | 'top_right' | 'bottom_left' | 'bottom_center' | 'bottom_right'
+}
+
 export type ChatSharedMatch = {
   kind: 'match'
   recordId: string
@@ -52,7 +65,7 @@ export type ChatSharedMatch = {
     shotsOnTarget: [number, number]
     xg: [number, number]
   }
-  goals: { minute: string; playerName: string; side: 'home' | 'away'; assistName?: string }[]
+  goals: ChatSharedGoal[]
   highlights: { badge: string; shortLabel: string; side: 'home' | 'away' | 'none' }[]
   mvp?: { name: string; line: string }
 }
@@ -182,13 +195,19 @@ export function buildChatSharedMatch(
   colors: { homeColor: string; awayColor: string },
 ): ChatSharedMatch {
   const duration = record.durationSeconds ?? LOGIC_MATCH_SECONDS
-  const goals = (record.goalDetails ?? []).slice(0, 12).map((g) => {
+  const goals: ChatSharedGoal[] = (record.goalDetails ?? []).slice(0, 12).map((g) => {
     const m = Math.max(1, Math.min(90, Math.floor(displayClock(g.clock, duration) / 60) + 1))
     return {
       minute: `${m}'`,
       playerName: g.playerName,
       side: g.side,
       ...(g.assistName ? { assistName: g.assistName } : {}),
+      origin: { x: Math.round(g.origin.x * 10) / 10, y: Math.round(g.origin.y * 10) / 10 },
+      distance: Math.round(g.distance * 10) / 10,
+      bodyPart: g.bodyPart,
+      technique: g.technique,
+      situation: g.situation,
+      target: g.target,
     }
   })
   const highlights = extractMatchHighlights(record)

@@ -388,7 +388,12 @@ function replayExpired(record: MatchRecord): boolean {
 export function renderReplay2D(record: MatchRecord): string {
   if (!hasReplay2D(record)) return ''
   const title = '2D 重看'
-  if (replayExpired(record)) return panel(title, '<p class="muted pad">2D 回放仅保留本赛季，历史文字战报仍可查看。</p>')
+  if (replayExpired(record)) {
+    return panel(
+      title,
+      `<p class="muted pad">2D 全场回放仅保留本赛季；仍可查看历史文字战报，或按射门坐标合成半场 3D 高光重演。</p><div class="btn-row pad"><button type="button" class="btn small hl3d-entry-btn" data-action="open-highlight-3d" data-record="${esc(record.id)}">🎬 打开 3D 高光剧场</button></div>`,
+    )
+  }
   if (replay2d.id !== record.id || replay2d.status === 'loading') return panel(title, '<p class="muted pad">正在载入 2D 回放…</p>', { className: 'replay2d-panel' })
   if (replay2d.status === 'error' || !replay2d.sim) return panel(title, `<p class="muted pad">${esc(replay2d.error || '回放暂时不可用')}</p>`, { className: 'replay2d-panel' })
   if (replay2d.highlights.length === 0 && !record.detailDeferred) syncHighlightsForRecord(record)
@@ -443,6 +448,7 @@ export function renderReplay2D(record: MatchRecord): string {
     <div class="replay-controls rp-controls">
       <button class="btn primary" data-action="replay2d-toggle">${replay2d.playing ? `${icon('pause', 14)}暂停` : finished ? `${icon('play', 14)}再看一遍` : `${icon('play', 14)}${sim.game.match.time > 0 ? '继续' : '播放'}`}</button>
       ${windows.length > 0 ? `<button class="btn ${replay2d.highlightsOnly ? 'active hl-mode-btn' : ''}" data-action="replay2d-highlights" title="只连播进球、红牌与绝佳机会片段">精彩集锦${curWin ? ` <small data-rp-hl-step>${curWin.index + 1}/${windows.length}</small>` : ''}</button>` : ''}
+      <button class="btn hl3d-entry-btn" data-action="open-highlight-3d" data-record="${esc(record.id)}" title="弹出半场禁区 3D 进球与神扑特写剧场">🎬 3D 特写剧场</button>
       ${highlights.length > 0 ? `<button class="btn" data-action="replay2d-next-highlight" title="跳到下一个关键镜头前 8 秒">下一镜头 ${icon('right', 12)}</button>` : ''}
       <button class="btn" data-action="replay2d-restart">重新开始</button>
       <button class="btn" data-action="replay2d-speed" title="播放速度">${replay2d.speed}×</button>

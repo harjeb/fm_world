@@ -233,7 +233,7 @@ export function createGround(host: HTMLElement, art: Awaited<ReturnType<typeof l
     revision++
   }
 
-  function path(points: { x: number; y: number; z: number }[]) {
+  function path(points: { x: number; y: number; z: number }[], showRing = true) {
     trail.geometry.dispose()
     if (points.length >= 2) {
       const curve = new T.CatmullRomCurve3(points.map((p) => new T.Vector3(p.x, p.y, p.z)))
@@ -241,7 +241,7 @@ export function createGround(host: HTMLElement, art: Awaited<ReturnType<typeof l
       trail.visible = true
       const end = points[points.length - 1]
       impactRing.position.set(end.x, end.y, end.z)
-      impactRing.visible = true
+      impactRing.visible = showRing
     } else {
       trail.geometry = new T.BufferGeometry()
       trail.visible = false
@@ -411,6 +411,41 @@ export function createGround(host: HTMLElement, art: Awaited<ReturnType<typeof l
       camTarget.copy(defTarget)
       revision++
       applyCamera()
+    },
+    setBanner(title: string) {
+      venue.setBanner(title)
+    },
+    setCinemaCamera(
+      pos: { x: number; y: number; z: number },
+      look: { x: number; y: number; z: number },
+      fov = 39,
+      hintSpot?: { x: number; z: number },
+    ) {
+      if (hintSpot) {
+        spotX = hintSpot.x
+        spotZ = hintSpot.z
+      }
+      const aspect = camera.aspect || 1.6
+      defPos.set(pos.x, pos.y, pos.z)
+      defTarget.set(look.x, look.y, look.z)
+      defFov = Math.max(fov, T.MathUtils.radToDeg(2 * Math.atan(4.35 / (Math.max(7, Math.min(18, pos.z)) * aspect))))
+      if (!customCam) {
+        camTarget.copy(defTarget)
+        applyCamera()
+      }
+    },
+    drawScene(
+      p: { x: number; y: number; z: number },
+      hit: Impact | null,
+      sinceImpact: number,
+      timeSec: number,
+      spinSign = 1,
+    ) {
+      net.move(hit, sinceImpact)
+      updateWeatherParticles(timeSec)
+      ball.position.set(p.x, p.y, p.z)
+      ball.rotation.set(-p.z * 2.1, spinSign * p.x * 0.55, -p.x * 0.95)
+      renderer.render(scene, camera)
     },
     path,
     extras,
