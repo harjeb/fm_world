@@ -13,14 +13,18 @@ import {
   DRAFT_RANK_REWARDS,
   DRAFT_REWARD_BOOKS,
   DUPLICATE_ALL_BOOKS_SHOP_POINTS,
+  ENABLED_SEASON_EVENT_MODES,
   ensureSeasonEvents,
   EVENT_STAGE_COUNT,
   eventDailyQuota,
   featuredEventForSeason,
   FREEKICK_REWARD_BOOKS,
   FREEKICK_STAGES,
+  isSeasonEventModeEnabled,
+  isSeasonEventsOpen,
   PENALTY_REWARD_BOOKS,
   PENALTY_STAGES,
+  SEASON_EVENTS_MIN_SEASON,
   STAGE_3_REWARD_COINS,
   STAGE_6_REWARD_COINS,
   type SeasonEventMode,
@@ -455,11 +459,23 @@ function renderDraftEvent(now: number): string {
 }
 
 export function renderSeasonEvents(): string {
+  if (!isSeasonEventsOpen(game)) {
+    return `${pageHead({
+      kicker: `SEASON EVENT · 第 ${game.season.index} 赛季`,
+      title: '十二码之夜',
+      sub: `点球活动将于第 ${SEASON_EVENTS_MIN_SEASON} 赛季（S3）正式开放。`,
+    })}${panel(
+      '活动暂未开放',
+      `<p class="hint pad">当前处于第 ${game.season.index} 赛季，点球活动「十二码之夜」与 3D 训练场将在第 ${SEASON_EVENTS_MIN_SEASON} 赛季（S3）解锁。</p><div class="btn-row pad"><button class="btn" data-nav="challenge">返回挑战页</button></div>`,
+      { flush: true },
+    )}`
+  }
   const now = isOnlineMode() ? serverNow() : Date.now()
   const ev = ensureSeasonEvents(game, now)
   const quota = eventDailyQuota(game, now)
   const featured = featuredEventForSeason(game.season.index)
-  const activeMode: SeasonEventMode = ui.seasonEventMode ?? featured
+  const activeMode: SeasonEventMode =
+    ui.seasonEventMode && isSeasonEventModeEnabled(ui.seasonEventMode) ? ui.seasonEventMode : featured
   const meta = EVENT_TITLES[activeMode]
   const env = currentSeasonEnvironment(game)
 
@@ -493,14 +509,16 @@ export function renderSeasonEvents(): string {
           <span>${activeMode === 'draft' ? `卡池：<b>${esc(DRAFT_POOL_THEMES[ev.draft?.themeId ?? draftThemeForSeason(game.season.index).id].label)}</b>` : `本季环境：<b>${esc(env.label)}（${esc(env.subtitle)}）</b>`}</span>
         </div>
       </div>
-      <div class="seg" aria-label="切换活动玩法">
-        ${(['penalty', 'freekick', 'draft'] as const)
-          .map(
-            (m) =>
-              `<button class="${activeMode === m ? 'active' : ''}" data-action="switch-event-mode" data-event-mode="${m}">${EVENT_TITLES[m].name}${featured === m ? ' · 本季主打' : ''}</button>`,
-          )
-          .join('')}
-      </div>
+      ${
+        ENABLED_SEASON_EVENT_MODES.length > 1
+          ? `<div class="seg" aria-label="切换活动玩法">
+        ${ENABLED_SEASON_EVENT_MODES.map(
+          (m) =>
+            `<button class="${activeMode === m ? 'active' : ''}" data-action="switch-event-mode" data-event-mode="${m}">${EVENT_TITLES[m].name}${featured === m ? ' · 本季主打' : ''}</button>`,
+        ).join('')}
+      </div>`
+          : ''
+      }
     </div>
     <div class="kpi-row">
       ${tile('当前模式', meta.tag)}

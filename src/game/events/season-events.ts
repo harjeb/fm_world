@@ -55,10 +55,20 @@ export interface SeasonEventsState {
   draftBookChosen?: SkillBookId
 }
 
+export const SEASON_EVENTS_MIN_SEASON = 3
+export const ENABLED_SEASON_EVENT_MODES: readonly SeasonEventMode[] = ['penalty']
+
+export function isSeasonEventsOpen(game: GameState): boolean {
+  return (game.season?.index ?? 1) >= SEASON_EVENTS_MIN_SEASON
+}
+
+export function isSeasonEventModeEnabled(mode: SeasonEventMode): boolean {
+  return ENABLED_SEASON_EVENT_MODES.includes(mode)
+}
+
 export function featuredEventForSeason(seasonIndex: number): SeasonEventMode {
-  const s = Math.max(3, Math.floor(seasonIndex))
-  const modes: readonly SeasonEventMode[] = ['penalty', 'freekick', 'draft']
-  return modes[(s - 3) % modes.length]
+  const s = Math.max(SEASON_EVENTS_MIN_SEASON, Math.floor(seasonIndex))
+  return ENABLED_SEASON_EVENT_MODES[(s - SEASON_EVENTS_MIN_SEASON) % ENABLED_SEASON_EVENT_MODES.length]
 }
 
 export function ensureSeasonEvents(game: GameState, now = Date.now()): SeasonEventsState {
@@ -601,12 +611,14 @@ export function applySeasonEventAction(
   now = Date.now(),
 ): { ok: boolean; error?: string; autoCoins?: number; moneyDelta?: number; pointsDelta?: number } {
   if (!raw || typeof raw !== 'object') return { ok: false, error: '无效的活动请求' }
+  if (!isSeasonEventsOpen(game)) return { ok: false, error: `赛季活动将于第 ${SEASON_EVENTS_MIN_SEASON} 赛季（S3）开放` }
   const body = raw as SeasonEventActionBody
   const ev = ensureSeasonEvents(game, now)
 
   switch (body.action) {
     case 'start_stage': {
       if (body.mode !== 'penalty' && body.mode !== 'freekick') return { ok: false, error: '未知活动类型' }
+      if (!isSeasonEventModeEnabled(body.mode)) return { ok: false, error: '当前仅开放点球活动「十二码之夜」' }
       const stage = Math.floor(Number(body.stage))
       if (stage < 1 || stage > EVENT_STAGE_COUNT) return { ok: false, error: '关卡编号无效' }
       if (stage > ev[body.mode].cleared + 1) return { ok: false, error: '请先通关前置关卡' }
@@ -614,6 +626,7 @@ export function applySeasonEventAction(
     }
     case 'clear_stage': {
       if (body.mode !== 'penalty' && body.mode !== 'freekick') return { ok: false, error: '未知活动类型' }
+      if (!isSeasonEventModeEnabled(body.mode)) return { ok: false, error: '当前仅开放点球活动「十二码之夜」' }
       const stage = Math.floor(Number(body.stage))
       if (stage < 1 || stage > EVENT_STAGE_COUNT || stage > ev[body.mode].cleared + 1) {
         return { ok: false, error: '关卡进度不合法' }
@@ -623,16 +636,20 @@ export function applySeasonEventAction(
     }
     case 'claim_book': {
       if (body.mode !== 'penalty' && body.mode !== 'freekick') return { ok: false, error: '未知活动类型' }
+      if (!isSeasonEventModeEnabled(body.mode)) return { ok: false, error: '当前仅开放点球活动「十二码之夜」' }
       return claimStage9ThemeBook(game, body.mode, body.bookId)
     }
     case 'draft_start': {
+      if (!isSeasonEventModeEnabled('draft')) return { ok: false, error: '当前仅开放点球活动「十二码之夜」' }
       return startOrResetDraftEvent(game, body.themeId, now)
     }
     case 'draft_pick': {
+      if (!isSeasonEventModeEnabled('draft')) return { ok: false, error: '当前仅开放点球活动「十二码之夜」' }
       if (!ev.draft) return { ok: false, error: '请先开启一轮星秀轮抽' }
       return pickDraftCard(ev.draft, String(body.cardId ?? ''))
     }
     case 'draft_lineup': {
+      if (!isSeasonEventModeEnabled('draft')) return { ok: false, error: '当前仅开放点球活动「十二码之夜」' }
       if (!ev.draft) return { ok: false, error: '请先开启一轮星秀轮抽' }
       return updateDraftPlayerLineup(ev.draft, {
         formationId: body.formationId,
@@ -642,14 +659,17 @@ export function applySeasonEventAction(
       })
     }
     case 'draft_sim_round': {
+      if (!isSeasonEventModeEnabled('draft')) return { ok: false, error: '当前仅开放点球活动「十二码之夜」' }
       if (!ev.draft) return { ok: false, error: '请先开启一轮星秀轮抽' }
       return simulateCurrentSwissRound(game, ev.draft)
     }
     case 'draft_live_start': {
+      if (!isSeasonEventModeEnabled('draft')) return { ok: false, error: '当前仅开放点球活动「十二码之夜」' }
       if (!ev.draft) return { ok: false, error: '请先开启一轮星秀轮抽' }
       return startLiveSwissMatch(game, ev.draft, now)
     }
     case 'draft_claim_reward': {
+      if (!isSeasonEventModeEnabled('draft')) return { ok: false, error: '当前仅开放点球活动「十二码之夜」' }
       return claimDraftRankReward(game, body.bookId)
     }
     default:

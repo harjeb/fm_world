@@ -1,4 +1,5 @@
 import { economyOf } from '../../game/economy.ts'
+import { isSeasonEventsOpen } from '../../game/events/season-events.ts'
 import { transferWindowOpen } from '../../game/market.ts'
 import { PLAYER_TEAM_ID, inPostseason, matchdayCountdown, nextMatchCountdown, nextSeasonCountdown, playerFixture, seasonRoundLabel } from '../../game/season.ts'
 import { APP_VERSION } from '../../game/changelog.ts'
@@ -64,7 +65,11 @@ function divisionText(): string {
 function visibleNavGroups(): { label: string; items: NavItem[] }[] {
   return NAV_GROUPS.map((group) => ({
     label: group.label,
-    items: group.items.filter((item) => item.id !== 'cups' || game.world?.seasonCupMode === 1),
+    items: group.items.filter(
+      (item) =>
+        (item.id !== 'cups' || game.world?.seasonCupMode === 1) &&
+        (item.id !== 'events' || isSeasonEventsOpen(game)),
+    ),
   })).filter((group) => group.items.length > 0)
 }
 

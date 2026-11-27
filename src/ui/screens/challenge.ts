@@ -28,6 +28,7 @@ import { starRating } from '../stars.ts'
 import { game, ui } from '../state.ts'
 import { conferenceLabel } from '../../game/data/world-clubs.ts'
 import { inPostseason, PLAYER_TEAM_ID } from '../../game/season.ts'
+import { isSeasonEventsOpen } from '../../game/events/season-events.ts'
 import { isOnlineMode, onlineState, serverNow } from '../../online.ts'
 import { DEFAULT_FORMATION, FORMATIONS } from '../../game/data/formations.ts'
 import { coreNames, pveRoster, pveTeamButton } from '../pve-details.ts'
@@ -250,7 +251,7 @@ export function renderChallenge(): string {
     bannerPosition: banner.position,
     accent: banner.accent,
   })}
-    <div class="toolbar"><strong>S3 · 赛季活动与 3D 训练场</strong><button class="btn" data-action="penalty-training">进入 3D 点球训练场</button><button class="btn" data-action="freekick-training">进入 3D 任意球实验室</button><button class="btn primary" data-nav="events">打开赛季活动中心</button><small>支持无门将空门与多环境自由练习</small></div>
+    ${isSeasonEventsOpen(game) ? '<div class="toolbar"><strong>S3 · 十二码之夜（3D 点球活动）</strong><button class="btn" data-action="penalty-training">进入 3D 点球训练场</button><button class="btn primary" data-nav="events">打开点球活动</button><small>支持无门将空门与本季环境自由练习</small></div>' : ''}
     <div class="seg challenge-mode-tabs" aria-label="挑战模式">${(Object.keys(MODE_LABEL) as (keyof typeof MODE_LABEL)[]).filter(key => !seasonCupsEnabled || key !== 'cup').map((key) => `<button data-challenge-mode="${key}" class="${key === mode ? 'active' : ''}">${MODE_LABEL[key]}</button>`).join('')}</div>
     ${body}${loaded ? selectedRoster() : ''}`
 }

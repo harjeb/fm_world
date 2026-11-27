@@ -23,6 +23,7 @@ import {
 import {
   applySeasonEventAction,
   EVENT_DAILY_LIMIT,
+  isSeasonEventsOpen,
   PENALTY_REWARD_BOOKS,
   STAGE_3_REWARD_COINS,
   STAGE_6_REWARD_COINS,
@@ -137,10 +138,20 @@ describe('2D 星秀轮抽杯：八人传包选满 20 人（CA 800–1400）与 4
   })
 })
 
-describe('赛季活动中心：每日限次、3/6 关首通奖金与 9 关彩书三选一', () => {
-  it('按北京时间每日 4 次限额扣次，通关 3/6 关自动发金币，通关 9 关可领主题彩书', () => {
+describe('赛季活动中心：S3 开放门禁、每日限次、3/6 关首通奖金与 9 关彩书三选一', () => {
+  it('S3 前不开放，S3 后仅点球可用且按北京时间每日 4 次限额扣次，通关发金币并可领彩书', () => {
     const now = Date.UTC(2026, 10, 24, 4)
     const game = createWorldGame(9124, undefined, '活动测试队', now)
+    expect(isSeasonEventsOpen(game)).toBe(false)
+    expect(applySeasonEventAction(game, { action: 'start_stage', mode: 'penalty', stage: 1 }, now).ok).toBe(false)
+    game.season.index = 2
+    expect(isSeasonEventsOpen(game)).toBe(false)
+    expect(applySeasonEventAction(game, { action: 'start_stage', mode: 'penalty', stage: 1 }, now).ok).toBe(false)
+
+    game.season.index = 3
+    expect(isSeasonEventsOpen(game)).toBe(true)
+    expect(applySeasonEventAction(game, { action: 'start_stage', mode: 'freekick', stage: 1 }, now).ok).toBe(false)
+    expect(applySeasonEventAction(game, { action: 'draft_start' }, now).ok).toBe(false)
     const startBalance = game.economy!.balance
 
     for (let i = 0; i < EVENT_DAILY_LIMIT; i++) {

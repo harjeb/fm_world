@@ -106,6 +106,8 @@ import {
   buildFreeKickStageController,
   buildPenaltyStageController,
   currentSeasonEnvironment,
+  isSeasonEventModeEnabled,
+  isSeasonEventsOpen,
   type SeasonEventActionBody,
   type SeasonEventMode,
 } from '../game/events/season-events.ts'
@@ -2482,6 +2484,7 @@ document.addEventListener('click', async (event) => {
       break
     }
     case 'penalty-training': {
+      if (!isSeasonEventsOpen(game)) { showNotice('点球活动与训练场将于第 3 赛季（S3）开放'); return }
       try {
         const { openPenaltyTraining } = await import('./penalty/training.ts')
         if (ui.screen === 'challenge' || ui.screen === 'events') await openPenaltyTraining(game.roster, clubLook(PLAYER_TEAM_ID))
@@ -2491,6 +2494,7 @@ document.addEventListener('click', async (event) => {
       return
     }
     case 'freekick-training': {
+      if (!isSeasonEventsOpen(game) || !isSeasonEventModeEnabled('freekick')) { showNotice('当前仅开放点球活动「十二码之夜」'); return }
       try {
         const { openFreeKickLab } = await import('./penalty/freekick.ts')
         if (ui.screen === 'challenge' || ui.screen === 'events') await openFreeKickLab(game.roster, clubLook(PLAYER_TEAM_ID))
@@ -2501,7 +2505,7 @@ document.addEventListener('click', async (event) => {
     }
     case 'switch-event-mode': {
       const m = actionEl.dataset.eventMode as SeasonEventMode | undefined
-      if (m === 'penalty' || m === 'freekick' || m === 'draft') {
+      if (m && isSeasonEventModeEnabled(m)) {
         ui.seasonEventMode = m
         ui.draftSwapPlayerId = null
         render()
