@@ -25,7 +25,7 @@ export type NegotiationDraft = {
 import type { TrainingActionId } from '../game/training.ts'
 import type { TrainingActivityId } from '../game/training-calendar.ts'
 
-export type Screen = 'youth' | 'club' | 'achievements' | 'shop' | 'transfer' | 'home' | 'academy' | 'inventory' | 'training' | 'lineup' | 'season' | 'cups' | 'world' | 'challenge' | 'review' | 'match'
+export type Screen = 'youth' | 'club' | 'achievements' | 'shop' | 'transfer' | 'home' | 'academy' | 'inventory' | 'training' | 'lineup' | 'season' | 'cups' | 'events' | 'world' | 'challenge' | 'review' | 'match'
 export type ClubTab = 'board' | 'facilities' | 'contracts' | 'history'
 export type AchievementFilter = 'all' | 'standard' | 'hidden' | 'unlocked'
 export type TransferTab = 'market' | 'free' | 'ai' | 'offers'
@@ -66,6 +66,11 @@ export type UIState = {
   seasonRound: number | null
   /** 正式赛季杯赛选中的赛事标签。 */
   seasonCupTab: import('../game/season-cups.ts').SeasonCupId
+  /** 赛季活动页当前选中的模式（null 时默认取本赛季主打活动）。 */
+  seasonEventMode: import('../game/events/season-events.ts').SeasonEventMode | null
+  draftThemePreview: import('../game/events/draft-cup.ts').DraftPoolThemeId | null
+  draftSwapPlayerId: string | null
+  draftChosenBookId: import('../game/types.ts').SkillBookId | null
   /** 挑战页当前模式。 */
   challengeMode: ChallengeMode
   /** 传奇挑战档位筛选；默认先看 B 档，所有档位均可自由切换。 */
@@ -166,7 +171,7 @@ export type UIState = {
   newGamePreview: { seed: number; clubs: ClubPreview[] } | null
 }
 
-const SAVE_SCREEN: Screen[] = ['youth', 'club', 'achievements', 'shop', 'transfer', 'home', 'academy', 'inventory', 'training', 'lineup', 'season', 'cups', 'world', 'challenge', 'review', 'match']
+const SAVE_SCREEN: Screen[] = ['youth', 'club', 'achievements', 'shop', 'transfer', 'home', 'academy', 'inventory', 'training', 'lineup', 'season', 'cups', 'events', 'world', 'challenge', 'review', 'match']
 
 /** 模式选定后才初始化；启动页不读取、迁移或生成离线世界。 */
 export let game: GameState
@@ -223,6 +228,10 @@ export const ui: UIState = {
   cupHistorySeason: null,
   cupPreviewId: null,
   challengeDivision: null,
+  seasonEventMode: null,
+  draftThemePreview: null,
+  draftSwapPlayerId: null,
+  draftChosenBookId: null,
   newsDivision: null,
   worldDivision: null,
   worldRound: null,

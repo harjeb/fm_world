@@ -10,6 +10,8 @@ const builtAt = (() => {
 export default defineConfig({
   // GitHub Pages 的项目页部署在 /<repo>/ 下，使用相对资源路径。
   base: './',
+  // Avoid a dev-server reload when the first user opens the lazy 3D activity.
+  optimizeDeps: { include: ['three', 'three/addons/loaders/GLTFLoader.js', 'three/addons/utils/BufferGeometryUtils.js'] },
   server: {
     proxy: {
       '/api': 'http://localhost:8787',

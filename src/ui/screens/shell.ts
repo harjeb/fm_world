@@ -42,6 +42,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { id: 'season', label: '赛季', icon: 'season' },
       { id: 'cups', label: '杯赛', icon: 'badge' },
+      { id: 'events', label: '活动', icon: 'star' },
       { id: 'challenge', label: '挑战', icon: 'challenge' },
       { id: 'review', label: '复盘', icon: 'review' },
       { id: 'world', label: '世界', icon: 'world' },

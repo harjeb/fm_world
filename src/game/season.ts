@@ -7,6 +7,7 @@ import { RECENT_MATCHES } from './transfer-rules.ts'
 import { settleSquadEnergy, shiftEnergyClock } from './energy.ts'
 import { applyConditionLoss, settleConditions, shiftConditionClock } from './condition.ts'
 import { settleYouth, recordYouthMatch, shiftYouthClock } from './youth.ts'
+import { settleCompletedLiveSwissMatch } from './events/draft-cup.ts'
 import { type MatchPlanId } from './pes/match-plan.ts'
 import { effectiveMatchConditionFactor } from './pes/tactical-plan.ts'
 import { expireOffers, runLocalTransfers } from './transfers.ts'
@@ -838,7 +839,19 @@ export function finishActiveMatch(game: GameState, engine: GameEngine, now = Dat
     }
   } else {
     game.challengeHistory.unshift(record)
-    applyPveResult(game, record, active.context)
+    if (active.context.cupId === 'season-event-draft' && active.context.cupFixtureId && game.seasonEvents?.draft) {
+      const tally = fixtureScorers(state)
+      settleCompletedLiveSwissMatch(
+        game,
+        game.seasonEvents.draft,
+        record.id,
+        active.context.cupFixtureId,
+        record.score,
+        tally.scorers,
+      )
+    } else {
+      applyPveResult(game, record, active.context)
+    }
   }
   game.activeMatch = undefined
   if (active.context.isLeague && !game.shared && record.round && isRoundComplete(game, record.round)) runLocalTransfers(game, record.round, now)

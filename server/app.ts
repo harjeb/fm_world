@@ -40,6 +40,7 @@ import { displayCA, mainAttrsFor } from '../src/game/rating.ts'
 import { GAME_DAY_MS, kickoffAtForRound, postseasonStartAt, roundsKickedOff, seasonEndAt } from '../src/game/calendar.ts'
 import { isYouthTrainee, recordYouthMatch, settleYouth, observeYouthFacility } from '../src/game/youth.ts'
 import { applyYouthAction } from '../src/game/youth-actions.ts'
+import { applySeasonEventAction } from '../src/game/events/season-events.ts'
 import { preserveYouthState } from '../src/game/youth-authority.ts'
 import { settleCondition } from '../src/game/condition.ts'
 import { splitSeed } from '../src/game/rng.ts'
@@ -3624,6 +3625,33 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return
     }
 
+    if (url.pathname === '/api/season-events/action' && req.method === 'POST') {
+      const body = await readJsonBody(req)
+      if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
+      advanceAccount(account)
+      if (!Number.isSafeInteger(body.baseRevision) || body.baseRevision !== account.revision) {
+        await sendJson(409, { error: '活动状态已变化，请刷新后重试', revision: account.revision, game: publicGame(account) }, true)
+        return
+      }
+      const game = structuredClone(account.game)
+      const outcome = applySeasonEventAction(game, body, now())
+      if (!outcome.ok) {
+        await sendJson(400, { error: outcome.error, revision: account.revision, game: publicGame(account) }, true)
+        return
+      }
+      account.game = game
+      accountSync.delete(account)
+      account.revision++
+      account.lastUserRevision = account.revision
+      account.updatedAt = now()
+      pendingAccountCommits.set(account.id, Symbol('season-events-commit'))
+      persistAccount(account)
+      if (!await confirmAccountCommit(account)) return json(res, 503, { error: '服务器保存尚未确认，请刷新检查，勿重复操作' })
+      broadcast(account, String(req.headers['x-fm-client'] ?? '').slice(0, 128))
+      await sendJson(200, { ...outcome, revision: account.revision, game: publicGame(account), serverTime: now() }, true)
+      return
+    }
+
     if (['/api/board/choose', '/api/board/slider', '/api/club/upgrade'].includes(url.pathname) && req.method === 'POST') {
       const body = await readJsonBody(req)
       if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
@@ -3853,6 +3881,20 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       body.game.shop = structuredClone(account.game.shop)
       body.game.achievements = structuredClone(account.game.achievements)
       body.game.board = structuredClone(account.game.board)
+      // Preserve authoritative seasonEvents, while allowing a server-started live 2D draft match to settle its fixture score
+      if (
+        account.game.activeMatch?.context.cupId === 'season-event-draft' &&
+        !body.game.activeMatch &&
+        account.game.seasonEvents?.draft &&
+        body.game.seasonEvents?.draft
+      ) {
+        const prevSeasonEvents = structuredClone(account.game.seasonEvents)
+        prevSeasonEvents.draft = body.game.seasonEvents.draft
+        prevSeasonEvents.draft.rewardClaimed = account.game.seasonEvents.draft.rewardClaimed
+        body.game.seasonEvents = prevSeasonEvents
+      } else {
+        body.game.seasonEvents = structuredClone(account.game.seasonEvents)
+      }
       if (isBoardBudgetActive(account.game)) {
         const incomingEco = body.game.economy
         const serverEco = account.game.economy

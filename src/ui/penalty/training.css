@@ -1,0 +1,607 @@
+/* S3 十二码之夜 & 任意球实验室 · 3D 定位球训练场 UI — 现代夜场转播质感 + 手机端框体防拖拽锁定 */
+html.pk-modal-lock,
+html.pk-modal-lock body {
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+  touch-action: none;
+}
+
+.penalty-lab {
+  box-sizing: border-box;
+  width: min(1240px, 95vw);
+  max-height: 95dvh;
+  padding: 16px 20px 18px;
+  background:
+    radial-gradient(ellipse 80% 42% at 50% 0%, rgba(58, 120, 168, 0.16), transparent 68%),
+    linear-gradient(180deg, #131a23 0%, #0d1219 100%);
+  color: #edf3f8;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 18px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.62);
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  color-scheme: dark;
+  margin: auto;
+  font: 500 14px/1.45 var(--font, system-ui, sans-serif);
+}
+.penalty-lab[open] {
+  display: flex;
+  flex-direction: column;
+}
+.penalty-lab::backdrop {
+  background: rgba(5, 9, 15, 0.84);
+  touch-action: none;
+  overscroll-behavior: none;
+}
+.penalty-lab [hidden] {
+  display: none !important;
+}
+
+/* Header */
+.penalty-lab .lab-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.penalty-lab .lab-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.penalty-lab .lab-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #cdf33f;
+  background: rgba(205, 243, 63, 0.1);
+  border: 1px solid rgba(205, 243, 63, 0.28);
+}
+.penalty-lab h2 {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #f6fafd;
+}
+.penalty-lab .lab-club {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #b8c8d6;
+}
+.penalty-lab .lab-club-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: 0 0 6px currentColor;
+}
+.penalty-lab .leave {
+  flex: none;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #b7c6d4;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+.penalty-lab .leave:hover {
+  background: rgba(255, 107, 107, 0.13);
+  border-color: rgba(255, 107, 107, 0.42);
+  color: #ffd0d0;
+}
+
+/* 3D Pitch Viewport (strictly locked against touch scroll/drag) */
+.penalty-lab .lab-head,
+.penalty-lab .call,
+.penalty-lab .ratings,
+.penalty-lab .lab-foot {
+  flex: none;
+}
+.penalty-lab .pitch3 {
+  flex: none;
+  position: relative;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  touch-action: none;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.penalty-lab .ground {
+  height: clamp(320px, 56dvh, 630px);
+  width: 100%;
+  touch-action: none;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  background: #172736;
+  border-radius: 11px;
+  overflow: hidden;
+  cursor: crosshair;
+}
+.penalty-lab canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Goalkeeper Holographic Radial Dive Pad */
+.penalty-lab .pad {
+  touch-action: none;
+  user-select: none;
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 100px;
+  height: 100px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1.5px solid rgba(138, 214, 255, 0.45);
+  background: radial-gradient(circle at 50% 40%, rgba(20, 35, 50, 0.86), rgba(8, 15, 24, 0.93));
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.46);
+}
+.penalty-lab .pad[data-active='true'] {
+  border-color: rgba(205, 243, 63, 0.88);
+  box-shadow: 0 0 14px rgba(205, 243, 63, 0.3);
+}
+.penalty-lab .pad[data-dived='true'] {
+  border-color: rgba(50, 245, 152, 0.85);
+}
+.penalty-lab .pad-dial {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.penalty-lab .pad-outer {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 1;
+}
+.penalty-lab .pad-deadzone {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.24);
+  stroke-width: 1.1;
+}
+.penalty-lab .pad-ticks {
+  fill: none;
+  stroke: rgba(215, 238, 255, 0.58);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+.penalty-lab .pad-diag {
+  stroke: rgba(126, 214, 255, 0.62);
+  stroke-width: 1.6;
+}
+.penalty-lab .pad[data-active='true'] .pad-diag {
+  stroke: rgba(205, 243, 63, 0.78);
+}
+.penalty-lab .pad-knob {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1.5px solid rgba(255, 224, 130, 0.82);
+  background: radial-gradient(circle at 35% 30%, #3d5465, #182533 78%);
+  color: #ffe48f;
+  font: 700 14px/1 var(--font, system-ui, sans-serif);
+  border-radius: 50%;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.5),
+    inset 0 1px 1px rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+  transition: transform 90ms ease-out;
+}
+.penalty-lab .pad[data-active='true'] .pad-knob {
+  border-color: #cdf33f;
+  color: #e4ff7a;
+  box-shadow:
+    0 0 14px rgba(205, 243, 63, 0.35),
+    0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+/* Broadcast Status Callout */
+.penalty-lab .call {
+  margin: 11px 0 9px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid #59b8ff;
+  color: #e5eff6;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.penalty-lab .call[data-tone='charge'] {
+  border-left-color: #ffd247;
+  background: rgba(255, 210, 71, 0.07);
+}
+.penalty-lab .call[data-tone='good'] {
+  border-left-color: #32f598;
+  background: rgba(50, 245, 152, 0.08);
+}
+.penalty-lab .call[data-tone='warn'] {
+  border-left-color: #ffb84d;
+  background: rgba(255, 184, 77, 0.08);
+}
+.penalty-lab .call[data-tone='bad'] {
+  border-left-color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.09);
+}
+
+/* Ratings Metric Pill Strip */
+.penalty-lab .ratings {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.penalty-lab .ratings-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #8296a8;
+  letter-spacing: 0.03em;
+  margin-right: 2px;
+}
+.penalty-lab .rating-chip {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 5px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  font-size: 11.5px;
+  color: #b4c4d3;
+}
+.penalty-lab .rating-chip::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: var(--score, 50%);
+  background: linear-gradient(to right, #3cc4ff, #54f5a8);
+  opacity: 0.75;
+}
+.penalty-lab .rating-chip[data-tier='mid']::after {
+  background: linear-gradient(to right, #ffb938, #ffe066);
+}
+.penalty-lab .rating-chip[data-tier='hi']::after {
+  background: linear-gradient(to right, #32f598, #cdf33f);
+}
+.penalty-lab .rating-chip b {
+  font: 700 12.5px/1 var(--font-num, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: #eaf3fa;
+}
+.penalty-lab .rating-chip[data-tier='mid'] b {
+  color: #ffd454;
+}
+.penalty-lab .rating-chip[data-tier='hi'] b {
+  color: #4bf7a6;
+}
+
+/* Structured Settings Deck */
+.penalty-lab .settings {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.penalty-lab .settings label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.penalty-lab .settings label > span {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8ea3b5;
+  letter-spacing: 0.03em;
+}
+.penalty-lab select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 28px 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    #18222d
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%2399b1c6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E")
+    no-repeat right 9px center;
+  color: #edf4fa;
+  font-size: 13px;
+  font-weight: 500;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+.penalty-lab select:hover:not(:disabled) {
+  border-color: rgba(205, 243, 63, 0.45);
+  background-color: #1e2a38;
+}
+.penalty-lab select:focus-visible {
+  outline: 2px solid #cdf33f;
+  outline-offset: 1px;
+}
+.penalty-lab select:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+/* Footer Actions */
+.penalty-lab .lab-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.penalty-lab .lab-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.penalty-lab .go {
+  min-width: 168px;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: linear-gradient(135deg, #d7fa4f 0%, #9ce835 100%);
+  color: #101905;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: 0 4px 14px rgba(188, 238, 56, 0.25);
+  transition: transform 90ms ease;
+}
+.penalty-lab .go:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+.penalty-lab .go:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.penalty-lab .go[data-phase='power'] {
+  background: linear-gradient(135deg, #ffe055 0%, #ff8b2b 100%);
+  color: #1d1003;
+  box-shadow:
+    0 6px 22px rgba(255, 162, 43, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+.penalty-lab .go[data-phase='done'] {
+  background: linear-gradient(135deg, #52f7ad 0%, #24c986 100%);
+  color: #051c12;
+  box-shadow:
+    0 6px 20px rgba(50, 245, 152, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.penalty-lab .go:disabled {
+  opacity: 0.52;
+  background: #23303d;
+  color: #a9bac9;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+  transform: none;
+}
+.penalty-lab .repeat,
+.penalty-lab .replay {
+  height: 40px;
+  padding: 0 15px;
+  border-radius: 10px;
+  border: 1px solid rgba(114, 212, 255, 0.35);
+  background: rgba(98, 206, 255, 0.1);
+  color: #a8e4ff;
+  font-size: 13px;
+  font-weight: 600;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+.penalty-lab .replay {
+  border-color: rgba(205, 243, 63, 0.42);
+  background: rgba(205, 243, 63, 0.12);
+  color: #dffb78;
+}
+.penalty-lab .repeat:hover {
+  background: rgba(98, 206, 255, 0.2);
+  border-color: rgba(114, 212, 255, 0.6);
+}
+.penalty-lab .replay:hover {
+  background: rgba(205, 243, 63, 0.22);
+  border-color: rgba(205, 243, 63, 0.72);
+}
+.penalty-lab .lab-note {
+  color: #7c92a6;
+  font-size: 12px;
+}
+
+/* Floating 3D Camera & Replay Angle Control Bar */
+.penalty-lab .cam-bar {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  max-width: calc(100% - 86px);
+  pointer-events: auto;
+}
+.penalty-lab .cam-presets {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(8, 15, 24, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(6px);
+}
+.penalty-lab .cam-tip {
+  font-size: 10.5px;
+  color: #9cb4c7;
+  padding: 0 4px;
+}
+.penalty-lab .cam-chip {
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(16, 28, 42, 0.86);
+  color: #d6e6f3;
+  font: 600 11px/1 var(--font, system-ui, sans-serif);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+.penalty-lab .cam-chip:hover {
+  border-color: rgba(205, 243, 63, 0.55);
+  color: #f4ffca;
+}
+.penalty-lab .cam-chip.is-active {
+  background: rgba(205, 243, 63, 0.2);
+  border-color: rgba(205, 243, 63, 0.72);
+  color: #e4ff7a;
+}
+
+@media (min-width: 1024px) {
+  .penalty-lab .settings {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .penalty-lab .cam-tip {
+    display: none;
+  }
+  .penalty-lab .cam-bar {
+    left: 8px;
+    bottom: 8px;
+    max-width: calc(100% - 70px);
+  }
+  .penalty-lab .replay,
+  .penalty-lab .repeat {
+    height: 38px;
+    padding: 0 11px;
+    font-size: 12px;
+  }
+  .penalty-lab {
+    width: 97vw;
+    max-height: 97dvh;
+    padding: 10px 12px 11px;
+    border-radius: 14px;
+  }
+  .penalty-lab .lab-head {
+    margin-bottom: 7px;
+  }
+  .penalty-lab h2 {
+    font-size: 1.1rem;
+  }
+  .penalty-lab .lab-club {
+    display: none;
+  }
+  .penalty-lab .ground {
+    height: clamp(196px, 34dvh, 296px);
+  }
+  .penalty-lab .pad {
+    width: 88px;
+    height: 88px;
+    right: 10px;
+    bottom: 10px;
+  }
+  .penalty-lab .call {
+    margin: 7px 0;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  .penalty-lab .ratings {
+    margin-bottom: 7px;
+  }
+  .penalty-lab .settings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 8px;
+    padding: 7px 9px;
+  }
+  .penalty-lab select {
+    height: 31px;
+    font-size: 12.5px;
+  }
+  .penalty-lab .lab-foot {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 5px;
+    margin-top: 8px;
+  }
+  .penalty-lab .lab-actions {
+    width: 100%;
+  }
+  .penalty-lab .go {
+    flex: 1;
+    height: 38px;
+  }
+  .penalty-lab .lab-note {
+    text-align: center;
+    font-size: 11px;
+  }
+}

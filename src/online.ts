@@ -1142,6 +1142,12 @@ export async function youthActionOnline(body: import('./game/youth-actions.ts').
   return protectedGameAction('/api/youth/action', () => ({ ...body, baseRevision: onlineState.revision }))
 }
 
+export async function seasonEventActionOnline(
+  body: import('./game/events/season-events.ts').SeasonEventActionBody,
+): Promise<GameState> {
+  return protectedGameAction('/api/season-events/action', () => ({ ...body, baseRevision: onlineState.revision }))
+}
+
 export async function startTrainingOnline(playerId: string, bookKeys: string[], points: number): Promise<GameState> {
   return protectedGameAction('/api/training/start', { playerId, bookKeys, points })
 }

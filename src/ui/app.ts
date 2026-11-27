@@ -68,7 +68,7 @@ import { SCOUT_LEVELS, startScouting, deleteScoutReport, type ScoutLevel, type S
 import { aiTransferOffers } from '../game/market.ts'
 import { isLocalFreeAgentAvailable } from '../game/free-market.ts'
 import { upgradeBurstAttr, upgradeNames, upgradeStarTraits } from '../game/names.ts'
-import { catchUpSeason, lineupLockState, settleGameConditions, skipToPostseasonEnd } from '../game/season.ts'
+import { PLAYER_TEAM_ID, catchUpSeason, lineupLockState, settleGameConditions, skipToPostseasonEnd } from '../game/season.ts'
 import { fetchFriendlyTeam, flushOnlineNow, isOnlineMode } from '../online.ts'
 import { advanceLeagueRealtime, leagueDisplayClock, setLeagueClock } from '../game/realtime.ts'
 import { displayClock } from '../game/match/time.ts'
@@ -86,7 +86,7 @@ import { adjustBoardBudgetOnline, aiTransferMarket, bidOnline, buyFromAIClubOnli
 import { agentHandoffText } from './agent-handoff.ts'
 import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
 import { UNHAPPY_HOURS } from '../game/transfer-rules.ts'
-import { assetUrl, cardName, findAnyPlayer } from './components.ts'
+import { assetUrl, cardName, clubLook, findAnyPlayer } from './components.ts'
 import { clockText, countdownText, esc, pct } from './format.ts'
 import { icon } from './icons.ts'
 import { morph } from './morph.ts'
@@ -98,8 +98,17 @@ import { renderAcademy } from './screens/academy.ts'
 import { renderYouth } from './screens/youth.ts'
 import { ensureYouth, settleYouth, type YouthPlan } from '../game/youth.ts'
 import { applyYouthAction, type YouthAction } from '../game/youth-actions.ts'
-import { applyLoadedCupSeason, applyLoadedMatchRecords, loadCupSeasonOnline, loadMatchRecordOnline, refreshPublicClub, youthActionOnline } from '../online.ts'
+import { applyLoadedCupSeason, applyLoadedMatchRecords, loadCupSeasonOnline, loadMatchRecordOnline, refreshPublicClub, seasonEventActionOnline, youthActionOnline } from '../online.ts'
 import { renderChallenge } from './screens/challenge.ts'
+import { renderSeasonEvents } from './screens/events.ts'
+import {
+  applySeasonEventAction,
+  buildFreeKickStageController,
+  buildPenaltyStageController,
+  currentSeasonEnvironment,
+  type SeasonEventActionBody,
+  type SeasonEventMode,
+} from '../game/events/season-events.ts'
 import type { CupId } from '../game/data/cup-config.ts'
 import { loadPveContent } from '../game/pve-content.ts'
 import { renderClub } from './screens/club.ts'
@@ -301,6 +310,8 @@ function renderScreen(): string {
       return renderSeason()
     case 'cups':
       return renderSeasonCups(game, ui.seasonCupTab)
+    case 'events':
+      return renderSeasonEvents()
     case 'world':
       return renderWorld()
     case 'challenge':
@@ -2470,6 +2481,249 @@ document.addEventListener('click', async (event) => {
       openFriendly(startSingleChallenge(game, teamId))
       break
     }
+    case 'penalty-training': {
+      try {
+        const { openPenaltyTraining } = await import('./penalty/training.ts')
+        if (ui.screen === 'challenge' || ui.screen === 'events') await openPenaltyTraining(game.roster, clubLook(PLAYER_TEAM_ID))
+      } catch {
+        showNotice('3D 点球训练场加载失败，请稍后重试。')
+      }
+      return
+    }
+    case 'freekick-training': {
+      try {
+        const { openFreeKickLab } = await import('./penalty/freekick.ts')
+        if (ui.screen === 'challenge' || ui.screen === 'events') await openFreeKickLab(game.roster, clubLook(PLAYER_TEAM_ID))
+      } catch {
+        showNotice('3D 任意球实验室加载失败，请稍后重试。')
+      }
+      return
+    }
+    case 'switch-event-mode': {
+      const m = actionEl.dataset.eventMode as SeasonEventMode | undefined
+      if (m === 'penalty' || m === 'freekick' || m === 'draft') {
+        ui.seasonEventMode = m
+        ui.draftSwapPlayerId = null
+        render()
+      }
+      return
+    }
+    case 'event-start-stage': {
+      const mode = actionEl.dataset.eventMode as 'penalty' | 'freekick'
+      const stage = Number(actionEl.dataset.stage)
+      if (!stage || (mode !== 'penalty' && mode !== 'freekick')) break
+      const runBody: SeasonEventActionBody = { action: 'start_stage', mode, stage }
+      try {
+        if (isOnlineMode()) await seasonEventActionOnline(runBody)
+        else {
+          const r = commitOfflineTransaction(() => applySeasonEventAction(game, runBody, Date.now()))
+          if (!r.ok) throw new Error(r.error)
+        }
+      } catch (err) {
+        showNotice(err instanceof Error ? err.message : '无法开启关卡')
+        return
+      }
+      render()
+      const env = currentSeasonEnvironment(game)
+      const onCleared = () => {
+        const clearBody: SeasonEventActionBody = { action: 'clear_stage', mode, stage }
+        if (isOnlineMode()) {
+          void seasonEventActionOnline(clearBody).then(() => render()).catch(() => {})
+        } else {
+          let bonusCoins = 0
+          const out = commitOfflineTransaction(() => {
+            const res = applySeasonEventAction(game, clearBody, Date.now())
+            bonusCoins = res.autoCoins ?? 0
+            return res
+          })
+          if (out.ok && bonusCoins > 0) {
+            ui.notice = `恭喜通关第 ${stage} 关！阶段首通奖金 ${bonusCoins.toLocaleString()} 金币已自动发放！`
+          } else {
+            ui.notice = `恭喜通关第 ${stage} 关！`
+          }
+          render()
+        }
+      }
+      try {
+        if (mode === 'penalty') {
+          const { openPenaltyTraining } = await import('./penalty/training.ts')
+          await openPenaltyTraining(game.roster, clubLook(PLAYER_TEAM_ID), buildPenaltyStageController(stage, env, onCleared))
+        } else {
+          const { openFreeKickLab } = await import('./penalty/freekick.ts')
+          await openFreeKickLab(game.roster, clubLook(PLAYER_TEAM_ID), buildFreeKickStageController(stage, env, onCleared))
+        }
+      } catch {
+        showNotice('3D 场景加载失败，请稍后重试。')
+      }
+      render()
+      return
+    }
+    case 'event-claim-book': {
+      const mode = actionEl.dataset.eventMode as 'penalty' | 'freekick'
+      const bookId = actionEl.dataset.book as import('../game/types.ts').SkillBookId
+      if (!bookId || (mode !== 'penalty' && mode !== 'freekick')) break
+      const body: SeasonEventActionBody = { action: 'claim_book', mode, bookId }
+      try {
+        if (isOnlineMode()) await seasonEventActionOnline(body)
+        else {
+          const r = commitOfflineTransaction(() => applySeasonEventAction(game, body, Date.now()))
+          if (!r.ok) throw new Error(r.error)
+        }
+        ui.notice = '主题彩色技能书奖励已成功入库！'
+      } catch (err) {
+        ui.notice = err instanceof Error ? err.message : '领取失败'
+      }
+      render()
+      return
+    }
+    case 'draft-start-new': {
+      const selectEl = document.querySelector<HTMLSelectElement>('#draft-theme-select')
+      const themeId = (selectEl?.value ?? ui.draftThemePreview ?? undefined) as import('../game/events/draft-cup.ts').DraftPoolThemeId | undefined
+      const body: SeasonEventActionBody = { action: 'draft_start', themeId }
+      try {
+        if (isOnlineMode()) await seasonEventActionOnline(body)
+        else {
+          const r = commitOfflineTransaction(() => applySeasonEventAction(game, body, Date.now()))
+          if (!r.ok) throw new Error(r.error)
+        }
+        ui.draftSwapPlayerId = null
+        ui.notice = '八人同桌轮抽已开启！请从首包 12 名成品卡中挑走第 1 人。'
+      } catch (err) {
+        ui.notice = err instanceof Error ? err.message : '开启轮抽失败'
+      }
+      render()
+      return
+    }
+    case 'draft-pick-card': {
+      const cardId = actionEl.dataset.card ?? ''
+      if (!cardId) break
+      const body: SeasonEventActionBody = { action: 'draft_pick', cardId }
+      try {
+        if (isOnlineMode()) await seasonEventActionOnline(body)
+        else {
+          const r = commitOfflineTransaction(() => applySeasonEventAction(game, body, Date.now()))
+          if (!r.ok) throw new Error(r.error)
+        }
+        if (game.seasonEvents?.draft?.phase === 'swiss') {
+          ui.notice = '20 人轮抽组建完毕！已自动排出最强首发并生成瑞士轮第 1 轮对阵。'
+        }
+      } catch (err) {
+        ui.notice = err instanceof Error ? err.message : '选牌失败'
+      }
+      render()
+      return
+    }
+    case 'draft-set-formation': {
+      const formationId = actionEl.dataset.formation as import('../game/types.ts').ElevenFormationId | undefined
+      if (!formationId) break
+      const body: SeasonEventActionBody = { action: 'draft_lineup', formationId }
+      try {
+        if (isOnlineMode()) await seasonEventActionOnline(body)
+        else {
+          const r = commitOfflineTransaction(() => applySeasonEventAction(game, body, Date.now()))
+          if (!r.ok) throw new Error(r.error)
+        }
+        ui.draftSwapPlayerId = null
+      } catch (err) {
+        ui.notice = err instanceof Error ? err.message : '切换阵型失败'
+      }
+      render()
+      return
+    }
+    case 'draft-auto-best': {
+      const body: SeasonEventActionBody = { action: 'draft_lineup', autoBest: true }
+      try {
+        if (isOnlineMode()) await seasonEventActionOnline(body)
+        else {
+          const r = commitOfflineTransaction(() => applySeasonEventAction(game, body, Date.now()))
+          if (!r.ok) throw new Error(r.error)
+        }
+        ui.draftSwapPlayerId = null
+        ui.notice = '已按位置匹配度与成品 CA 重排最强 11 人首发。'
+      } catch (err) {
+        ui.notice = err instanceof Error ? err.message : '重排失败'
+      }
+      render()
+      return
+    }
+    case 'draft-swap-pick': {
+      const pid = actionEl.dataset.player ?? ''
+      if (!pid) break
+      if (!ui.draftSwapPlayerId) {
+        ui.draftSwapPlayerId = pid
+        render()
+        return
+      }
+      if (ui.draftSwapPlayerId === pid) {
+        ui.draftSwapPlayerId = null
+        render()
+        return
+      }
+      const pair: [string, string] = [ui.draftSwapPlayerId, pid]
+      ui.draftSwapPlayerId = null
+      const body: SeasonEventActionBody = { action: 'draft_lineup', swapPlayerIds: pair }
+      try {
+        if (isOnlineMode()) await seasonEventActionOnline(body)
+        else {
+          const r = commitOfflineTransaction(() => applySeasonEventAction(game, body, Date.now()))
+          if (!r.ok) throw new Error(r.error)
+        }
+      } catch (err) {
+        ui.notice = err instanceof Error ? err.message : '无法互换这两名球员的位置'
+      }
+      render()
+      return
+    }
+    case 'draft-sim-round': {
+      const body: SeasonEventActionBody = { action: 'draft_sim_round' }
+      try {
+        if (isOnlineMode()) await seasonEventActionOnline(body)
+        else {
+          const r = commitOfflineTransaction(() => applySeasonEventAction(game, body, Date.now()))
+          if (!r.ok) throw new Error(r.error)
+        }
+        ui.notice =
+          game.seasonEvents?.draft?.phase === 'finished'
+            ? '4 轮瑞士轮全部完赛！请查看最终排名并领取奖励。'
+            : '本轮瑞士轮比赛已结算，可点开战报观看完整 2D 录像回放！'
+      } catch (err) {
+        ui.notice = err instanceof Error ? err.message : '模拟失败'
+      }
+      render()
+      return
+    }
+    case 'draft-play-live': {
+      const body: SeasonEventActionBody = { action: 'draft_live_start' }
+      try {
+        if (isOnlineMode()) await seasonEventActionOnline(body)
+        else {
+          const r = commitOfflineTransaction(() => applySeasonEventAction(game, body, Date.now()))
+          if (!r.ok) throw new Error(r.error)
+        }
+        openFriendly({ ok: true })
+      } catch (err) {
+        ui.notice = err instanceof Error ? err.message : '无法进入 2D 直播球场'
+        render()
+      }
+      return
+    }
+    case 'draft-claim-reward': {
+      const bookSel = document.querySelector<HTMLSelectElement>('#draft-reward-book')
+      const bookId = (bookSel?.value ?? ui.draftChosenBookId ?? undefined) as import('../game/types.ts').SkillBookId | undefined
+      const body: SeasonEventActionBody = { action: 'draft_claim_reward', bookId }
+      try {
+        if (isOnlineMode()) await seasonEventActionOnline(body)
+        else {
+          const r = commitOfflineTransaction(() => applySeasonEventAction(game, body, Date.now()))
+          if (!r.ok) throw new Error(r.error)
+        }
+        ui.notice = '星秀轮抽杯瑞士轮排名奖励已发放至俱乐部账户！'
+      } catch (err) {
+        ui.notice = err instanceof Error ? err.message : '领奖失败'
+      }
+      render()
+      return
+    }
     case 'start-legend-challenge': {
       const teamId = actionEl.dataset.team
       if (!teamId || ui.completing) break
@@ -2962,6 +3216,16 @@ document.addEventListener('change', (event) => {
   }
   if (target.id === 'match-shout-target') {
     ui.matchShoutTarget = target.value
+    render()
+    return
+  }
+  if (target.id === 'draft-theme-select') {
+    ui.draftThemePreview = target.value as import('../game/events/draft-cup.ts').DraftPoolThemeId
+    render()
+    return
+  }
+  if (target.id === 'draft-reward-book') {
+    ui.draftChosenBookId = target.value as import('../game/types.ts').SkillBookId
     render()
     return
   }
