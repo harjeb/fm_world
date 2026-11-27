@@ -340,10 +340,16 @@ function sameSkills(
   return true
 }
 
-/** 把 AI 卡上学会的技能同步到球员身上；首次改写前快照原始技能到 baseSkills，确保下次培养与转会还原不受污染。 */
+/** 把 AI 卡上学会的技能及球风路线同步到球员身上；首次改写前快照原始技能到 baseSkills，确保下次培养与转会还原不受污染。 */
 function applyCardSkills(player: Player, card: AICard): boolean {
-  if (!card.skills) return false
-  if (sameSkills(player.skills, player.skillTiers, card.skills, card.skillTiers)) return false
+  let updated = false
+  if (card.routeId !== undefined && (player.routeId ?? null) !== (card.routeId ?? null)) {
+    if (card.routeId) player.routeId = card.routeId
+    else delete player.routeId
+    updated = true
+  }
+  if (!card.skills) return updated
+  if (sameSkills(player.skills, player.skillTiers, card.skills, card.skillTiers)) return updated
   if (player.baseSkills === undefined) {
     player.baseSkills = [...player.skills]
     player.baseSkillTiers = player.skillTiers ? { ...player.skillTiers } : {}
@@ -610,6 +616,7 @@ export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | '
         attrs: { ...trainedPlayer.attrs },
         skills: trainedSkills,
         skillTiers: trainedSkillTiers,
+        ...(trainedPlayer.routeId ? { routeId: trainedPlayer.routeId } : {}),
         owner: card.owner,
       }
       // 按名单下标装这个槽位自己的卡（不能拿一个人当 0 号槽位去套）。
@@ -620,6 +627,7 @@ export function advanceAIClub(state: AIClubState, club: Pick<WorldClub, 'id' | '
         ...card,
         skills: trainedSkills,
         skillTiers: trainedSkillTiers,
+        ...(trainedPlayer.routeId ? { routeId: trainedPlayer.routeId } : {}),
       }
       if (applyToTeam && players && equipSlot(state, players, slot)) equipped = true
     }
@@ -678,7 +686,12 @@ export function backfillAICardSkills(
     const trainedSkills = [...trained.skills]
     const trainedSkillTiers = trained.skillTiers ? { ...trained.skillTiers } : {}
     // 仅回填技能与档位，不额外赠送免费 CA 成长，保持对真人玩家公平。
-    state.cards[String(slot)] = { ...card, skills: trainedSkills, skillTiers: trainedSkillTiers }
+    state.cards[String(slot)] = {
+      ...card,
+      skills: trainedSkills,
+      skillTiers: trainedSkillTiers,
+      ...(trained.routeId ? { routeId: trained.routeId } : {}),
+    }
     if (equipSlot(state, players, slot)) changed = true
   }
   if (changed && team) refreshAILineup(team)

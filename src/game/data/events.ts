@@ -1,22 +1,50 @@
-import type { EventDef } from '../types.ts'
+import type { EventDef, RouteId, SkillId } from '../types.ts'
 
-export const ROUTE_LABELS = {
+export const ROUTE_LABELS: Record<RouteId, string> = {
   safe_organization: '稳健组织',
   through_passing: '穿透传球',
   hold_shape: '稳健卡位',
   press_hunt: '主动扫荡',
   calm_finish: '冷静终结',
   long_range: '远射威胁',
+  wing_overdrive: '边路爆破',
+  pinpoint_cross: '精准传中',
+  target_pivot: '高空支点',
+  power_shield: '背身支点',
+  shot_stopper: '门线铁闸',
+  sweeper_keeper: '清道门神',
 }
 
-export const ROUTE_SKILL = {
+export const ROUTE_SKILL: Record<RouteId, SkillId> = {
   safe_organization: 'safe_pass',
   through_passing: 'through_ball',
   hold_shape: 'iron_lung',
   press_hunt: 'sweeper',
   calm_finish: 'box_hunter',
   long_range: 'long_shot',
-} as const
+  wing_overdrive: 'wing_runner',
+  pinpoint_cross: 'wing_cross',
+  target_pivot: 'aerial',
+  power_shield: 'cm_shield',
+  shot_stopper: 'gk_reflexes',
+  sweeper_keeper: 'gk_sweeper',
+}
+
+/** 培养路线球风烙印：不占 4+2 技能槽，随装备角色卡同步在 2D 引擎生效。 */
+export const ROUTE_EFFECT_DESC: Record<RouteId, string> = {
+  safe_organization: '中后场传球/停球/镇定提升，前场冒险直塞微降',
+  through_passing: '前场威胁视野与直塞提升，回防站位微降',
+  hold_shape: '防守站位与封线预判提升，前插无球跑位微降',
+  press_hunt: '贴身抢断与上抢爆发提升，拖后站位微降',
+  calm_finish: '禁区内射术与抗压镇定提升，禁区外浪射微降',
+  long_range: '禁区外远射与发力提升，小禁区抢点微降',
+  wing_overdrive: '边路盘带突破与启动提升，内收协防微降',
+  pinpoint_cross: '边路传中与观察视野提升，禁区强射微降',
+  target_pivot: '高球争顶与对抗力量提升，急转变向微降',
+  power_shield: '前场受压护球/停球/镇定提升，长途极速微降',
+  shot_stopper: '门线扑救反应与手控提升，弃门出击微降',
+  sweeper_keeper: '出击拦截、单刀与出球提升，门线手控微降',
+}
 
 const once = { once: true }
 
@@ -175,7 +203,7 @@ export const EVENTS: EventDef[] = [
     weight: 16,
     priority: 2,
     ...once,
-    trigger: { minAction: 3, maxAction: 11, latestAction: 10, trained: { passing: 1 }, noRoute: true },
+    trigger: { minAction: 3, maxAction: 11, latestAction: 10, playerCategory: 'field', trained: { passing: 1 }, noRoute: true },
     text: '你在训练赛里尝试了一脚直塞，球被断下，对手直接反击得分。教练没有喊停，只问：“你看到那条线路了吗？”',
     options: [
       {
@@ -207,7 +235,7 @@ export const EVENTS: EventDef[] = [
     weight: 22,
     priority: 6,
     ...once,
-    trigger: { minAction: 4, maxAction: 16, latestAction: 14, prior: ['chain_pass_1'], routeMin: 1, trainedSince: { passing: 1 } },
+    trigger: { minAction: 4, maxAction: 16, latestAction: 14, playerCategory: 'field', prior: ['chain_pass_1'], routeMin: 1, trainedSince: { passing: 1 } },
     text: '青训导师把你叫到半场，摆出三条接应路线：“今天只练一件事——在正确的时机把球送到正确的脚下。”',
     options: [
       {
@@ -238,7 +266,7 @@ export const EVENTS: EventDef[] = [
     weight: 30,
     priority: 9,
     ...once,
-    trigger: { minAction: 8, maxAction: 17, latestAction: 16, prior: ['chain_pass_2'], routeMin: 2 },
+    trigger: { minAction: 8, maxAction: 17, latestAction: 16, playerCategory: 'field', prior: ['chain_pass_2'], routeMin: 2 },
     text: '路线熟练度已经足够。导师把两段录像放在你面前：“你的比赛方式已经长出来了，现在把它变成一个能带走的技能。”',
     options: [
       {
@@ -265,7 +293,7 @@ export const EVENTS: EventDef[] = [
     weight: 16,
     priority: 2,
     ...once,
-    trigger: { minAction: 3, maxAction: 11, latestAction: 10, trainedAny: { tackling: 1, defPos: 1 }, noRoute: true },
+    trigger: { minAction: 3, maxAction: 11, latestAction: 10, playerCategory: 'field', trainedAny: { tackling: 1, defPos: 1 }, noRoute: true },
     text: '一次一对一中，你被对手从身侧抹过。教练把标志盘踢回原位：“被过不可怕，怕的是不知道为什么会这样。”',
     options: [
       {
@@ -297,7 +325,7 @@ export const EVENTS: EventDef[] = [
     weight: 22,
     priority: 6,
     ...once,
-    trigger: { minAction: 4, maxAction: 16, latestAction: 14, prior: ['chain_def_1'], routeMin: 1, trainedSinceAny: { tackling: 1, defPos: 1 } },
+    trigger: { minAction: 4, maxAction: 16, latestAction: 14, playerCategory: 'field', prior: ['chain_def_1'], routeMin: 1, trainedSinceAny: { tackling: 1, defPos: 1 } },
     text: '防守导师让你站在禁区弧顶，一遍遍处理“对手已经起速”的局面。他没有告诉你答案，只让你在每次失败后说出原因。',
     options: [
       {
@@ -328,7 +356,7 @@ export const EVENTS: EventDef[] = [
     weight: 30,
     priority: 9,
     ...once,
-    trigger: { minAction: 8, maxAction: 17, latestAction: 16, prior: ['chain_def_2'], routeMin: 2 },
+    trigger: { minAction: 8, maxAction: 17, latestAction: 16, playerCategory: 'field', prior: ['chain_def_2'], routeMin: 2 },
     text: '导师把防线交给你指挥：“现在不是你一个人防住谁，而是让整条线知道该站在哪里。”',
     options: [
       {
@@ -355,7 +383,7 @@ export const EVENTS: EventDef[] = [
     weight: 16,
     priority: 2,
     ...once,
-    trigger: { minAction: 3, maxAction: 11, latestAction: 10, trained: { shooting: 1 }, noRoute: true },
+    trigger: { minAction: 3, maxAction: 11, latestAction: 10, playerCategory: 'field', trained: { shooting: 1 }, noRoute: true },
     text: '训练赛里你得到一次单刀，推射偏出。球滚出底线时，守门员甚至没有庆祝，只是把球捡了回来。',
     options: [
       {
@@ -387,7 +415,7 @@ export const EVENTS: EventDef[] = [
     weight: 22,
     priority: 6,
     ...once,
-    trigger: { minAction: 4, maxAction: 16, latestAction: 14, prior: ['chain_fin_1'], routeMin: 1, trainedSince: { shooting: 1 } },
+    trigger: { minAction: 4, maxAction: 16, latestAction: 14, playerCategory: 'field', prior: ['chain_fin_1'], routeMin: 1, trainedSince: { shooting: 1 } },
     text: '射门教练把球摆在禁区内外不同位置：“别追求每脚都进。先告诉我，你这一脚想解决什么问题。”',
     options: [
       {
@@ -418,7 +446,7 @@ export const EVENTS: EventDef[] = [
     weight: 30,
     priority: 9,
     ...once,
-    trigger: { minAction: 8, maxAction: 17, latestAction: 16, prior: ['chain_fin_2'], routeMin: 2 },
+    trigger: { minAction: 8, maxAction: 17, latestAction: 16, playerCategory: 'field', prior: ['chain_fin_2'], routeMin: 2 },
     text: '教练把最后一筐球留给你：“路线已经练出来了。现在决定，你要把哪种射门变成比赛里的本能。”',
     options: [
       {
@@ -432,6 +460,276 @@ export const EVENTS: EventDef[] = [
         label: '继续练跑位',
         hint: '无球跑位 +1，疲劳 -4',
         effect: { text: '你没有急着定型，而是继续寻找更舒服的起脚位置。', attrs: { offBall: 1 }, fatigue: -4 },
+      },
+    ],
+  },
+
+  {
+    id: 'chain_wing_1',
+    title: '边线的抉择',
+    category: 'chain',
+    chain: 'wing',
+    stage: 1,
+    weight: 16,
+    priority: 2,
+    ...once,
+    trigger: { minAction: 3, maxAction: 11, latestAction: 10, playerCategory: 'field', trained: { dribbling: 1 }, noRoute: true },
+    text: '边路一对一被夹防逼到角旗区后，助教指着肋部与底线问你：“拿到边线空间时，你想自己撕开防线，还是把球喂到最致命的落点？”',
+    options: [
+      {
+        id: 'overdrive',
+        label: '下底生吃，用爆发撕开走廊',
+        hint: '盘带 +2，加速 +1，进入“边路爆破”路线',
+        effect: { text: '你压低重心反复练习第一步趟球超车。路线：边路爆破。', attrs: { dribbling: 2, acceleration: 1 }, route: { id: 'wing_overdrive', points: 1 }, fatigue: 4 },
+      },
+      {
+        id: 'cross',
+        label: '抬头看人，把传中喂到头顶',
+        hint: '传球 +2，视野 +1，进入“精准传中”路线',
+        effect: { text: '你开始在高速带球中提前抬头观察后点空当。路线：精准传中。', attrs: { passing: 2, vision: 1 }, route: { id: 'pinpoint_cross', points: 1 }, fatigue: 3 },
+      },
+      {
+        id: 'cutback',
+        label: '回敲衔接，暂不锁定路线',
+        hint: '第一脚触球 +1，灵活 +1，疲劳 -6，不锁定路线',
+        effect: { text: '你先把停球和变向节奏稳住，留着更多选择空间。', attrs: { firstTouch: 1, agility: 1 }, fatigue: -6 },
+      },
+    ],
+  },
+  {
+    id: 'chain_wing_2',
+    title: '边路走廊特训',
+    category: 'chain',
+    chain: 'wing',
+    stage: 2,
+    weight: 22,
+    priority: 6,
+    ...once,
+    trigger: { minAction: 4, maxAction: 16, latestAction: 14, playerCategory: 'field', prior: ['chain_wing_1'], routeMin: 1, trainedSinceAny: { dribbling: 1, acceleration: 1, speed: 1, passing: 1 } },
+    text: '边锋导师在边线五米走廊里摆满假人与标志杆：“真正的边路杀器，要么让边卫不敢贴，要么让他贴上来也挡不住出球。”',
+    options: [
+      {
+        id: 'basic',
+        label: '打磨高速触球节奏',
+        hint: '盘带 +2，传球 +1，路线熟练度 +1',
+        effect: { text: '你在狭窄边线里把趟球步频练得收放自如。路线熟练度 +1。', attrs: { dribbling: 2, passing: 1 }, routeOwn: 1, fatigue: 5 },
+      },
+      {
+        id: 'challenge',
+        label: '挑战双人包夹破局',
+        hint: '盘带、加速与视野的均值决定成功率；无论如何路线熟练度 +1',
+        branch: {
+          chanceText: '边路破包夹成功率',
+          check: { attrs: ['dribbling', 'acceleration', 'vision'], base: 0.48, scale: 0.009 },
+          success: { text: '你先假内切晃开重心再瞬间闪出空当，导师在场边鼓掌叫好。', attrs: { dribbling: 2, acceleration: 2, vision: 1 }, routeOwn: 1, fatigue: 6 },
+          failure: { text: '最后一下趟大了半步出界，但你摸准了协防球员扑抢的时间差。', attrs: { dribbling: 1, decisions: 1 }, routeOwn: 1, fatigue: 6 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'chain_wing_3',
+    title: '走廊的主人',
+    category: 'chain',
+    chain: 'wing',
+    stage: 3,
+    weight: 30,
+    priority: 9,
+    ...once,
+    trigger: { minAction: 8, maxAction: 17, latestAction: 16, playerCategory: 'field', prior: ['chain_wing_2'], routeMin: 2 },
+    text: '毕业赛前，导师指着草皮被踩得发白的边线走廊：“这条边路现在写着你的名字，把你的招牌招式定下来吧。”',
+    options: [
+      {
+        id: 'learn',
+        label: '接受路线技能训练',
+        hint: '解锁当前路线对应技能（边路飞翼 / 精准传中），灵活 +1',
+        effect: { text: '你把边路走廊的习惯升华为实战本能。技能槽里多了一项边路杀招。', attrs: { agility: 1 }, routeSkill: true, fatigue: 2 },
+      },
+      {
+        id: 'save',
+        label: '保留体能，打磨无球启动',
+        hint: '无球跑位 +1，疲劳 -5',
+        effect: { text: '你选择把体能留给正赛，反复揣摩反越位前插时机。', attrs: { offBall: 1 }, fatigue: -5 },
+      },
+    ],
+  },
+
+  {
+    id: 'chain_aerial_1',
+    title: '禁区里的肉搏',
+    category: 'chain',
+    chain: 'aerial',
+    stage: 1,
+    weight: 16,
+    priority: 2,
+    ...once,
+    trigger: { minAction: 3, maxAction: 11, latestAction: 10, playerCategory: 'field', trainedAny: { heading: 1, strength: 1 }, noRoute: true },
+    text: '高球砸进禁区，你在中卫顶防下失去重心。锋线教练拍了拍你的肩膀：“想在前场站住脚，你准备靠制空统治头顶，还是靠背身把球钉在脚下？”',
+    options: [
+      {
+        id: 'target',
+        label: '锤炼起跳争顶，统治高空落点',
+        hint: '力量 +2，头球 +2，进入“高空支点”路线',
+        effect: { text: '你开始练习提前卡住起跳身位，在最高点发力攻门与摆渡。路线：高空支点。', attrs: { strength: 2, heading: 2 }, route: { id: 'target_pivot', points: 1 }, fatigue: 4 },
+      },
+      {
+        id: 'shield',
+        label: '沉肩卡位护球，做前场支点墙',
+        hint: '力量 +2，第一脚触球 +1，镇定 +1，进入“背身支点”路线',
+        effect: { text: '你学会用后背感知防守者重心，稳稳把球卸给插上队友。路线：背身支点。', attrs: { strength: 2, firstTouch: 1, composure: 1 }, route: { id: 'power_shield', points: 1 }, fatigue: 4 },
+      },
+      {
+        id: 'evade',
+        label: '绕开正面肉搏，暂不锁定路线',
+        hint: '无球跑位 +1，决策 +1，疲劳 -5，不锁定路线',
+        effect: { text: '你先观察后卫盲区寻找空当，不急着定下对抗风格。', attrs: { offBall: 1, decisions: 1 }, fatigue: -5 },
+      },
+    ],
+  },
+  {
+    id: 'chain_aerial_2',
+    title: '支点对抗特训',
+    category: 'chain',
+    chain: 'aerial',
+    stage: 2,
+    weight: 22,
+    priority: 6,
+    ...once,
+    trigger: { minAction: 4, maxAction: 16, latestAction: 14, playerCategory: 'field', prior: ['chain_aerial_1'], routeMin: 1, trainedSinceAny: { heading: 1, strength: 1, firstTouch: 1 } },
+    text: '两名陪练中卫轮番从背后贴防顶撞，教练在场边抛出一记记高球与半高球：“支点存在的意义，就是让全队在受压时永远有一个能找的人。”',
+    options: [
+      {
+        id: 'basic',
+        label: '扎实完成卡位与卸球',
+        hint: '力量 +2，头球 +1，第一脚触球 +1，路线熟练度 +1',
+        effect: { text: '你在连续碰撞中纹丝不动地把球点给二线队友。路线熟练度 +1。', attrs: { strength: 2, heading: 1, firstTouch: 1 }, routeOwn: 1, fatigue: 5 },
+      },
+      {
+        id: 'challenge',
+        label: '挑战高压争顶制霸',
+        hint: '力量、头球与镇定的均值决定成功率；无论如何路线熟练度 +1',
+        branch: {
+          chanceText: '高压支点对抗成功率',
+          check: { attrs: ['strength', 'heading', 'composure'], base: 0.48, scale: 0.009 },
+          success: { text: '你力压两名防守队员旱地拔葱将球砸进球门死角，全场一片惊叹。', attrs: { strength: 3, heading: 2 }, routeOwn: 1, fatigue: 7 },
+          failure: { text: '起跳时机早了半拍没能发上力，但你已经摸透了顶防者的发力习惯。', attrs: { strength: 1, anticipation: 1 }, routeOwn: 1, fatigue: 7 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'chain_aerial_3',
+    title: '桥头堡的烙印',
+    category: 'chain',
+    chain: 'aerial',
+    stage: 3,
+    weight: 30,
+    priority: 9,
+    ...once,
+    trigger: { minAction: 8, maxAction: 17, latestAction: 16, playerCategory: 'field', prior: ['chain_aerial_2'], routeMin: 2 },
+    text: '教练拍着你的后背：“有你在前场扛住第一点，整支球队的阵型就能往前压二十米。把这股威慑力彻底定型吧。”',
+    options: [
+      {
+        id: 'learn',
+        label: '接受路线技能训练',
+        hint: '解锁当前路线对应技能（空中霸主 / 高压护球），团队合作 +1',
+        effect: { text: '你把支点对抗练成了肌肉记忆。技能槽里多了一项前场桥头堡绝技。', attrs: { teamwork: 1 }, routeSkill: true, fatigue: 2 },
+      },
+      {
+        id: 'recover',
+        label: '放松肌肉恢复状态',
+        hint: '头球 +1，疲劳 -6',
+        effect: { text: '你做了冰敷与核心拉伸，让身体在高强度对抗后彻底恢复弹性。', attrs: { heading: 1 }, fatigue: -6 },
+      },
+    ],
+  },
+
+  {
+    id: 'chain_gk_1',
+    title: '禁区弧顶的来球',
+    category: 'chain',
+    chain: 'goalkeeping',
+    stage: 1,
+    weight: 18,
+    priority: 2,
+    ...once,
+    trigger: { minAction: 3, maxAction: 11, latestAction: 10, playerCategory: 'gk', trainedAny: { reflexes: 1, handling: 1, rushing: 1, oneOnOne: 1 }, noRoute: true },
+    text: '一记穿透防线的身后直塞滚向大禁区边缘，出击慢半拍就是单刀，弃门太猛又怕被挑射。门将教练按住秒表问你：“你的领地，是脚下这条白线，还是整片罚球区？”',
+    options: [
+      {
+        id: 'stopper',
+        label: '死守门线，把极限扑救练到极致',
+        hint: '反应 +2，手控球 +1，进入“门线铁闸”路线',
+        effect: { text: '你专注锤炼门线站位、步法移动与近距离神扑反应。路线：门线铁闸。', attrs: { reflexes: 2, handling: 1 }, route: { id: 'shot_stopper', points: 1 }, fatigue: 3 },
+      },
+      {
+        id: 'sweeper',
+        label: '果断弃门，把险情扼杀在禁区外',
+        hint: '出击 +2，一对一 +1，进入“清道门神”路线',
+        effect: { text: '你拉高起始站位，练习第一时间冲出禁区解围与衔接出球。路线：清道门神。', attrs: { rushing: 2, oneOnOne: 1 }, route: { id: 'sweeper_keeper', points: 1 }, fatigue: 4 },
+      },
+      {
+        id: 'command',
+        label: '先练呼喊指挥，暂不锁定路线',
+        hint: '决策 +1，镇定 +1，疲劳 -5，不锁定路线',
+        effect: { text: '你先和后卫线复盘防线间距与口令配合，暂不急于定型门风。', attrs: { decisions: 1, composure: 1 }, fatigue: -5 },
+      },
+    ],
+  },
+  {
+    id: 'chain_gk_2',
+    title: '门将教练的加练',
+    category: 'chain',
+    chain: 'goalkeeping',
+    stage: 2,
+    weight: 22,
+    priority: 6,
+    ...once,
+    trigger: { minAction: 4, maxAction: 16, latestAction: 14, playerCategory: 'gk', prior: ['chain_gk_1'], routeMin: 1, trainedSinceAny: { reflexes: 1, handling: 1, rushing: 1, oneOnOne: 1, passing: 1 } },
+    text: '黄昏的球门前摆着三台发球机与挡拆人墙，折射球、高空球与身后单刀接连袭来。门将教练喊道：“门将没有第二次机会，把你的第一反应刻进骨子里！”',
+    options: [
+      {
+        id: 'basic',
+        label: '稳扎稳打完成连扑与摘球',
+        hint: '反应 +2，手控球 +1，路线熟练度 +1',
+        effect: { text: '你干净利落地抱住每一记势大力沉的来球，没有给补射留下一丝机会。路线熟练度 +1。', attrs: { reflexes: 2, handling: 1 }, routeOwn: 1, fatigue: 5 },
+      },
+      {
+        id: 'challenge',
+        label: '挑战极限单刀与盲区神扑',
+        hint: '反应、出击与镇定的均值决定成功率；无论如何路线熟练度 +1',
+        branch: {
+          chanceText: '极限门前决断成功率',
+          check: { attrs: ['reflexes', 'rushing', 'composure'], base: 0.48, scale: 0.009 },
+          success: { text: '你连续封出近距离折射与单刀推射，连场边前锋都抱头叹服。', attrs: { reflexes: 2, oneOnOne: 2, rushing: 1 }, routeOwn: 1, fatigue: 6 },
+          failure: { text: '一记变线球擦着指尖入网，但你精准记下了重心微调的半步距离。', attrs: { reflexes: 1, composure: 1 }, routeOwn: 1, fatigue: 6 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'chain_gk_3',
+    title: '一号门将的信条',
+    category: 'chain',
+    chain: 'goalkeeping',
+    stage: 3,
+    weight: 30,
+    priority: 9,
+    ...once,
+    trigger: { minAction: 8, maxAction: 17, latestAction: 16, playerCategory: 'gk', prior: ['chain_gk_2'], routeMin: 2 },
+    text: '门将教练把一双崭新的比赛手套递到你手里：“后卫回头看你一眼就能安心的时候，你才算真正守住了这座球门。”',
+    options: [
+      {
+        id: 'learn',
+        label: '接受路线技能训练',
+        hint: '解锁当前路线对应技能（门线神扑 / 出击门将），镇定 +1',
+        effect: { text: '你把独属于自己的守门信条凝练为看家本领，技能槽里多了一项门神绝技。', attrs: { composure: 1 }, routeSkill: true, fatigue: 2 },
+      },
+      {
+        id: 'steady',
+        label: '打磨手型与赛前状态',
+        hint: '手控球 +1，疲劳 -5',
+        effect: { text: '你放缓节奏反复校准接球手型，把最佳反应状态留给正式比赛。', attrs: { handling: 1 }, fatigue: -5 },
       },
     ],
   },

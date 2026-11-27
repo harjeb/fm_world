@@ -17,7 +17,7 @@ import { previewClubSigning } from '../../game/market.ts'
 import { releaseChance, SQUAD_STATUS_LABELS } from '../../game/transfer-rules.ts'
 import { economyOf } from '../../game/economy.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, TIER_LABELS, negotiationDemands, negotiationTerms, type SeasonGoal, type SquadRole } from '../../game/negotiation.ts'
-import { CA_STOPS, attrHeadCell, attributeRadar, attrHeat, caHeat, cardName, cardRoute, countryLabel, crest, eraLabel, findAnyPlayer, heatLegend, icon, injuryLabel, mainAttrs, meter, playerPortrait, positionMap, posBadge, primaryPosition, skillGroups, skillTag, tag, traitLabel } from '../components.ts'
+import { CA_STOPS, attrHeadCell, attributeRadar, attrHeat, caHeat, cardName, cardRoute, cardRouteEffect, countryLabel, crest, eraLabel, findAnyPlayer, heatLegend, icon, injuryLabel, mainAttrs, meter, playerPortrait, positionMap, posBadge, primaryPosition, routeLabel, skillGroups, skillTag, tag, traitLabel } from '../components.ts'
 import { attrLabel, esc, playerCA, trainingLogText } from '../format.ts'
 import { game, ui } from '../state.ts'
 import { careerStats, fixtureTotals, isOwnPlayer, seasonStats } from '../../game/player-stats.ts'
@@ -39,7 +39,7 @@ function cardRows(player: Player): string {
     </div>`
   return `<div class="card-rows">
     ${row('', '原始属性', '没有培养过的样子', initialDisplayCA(player), !player.equippedCardId)}
-    ${cards.map((card) => row(card.id, cardName(card), cardRoute(card), playerCA(card), card.id === player.equippedCardId)).join('')}
+    ${cards.map((card) => row(card.id, cardName(card), card.routeId ? `${cardRoute(card)} · ${cardRouteEffect(card)}` : cardRoute(card), playerCA(card), card.id === player.equippedCardId)).join('')}
   </div>
   <p class="hint">换卡不影响体能和精力。${cards.length ? `<button class="link" data-nav="inventory">去库存比较 ${icon('right', 12)}</button>` : '培养一轮后这里会多一张卡。'}</p>`
 }
@@ -185,7 +185,7 @@ export function renderDetailOverlay(): string {
             ${positionMap(player)}
             ${owned ? `<h3>位置星级</h3>${renderRelativePositionRatings(player, game.roster)}` : ''}
             <h3>特性与技能</h3>
-            <div class="tag-row">${traitLabel(player.traitId, true)}</div>
+            <div class="tag-row">${traitLabel(player.traitId, true)}${routeLabel(player.routeId ?? worn?.routeId)}</div>
             ${skillGroups(player)}
             ${owned ? `<h3>队友默契</h3>${chemistryPartners(player)}<p class="hint">配合越多，默契越高；换卡保留。超过 21 天未合作会移除。</p>` : ''}
           </section>

@@ -62,6 +62,7 @@ export function toMatchPlayer(player: Player, side: MatchSide, role: MatchPlayer
     skills: [...player.skills],
     skillTiers: { ...player.skillTiers },
     traitId: player.traitId,
+    ...(player.routeId ? { routeId: player.routeId } : {}),
     ...(player.personality ? { personality: { ...player.personality } } : {}),
     foot: player.foot,
     height: player.height,

@@ -8,6 +8,7 @@ import type {
   Player,
   Position,
   DetailedPosition,
+  RouteId,
   TrainingSession,
   TrainingExchange,
   SkillId,
@@ -73,13 +74,19 @@ function mentorReviewScale(session: TrainingSession): number {
   return session.actionsTotal === undefined ? 1 : 0.5
 }
 
-const ROUTE_CHAIN: Record<string, string> = {
+const ROUTE_CHAIN: Record<RouteId, string> = {
   safe_organization: 'passing',
   through_passing: 'passing',
   hold_shape: 'defending',
   press_hunt: 'defending',
   calm_finish: 'finishing',
   long_range: 'finishing',
+  wing_overdrive: 'wing',
+  pinpoint_cross: 'wing',
+  target_pivot: 'aerial',
+  power_shield: 'aerial',
+  shot_stopper: 'goalkeeping',
+  sweeper_keeper: 'goalkeeping',
 }
 
 export type TrainingActionId = 'drill' | 'combo' | 'match' | 'position' | 'rest' | 'mentor' | 'protection' | 'inherit'
@@ -771,6 +778,19 @@ export function eligibleEventCount(session: TrainingSession, action = session.ac
   return eligibleEvents(session, action).length
 }
 
+function chainTrainScore(session: TrainingSession, chain: string | undefined): number {
+  const t = session.trained
+  switch (chain) {
+    case 'passing': return (t.passing ?? 0) + (t.vision ?? 0) * 0.5
+    case 'defending': return (t.tackling ?? 0) + (t.defPos ?? 0)
+    case 'finishing': return (t.shooting ?? 0) + (t.offBall ?? 0) * 0.5
+    case 'wing': return (t.dribbling ?? 0) + (t.acceleration ?? 0) * 0.35 + (t.speed ?? 0) * 0.35
+    case 'aerial': return (t.heading ?? 0) * 1.4 + (t.strength ?? 0)
+    case 'goalkeeping': return (t.reflexes ?? 0) + (t.handling ?? 0) + (t.rushing ?? 0) + (t.oneOnOne ?? 0)
+    default: return 0
+  }
+}
+
 export function guaranteedEvent(session: TrainingSession, action = session.action): EventDef | null {
   const isGk = candidateIsGk(session)
   const total = trainingActionsTotal(session)
@@ -779,10 +799,15 @@ export function guaranteedEvent(session: TrainingSession, action = session.actio
     if (!isEventEligible(session, event, action, isGk)) continue
     if (event.mainline && (event.id === 'main_graduation' ? total : event.trigger.minAction) === action) return event
     if (event.trigger.latestAction !== undefined && action >= event.trigger.latestAction) {
+      const pCur = event.priority ?? 0
+      const pBest = bestOverdue?.priority ?? 0
+      const sCur = event.stage ?? 0
+      const sBest = bestOverdue?.stage ?? 0
       if (
         !bestOverdue
-        || (event.priority ?? 0) > (bestOverdue.priority ?? 0)
-        || ((event.priority ?? 0) === (bestOverdue.priority ?? 0) && (event.stage ?? 0) > (bestOverdue.stage ?? 0))
+        || pCur > pBest
+        || (pCur === pBest && sCur > sBest)
+        || (pCur === pBest && sCur === sBest && event.trigger.noRoute && bestOverdue.trigger.noRoute && chainTrainScore(session, event.chain) > chainTrainScore(session, bestOverdue.chain))
       ) {
         bestOverdue = event
       }
@@ -1178,6 +1203,7 @@ function applyEventEffect(session: TrainingSession, effect: EventEffect): { gain
       session.routeId = effect.route.id
       session.routePoints += effect.route.points
     }
+    session.candidate.routeId = session.routeId
   }
   if (effect.routeOwn && session.routeId) session.routePoints += effect.routeOwn
   if (effect.flags) session.flags.push(...effect.flags)
@@ -1197,6 +1223,8 @@ function completeSession(session: TrainingSession): void {
   if (session.completed) return
   session.completed = true
   session.candidate.version = session.baseVersion + 1
+  if (session.routeId) session.candidate.routeId = session.routeId
+  else delete session.candidate.routeId
   session.log.push({
     action: trainingActionsTotal(session),
     week: sessionWeek(session, trainingActionsTotal(session)),

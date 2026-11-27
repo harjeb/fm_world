@@ -359,7 +359,19 @@ export type StyleId =
   | 'st_runner'
   | 'st_false9'
 
-export type RouteId = 'safe_organization' | 'through_passing' | 'hold_shape' | 'press_hunt' | 'calm_finish' | 'long_range'
+export type RouteId =
+  | 'safe_organization'
+  | 'through_passing'
+  | 'hold_shape'
+  | 'press_hunt'
+  | 'calm_finish'
+  | 'long_range'
+  | 'wing_overdrive'
+  | 'pinpoint_cross'
+  | 'target_pivot'
+  | 'power_shield'
+  | 'shot_stopper'
+  | 'sweeper_keeper'
 
 export type Personality = {
   professionalism: number
@@ -406,6 +418,8 @@ export type Player = {
   baseSkillTiers?: Partial<Record<SkillId, SkillTier>>
   /** 当前装备的球员卡；没有则使用原始属性。 */
   equippedCardId?: string
+  /** 当前生效的培养路线球风烙印（随换卡同步，不占 4+2 技能槽）。 */
+  routeId?: RouteId | null
   /** 赛季体能/状态，1-100；比赛开始时映射为初始体力。 */
   condition: number
   /** 训练精力，1-100；每次训练消耗，休息恢复。与比赛体力分离。 */
@@ -1631,6 +1645,8 @@ export type AICard = {
   /** 培养卡学会的技能及档位；装备时一并同步到球员身上（原始技能保留在 baseSkills）。 */
   skills?: SkillId[]
   skillTiers?: Partial<Record<SkillId, SkillTier>>
+  /** 培养卡锁定的球风路线；装备时一并同步到球员身上。 */
+  routeId?: RouteId | null
   /** 这张卡属于谁（球员 id 加英文名）。槽位上换了人，旧卡不能套给新人。 */
   owner?: string
 }

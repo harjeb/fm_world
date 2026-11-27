@@ -1,10 +1,10 @@
-import type { AttrKey, Attributes, Fixture, Player, Position, SeasonTableRow, SkillId, SkillTier, TierId, TraitId } from '../game/types.ts'
+import type { AttrKey, Attributes, Fixture, Player, Position, RouteId, SeasonTableRow, SkillId, SkillTier, TierId, TraitId } from '../game/types.ts'
 import { POSITIONS, type PlayerCard } from '../game/types.ts'
 import { cardDisplayName, playerCards } from '../game/cards.ts'
 import { DETAILED_POSITIONS, DETAILED_POSITION_LABELS, detailedPositionValue } from '../game/detailed-positions.ts'
 import type { DetailedPosition } from '../game/types.ts'
 import { ATTR_META } from '../game/data/attributes.ts'
-import { ROUTE_LABELS } from '../game/data/events.ts'
+import { ROUTE_EFFECT_DESC, ROUTE_LABELS } from '../game/data/events.ts'
 import { skillEffectText, skillTierNote, traitEffectText } from '../game/data/skill-effects.ts'
 import type { PlayerForm } from '../game/form.ts'
 import { skillCapacity, skillCategory } from '../game/data/skills.ts'
@@ -309,6 +309,17 @@ export function cardName(card: Pick<PlayerCard, 'serial' | 'customName'>): strin
 
 export function cardRoute(card: Pick<PlayerCard, 'routeId'>): string {
   return card.routeId ? ROUTE_LABELS[card.routeId] : '未选路线'
+}
+
+export function cardRouteEffect(card: Pick<PlayerCard, 'routeId'>): string {
+  return card.routeId ? ROUTE_EFFECT_DESC[card.routeId] : ''
+}
+
+export function routeLabel(routeId: RouteId | null | undefined): string {
+  if (!routeId || !ROUTE_LABELS[routeId]) return ''
+  const label = ROUTE_LABELS[routeId]
+  const effect = ROUTE_EFFECT_DESC[routeId]
+  return `<span class="tag info tip" ${tipAttrs(`球风烙印 · ${label}`, `${effect}（随角色卡装备同步生效，不占 4+2 技能槽）`)}>烙印 · ${esc(label)}</span>`
 }
 
 /**

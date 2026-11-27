@@ -5,7 +5,7 @@ import { DETAILED_POSITIONS, DETAILED_POSITION_LABELS, DETAILED_TO_POSITION, det
 import { initialDisplayCA } from '../../game/rating.ts'
 import { saveGame } from '../../game/state.ts'
 import { isOnlineMode, renameCardOnline } from '../../online.ts'
-import { attrHeat, caHeat, cardRoute, emptyState, findAnyPlayer, icon, mainAttrs, meter, pageHead, panel, playerPortrait, posBadge, primaryPosition, skillTag, tag } from '../components.ts'
+import { attrHeat, caHeat, cardRoute, cardRouteEffect, emptyState, findAnyPlayer, icon, mainAttrs, meter, pageHead, panel, playerPortrait, posBadge, primaryPosition, skillTag, tag } from '../components.ts'
 import { attrLabel, esc, playerCA, positionClass, positionLabel, skillName } from '../format.ts'
 import { morph } from '../morph.ts'
 import { game, ui } from '../state.ts'
@@ -183,9 +183,10 @@ function cardTile(card: PlayerCard, owner: Player | undefined): string {
   const equipped = owner?.equippedCardId === card.id
   const pending = game.training[card.playerId]?.cardId === card.id
   const reference = owner && !equipped ? owner : undefined
+  const routeEffect = cardRouteEffect(card)
   return `<article class="pcard ${equipped ? 'equipped' : ''}" data-key="${esc(card.id)}">
     <header class="pcard-head">
-      <div class="pcard-title">${cardNameField(card)}${equipped ? tag('已装备', 'solid') : pending ? tag('新', 'good') : ''}<small>${esc(cardRoute(card))}</small></div>
+      <div class="pcard-title">${cardNameField(card)}${equipped ? tag('已装备', 'solid') : pending ? tag('新', 'good') : ''}<small ${routeEffect ? `title="${esc(`球风烙印：${routeEffect}（装备后在 2D 比赛生效，不占技能槽）`)}"` : ''}>${esc(cardRoute(card))}${routeEffect ? ` · ${esc(routeEffect)}` : ''}</small></div>
       <div class="pcard-ca"><small>CA</small>${caHeat(playerCA(card))}${deltaText(playerCA(card), reference ? playerCA(reference) : undefined)}</div>
     </header>
     ${attrGrid(card.attrs, mainAttrs({ positions: card.positions }), reference)}

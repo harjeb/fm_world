@@ -10,7 +10,7 @@ import {
 } from '../../game/chat.ts'
 import { cardsOf } from '../../game/cards.ts'
 import { ATTR_META } from '../../game/data/attributes.ts'
-import { ROUTE_LABELS } from '../../game/data/events.ts'
+import { ROUTE_EFFECT_DESC, ROUTE_LABELS } from '../../game/data/events.ts'
 import { mainAttrsFor } from '../../game/scale.ts'
 import { POSITIONS } from '../../game/types.ts'
 import { chatState, isOnlineMode, onlineState, serverNow } from '../../online.ts'
@@ -215,6 +215,10 @@ function renderSharedCardModalBody(msg: ChatMessage, card: ChatSharedCard): stri
       <h3>擅长位置</h3>
       <div class="tag-row">${posChips || '<span class="muted small">—</span>'}</div>
     </div>
+    ${card.routeId && ROUTE_LABELS[card.routeId] ? `<div class="share-card-sec">
+      <h3>球风烙印 <small class="muted">（随卡生效 · 不占技能槽）</small></h3>
+      <div class="tag-row"><span class="tag info">烙印 · ${esc(ROUTE_LABELS[card.routeId])}</span><span class="muted small">${esc(ROUTE_EFFECT_DESC[card.routeId])}</span></div>
+    </div>` : ''}
     <div class="share-card-sec">
       <h3>实战技能 <small class="muted">（悬停查看效果）</small></h3>
       <div class="tag-row">${skillsHtml}</div>

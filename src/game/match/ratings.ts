@@ -153,6 +153,9 @@ export class MatchRatings {
         value += shout.delta * 0.55
       }
     }
+    if (player.routeId) {
+      value += routeAttrDelta(player, key, ctx)
+    }
     return clamp(value * (player.injured ? 0.7 : 1), 1, MAX_ATTR_RATING)
   }
 
@@ -211,3 +214,104 @@ export class MatchRatings {
     return this.stateOf().teamTraits?.[`${side}|${key}`] ?? 0
   }
 }
+
+/**
+ * 培养路线球风烙印：不占 4+2 技能槽、不消耗 RNG，仅在球员装备带有 routeId 的角色卡时生效。
+ * 每条路线提供明确的专精增益与小幅风格取舍，使同一球员切换不同路线卡时在 2D 引擎中呈现不同球风。
+ */
+export function routeAttrDelta(player: MatchPlayerState, key: AttrKey, ctx: MatchEventContext = {}): number {
+  const route = player.routeId
+  if (!route) return 0
+  const gk = player.position === 'GK'
+  const prog = progressOf(player.side, player.x)
+  const isWide = Boolean(ctx.wide || ctx.crossing || wideZone(player))
+  const isAttackThird = Boolean(ctx.finalThird || ctx.inBox || prog > 0.65)
+
+  switch (route) {
+    case 'safe_organization':
+      if (!isAttackThird) {
+        if (key === 'passing') return 3.5
+        if (key === 'firstTouch') return 2.5
+        if (key === 'composure') return 2
+      } else if (key === 'vision') {
+        return -1.5
+      }
+      return 0
+    case 'through_passing':
+      if (ctx.passing || isAttackThird) {
+        if (key === 'vision') return 4
+        if (key === 'passing') return 2.5
+      }
+      if (key === 'defPos') return -1.5
+      return 0
+    case 'hold_shape':
+      if (key === 'defPos') return 4
+      if (key === 'anticipation') return 2.5
+      if (key === 'offBall') return -1.5
+      return 0
+    case 'press_hunt':
+      if (key === 'tackling') return 4
+      if (key === 'acceleration') return 2
+      if (key === 'defPos') return -1.5
+      return 0
+    case 'calm_finish':
+      if (ctx.inBox || (!ctx.longRange && prog > 0.8)) {
+        if (key === 'shooting') return 3.5
+        if (key === 'composure') return 3.5
+      } else {
+        if (key === 'shooting') return -2
+        if (isAttackThird && key === 'composure') return 2
+      }
+      return 0
+    case 'long_range':
+      if (ctx.longRange || !ctx.inBox) {
+        if (key === 'shooting') return 4
+        if (key === 'strength') return 2
+      }
+      if (ctx.inBox && key === 'offBall') return -1.5
+      return 0
+    case 'wing_overdrive':
+      if (isWide) {
+        if (key === 'dribbling') return 4
+        if (key === 'acceleration') return 3
+      }
+      if (key === 'defPos') return -1.5
+      return 0
+    case 'pinpoint_cross':
+      if (isWide) {
+        if (key === 'passing') return 4
+        if (key === 'vision') return 2.5
+      }
+      if (ctx.inBox && key === 'shooting') return -1.5
+      return 0
+    case 'target_pivot':
+      if (ctx.aerial || ctx.inBox || isAttackThird) {
+        if (key === 'heading') return 4.5
+        if (key === 'strength') return 3
+      }
+      if (key === 'agility') return -1.5
+      return 0
+    case 'power_shield':
+      if (ctx.pressured || isAttackThird) {
+        if (key === 'strength') return 3.5
+        if (key === 'firstTouch') return 3
+        if (key === 'composure') return 2
+      }
+      if (key === 'speed') return -1.5
+      return 0
+    case 'shot_stopper':
+      if (!gk) return 0
+      if (key === 'reflexes') return 4
+      if (key === 'handling') return 3
+      if (key === 'rushing') return -2
+      return 0
+    case 'sweeper_keeper':
+      if (!gk) return 0
+      if (key === 'rushing') return 4.5
+      if (key === 'oneOnOne') return 3
+      if (key === 'passing') return 2.5
+      if (key === 'handling') return -1.5
+      return 0
+  }
+}
+

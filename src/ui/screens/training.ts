@@ -1,6 +1,6 @@
 import type { DetailedPosition, Player, Position, SkillId, TrainingLogEntry, TrainingSession } from '../../game/types.ts'
 import { DETAILED_POSITIONS, DETAILED_POSITION_LABELS, detailedPositionValue, isDetailedPosition } from '../../game/detailed-positions.ts'
-import { eventById, ROUTE_LABELS } from '../../game/data/events.ts'
+import { eventById, ROUTE_EFFECT_DESC, ROUTE_LABELS } from '../../game/data/events.ts'
 import { POSITION_LABELS } from '../../game/data/attributes.ts'
 import { SKILLS, basicSkillsFor, canLearnSkill, skillCategory } from '../../game/data/skills.ts'
 import { autoPresetLabel, autoTrainingConfig, autoTrainingPresetsFor, autoTrainingRunnable, maxTrainingBooks, previewTraining, resolveAutoPresetId, trainingBookLoadout, trainingSeasonIndex } from '../../game/actions.ts'
@@ -423,6 +423,7 @@ function trainingHeader(current: Player, session: TrainingSession, cand: Player)
   const stamina = 100 - fatigue
   const total = trainingActionsTotal(session)
   const route = session.routeId ? `${ROUTE_LABELS[session.routeId]} · ${session.routePoints}/2` : '未选择路线'
+  const routeTip = session.routeId ? ` title="${esc(`球风烙印：${ROUTE_EFFECT_DESC[session.routeId]}`)}"` : ''
   const eventP = eventChance(session, session.action + 1)
   const quality = trainingQualityChances(session)
   const currentAction = Math.min(total, session.action + 1)
@@ -437,7 +438,7 @@ function trainingHeader(current: Player, session: TrainingSession, cand: Player)
         ${posBadge(primaryPosition(current))}
         <div>
           <h2>${esc(current.name)} <small>${esc(current.enName)}</small>${campNow ? ` ${tag(`国外特训 ×${OVERSEAS_CAMP_MULTIPLIER}`, 'gold')}` : ''}</h2>
-          <p class="muted small">${when} · 行动 ${session.action}/${total} · ${traitLabel(current.traitId)} · ${esc(route)}</p>
+          <p class="muted small">${when} · 行动 ${session.action}/${total} · ${traitLabel(current.traitId)} · <span${routeTip}>${esc(route)}</span></p>
         </div>
       </div>
       ${autoControls(current)}
@@ -702,7 +703,7 @@ function candidatePanel(current: Player, cand: Player, session: TrainingSession)
       <div class="candidate-side">
         <div class="tile-grid">
           ${tile('CA', `${playerCA(current).toFixed(1)} → ${playerCA(cand).toFixed(1)}`, caDelta(current, cand))}
-          ${tile('路线', session.routeId ? esc(ROUTE_LABELS[session.routeId]) : '未选择')}
+          ${tile('球风路线', session.routeId ? esc(ROUTE_LABELS[session.routeId]) : '未选择', session.routeId ? esc(ROUTE_EFFECT_DESC[session.routeId]) : '未锁定专属球风烙印')}
         </div>
         ${skillGroups(cand)}
       </div>

@@ -19,6 +19,7 @@ import type {
   PlayerShoutState,
   Position,
   RoleId,
+  RouteId,
   ScheduledMatchShout,
   SkillId,
   Tactics,
@@ -49,6 +50,8 @@ export type MatchPlayerState = {
   skills: SkillId[]
   skillTiers?: Partial<Record<SkillId, 'silver' | 'gold' | 'rainbow'>>
   traitId: TraitId
+  /** 已装备角色卡携带的培养路线球风烙印（不占技能槽）。 */
+  routeId?: RouteId
   foot: 'L' | 'R' | 'B'
   height: number
   role: RoleId

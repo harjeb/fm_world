@@ -191,10 +191,11 @@ export function baseBuild(player: Player): Build {
 export function untrainedPlayer(player: Player): Player {
   const base: Player = { ...player, ...baseBuild(player) }
   delete base.equippedCardId
+  delete base.routeId
   return base
 }
 
-function wear(player: Player, build: Build, cardId: string | null): void {
+function wear(player: Player, build: Build, cardId: string | null, routeId: RouteId | null = null): void {
   if (!player.equippedCardId && player.version === 0) {
     player.baseDetailedPositions = player.detailedPositions && { ...player.detailedPositions }
     player.baseDetailedPositionsVersion = player.detailedPositionsVersion
@@ -214,6 +215,8 @@ function wear(player: Player, build: Build, cardId: string | null): void {
   player.version = copy.version
   if (cardId) player.equippedCardId = cardId
   else delete player.equippedCardId
+  if (cardId && routeId) player.routeId = routeId
+  else delete player.routeId
 }
 
 /**
@@ -229,8 +232,8 @@ export function equipCard(game: GameState, playerId: string, cardId: string | nu
   const card = cardId === null ? null : cardsOf(game).find((item) => item.id === cardId)
   if (card === undefined) return fail('球员卡不存在')
   if (card && card.playerId !== playerId) return fail('只能装备这名球员自己的卡')
-  if ((player.equippedCardId ?? null) === cardId) return { ok: true }
-  wear(player, card ?? baseBuild(player), cardId)
+  if ((player.equippedCardId ?? null) === cardId && (player.routeId ?? null) === (card?.routeId ?? null)) return { ok: true }
+  wear(player, card ?? baseBuild(player), cardId, card?.routeId ?? null)
   return { ok: true }
 }
 
@@ -258,7 +261,7 @@ export function deleteCard(game: GameState, cardId: string): CardOutcome {
 export function destroyPlayerCards(game: GameState, player: Player): number {
   const cards = cardsOf(game)
   const kept = cards.filter((card) => card.playerId !== player.id)
-  wear(player, baseBuild(player), null)
+  wear(player, baseBuild(player), null, null)
   delete game.candidates[player.id]
   delete game.training[player.id]
   game.cards = kept
@@ -267,19 +270,33 @@ export function destroyPlayerCards(game: GameState, player: Player): number {
 
 /**
  * 补齐旧存档，并处理卡被删后球员才回队的情况：
- * 球员身上已确认的培养成果收进库存并视为已装备，等待确认的候选也收进库存。
+ * 球员身上已确认的培养成果收进库存并视为已装备，等待确认的候选也收进库存；
+ * 同时把已装备卡片上的 routeId 球风烙印回填到球员身上。
  */
 export function ensureCards(game: GameState): boolean {
   let changed = game.cards === undefined
   const cards = (game.cards ??= [])
   for (const player of game.roster) {
-    if (player.equippedCardId && cards.some((card) => card.id === player.equippedCardId)) continue
     if (player.equippedCardId) {
+      const equipped = cards.find((card) => card.id === player.equippedCardId)
+      if (equipped) {
+        const wanted = equipped.routeId ?? undefined
+        if ((player.routeId ?? undefined) !== wanted) {
+          if (wanted) player.routeId = wanted
+          else delete player.routeId
+          changed = true
+        }
+        continue
+      }
       delete player.equippedCardId
+      if (player.routeId !== undefined) delete player.routeId
+      changed = true
+    } else if (player.routeId !== undefined && player.version === 0) {
+      delete player.routeId
       changed = true
     }
     if (player.version > 0) {
-      player.equippedCardId = addCard(game, player, player, null).id
+      player.equippedCardId = addCard(game, player, player, player.routeId ?? null).id
       changed = true
     }
   }
@@ -292,7 +309,7 @@ export function ensureCards(game: GameState): boolean {
   for (const [playerId, candidate] of Object.entries(game.candidates ?? {})) {
     if (game.training?.[playerId]) continue
     const owner = game.roster.find((player) => player.id === playerId)
-    if (owner) addCard(game, owner, candidate, null)
+    if (owner) addCard(game, owner, candidate, candidate.routeId ?? null)
     delete game.candidates[playerId]
     changed = true
   }
