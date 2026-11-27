@@ -183,7 +183,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 一轮培养结束时新卡自动进入库存 `state.cards`，换上之前球员继续用原来的卡；不处理培养结果也可以直接开始下一轮。每轮培养都从原始属性开始，卡和卡之间互不影响。
 
-`state.roster[]` 的 `attrs`、`positions`、`skills`、`personality` 始终是当前装备的卡（或原始属性）的值，另有 `equippedCardId`（`null` 表示原始属性）和 `cardIds`。`state.cards[]` 每张卡有 `id`、`playerId`、`playerName`、`serial`（这名球员的第几张）、`routeId`、`ca`、可见主属性 `attrs`、`positions`、`detailedPositions`、`personality`、`skills`、`skillTiers`、`equipped`、`ownerInSquad`、`recycleLocked` 和 `recyclePoints`（不可回收时为 `null`）。
+`state.roster[]` 的 `attrs`、`positions`、`skills`、`personality` 始终是当前装备的卡（或原始属性）的值，另有 `equippedCardId`（`null` 表示原始属性）和 `cardIds`。`state.cards[]` 每张卡有 `id`、`playerId`、`playerName`、`name`（当前显示名，未改名时为默认卡名）、`customName`（自定义改名，`null` 表示使用默认名）、`serial`（这名球员的第几张）、`routeId`、`ca`、可见主属性 `attrs`、`positions`、`detailedPositions`、`personality`、`skills`、`skillTiers`、`equipped`、`ownerInSquad`、`recycleLocked` 和 `recyclePoints`（不可回收时为 `null`）。
 
 - `equip_card` — 给球员换卡，只能装备他自己的卡。比赛进行中不能换。换卡不会让阵容失效，新卡在当前位置熟练度低只是属性折损更多。
   - `playerId`
@@ -195,6 +195,9 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 - `lock_card` — 锁定或解锁一张库存卡的回收状态；已装备的卡也可以提前上锁，挂牌出售成交时仍会销毁。
   - `cardId`
   - `locked`: 布尔值
+- `rename_card` — 修改一张球员卡的自定义显示名；`name` 传空字符串恢复默认名，同一名球员名下不能重名。
+  - `cardId`
+  - `name`: 新卡名（字符串）
 
 球员的 `traitId`、`traitName`、`traitEffect` 是特性及其效果说明。500 名真实球星每人一个专属特性，随机球员用通用特性；特性属于球员本人，不随球员卡变化。
 
@@ -330,7 +333,7 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 
 ## 5. MCP
 
-本仓库自带 stdio MCP 服务 `mcp/index.ts`（实现见 `mcp/server.ts`），与上面的联机 HTTP 动作保持 100% 同步（含 `match_shout`、`set_auto_shout`、`claim_achievement`、`save_lineup_preset`、`apply_lineup_preset`、`board_choose_ambition`、`board_adjust_budget`、`get_world`、`get_pve`、`start_peak_challenge`、`start_legend_challenge`、`use_peak_breakthrough`、`claim_peak_reward`、`preview_signing`、`sign_club_player`、`run_auto_training`、`start_scouting`、`get_scout_reports`、`recycle_cards`、`lock_card`、`get_chat`、`send_chat`、`set_match_auto_subs` 等；已废弃的 `choose_club` 与单机专用 `buy_free_agent` 不注册），另有只读工具 `get_state`、`get_docs` 及文档资源 `fm://agent-api.md`。
+本仓库自带 stdio MCP 服务 `mcp/index.ts`（实现见 `mcp/server.ts`），与上面的联机 HTTP 动作保持 100% 同步（含 `match_shout`、`set_auto_shout`、`claim_achievement`、`save_lineup_preset`、`apply_lineup_preset`、`board_choose_ambition`、`board_adjust_budget`、`get_world`、`get_pve`、`start_peak_challenge`、`start_legend_challenge`、`use_peak_breakthrough`、`claim_peak_reward`、`preview_signing`、`sign_club_player`、`run_auto_training`、`start_scouting`、`get_scout_reports`、`recycle_cards`、`lock_card`、`rename_card`、`get_chat`、`send_chat`、`set_match_auto_subs` 等；已废弃的 `choose_club` 与单机专用 `buy_free_agent` 不注册），另有只读工具 `get_state`、`get_docs` 及文档资源 `fm://agent-api.md`。
 
 ```bash
 FM_AGENT_TOKEN=fm_... FM_SERVER=http://127.0.0.1:8787 npm run mcp

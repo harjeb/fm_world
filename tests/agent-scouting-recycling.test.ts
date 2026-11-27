@@ -47,6 +47,11 @@ describe('Agent API：球探、回收培养点和细分位置', () => {
     const game = createInitialGame(9002)
     game.cards = [cardFor(game)]
     game.trainingPoints = 30
+    const renamed = applyAgentAction(game, { action: 'rename_card', cardId: 'test-card', name: '主力尖刀' })
+    expect(renamed.ok).toBe(true)
+    expect(agentView(game).cards.find(c => c.id === 'test-card')).toMatchObject({ name: '主力尖刀', customName: '主力尖刀' })
+    expect(applyAgentAction(game, { action: 'rename_card', cardId: 'test-card', name: '' }).ok).toBe(true)
+    expect(agentView(game).cards.find(c => c.id === 'test-card')?.customName).toBeNull()
     const locked = applyAgentAction(game, { action: 'lock_card', cardId: 'test-card', locked: true })
     expect(locked.ok).toBe(true)
     expect(applyAgentAction(game, { action: 'recycle_cards', cardIds: ['test-card'] }).ok).toBe(false)
@@ -90,7 +95,7 @@ describe('Agent API：球探、回收培养点和细分位置', () => {
     try {
       await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
       const tools = (await client.listTools()).tools
-      for (const name of ['start_scouting', 'get_scout_reports', 'delete_scout_report', 'recycle_cards', 'lock_card', 'get_chat', 'send_chat', 'set_match_auto_subs']) {
+      for (const name of ['start_scouting', 'get_scout_reports', 'delete_scout_report', 'recycle_cards', 'lock_card', 'rename_card', 'get_chat', 'send_chat', 'set_match_auto_subs']) {
         expect(tools.some(tool => tool.name === name)).toBe(true)
       }
       const training = tools.find(tool => tool.name === 'start_training')!

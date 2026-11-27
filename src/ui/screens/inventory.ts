@@ -4,6 +4,7 @@ import { CARD_NAME_LIMIT, baseBuild, cardRecyclePoints, cardsOf, playerCards, re
 import { DETAILED_POSITIONS, DETAILED_POSITION_LABELS, DETAILED_TO_POSITION, detailedPositionValue } from '../../game/detailed-positions.ts'
 import { initialDisplayCA } from '../../game/rating.ts'
 import { saveGame } from '../../game/state.ts'
+import { isOnlineMode, renameCardOnline } from '../../online.ts'
 import { attrHeat, caHeat, cardRoute, emptyState, findAnyPlayer, icon, mainAttrs, meter, pageHead, panel, playerPortrait, posBadge, primaryPosition, skillTag, tag } from '../components.ts'
 import { attrLabel, esc, playerCA, positionClass, positionLabel, skillName } from '../format.ts'
 import { morph } from '../morph.ts'
@@ -82,6 +83,8 @@ function deleteControls(card: PlayerCard, equipped: boolean): string {
 
 /** 改名失败的中文提示，按卡 id 存；重绘后仍显示在那张卡上。 */
 const cardNameErrors: Record<string, string> = {}
+/** 避免 Enter 与随后的 blur/change 重复提交同一个联机改名请求。 */
+const cardRenamePending = new Set<string>()
 
 /** 只重绘库存页内容区，不惊动 app.ts 的整页 render。 */
 function refreshInventory(): void {
@@ -92,25 +95,42 @@ function refreshInventory(): void {
 
 /**
  * 提卡名：空白等于恢复默认名；同一名球员重名会被拒绝并在卡上提示。
- * 名称本身存在 PlayerCard.customName 里，随存档一起持久化。
+ * 名称本身存在 PlayerCard.customName 里，联机走专门接口、单机随存档持久化。
  */
-function commitCardName(input: HTMLInputElement): void {
+async function commitCardName(input: HTMLInputElement): Promise<void> {
   const cardId = input.dataset.cardName
-  if (!cardId) return
-  const result = renameCard(game, cardId, input.value)
-  if (result.ok) {
-    delete cardNameErrors[cardId]
-    saveGame(game)
+  if (!cardId || cardRenamePending.has(cardId)) return
+  const nextValue = input.value
+  const current = game.cards?.find((card) => card.id === cardId)?.customName?.trim() ?? ''
+  if (nextValue.trim() === current && !cardNameErrors[cardId]) return
+  if (!isOnlineMode()) {
+    const result = renameCard(game, cardId, nextValue)
+    if (result.ok) {
+      delete cardNameErrors[cardId]
+      saveGame(game)
+      refreshInventory()
+      return
+    }
+    cardNameErrors[cardId] = result.error ?? '改名失败'
     refreshInventory()
     return
   }
-  cardNameErrors[cardId] = result.error ?? '改名失败'
-  refreshInventory()
+  cardRenamePending.add(cardId)
+  delete cardNameErrors[cardId]
+  try {
+    await renameCardOnline(cardId, nextValue)
+    delete cardNameErrors[cardId]
+  } catch (error) {
+    cardNameErrors[cardId] = error instanceof Error ? error.message : '改名失败'
+  } finally {
+    cardRenamePending.delete(cardId)
+    refreshInventory()
+  }
 }
 
 document.addEventListener('change', (event) => {
   const input = (event.target as HTMLElement).closest?.<HTMLInputElement>('[data-card-name]')
-  if (input) commitCardName(input)
+  if (input) void commitCardName(input)
 })
 
 document.addEventListener('keydown', (event) => {
@@ -118,7 +138,7 @@ document.addEventListener('keydown', (event) => {
   const input = (event.target as HTMLElement).closest?.<HTMLInputElement>('[data-card-name]')
   if (!input) return
   event.preventDefault()
-  commitCardName(input)
+  void commitCardName(input)
 })
 
 /** 卡名输入框：空着就用默认的“卡 N”。 */

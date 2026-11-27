@@ -339,6 +339,11 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
     locked: z.boolean(),
   }, (args) => action('lock_card', args))
 
+  register('rename_card', '重命名球员卡', '修改库存或已装备球员卡的自定义显示名；name 传空字符串恢复默认名，同一名球员名下不能重名。', {
+    cardId: z.string().min(1),
+    name: z.string(),
+  }, (args) => action('rename_card', args))
+
   register('start_next_season', '开始新赛季', '赛季结束后开始下一赛季，保留球员和俱乐部数据。', {}, () => action('start_next_season'))
 
   register('start_league', '开始联赛比赛', '单机：开始本轮联赛。联机联赛到开赛时间由服务器用保存的阵容自动结算，不能手动开赛；开赛前 30 分钟锁定阵容。', {}, () => action('start_league'))

@@ -94,7 +94,7 @@ import {
 import { injuryUntil } from '../src/game/injury.ts'
 import { currentEnergy } from '../src/game/energy.ts'
 import { buildReview } from '../src/game/review.ts'
-import { cardRecyclePoints, cardsOf, playerCards, recyclePlayerCards, setCardRecycleLock, untrainedPlayer } from '../src/game/cards.ts'
+import { cardDisplayName, cardRecyclePoints, cardsOf, playerCards, recyclePlayerCards, renameCard, setCardRecycleLock, untrainedPlayer } from '../src/game/cards.ts'
 import { skillEffectText, traitEffectText } from '../src/game/data/skill-effects.ts'
 import { hasBookAtOrAbove } from '../src/game/legend-books.ts'
 import { SHOP_BOOK_PRICE, buyShopBook, peakStageShopPoints, shopCatalog, shopPointsOf, shopSeasonIndex } from '../src/game/shop.ts'
@@ -186,6 +186,8 @@ function cardView(card: PlayerCard, game: GameState) {
     id: card.id,
     playerId: card.playerId,
     playerName: card.playerName,
+    name: cardDisplayName(card),
+    customName: card.customName?.trim() || null,
     serial: card.serial,
     routeId: card.routeId,
     ca: displayCA(caOf(card.attrs, gk)),
@@ -1169,6 +1171,11 @@ export function applyAgentAction(game: GameState, rawBody: unknown, now = Date.n
     case 'lock_card': {
       if (typeof body.locked !== 'boolean') return { ok: false, error: 'locked 必须是布尔值' }
       const result = setCardRecycleLock(game, text(body.cardId), body.locked)
+      return { ...result, result }
+    }
+    case 'rename_card': {
+      if (typeof body.name !== 'string') return { ok: false, error: 'name 必须是字符串' }
+      const result = renameCard(game, text(body.cardId), body.name)
       return { ...result, result }
     }
     case 'start_scouting': {

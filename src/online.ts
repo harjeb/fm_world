@@ -1011,6 +1011,10 @@ export async function setCardRecycleLockOnline(cardId: string, locked: boolean):
   return protectedGameAction('/api/cards/lock', { cardId, locked })
 }
 
+export async function renameCardOnline(cardId: string, name: string): Promise<GameState> {
+  return protectedGameAction('/api/cards/rename', { cardId, name })
+}
+
 export async function startScoutingOnline(playerId: string, source: ScoutSource, level: ScoutLevel, clubId?: string): Promise<GameState> {
   return protectedGameAction('/api/scouting/start', { playerId, source, level, clubId })
 }

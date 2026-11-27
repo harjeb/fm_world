@@ -22,7 +22,7 @@ import {
   type SseSink,
 } from './state-sync.ts'
 import { createInitialGame, GAME_VERSION, upgradeLegacySignatures } from '../src/game/state.ts'
-import { addTrainedCard, ensureCards, equipCard, playerCards, recyclePlayerCards, setCardRecycleLock, untrainedPlayer } from '../src/game/cards.ts'
+import { addTrainedCard, ensureCards, equipCard, playerCards, recyclePlayerCards, renameCard, setCardRecycleLock, untrainedPlayer } from '../src/game/cards.ts'
 import { ensurePve } from '../src/game/pve.ts'
 import { loadPveContent } from '../src/game/pve-content.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION, upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
@@ -3694,7 +3694,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return
     }
 
-    if (['/api/cards/recycle', '/api/cards/lock', '/api/training/start', '/api/shop/buy', '/api/achievements/claim'].includes(url.pathname) && req.method === 'POST') {
+    if (['/api/cards/recycle', '/api/cards/lock', '/api/cards/rename', '/api/training/start', '/api/shop/buy', '/api/achievements/claim'].includes(url.pathname) && req.method === 'POST') {
       const body = await readJsonBody(req)
       if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
       advanceAccount(account)
@@ -3714,6 +3714,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       } else if (url.pathname === '/api/cards/lock') {
         if (typeof body.cardId !== 'string' || !body.cardId || typeof body.locked !== 'boolean') return json(res, 400, { error: '球员卡或锁定状态无效' })
         outcome = setCardRecycleLock(game, body.cardId, body.locked)
+      } else if (url.pathname === '/api/cards/rename') {
+        if (typeof body.cardId !== 'string' || !body.cardId || typeof body.name !== 'string') return json(res, 400, { error: '球员卡或名称无效' })
+        outcome = renameCard(game, body.cardId, body.name)
       } else if (url.pathname === '/api/shop/buy') {
         if (typeof body.skillId !== 'string' || !body.skillId) return json(res, 400, { error: '技能书 ID 无效' })
         outcome = buyShopBook(game, body.skillId)
