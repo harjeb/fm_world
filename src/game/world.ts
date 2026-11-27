@@ -2,6 +2,7 @@ import type {
   AIClubState,
   AITeam,
   ConferenceId,
+  DivisionSeasonHonor,
   Fixture,
   GameState,
   Lineup,
@@ -13,6 +14,7 @@ import type {
   Tactics,
   TierId,
   WorldClub,
+  WorldSeasonSummary,
   WorldState,
 } from './types.ts'
 import { PLAYER_SEEDS, createPlayerFromSeed, seedById } from './data/players.ts'
@@ -1115,8 +1117,103 @@ export function ownerlessWorldFromClub(base: WorldState, clubId: string): WorldS
     entry.promotions = entry.promotions.map((id) => id === 'player' ? clubId : id)
     entry.relegations = entry.relegations.map((id) => id === 'player' ? clubId : id)
     if (entry.championsTop4) entry.championsTop4 = entry.championsTop4.map((id) => id === 'player' ? clubId : id)
+    if (entry.divisions) {
+      for (const honor of Object.values(entry.divisions)) {
+        if (honor.championId === 'player') honor.championId = clubId
+        honor.promotions = honor.promotions.map((id) => id === 'player' ? clubId : id)
+        honor.relegations = honor.relegations.map((id) => id === 'player' ? clubId : id)
+      }
+    }
   }
   return world
+}
+
+function d2ZonePrefix(divisionId: string): string | null {
+  if (divisionId === 'd2-north') return 'd2n_'
+  if (divisionId === 'd2-south') return 'd2s_'
+  const m = /^d2-zone(\d+)$/.exec(divisionId)
+  return m ? `d2z${m[1]}_` : null
+}
+
+/**
+ * 读取指定联赛/赛区在某历史赛季的冠军与升降级荣誉；
+ * 对尚未写入 `entry.divisions` 的旧版历史（如首季升级杯后），按战绩与附加赛快照幂等推算。
+ */
+export function divisionHonorFor(
+  world: Pick<WorldState, 'clubs' | 'promotionPlayoff' | 'lastPromotionPlayoff'>,
+  entry: WorldSeasonSummary,
+  divisionId: string,
+): DivisionSeasonHonor | null {
+  if (entry.divisions) return entry.divisions[divisionId] ?? null
+
+  const playerClub = world.clubs.find((c) => c.id === 'player')
+  const canonicalId = (id: string) => (id === 'player' ? (playerClub?.squadKey ?? id) : id)
+  const clubNameOf = (id: string) => {
+    const cid = canonicalId(id)
+    return world.clubs.find((c) => c.id === id || c.id === cid || c.squadKey === cid)?.name ?? id
+  }
+
+  if (divisionId === 'champions') {
+    return {
+      championId: entry.championsTop4?.[0],
+      champion: entry.champion,
+      promotions: [],
+      relegations: entry.relegations.slice(0, 3),
+    }
+  }
+
+  if (divisionId === 'division1') {
+    if (entry.promotions.length < 3) return null
+    const champId = entry.promotions[0]
+    return {
+      championId: champId,
+      champion: clubNameOf(champId),
+      promotions: entry.promotions.slice(0, 3),
+      relegations: entry.relegations.length >= 6 ? entry.relegations.slice(3, 6) : [],
+    }
+  }
+
+  const prefix = d2ZonePrefix(divisionId)
+  if (!prefix) return null
+  const playoff = [world.lastPromotionPlayoff, world.promotionPlayoff]
+    .find((p): p is PromotionPlayoff => !!p && p.seasonIndex === entry.seasonIndex)
+  if (!playoff) return null
+
+  const inZone = (id: string) => canonicalId(id).startsWith(prefix)
+  const zoneTeams = playoff.teams.filter(inZone)
+  if (!zoneTeams.length) return null
+
+  const qualIds = new Set(
+    playoff.matches
+      .filter((m) => m.stage === 'qualifier')
+      .flatMap((m) => [canonicalId(m.homeId), canonicalId(m.awayId)]),
+  )
+  const zoneChamp = zoneTeams.find((id) => !qualIds.has(canonicalId(id))) ?? zoneTeams[0]
+  return {
+    championId: canonicalId(zoneChamp),
+    champion: clubNameOf(zoneChamp),
+    promotions: playoff.promoted.filter(inZone).map(canonicalId),
+    relegations: [],
+  }
+}
+
+/** 为旧版 world.history 幂等补全各联赛/赛区的历届荣誉快照。 */
+export function ensureWorldHistoryDivisions(world: WorldState): boolean {
+  let changed = false
+  const candidateIds = [...new Set(['champions', 'division1', ...world.divisions.map((d) => d.divisionId).filter((id): id is string => !!id)])]
+  for (const entry of world.history ?? []) {
+    if (entry.divisions) continue
+    const divisions: Record<string, DivisionSeasonHonor> = {}
+    for (const divId of candidateIds) {
+      const honor = divisionHonorFor(world, entry, divId)
+      if (honor) divisions[divId] = honor
+    }
+    if (Object.keys(divisions).length > 0) {
+      entry.divisions = divisions
+      changed = true
+    }
+  }
+  return changed
 }
 
 
@@ -1715,6 +1812,7 @@ function promoteAndRelegate(game: GameState, protectedClubs: ReadonlySet<string>
   const world = game.world!
   const current = new Map(world.clubs.map((club) => [club.id, club]))
   const resolveClub = (id: string) => current.get(id) ?? world.clubs.find((club) => club.squadKey === id)
+  ensureWorldHistoryDivisions(world)
   const champions = world.divisions.find((division) => division.divisionId === 'champions')!
   const d1Divisions = world.divisions
     .filter((division) => division.tier === 'division1')
@@ -1827,12 +1925,44 @@ function promoteAndRelegate(game: GameState, protectedClubs: ReadonlySet<string>
     }
   }
   const championsTop4 = champions.table.slice(0, 4).map((row) => row.teamId)
+  const canonId = (id: string) => resolveClub(id)?.squadKey ?? resolveClub(id)?.id ?? id
+  const divisionHonors: Record<string, DivisionSeasonHonor> = {}
+  for (const div of world.divisions) {
+    const divId = div.divisionId
+    if (!divId) continue
+    const rawChampId = div.champion ?? div.table[0]?.teamId ?? ''
+    const champClub = rawChampId ? resolveClub(rawChampId) : undefined
+    const championId = rawChampId ? canonId(rawChampId) : undefined
+    const champion = rawChampId
+      ? (rawChampId === 'player' ? game.clubName : (champClub?.name ?? rawChampId))
+      : ''
+    const memberSet = new Set([...(div.clubIds ?? []), ...div.table.map((row) => row.teamId)].map(canonId))
+    const promotions =
+      div.tier === 'champions'
+        ? []
+        : div.tier === 'division1'
+          ? d1Top.map(canonId).filter((id) => memberSet.has(id))
+          : promoted.map(canonId).filter((id) => memberSet.has(id))
+    const relegations =
+      div.tier === 'champions'
+        ? champsBottom.map(canonId).filter((id) => memberSet.has(id))
+        : div.tier === 'division1'
+          ? d1Bottom.map(canonId).filter((id) => memberSet.has(id))
+          : []
+    divisionHonors[divId] = {
+      ...(championId ? { championId } : {}),
+      champion,
+      promotions,
+      relegations,
+    }
+  }
   world.history.push({
     seasonIndex: world.seasonIndex,
     champion: current.get(champions.champion ?? '')?.name ?? champions.champion ?? '',
     promotions: [...d1Top, ...promoted],
     relegations: [...champsBottom, ...d1Bottom],
     championsTop4,
+    divisions: divisionHonors,
   })
   return { promoted, relegated: [...champsBottom, ...d1Bottom] }
 }

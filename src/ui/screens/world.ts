@@ -1,4 +1,4 @@
-import { d2ClubChoices, divisionLeaders, hasDualD1, promotionSpotCount, worldDivisionLabel, worldTierLabel } from '../../game/world.ts'
+import { d2ClubChoices, divisionHonorFor, divisionLeaders, hasDualD1, promotionSpotCount, worldDivisionLabel, worldTierLabel } from '../../game/world.ts'
 import { latestPlayedRound } from '../../game/standings-history.ts'
 import { leaderPanels } from '../leaderboard.ts'
 import { renderClubRankTrendPanel } from '../rank-chart.ts'
@@ -250,7 +250,33 @@ export function renderWorld(): string {
             : '<p class="hint">常规赛结束后留 16 小时休整踢升级杯，期间可以安排友谊赛。</p>'}
           ${world.seasonCupMode === 1 ? `<div class="btn-row" style="margin-top:8px"><button class="btn small" data-action="go-cup" data-cup="promotion">${icon('flag', 13)} 查看升级杯赛程与分组</button></div>` : ''}
         `)}
-        ${world.history.length ? panel('历届荣誉', `<div class="rows">${world.history.slice().reverse().slice(0, 5).map((item) => `<div class="row-line"><span class="dim">第 ${item.seasonIndex} 赛季</span><span>冠军 ${ownName(item.champion, item.champion === game.clubName)}</span><span class="muted small">升级 ${item.promotions.length} 队</span></div>`).join('')}</div>`, { flush: true }) : ''}
+        ${(() => {
+          if (!world.history.length) return ''
+          const divHonors = world.history
+            .slice()
+            .reverse()
+            .map((item) => ({ seasonIndex: item.seasonIndex, honor: divisionHonorFor(world, item, active.id) }))
+            .filter((entry): entry is { seasonIndex: number; honor: NonNullable<typeof entry.honor> } => entry.honor !== null)
+            .slice(0, 5)
+          const honorBody = divHonors.length
+            ? `<div class="rows">${divHonors.map(({ seasonIndex, honor }) => {
+                const isOwn = !!honor.championId
+                  ? (honor.championId === PLAYER_TEAM_ID || honor.championId === ownId || honor.championId === playerClub?.squadKey)
+                  : honor.champion === game.clubName
+                const champName = isOwn
+                  ? game.clubName
+                  : (honor.championId ? clubLabel(honor.championId) : honor.champion) || honor.champion
+                const moveText =
+                  active.tier === 'champions'
+                    ? `降级 ${honor.relegations.length} 队`
+                    : active.tier === 'division1'
+                      ? `升级 ${honor.promotions.length} 队 · 降级 ${honor.relegations.length} 队`
+                      : `升级 ${honor.promotions.length} 队`
+                return `<div class="row-line"><span class="dim">第 ${seasonIndex} 赛季</span><span>冠军 ${ownName(champName, isOwn)}</span><span class="muted small">${moveText}</span></div>`
+              }).join('')}</div>`
+            : '<p class="muted pad">本联赛暂无历届荣誉记录。</p>'
+          return panel(`历届荣誉 · ${esc(activeDivLabel)}`, honorBody, { flush: true })
+        })()}
         ${panel('球队席位', `
           <p class="hint">新账号可选择先锋联赛空位，也可接手原教练连续 7 天未上线后自动释放的球队（超过 3 天未上线由 AI 临时接管，满 7 天自动清理账号并释放席位，不限级别）。释放时恢复原队名，保留阵容与经营进度。没有可接管球队时，服务器会增开先锋赛区。联机账号不能自行重开世界；退出账号后可以创建独立的本地存档。</p>
           <div class="club-chips">${picks.slice(0, 8).map((club) => `<span class="club-chip">${crest({ name: club.name, color: colorOf(club.id) }, 15)}${esc(club.name)}<small>${club.conference === 'north' ? '北区' : '南区'}</small></span>`).join('')}</div>

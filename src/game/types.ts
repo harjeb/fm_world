@@ -556,6 +556,13 @@ export type PromotionPlayoff = {
   runnerUps?: string[]
 }
 
+export type DivisionSeasonHonor = {
+  championId?: string
+  champion: string
+  promotions: string[]
+  relegations: string[]
+}
+
 export type WorldSeasonSummary = {
   seasonIndex: number
   champion: string
@@ -563,6 +570,8 @@ export type WorldSeasonSummary = {
   relegations: string[]
   /** 该赛季冠军联赛最终前四，用于下一赛季传奇杯参赛资格。 */
   championsTop4?: string[]
+  /** 按联赛/赛区 ID（champions / division1 / d1-north / d2-north 等）记录各自冠军与升降级。 */
+  divisions?: Record<string, DivisionSeasonHonor>
 }
 
 export type RoundNewsEdition = { season: number; round: number; matches: import('./football-news.ts').Story[]; transfers: (import('./football-news.ts').Story & { at: number })[] }

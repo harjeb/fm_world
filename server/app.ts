@@ -26,7 +26,7 @@ import { addTrainedCard, ensureCards, equipCard, playerCards, recyclePlayerCards
 import { ensurePve } from '../src/game/pve.ts'
 import { loadPveContent } from '../src/game/pve-content.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION, upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
-import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, healInjuriesByMs, migrateLegacyExpandedTactics, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, reconcileWorldStars, repairInflatedContractWages, rolloverOwnerlessTeams, syncAllClubLiveTactics, syncClubLiveTactics, wageForPlayer, worldForClub, worldSlots, worldWageBill, type WorldForClubReadOnlyCache } from '../src/game/world.ts'
+import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, ensureWorldHistoryDivisions, healInjuriesByMs, migrateLegacyExpandedTactics, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, reconcileWorldStars, repairInflatedContractWages, rolloverOwnerlessTeams, syncAllClubLiveTactics, syncClubLiveTactics, wageForPlayer, worldForClub, worldSlots, worldWageBill, type WorldForClubReadOnlyCache } from '../src/game/world.ts'
 import { INITIAL_CHAMPIONS_CLUB_IDS, WORLD_CLUB_DEFS, isClubPlayerLocked, pickExpandedZoneClubs } from '../src/game/data/world-clubs.ts'
 import { rescaleLegacyRandomPlayer } from '../src/game/data/players.ts'
 import { lineupLockState } from '../src/game/season.ts'
@@ -834,6 +834,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
     if (season && rewardBackfill && complete) { season.aiRewardVersion = 1; changed = true }
     if (changed) persistWorld({ world: true, teams: false, matchBook: false, immediate: true })
+  }
+  if (ensureWorldHistoryDivisions(sharedWorld.world)) {
+    persistWorld({ world: true, teams: false, matchBook: false, immediate: true })
   }
   const matchScheduler = new MatchScheduler(
     matchQueue,
