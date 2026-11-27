@@ -3131,3 +3131,212 @@ circle.pm-5 { fill: var(--h6); }
   :root[data-theme="light"] .dt.squad td:nth-child(2) { box-shadow: 2px 0 6px rgba(15, 23, 42, 0.12); }
 }
 
+/* ---------- 赛后 2D 高光时间轴 / 精彩集锦 & 首席助教三句话诊断 ---------- */
+.btn.hl-mode-btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.btn.hl-mode-btn small {
+  font-family: var(--font-num);
+  font-size: 11px;
+  opacity: 0.9;
+}
+.rp-track {
+  padding-top: 6px;
+}
+.rp-track input[type=range] {
+  position: relative;
+  z-index: 1;
+}
+.rp-window {
+  position: absolute;
+  top: 13px;
+  height: 7px;
+  z-index: 0;
+  border-radius: 4px;
+  background: rgba(205, 243, 63, 0.22);
+  border: 1px solid rgba(205, 243, 63, 0.5);
+  pointer-events: none;
+}
+:root[data-theme="light"] .rp-window {
+  background: rgba(22, 163, 74, 0.18);
+  border-color: rgba(22, 163, 74, 0.48);
+}
+.rp-marker {
+  position: absolute;
+  top: 1px;
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  margin-left: -4.5px;
+  border-radius: 50%;
+  border: 1.5px solid var(--panel);
+  cursor: pointer;
+  z-index: 3;
+  transition: transform 110ms ease, box-shadow 110ms ease;
+}
+.rp-marker::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+}
+.rp-marker:hover {
+  transform: scale(1.38);
+  z-index: 5;
+}
+.rp-marker.kind-goal { background: #f5c451; box-shadow: 0 0 6px rgba(245, 196, 81, 0.65); z-index: 4; }
+.rp-marker.kind-goal.is-own { background: var(--accent); box-shadow: 0 0 6px rgba(205, 243, 63, 0.7); z-index: 4; }
+.rp-marker.kind-red { background: #ef4444; border-radius: 2px; z-index: 4; }
+.rp-marker.kind-penalty { background: #fb923c; z-index: 3; }
+.rp-marker.kind-chance { background: #38bdf8; z-index: 3; }
+.rp-marker.kind-tactic { background: #a78bfa; width: 7px; height: 7px; top: 2px; margin-left: -3.5px; z-index: 2; }
+
+.rp-hl-section {
+  padding: 8px 0 6px;
+  border-bottom: 1px solid var(--line);
+}
+.rp-hl-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rp-hl-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.rp-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.rp-dot.kind-goal { background: var(--accent); }
+.rp-dot.kind-chance { background: #38bdf8; }
+.rp-dot.kind-red { background: #ef4444; border-radius: 2px; }
+.rp-dot.kind-tactic { background: #a78bfa; }
+
+.rp-hl-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.hl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-2);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 100ms ease, background-color 100ms ease, transform 90ms ease;
+}
+.hl-chip:hover {
+  border-color: var(--accent);
+  background: var(--raised);
+}
+.hl-chip.is-own {
+  border-color: rgba(205, 243, 63, 0.34);
+}
+:root[data-theme="light"] .hl-chip.is-own {
+  border-color: rgba(22, 163, 74, 0.36);
+}
+.hl-chip-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .hl-chip-badge {
+  background: rgba(15, 23, 42, 0.07);
+}
+.hl-chip.kind-goal .hl-chip-badge { background: rgba(245, 196, 81, 0.22); color: #f5c451; }
+.hl-chip.kind-goal.is-own .hl-chip-badge { background: var(--accent-soft); color: var(--accent); }
+.hl-chip.kind-red .hl-chip-badge { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+.hl-chip.kind-chance .hl-chip-badge { background: rgba(56, 189, 248, 0.18); color: #38bdf8; }
+.hl-chip.kind-tactic .hl-chip-badge { background: rgba(167, 139, 250, 0.18); color: #c4b5fd; }
+:root[data-theme="light"] .hl-chip.kind-goal .hl-chip-badge { color: #b45309; }
+:root[data-theme="light"] .hl-chip.kind-red .hl-chip-badge { color: #dc2626; }
+:root[data-theme="light"] .hl-chip.kind-chance .hl-chip-badge { color: #0284c7; }
+:root[data-theme="light"] .hl-chip.kind-tactic .hl-chip-badge { color: #6d28d9; }
+
+.assistant-diagnosis-panel {
+  margin-bottom: 12px;
+}
+.diag-lead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.diag-lead h2 { margin: 0; }
+.diag-lead .hint { margin: 2px 0 0; font-size: 11.5px; }
+.diag-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.diag-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 11px 13px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--good);
+  border-radius: var(--radius);
+}
+.diag-card.tone-warn { border-top-color: var(--warn); }
+.diag-card.tone-bad { border-top-color: var(--bad); }
+.diag-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.diag-step {
+  font: 700 12px/1 var(--font-num);
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+}
+.diag-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
+}
+.diag-detail {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+  flex: 1;
+}
+.diag-cta {
+  margin-top: 4px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 960px) {
+  .diag-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .hide-sm { display: none; }
+}
+
+

@@ -130,7 +130,7 @@ import { renderAccountOverlay, renderChangelogOverlay, renderDetailOverlay, rend
 import { comparisonCandidates } from './screens/player-comparison.ts'
 import { ownerlessTeamsNow, renderClubOverlay } from './club-view.ts'
 import { renderCommentary, renderReview } from './screens/review.ts'
-import { cycleReplay2DSpeed, drawReplay2D, ensureReplay2D, previewReplay2DSeek, replay2d, resetReplay2D, restartReplay2D, seekReplay2D, setReplay2DHooks, toggleReplay2D } from './replay-2d.ts'
+import { cacheLocalReplay2D, cycleReplay2DSpeed, drawReplay2D, ensureReplay2D, jumpReplay2DToClock, nextReplay2DHighlight, previewReplay2DSeek, replay2d, resetReplay2D, restartReplay2D, seekReplay2D, setReplay2DHooks, toggleReplay2D, toggleReplay2DDrawer, toggleReplay2DHighlights } from './replay-2d.ts'
 import { renderSeason } from './screens/season.ts'
 import { renderMarketTicker, renderMobileNavSheet, renderSidebar, renderTopbar } from './screens/shell.ts'
 import { buildTrainingRequest, renderAutoStrategyOverlay, renderTraining } from './screens/training.ts'
@@ -402,6 +402,7 @@ function render(): void {
   syncNoticeTimer()
   syncTooltip()
   syncAutoTraining()
+  syncKickoffSnapshot()
   if (ui.screen === 'match') {
     drawPitch()
     ensureTimer()
@@ -487,6 +488,34 @@ function ensureMatchRecordDetail(record: GameState['matchHistory'][number] | und
   })
 }
 
+let activeKickoffSnapshot: { startedAt: number; seed: number; state: unknown; manualUsed: boolean } | null = null
+
+function syncKickoffSnapshot(): void {
+  const active = game?.activeMatch
+  if (!active || active.preplayed) return
+  const stateClock = (active.engineState as { clock?: number } | undefined)?.clock
+  if (!activeKickoffSnapshot || activeKickoffSnapshot.startedAt !== active.startedAt || activeKickoffSnapshot.seed !== active.context.seed) {
+    if (typeof stateClock === 'number' && stateClock <= 0.05) {
+      activeKickoffSnapshot = {
+        startedAt: active.startedAt,
+        seed: active.context.seed,
+        state: structuredClone(active.engineState),
+        manualUsed: (active.instructions?.length ?? 0) > 0,
+      }
+    } else {
+      activeKickoffSnapshot = null
+    }
+    return
+  }
+  if ((active.instructions?.length ?? 0) > 0) activeKickoffSnapshot.manualUsed = true
+}
+
+function maybeCacheFinishedReplay(record: { id: string; seed: number; durationSeconds?: number; hasReplay?: boolean }, previous?: GameState['activeMatch']): void {
+  if (record.hasReplay || !activeKickoffSnapshot || activeKickoffSnapshot.seed !== record.seed) return
+  if (activeKickoffSnapshot.manualUsed || (previous?.instructions?.length ?? 0) > 0) return
+  cacheLocalReplay2D(record.id, activeKickoffSnapshot.state, record.durationSeconds)
+}
+
 function openFinishedLeague(previous: NonNullable<GameState['activeMatch']>): void {
   const record = previous.preplayed && previous.context.mode === 'cup'
     ? game.challengeHistory.find(item => item.cupFixtureId === previous.context.cupFixtureId)
@@ -497,10 +526,12 @@ function openFinishedLeague(previous: NonNullable<GameState['activeMatch']>): vo
     if (previous.preplayed) { ui.screen = 'home'; ui.matchEngine = null; ui.coachPanel = false }
     return
   }
+  maybeCacheFinishedReplay(record, previous)
   resetReplay(record.id)
   if (record.detailDeferred) autoExpandReviewId = record.id
   replay.index = (record.commentary ?? record.keyEvents).length
   ui.reviewId = record.id
+  ui.reviewAutoOpen = true
   ui.screen = 'review'
   ui.matchEngine = null
   ui.coachPanel = false
@@ -787,16 +818,19 @@ function completeMatch(): void {
   stopTimer()
   ui.matchPlaying = false
   const engine = ui.matchEngine
+  const previousActive = game.activeMatch
   const record = finishMatch(game, engine)
   ui.coachPanel = false
   ui.matchAutoSubsDraft = null
   if (record) {
+    maybeCacheFinishedReplay(record, previousActive)
     if (!returnToChallengeAfterWin(ui, record)) {
       resetReplay(record.id)
       replay.index = (record.commentary ?? record.keyEvents).length
       ui.reviewId = record.id
+      ui.reviewAutoOpen = true
       ui.screen = 'review'
-      ui.notice = '比赛结束，文字回放已就绪。'
+      ui.notice = '比赛结束，赛后复盘已就绪。'
     }
   } else {
     ui.notice = '比赛尚未结束，无法记录。'
@@ -3001,6 +3035,7 @@ document.addEventListener('click', async (event) => {
         failedMatchRecords.delete(recordId)
         resetReplay(recordId)
         ui.reviewId = recordId
+        ui.reviewAutoOpen = false
         ui.screen = 'review'
         persist()
         render()
@@ -3008,6 +3043,18 @@ document.addEventListener('click', async (event) => {
       break
     case 'replay2d-toggle':
       toggleReplay2D()
+      break
+    case 'replay2d-highlights':
+      toggleReplay2DHighlights()
+      break
+    case 'replay2d-next-highlight':
+      nextReplay2DHighlight()
+      break
+    case 'replay2d-jump':
+      jumpReplay2DToClock(Number(actionEl.dataset.clock))
+      break
+    case 'replay2d-drawer':
+      toggleReplay2DDrawer()
       break
     case 'replay2d-restart':
       restartReplay2D()
@@ -3023,6 +3070,26 @@ document.addEventListener('click', async (event) => {
       }
       render()
       break
+    case 'replay-highlights':
+      replay.highlightsOnly = !replay.highlightsOnly
+      render()
+      break
+    case 'replay-drawer':
+      replay.drawerOpen = !replay.drawerOpen
+      render()
+      break
+    case 'replay-jump': {
+      const targetClock = Number(actionEl.dataset.clock)
+      const record = [...game.matchHistory, ...game.challengeHistory].find((item) => item.id === ui.reviewId)
+      if (record && Number.isFinite(targetClock)) {
+        stopReplay()
+        const entries = record.commentary ?? record.keyEvents
+        const idx = entries.findIndex((e) => e.clock >= targetClock - 0.05)
+        replay.index = idx < 0 ? entries.length : Math.min(entries.length, idx + 2)
+      }
+      render()
+      break
+    }
     case 'replay-reset':
       resetReplay(ui.reviewId ?? '')
       render()
@@ -3035,6 +3102,7 @@ document.addEventListener('click', async (event) => {
     case 'back-review':
       stopReplay()
       ui.reviewId = null
+      ui.reviewAutoOpen = false
       render()
       break
     case 'mobile-nav-toggle':

@@ -121,6 +121,8 @@ export type UIState = {
   /** 球员详情里“本赛季 / 生涯”数据选项卡。 */
   playerStatsTab: 'season' | 'career'
   reviewId: string | null
+  /** 刚踢完实时比赛直达复盘页时默认展开完整报告；从列表点进时默认收起防剧透。 */
+  reviewAutoOpen: boolean
   /** 正在进行的球员谈判（自由球员 / AI 球队买人 / 联机竞拍）。 */
   negotiation: NegotiationDraft | null
   notice: string
@@ -259,6 +261,7 @@ export const ui: UIState = {
   clubViewPlayerId: null,
   playerStatsTab: 'season',
   reviewId: null,
+  reviewAutoOpen: false,
   negotiation: null,
   notice: '',
   matchPlaying: false,
@@ -304,7 +307,7 @@ export function restoreSavedScreen(): void {
 // 服务端独立渲染页面时没有浏览器模式选择器，使用离线世界。
 if (import.meta.env?.SSR ?? typeof document === 'undefined') startOfflineGame()
 
-export const replay = { id: '', index: 0, playing: false, speed: 1, timer: null as number | null }
+export const replay = { id: '', index: 0, playing: false, speed: 1, highlightsOnly: false, drawerOpen: false, timer: null as number | null }
 
 export function stopReplay(): void {
   if (replay.timer !== null) window.clearTimeout(replay.timer)
@@ -316,4 +319,6 @@ export function resetReplay(id: string): void {
   stopReplay()
   replay.id = id
   replay.index = 0
+  replay.highlightsOnly = false
+  replay.drawerOpen = false
 }

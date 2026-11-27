@@ -2,14 +2,14 @@ import type { CommentaryEntry, MatchLogEntry, MatchRecord } from '../../game/typ
 import { SKILLS } from '../../game/data/skills.ts'
 import { displayClock } from '../../game/match/time.ts'
 import { shotPositionText } from '../../game/match/shooting.ts'
-import { buildReview } from '../../game/review.ts'
+import { buildAssistantDiagnosis, buildReview, extractMatchHighlights } from '../../game/review.ts'
 import { PLAYER_TEAM_ID } from '../../game/season.ts'
-import { bookTitle, clubLook, clubName, compareRow, crest, distinctKit, emptyState, icon, ownName, pageHead, panel, recordResult, resultPill, tag } from '../components.ts'
+import { bookTitle, clubLook, clubName, compareRow, crest, distinctKit, emptyState, icon, ownName, pageHead, panel, recordResult, resultPill, staffAvatar, tag } from '../components.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
 import { clockText, esc, matchModeLabel, pveModeLabel, skillName } from '../format.ts'
 import { tipAttrs } from '../tooltip.ts'
 import { game, replay, resetReplay, ui } from '../state.ts'
-import { renderReplay2D } from '../replay-2d.ts'
+import { hasReplay2D, renderReplay2D } from '../replay-2d.ts'
 
 export function eventTypeLabel(type: string): string {
   const labels: Record<string, string> = { goal: '进球', shot: '射门', save: '扑救', block: '封堵', foul: '犯规', pass: '传球', dribble: '盘带', tackle: '抢断', contest: '争夺', setpiece: '定位球', penalty: '点球', kickoff: '开球', half: '半场', full: '终场', sub: '换人', injury: '受伤', tactic: '战术', shout: '喊话', miss: '偏出', info: '信息' }
@@ -52,6 +52,14 @@ function recordKits(record: MatchRecord): string {
   return `--home:${esc(homeKit)};--away:${esc(awayKit)}`
 }
 
+const KEY_TEXT_EVENT_TYPES = new Set<string>(['goal', 'penalty', 'save', 'shot', 'miss', 'block', 'sub', 'tactic', 'injury', 'half', 'full'])
+
+function isKeyCommentaryEntry(entry: CommentaryEntry | MatchLogEntry): boolean {
+  if ('card' in entry && entry.card === 'red') return true
+  if (entry.type === 'foul') return entry.text.includes('红牌') || entry.text.includes('点球')
+  return KEY_TEXT_EVENT_TYPES.has(entry.type)
+}
+
 function renderReplay(record: MatchRecord): string {
   if (record.detailDeferred) {
     return panel('文字播放器', '<p class="muted pad">正在按需加载完整文字解说与复盘明细…</p>', { className: 'replay-panel' })
@@ -61,6 +69,35 @@ function renderReplay(record: MatchRecord): string {
   const count = entries?.length ?? record.keyEvents.length
   const shown = entries?.slice(0, replay.index)
   const last = shown?.at(-1)
+  const highlights = !hasReplay2D(record) ? extractMatchHighlights(record) : []
+  const drawerShown = replay.drawerOpen || replay.index >= count
+
+  const textQuickBar = highlights.length > 0
+    ? `<div class="rp-hl-section">
+        <div class="rp-hl-head">
+          <button type="button" class="btn small ghost rp-hl-toggle" data-action="replay-drawer" aria-expanded="${drawerShown}">
+            <span>${drawerShown ? '收起关键镜头' : `关键镜头速跳 (${highlights.length})`}</span>
+          </button>
+          <span class="muted small">点击胶囊直接推进文字解说到对应回合</span>
+        </div>
+        ${drawerShown ? `<div class="rp-hl-chips" role="list" aria-label="关键镜头列表">${highlights.map((h) => `<button type="button" class="hl-chip kind-${h.kind} ${h.isOwn ? 'is-own' : 'is-opp'}" data-action="replay-jump" data-clock="${h.clock}" title="${esc(h.detail)}"><span class="hl-chip-badge">${esc(h.badge)}</span><span>${esc(h.shortLabel)}</span></button>`).join('')}</div>` : ''}
+      </div>`
+    : ''
+
+  const renderedLines = entries
+    ? shown!
+        .filter((e) => !replay.highlightsOnly || isKeyCommentaryEntry(e))
+        .slice()
+        .reverse()
+        .map((entry) => renderCommentary(entry, duration))
+        .join('')
+    : record.keyEvents
+        .slice(0, replay.index)
+        .filter((e) => !replay.highlightsOnly || isKeyCommentaryEntry(e))
+        .reverse()
+        .map((entry) => renderEvent(entry, duration))
+        .join('')
+
   return panel('文字播放器', `
     <div class="replay-score">
       <span class="replay-team">${crest(clubLook(record.homeId), 30)}<b>${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)}</b></span>
@@ -70,12 +107,47 @@ function renderReplay(record: MatchRecord): string {
     </div>
     <div class="replay-controls">
       <button class="btn primary" data-action="replay-toggle" ${count === 0 || replay.index >= count ? 'disabled' : ''}>${replay.playing ? `${icon('pause', 14)}暂停` : `${icon('play', 14)}开始 / 继续`}</button>
+      <button class="btn ${replay.highlightsOnly ? 'active hl-mode-btn' : ''}" data-action="replay-highlights" title="折叠普通中场倒脚，只保留射门、进球、红牌与战术调整">只看关键镜头</button>
       <button class="btn" data-action="replay-reset">重新播放</button>
       <button class="btn" data-action="replay-speed">${replay.speed}×</button>
       <span class="muted small">${entries ? '按比赛时钟逐条播放；比分随事件更新。' : '旧记录只有关键事件，历史比分不可用。'}</span>
     </div>
-    <div class="event-log commentary-log">${entries ? shown!.slice().reverse().map((entry) => renderCommentary(entry, duration)).join('') : record.keyEvents.slice(0, replay.index).reverse().map((entry) => renderEvent(entry, duration)).join('')}${replay.index === 0 ? '<p class="muted pad">点击开始播放。</p>' : ''}</div>
+    ${textQuickBar}
+    <div class="event-log commentary-log">${renderedLines}${replay.index === 0 ? '<p class="muted pad">点击开始播放，或直接点关键镜头速跳。</p>' : replay.index > 0 && !renderedLines ? '<p class="muted pad">当前时段暂无关键射门或进球事件。</p>' : ''}</div>
   `, { className: 'replay-panel', aside: `<span class="muted small">${replay.index} / ${count}</span>` })
+}
+
+function renderAssistantDiagnosis(record: MatchRecord): string {
+  if (record.detailDeferred) return ''
+  const list = buildAssistantDiagnosis(record)
+  if (list.length === 0) return ''
+  const cards = list.map((item, idx) => {
+    const toneTag = item.tone === 'bad' ? 'bad' : item.tone === 'warn' ? 'warn' : 'good'
+    return `<div class="diag-card tone-${item.tone}">
+      <div class="diag-card-head">
+        <span class="diag-step">0${idx + 1}</span>
+        ${tag(esc(item.tag), toneTag)}
+      </div>
+      <b class="diag-title">${esc(item.title)}</b>
+      <p class="diag-detail">${esc(item.detail)}</p>
+      ${item.cta ? `<div class="diag-cta"><button type="button" class="btn small ghost" data-nav="${item.cta.nav}">${esc(item.cta.label)} ${icon('right', 12)}</button></div>` : ''}
+    </div>`
+  }).join('')
+
+  return `<section class="panel assistant-diagnosis-panel">
+    <header class="panel-head">
+      <div class="diag-lead">
+        ${staffAvatar('youth-director', 38, '首席助教')}
+        <div>
+          <h2>首席助教 · 三句话战术诊断</h2>
+          <p class="hint">综合本场预期进球（xG）、机会质量、传控盲区、主力体能与技能兑现自动提炼</p>
+        </div>
+      </div>
+    </header>
+    <div class="panel-body">
+      <div class="diag-grid">${cards}</div>
+    </div>
+  </section>`
 }
 
 function renderGoals(record: MatchRecord): string {
@@ -121,13 +193,14 @@ function renderRecord(record: MatchRecord): string {
     ${record.aggregateScore ? `<p class="banner info">两回合总比分：${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)} ${record.aggregateScore.home}:${record.aggregateScore.away} ${ownName(record.awayName, record.awayId === PLAYER_TEAM_ID)}${record.shootout ? ` · 点球 ${record.shootout.home}:${record.shootout.away}` : ''}（不计客场进球）</p>` : ''}
     ${renderReplay2D(record)}
     ${renderReplay(record)}
-    <details class="review-details"><summary>${icon('review', 15)}展开完整赛后复盘（含最终结果）</summary>
+    <details class="review-details"${ui.reviewAutoOpen ? ' open' : ''}><summary>${icon('review', 15)}展开完整赛后复盘与助教战术诊断（含最终结果）</summary>
       <div class="report" style="${recordKits(record)}">
         <section class="report-score">
           ${clubName(record.homeId, 28)}
           <div class="report-digits"><b>${record.score.home} : ${record.score.away}</b>${record.shootout ? `<small>点球 ${record.shootout.home}:${record.shootout.away}</small>` : ''}<span>${resultPill(recordResult(record.result))} ${record.result === 'win' ? '胜利' : record.result === 'loss' ? '失利' : '平局'}</span></div>
           ${clubName(record.awayId, 28)}
         </section>
+        ${renderAssistantDiagnosis(record)}
         ${renderBookDrops(record)}
         ${renderGoals(record)}
         <div class="grid two">
@@ -145,7 +218,7 @@ function renderRecord(record: MatchRecord): string {
             ${compareRow('黄牌', home.yellowCards ?? 0, away.yellowCards ?? 0)}
             ${compareRow('红牌', home.redCards ?? 0, away.redCards ?? 0)}
           `)}
-          ${panel('复盘建议', review.map((item) => `<div class="advice ${item.tone}"><b>${esc(item.title)}</b><p>${esc(item.detail)}</p></div>`).join('') || '<p class="muted">没有特别的建议。</p>')}
+          ${panel('详细指标提示', review.map((item) => `<div class="advice ${item.tone}"><b>${esc(item.title)}</b><p>${esc(item.detail)}</p></div>`).join('') || '<p class="muted">没有特别的建议。</p>')}
         </div>
         <div class="grid two">
           ${panel('关键事件', `<div class="event-log">${record.keyEvents.slice().reverse().map((entry) => renderEvent(entry, record.durationSeconds ?? 600)).join('')}</div>`, { flush: true })}
