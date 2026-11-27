@@ -1,7 +1,7 @@
 import type { Auction, AuctionResult } from './game/auction.ts'
 import type { ScoutLevel, ScoutSource, VisibleScoutReport } from './game/scouting.ts'
 import type { CupSeasonState } from './game/cup.ts'
-import { CHAT_HISTORY_LIMIT, appendChatMessage, isValidChatMessage, type ChatMessage, type ChatSseMessage } from './game/chat.ts'
+import { CHAT_HISTORY_LIMIT, appendChatMessage, isValidChatMessage, type ChatMessage, type ChatShareRequest, type ChatSseMessage } from './game/chat.ts'
 import type { AITeam, Attributes, FacilityId, GameState, MatchRecord, Player, SeasonTableRow, Fixture, TierId, ConferenceId } from './game/types.ts'
 import type { ReleaseAssessment } from './game/transfer-rules.ts'
 import type { NegotiationDemands } from './game/negotiation.ts'
@@ -744,14 +744,15 @@ export async function refreshChatOnline(): Promise<void> {
   }
 }
 
-export async function sendChatOnline(text: string): Promise<ChatMessage> {
+export async function sendChatOnline(text: string, share?: ChatShareRequest): Promise<ChatMessage> {
   chatState.sending = true
   notify()
   try {
+    if (share) await flushOnlineNow()
     const data = await requestJson<{ ok: boolean; message: ChatMessage; serverTime?: number }>('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(share ? { text, share } : { text }),
     })
     const alreadyHad = chatState.messages.some((item) => item.id === data.message.id)
     chatState.messages = appendChatMessage(chatState.messages, data.message, CHAT_HISTORY_LIMIT)

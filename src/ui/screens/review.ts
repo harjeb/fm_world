@@ -189,6 +189,7 @@ function renderRecord(record: MatchRecord): string {
     ${pageHead({
       kicker: `<button class="link" data-action="back-review">${icon('left', 12)} 返回记录</button><span class="kicker-sep">${record.isLeague ? `联赛第 ${record.round} 轮` : pveModeLabel(record.mode, record.stage)} · 种子 ${record.seed}</span>`,
       title: `${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)} vs ${ownName(record.awayName, record.awayId === PLAYER_TEAM_ID)}`,
+      actions: `<button class="btn small ghost" data-action="chat-share-match" data-record="${esc(record.id)}" title="把这场战报分享到全服聊天">${icon('chat', 13)}晒战报到聊天</button>`,
     })}
     ${record.aggregateScore ? `<p class="banner info">两回合总比分：${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)} ${record.aggregateScore.home}:${record.aggregateScore.away} ${ownName(record.awayName, record.awayId === PLAYER_TEAM_ID)}${record.shootout ? ` · 点球 ${record.shootout.home}:${record.shootout.away}` : ''}（不计客场进球）</p>` : ''}
     ${renderReplay2D(record)}

@@ -55,8 +55,8 @@ function minuteTextOf(clock: number, durationSeconds: number): { minute: number;
 
 function cleanShortActor(entry: MatchLogEntry, goalScorer?: string): string {
   if (goalScorer) return goalScorer
-  const m = /^([^\s，。！：,:!(（]{2,10})/.exec(entry.text.trim())
-  return m ? m[1] : ''
+  const head = entry.text.trim().split(/(?:\s+|战术犯规|犯规|被出示|面对|在禁区|禁区|主罚|射门|推射|抽射)/)[0]?.replace(/[，。！：,:!(（].*$/, '') ?? ''
+  return head.length >= 2 && head.length <= 8 && !head.endsWith('染红') && !head.endsWith('破门') ? head : ''
 }
 
 /**

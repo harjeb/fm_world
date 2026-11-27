@@ -63,7 +63,7 @@ import { mainAttrsFor } from '../game/rating.ts'
 import { attrLabel } from '../game/data/attributes.ts'
 import { claimPeakReward } from '../game/peak-reward.ts'
 import { applyPeakBreakthrough } from '../game/peak-milestones.ts'
-import { ensureCards, playerCards, recyclePlayerCards, setCardRecycleLock, untrainedPlayer } from '../game/cards.ts'
+import { cardDisplayName, cardsOf, ensureCards, playerCards, recyclePlayerCards, setCardRecycleLock, untrainedPlayer } from '../game/cards.ts'
 import { SCOUT_LEVELS, startScouting, deleteScoutReport, type ScoutLevel, type ScoutSource } from '../game/scouting.ts'
 import { aiTransferOffers } from '../game/market.ts'
 import { isLocalFreeAgentAvailable } from '../game/free-market.ts'
@@ -87,7 +87,7 @@ import { agentHandoffText } from './agent-handoff.ts'
 import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
 import { UNHAPPY_HOURS } from '../game/transfer-rules.ts'
 import { assetUrl, cardName, clubLook, findAnyPlayer } from './components.ts'
-import { clockText, countdownText, esc, pct } from './format.ts'
+import { clockText, countdownText, esc, pct, playerCA } from './format.ts'
 import { icon } from './icons.ts'
 import { morph } from './morph.ts'
 import { installTooltips, syncTooltip } from './tooltip.ts'
@@ -119,7 +119,7 @@ import { achievementCeilingBonus, claimAchievement, claimAllAchievements } from 
 import { renderShop } from './screens/shop.ts'
 import { buyShopBook } from '../game/shop.ts'
 import { SKILLS } from '../game/data/skills.ts'
-import { renderChatDrawer } from './screens/chat.ts'
+import { renderChatDrawer, renderChatShareModal } from './screens/chat.ts'
 import { renderTransfer } from './screens/transfer.ts'
 import { renderHome } from './screens/home.ts'
 import { recyclableCards, renderInventory, selectedRecycleCards } from './screens/inventory.ts'
@@ -381,6 +381,7 @@ function render(): void {
     </div>
     ${renderMobileNavSheet()}
     ${renderChatDrawer()}
+    ${renderChatShareModal()}
     ${renderDetailOverlay()}
     ${renderNegotiationOverlay()}
     ${renderClubOverlay()}
@@ -691,6 +692,21 @@ function scrollChatToBottom(force = false): void {
   if (force || nearBottom) el.scrollTop = el.scrollHeight
 }
 
+function openChatWithShare(share: NonNullable<typeof ui.chatPendingShare>): void {
+  ui.chatPendingShare = share
+  ui.chatOpen = true
+  ui.chatError = ''
+  if (isOnlineMode()) {
+    markChatSeen()
+    if (!chatState.messages.length) void refreshChatOnline()
+  }
+  render()
+  scrollChatToBottom(true)
+  if (!window.matchMedia?.('(pointer: coarse)').matches) {
+    ;(document.getElementById('chat-input') as HTMLInputElement | null)?.focus()
+  }
+}
+
 async function submitChat(): Promise<void> {
   if (!isOnlineMode()) {
     ui.chatError = '请先登录联机账号后再发送消息。'
@@ -699,11 +715,18 @@ async function submitChat(): Promise<void> {
   }
   const input = document.getElementById('chat-input') as HTMLInputElement | null
   const text = input?.value.trim() ?? ''
-  if (!text) return
+  const pending = ui.chatPendingShare
+  if (!text && !pending) return
+  const reqShare = pending
+    ? pending.kind === 'card'
+      ? { kind: 'card' as const, cardId: pending.cardId }
+      : { kind: 'match' as const, recordId: pending.recordId }
+    : undefined
   ui.chatError = ''
   render()
   try {
-    await sendChatOnline(text)
+    await sendChatOnline(text, reqShare)
+    ui.chatPendingShare = null
     const after = document.getElementById('chat-input') as HTMLInputElement | null
     if (after) after.value = ''
     markChatSeen()
@@ -3143,6 +3166,78 @@ document.addEventListener('click', async (event) => {
     case 'chat-send':
       void submitChat()
       break
+    case 'chat-share-card': {
+      const targetCardId = actionEl.dataset.card ?? ''
+      const card = cardsOf(game).find((item) => item.id === targetCardId)
+      if (card) {
+        openChatWithShare({
+          kind: 'card',
+          cardId: card.id,
+          label: `${card.playerName} · ${cardDisplayName(card)}（CA ${Math.round(playerCA(card))}）`,
+        })
+      }
+      break
+    }
+    case 'chat-share-match': {
+      const targetRecordId = actionEl.dataset.record ?? ''
+      const rec = [...game.matchHistory, ...game.challengeHistory].find((item) => item.id === targetRecordId)
+      if (rec) {
+        openChatWithShare({
+          kind: 'match',
+          recordId: rec.id,
+          label: `${rec.homeName} ${rec.score.home}:${rec.score.away} ${rec.awayName}`,
+        })
+      }
+      break
+    }
+    case 'chat-pick-best-card': {
+      const best = [...cardsOf(game)].sort((a, b) => playerCA(b) - playerCA(a))[0]
+      if (best) {
+        openChatWithShare({
+          kind: 'card',
+          cardId: best.id,
+          label: `${best.playerName} · ${cardDisplayName(best)}（CA ${Math.round(playerCA(best))}）`,
+        })
+      }
+      break
+    }
+    case 'chat-pick-last-match': {
+      const latest = [...game.matchHistory, ...game.challengeHistory].sort((a, b) => b.createdAt - a.createdAt)[0]
+      if (latest) {
+        openChatWithShare({
+          kind: 'match',
+          recordId: latest.id,
+          label: `${latest.homeName} ${latest.score.home}:${latest.score.away} ${latest.awayName}`,
+        })
+      }
+      break
+    }
+    case 'chat-clear-share':
+      ui.chatPendingShare = null
+      render()
+      ;(document.getElementById('chat-input') as HTMLInputElement | null)?.focus()
+      break
+    case 'chat-preview-msg':
+      ui.chatPreviewMsgId = actionEl.dataset.msgId ?? null
+      render()
+      break
+    case 'chat-preview-close':
+      ui.chatPreviewMsgId = null
+      render()
+      break
+    case 'chat-open-own-review':
+      if (recordId) {
+        ui.chatPreviewMsgId = null
+        ui.chatOpen = false
+        failedMatchRecords.delete(recordId)
+        resetReplay(recordId)
+        ui.reviewId = recordId
+        ui.reviewAutoOpen = false
+        ui.screen = 'review'
+        persist()
+        render()
+      }
+      break
     case 'chat-login':
       ui.chatOpen = false
       ui.chatError = ''
@@ -3514,6 +3609,7 @@ document.addEventListener('keydown', (event) => {
     else if (ui.accountOpen) ui.accountOpen = false
     else if (ui.clubViewId) { ui.clubViewId = null; ui.clubViewPlayerId = null }
     else if (ui.detailPlayerId) ui.detailPlayerId = null
+    else if (ui.chatPreviewMsgId) ui.chatPreviewMsgId = null
     else if (ui.chatOpen) { ui.chatOpen = false; ui.chatError = '' }
     else if (ui.mobileNavOpen) ui.mobileNavOpen = false
     else return

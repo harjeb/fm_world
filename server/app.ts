@@ -100,9 +100,15 @@ import { migrateLivePlayerPositions, migratePositionProfiles, preservePositionPr
 import {
   CHAT_COOLDOWN_MS,
   CHAT_HISTORY_LIMIT,
+  DEFAULT_CARD_SHARE_TEXT,
+  DEFAULT_MATCH_SHARE_TEXT,
+  buildChatSharedCard,
+  buildChatSharedMatch,
   isValidChatMessage,
+  parseChatShareRequest,
   sanitizeChatColor,
   validateChatText,
+  type ChatAttachment,
   type ChatMessage,
   type ChatSseMessage,
 } from '../src/game/chat.ts'
@@ -1710,9 +1716,51 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     for (const group of clients.values()) for (const client of group) sendClientRaw(client, payload)
   }
 
-  /** 发送全服聊天消息：校验字数与冷却，仅保留最新 50 条并实时推送。 */
-  function postChat(account: Account, rawText: unknown): { ok: true; message: ChatMessage } | { ok: false; error: string; status: number } {
-    const valid = validateChatText(rawText)
+  function resolveMatchTeamColor(account: Account, teamId: string, myClubColor: string): string {
+    if (teamId === 'player') return myClubColor
+    const wClub = sharedWorld.world.clubs.find((item) => item.id === teamId)
+    if (wClub?.color) return sanitizeChatColor(wClub.color)
+    const ai = account.game?.aiTeams?.find((item) => item.id === teamId)
+    return sanitizeChatColor(ai?.color)
+  }
+
+  /** 发送全服聊天消息（支持附带权威校验的角色卡名片或战报卡片）：校验字数与冷却，仅保留最新 50 条并实时推送。 */
+  function postChat(
+    account: Account,
+    rawText: unknown,
+    rawShare?: unknown,
+  ): { ok: true; message: ChatMessage } | { ok: false; error: string; status: number } {
+    const parsedShare = parseChatShareRequest(rawShare)
+    if (parsedShare === 'invalid') {
+      return { ok: false, error: '分享附件格式无效', status: 400 }
+    }
+    const clubId = ownedClubId(account) ?? ''
+    const worldClub = clubId ? sharedWorld.world.clubs.find((item) => item.id === clubId) : undefined
+    const playerClub = account.game?.world?.clubs.find((item) => item.id === 'player')
+    const clubName = account.game?.clubName || worldClub?.name || account.username
+    const clubColor = sanitizeChatColor(worldClub?.color ?? playerClub?.color)
+
+    let share: ChatAttachment | undefined
+    let fallbackText: string | undefined
+    if (parsedShare?.kind === 'card') {
+      const built = account.game ? buildChatSharedCard(account.game, parsedShare.cardId) : null
+      if (!built) return { ok: false, error: '找不到这张角色卡，请先确认存档已同步', status: 400 }
+      share = built
+      fallbackText = DEFAULT_CARD_SHARE_TEXT
+    } else if (parsedShare?.kind === 'match') {
+      const summary = account.game
+        ? [...(account.game.matchHistory ?? []), ...(account.game.challengeHistory ?? [])].find((r) => r.id === parsedShare.recordId)
+        : undefined
+      if (!summary) return { ok: false, error: '找不到这场战报记录，请先确认存档已同步', status: 400 }
+      const hydrated = hydrateAccountMatchRecord(account.id, summary)
+      share = buildChatSharedMatch(hydrated, {
+        homeColor: resolveMatchTeamColor(account, hydrated.homeId, clubColor),
+        awayColor: resolveMatchTeamColor(account, hydrated.awayId, clubColor),
+      })
+      fallbackText = DEFAULT_MATCH_SHARE_TEXT
+    }
+
+    const valid = validateChatText(rawText, fallbackText)
     if (!valid.ok) return { ok: false, error: valid.error, status: 400 }
     const t = now()
     const prev = chatLastSentAt.get(account.id)
@@ -1720,11 +1768,6 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return { ok: false, error: '发言太快了，请稍等片刻', status: 429 }
     }
     chatLastSentAt.set(account.id, t)
-    const clubId = ownedClubId(account) ?? ''
-    const worldClub = clubId ? sharedWorld.world.clubs.find((item) => item.id === clubId) : undefined
-    const playerClub = account.game?.world?.clubs.find((item) => item.id === 'player')
-    const clubName = account.game?.clubName || worldClub?.name || account.username
-    const clubColor = sanitizeChatColor(worldClub?.color ?? playerClub?.color)
     const message: ChatMessage = {
       id: `${t.toString(36)}-${(++chatSeq).toString(36)}-${crypto.randomBytes(3).toString('hex')}`,
       accountId: account.id,
@@ -1734,6 +1777,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       clubColor,
       text: valid.text,
       at: t,
+      ...(share ? { share } : {}),
     }
     chatMessages.push(message)
     if (chatMessages.length > CHAT_HISTORY_LIMIT) {
@@ -3300,7 +3344,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
           return
         }
         if (body.action === 'send_chat') {
-          const sent = postChat(agentAccount, body.text)
+          const sent = postChat(agentAccount, body.text, body.share)
           await sendJson(sent.ok ? 200 : sent.status, { ...sent, ...(sent.ok ? { result: { message: sent.message, messages: chatMessages } } : {}), revision: agentAccount.revision, game: agentState() }, true)
           return
         }
@@ -4123,7 +4167,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
     if (url.pathname === '/api/chat' && req.method === 'POST') {
       const body = await readJsonBody(req)
-      const sent = postChat(account, body.text)
+      if (body.share !== undefined) advanceAccount(account)
+      const sent = postChat(account, body.text, body.share)
       if (!sent.ok) return json(res, sent.status, { error: sent.error })
       json(res, 200, { ok: true, message: sent.message, messages: chatMessages, serverTime: now() })
       return

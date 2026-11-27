@@ -217,4 +217,131 @@ describe('全服聊天（纯函数与服务端）', () => {
     expect(sendChatBody.result.messages[0].text).toBe('消息 #7')
     expect(sendChatBody.result.messages[49].text).toBe('Agent 第 56 条问候')
   })
+
+  it('支持权威校验的角色卡名片与比赛战报分享（不泄露隐藏属性、防伪造并支持持久化恢复）', async () => {
+    let clock = 1_700_000_000_000
+    const { app, base, dir } = await start(() => clock)
+    const alice = await register(base, 'share_coach')
+
+    // 伪造不存在的卡片 ID 或战报 ID 会被服务端拒绝
+    const fakeCard = await fetch(`${base}/api/chat`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${alice.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: '看我神卡', share: { kind: 'card', cardId: 'fake-card-999' } }),
+    })
+    expect(fakeCard.status).toBe(400)
+
+    const fakeMatch = await fetch(`${base}/api/chat`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${alice.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: '', share: { kind: 'match', recordId: 'm-nonexistent' } }),
+    })
+    expect(fakeMatch.status).toBe(400)
+
+    // 先给外场球员产出一张真实角色卡并打一场友谊赛写入存档
+    const player = alice.game.roster.find((p: any) => (p.positions?.GK ?? 0) === 0) ?? alice.game.roster[0]
+    const seededCard = {
+      id: `card-${player.id}-1`,
+      playerId: player.id,
+      playerName: player.name,
+      serial: 1,
+      customName: '双彩猎狐',
+      routeId: 'through_passing',
+      createdAt: clock,
+      attrs: { ...player.attrs, shooting: 920, passing: 880, consistency: 19, dirtiness: 18 },
+      positions: { ...player.positions },
+      personality: { ...player.personality },
+      skills: ['through_ball', 'box_hunter'],
+      skillTiers: { through_ball: 'rainbow', box_hunter: 'gold' },
+      version: 1,
+    }
+    alice.game.cards = [seededCard]
+    alice.game.challengeHistory = [
+      {
+        id: 'm-friendly-test-1',
+        seed: 778899,
+        createdAt: clock,
+        seasonIndex: 1,
+        durationSeconds: 900,
+        isLeague: false,
+        mode: 'friendly',
+        homeId: 'player',
+        awayId: 'd2n_1',
+        homeName: alice.game.clubName,
+        awayName: '测试对手队',
+        score: { home: 3, away: 1 },
+        result: 'win',
+        stats: {
+          home: { possession: 58, passes: 280, passesCompleted: 235, shots: 14, shotsOnTarget: 8, goals: 3, interceptions: 10, tackles: 12, fouls: 6, corners: 5, xg: 2.64, distance: 98, yellowCards: 1, redCards: 0 },
+          away: { possession: 42, passes: 200, passesCompleted: 150, shots: 6, shotsOnTarget: 3, goals: 1, interceptions: 8, tackles: 11, fouls: 9, corners: 2, xg: 0.82, distance: 94, yellowCards: 2, redCards: 0 },
+        },
+        playerStats: [
+          { playerId: player.id, name: player.name, side: 'home', minutes: 90, passes: 40, passesCompleted: 35, shots: 5, goals: 2, assists: 1, tackles: 2, interceptions: 1, distance: 10.2, staminaLeft: 70, touches: 55, rating: 9.2 },
+        ],
+        skillStats: [],
+        failureStats: [],
+        keyEvents: [
+          { seq: 1, clock: 220, half: 1, type: 'goal', team: 'home', text: `${player.name}破门！` },
+        ],
+        goalDetails: [
+          { playerId: player.id, playerName: player.name, side: 'home', clock: 220, half: 1, origin: { x: 88, y: 34 }, distance: 11, bodyPart: 'right', technique: 'placed', situation: 'open', target: 'bottom_right' },
+        ],
+        instructions: [],
+        lineup: alice.game.lineup,
+        opponentId: 'd2n_1',
+      },
+    ]
+
+    const putRes = await fetch(`${base}/api/game`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${alice.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ game: alice.game, baseRevision: 1 }),
+    })
+    expect(putRes.status).toBe(200)
+
+    // 1. 晒角色卡（允许空文本，且服务端只提取主属性，绝不下发 consistency / dirtiness 等隐藏属性）
+    clock += CHAT_COOLDOWN_MS + 100
+    const shareCardRes = await fetch(`${base}/api/chat`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${alice.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: '', share: { kind: 'card', cardId: seededCard.id } }),
+    })
+    expect(shareCardRes.status).toBe(200)
+    const shareCardBody = await shareCardRes.json() as { ok: boolean; message: ChatMessage }
+    expect(shareCardBody.message.share?.kind).toBe('card')
+    if (shareCardBody.message.share?.kind === 'card') {
+      expect(shareCardBody.message.share.cardTitle).toBe('双彩猎狐')
+      expect(shareCardBody.message.share.skills).toEqual(['through_ball', 'box_hunter'])
+      expect(shareCardBody.message.share.attrs.shooting).toBe(920)
+      expect((shareCardBody.message.share.attrs as Record<string, unknown>).consistency).toBeUndefined()
+      expect((shareCardBody.message.share.attrs as Record<string, unknown>).dirtiness).toBeUndefined()
+    }
+
+    // 2. 晒比赛战报（附带自定义留言）
+    clock += CHAT_COOLDOWN_MS + 100
+    const shareMatchRes = await fetch(`${base}/api/chat`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${alice.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: '这场大胜太爽了！', share: { kind: 'match', recordId: 'm-friendly-test-1' } }),
+    })
+    expect(shareMatchRes.status).toBe(200)
+    const shareMatchBody = await shareMatchRes.json() as { ok: boolean; message: ChatMessage }
+    expect(shareMatchBody.message.text).toBe('这场大胜太爽了！')
+    expect(shareMatchBody.message.share?.kind).toBe('match')
+    if (shareMatchBody.message.share?.kind === 'match') {
+      expect(shareMatchBody.message.share.score).toEqual({ home: 3, away: 1 })
+      expect(shareMatchBody.message.share.goals).toHaveLength(1)
+      expect(shareMatchBody.message.share.mvp?.name).toBe(player.name)
+    }
+
+    // 重启服务器后，带 share 附件的历史消息完整保留
+    await app.shutdown()
+    servers.splice(servers.indexOf(app), 1)
+    const restarted = await start(() => clock, dir)
+    const afterRes = await fetch(`${restarted.base}/api/chat`)
+    const afterBody = await afterRes.json() as { messages: ChatMessage[] }
+    expect(afterBody.messages).toHaveLength(2)
+    expect(afterBody.messages[0].share?.kind).toBe('card')
+    expect(afterBody.messages[1].share?.kind).toBe('match')
+  })
 })

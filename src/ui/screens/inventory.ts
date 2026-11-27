@@ -196,6 +196,7 @@ function cardTile(card: PlayerCard, owner: Player | undefined): string {
       <span class="muted small">${cardRecyclePoints(card) === null ? '卡片能力无效，不能回收' : `回收 ${cardRecyclePoints(card)} 培养点`}${equipped ? ' · 已装备' : pending ? ' · 新卡待处理' : card.recycleLocked ? ' · 已锁定' : ''}</span>
     </div>
     <footer class="pcard-actions">
+      <button class="btn small ghost" data-action="chat-share-card" data-card="${esc(card.id)}" title="晒这张角色卡到全服聊天">${icon('chat', 13)}晒卡</button>
       <button class="btn small ghost" data-action="card-recycle-lock" data-card="${esc(card.id)}" data-locked="${card.recycleLocked ? 'false' : 'true'}" aria-label="${card.recycleLocked ? '解锁' : '锁定'}${esc(card.customName?.trim() || `卡 ${card.serial}`)}回收">${card.recycleLocked ? '解锁' : '锁定'}</button>
       ${owner && !equipped ? `<button class="btn small primary" data-action="card-equip" data-player="${esc(owner.id)}" data-card="${esc(card.id)}" ${game.activeMatch ? 'disabled title="比赛进行中不能换卡"' : ''}>${icon('check', 13)}装备</button>` : ''}
       ${deleteControls(card, equipped)}
