@@ -334,14 +334,40 @@ describe('全服聊天（纯函数与服务端）', () => {
       expect(shareMatchBody.message.share.mvp?.name).toBe(player.name)
     }
 
+    // 3. 晒单粒进球的 3D 动画（非法 goalIndex 拒绝 400；合法 goalIndex 提取精准瞬间比分与射门数据）
+    clock += CHAT_COOLDOWN_MS + 100
+    const badGoalRes = await fetch(`${base}/api/chat`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${alice.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: '', share: { kind: 'goal', recordId: 'm-friendly-test-1', goalIndex: 3 } }),
+    })
+    expect(badGoalRes.status).toBe(400)
+
+    clock += CHAT_COOLDOWN_MS + 100
+    const shareGoalRes = await fetch(`${base}/api/chat`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${alice.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: '', share: { kind: 'goal', recordId: 'm-friendly-test-1', goalIndex: 0 } }),
+    })
+    expect(shareGoalRes.status).toBe(200)
+    const shareGoalBody = await shareGoalRes.json() as { ok: boolean; message: ChatMessage }
+    expect(shareGoalBody.message.share?.kind).toBe('goal')
+    if (shareGoalBody.message.share?.kind === 'goal') {
+      expect(shareGoalBody.message.share.goalIndex).toBe(0)
+      expect(shareGoalBody.message.share.scoreBefore).toEqual({ home: 0, away: 0 })
+      expect(shareGoalBody.message.share.scoreAfter).toEqual({ home: 1, away: 0 })
+      expect(shareGoalBody.message.share.goal.playerName).toBe(player.name)
+    }
+
     // 重启服务器后，带 share 附件的历史消息完整保留
     await app.shutdown()
     servers.splice(servers.indexOf(app), 1)
     const restarted = await start(() => clock, dir)
     const afterRes = await fetch(`${restarted.base}/api/chat`)
     const afterBody = await afterRes.json() as { messages: ChatMessage[] }
-    expect(afterBody.messages).toHaveLength(2)
+    expect(afterBody.messages).toHaveLength(3)
     expect(afterBody.messages[0].share?.kind).toBe('card')
     expect(afterBody.messages[1].share?.kind).toBe('match')
+    expect(afterBody.messages[2].share?.kind).toBe('goal')
   })
 })

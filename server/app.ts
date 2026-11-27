@@ -101,8 +101,10 @@ import {
   CHAT_COOLDOWN_MS,
   CHAT_HISTORY_LIMIT,
   DEFAULT_CARD_SHARE_TEXT,
+  DEFAULT_GOAL_SHARE_TEXT,
   DEFAULT_MATCH_SHARE_TEXT,
   buildChatSharedCard,
+  buildChatSharedGoal,
   buildChatSharedMatch,
   isValidChatMessage,
   parseChatShareRequest,
@@ -320,6 +322,57 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
   }
   upgradeSharedWorldNames(sharedWorld)
+  // 回填并规范化历史赛季杯赛冠军（含 S2 星联杯 / 传奇杯，从玩家奖杯补齐遗漏的 championId）。
+  if (sharedWorld.world) {
+    const ownerByAccount = new Map(Object.entries(sharedWorld.owners).map(([clubId, accId]) => [accId, clubId]))
+    for (const sc of sharedWorld.world.seasonCupHistory ?? []) {
+      for (const cup of sc.cups ?? []) {
+        if (cup.id === 'cross' && cup.name === '跨级杯') cup.name = '星联杯'
+        if (!cup.championId) {
+          const lastRound = cup.rounds.at(-1)
+          const finalWinner = lastRound?.fixtures.length === 1 && lastRound.fixtures[0].played ? lastRound.fixtures[0].winnerId : undefined
+          if (finalWinner) cup.championId = finalWinner
+        }
+      }
+    }
+    const trophyCupMap: Record<string, { id: 'community' | 'league' | 'champions' | 'cross' | 'legend'; name: string }> = {
+      'season-community': { id: 'community', name: '社区杯' },
+      'season-league': { id: 'league', name: '联盟杯' },
+      'season-champions': { id: 'champions', name: '冠军杯' },
+      'season-cross': { id: 'cross', name: '星联杯' },
+      'season-legend': { id: 'legend', name: '传奇杯' },
+    }
+    for (let s = 2; s < sharedWorld.world.seasonIndex; s++) {
+      for (const account of db.accounts) {
+        const clubId = ownerByAccount.get(account.id)
+        if (!clubId) continue
+        for (const trophy of account.game?.pve?.trophies ?? []) {
+          if (trophy.seasonIndex !== s) continue
+          const mapped = trophyCupMap[trophy.cupId]
+          if (!mapped) continue
+          const history = (sharedWorld.world.seasonCupHistory ??= [])
+          let seasonEntry = history.find((item) => item.seasonIndex === s)
+          if (!seasonEntry) {
+            seasonEntry = { version: 1, seasonIndex: s, qualificationRound: 6, createdAt: trophy.wonAt || sharedWorld.startedAt, delayedLeagueRounds: [], cups: [] }
+            history.push(seasonEntry)
+          }
+          let cupEntry = seasonEntry.cups.find((c) => c.id === mapped.id)
+          if (!cupEntry) {
+            seasonEntry.cups.push({
+              id: mapped.id,
+              name: mapped.name,
+              entrants: [clubId],
+              dates: [],
+              rounds: [],
+              championId: clubId,
+            })
+          } else if (!cupEntry.championId) {
+            cupEntry.championId = clubId
+          }
+        }
+      }
+    }
+  }
   if (!sharedWorld.aiClubs) sharedWorld.aiClubs = seedAIClubs(sharedWorld.world, sharedWorld.seed)
   if (!sharedWorld.teams || Object.keys(sharedWorld.teams).length !== sharedWorld.world.clubs.length) {
     sharedWorld.teams = buildOwnerlessTeams(sharedWorld.world, sharedWorld.seed, sharedWorld.aiClubs)
@@ -1761,6 +1814,19 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         awayColor: resolveMatchTeamColor(account, hydrated.awayId, clubColor),
       })
       fallbackText = DEFAULT_MATCH_SHARE_TEXT
+    } else if (parsedShare?.kind === 'goal') {
+      const summary = account.game
+        ? [...(account.game.matchHistory ?? []), ...(account.game.challengeHistory ?? [])].find((r) => r.id === parsedShare.recordId)
+        : undefined
+      if (!summary) return { ok: false, error: '找不到这场战报记录，请先确认存档已同步', status: 400 }
+      const hydrated = hydrateAccountMatchRecord(account.id, summary)
+      const built = buildChatSharedGoal(hydrated, parsedShare.goalIndex, {
+        homeColor: resolveMatchTeamColor(account, hydrated.homeId, clubColor),
+        awayColor: resolveMatchTeamColor(account, hydrated.awayId, clubColor),
+      })
+      if (!built) return { ok: false, error: '找不到这粒进球记录，可能该场没有进球明细或索引超出范围', status: 400 }
+      share = built
+      fallbackText = DEFAULT_GOAL_SHARE_TEXT
     }
 
     const valid = validateChatText(rawText, fallbackText)

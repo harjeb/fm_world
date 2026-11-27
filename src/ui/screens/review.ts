@@ -4,7 +4,7 @@ import { displayClock } from '../../game/match/time.ts'
 import { shotPositionText } from '../../game/match/shooting.ts'
 import { buildAssistantDiagnosis, buildReview, extractMatchHighlights } from '../../game/review.ts'
 import { PLAYER_TEAM_ID } from '../../game/season.ts'
-import { bookTitle, clubLook, clubName, compareRow, crest, distinctKit, emptyState, icon, ownName, pageHead, panel, recordResult, resultPill, staffAvatar, tag } from '../components.ts'
+import { bookTitle, clubLook, clubName, compareRow, crest, distinctKit, emptyState, icon, pageHead, panel, recordResult, resultPill, staffAvatar, styledClubName, tag } from '../components.ts'
 import { skillEffectText } from '../../game/data/skill-effects.ts'
 import { clockText, esc, matchModeLabel, pveModeLabel, skillName } from '../format.ts'
 import { tipAttrs } from '../tooltip.ts'
@@ -100,9 +100,9 @@ function renderReplay(record: MatchRecord): string {
 
   return panel('文字播放器', `
     <div class="replay-score">
-      <span class="replay-team">${crest(clubLook(record.homeId), 30)}<b>${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)}</b></span>
+      <span class="replay-team">${crest(clubLook(record.homeId), 30)}<b>${styledClubName(record.homeId, record.homeName, record.homeId === PLAYER_TEAM_ID)}</b></span>
       <b class="replay-digits">${entries ? (last ? `${last.score.home} : ${last.score.away}` : '0 : 0') : '— : —'}</b>
-      <span class="replay-team away"><b>${ownName(record.awayName, record.awayId === PLAYER_TEAM_ID)}</b>${crest(clubLook(record.awayId), 30)}</span>
+      <span class="replay-team away"><b>${styledClubName(record.awayId, record.awayName, record.awayId === PLAYER_TEAM_ID)}</b>${crest(clubLook(record.awayId), 30)}</span>
       ${last?.shootoutScore ? `<small class="replay-shootout">点球 ${last.shootoutScore.home} : ${last.shootoutScore.away}</small>` : ''}
     </div>
     <div class="replay-controls">
@@ -164,7 +164,7 @@ function renderGoals(record: MatchRecord): string {
       <td class="dim">${goal.side === 'home' ? '主队' : '客队'}</td>
       <td class="dim">${esc(shotPositionText(goal))} (${goal.origin.x.toFixed(1)}, ${goal.origin.y.toFixed(1)}) · ${goal.distance.toFixed(1)} 米</td>
       <td class="dim">${body[goal.bodyPart]}${goal.technique === 'header' ? '' : ` · ${technique[goal.technique]}`} · ${situation[goal.situation]}${goal.chance ? ` · ${esc(goal.chance)}` : ' · 旧版未记录机会'} · 落点 ${target[goal.target]}</td>
-      <td class="num"><button type="button" class="btn small ghost" data-action="open-highlight-3d" data-record="${esc(record.id)}" data-goal-index="${idx}" title="在 3D 球场特写重演此粒进球">🎬 3D 重演</button></td>
+      <td class="num"><div class="goal-3d-actions"><button type="button" class="btn small ghost" data-action="open-highlight-3d" data-record="${esc(record.id)}" data-goal-index="${idx}" title="在 3D 球场特写重演此粒进球">🎬 3D 重演</button><button type="button" class="btn small ghost" data-action="chat-share-goal" data-record="${esc(record.id)}" data-goal-index="${idx}" title="将这粒进球的 3D 动画分享到全服聊天">💬 分享</button></div></td>
     </tr>`).join('')
   return panel('进球详情', rows
     ? `<div class="table-scroll"><table class="dt"><thead><tr><th class="num">时间</th><th>半场</th><th>球员</th><th>球队</th><th>位置 · 距离</th><th>方式</th><th class="num">3D 特写</th></tr></thead><tbody>${rows}</tbody></table></div>`
@@ -190,10 +190,10 @@ function renderRecord(record: MatchRecord): string {
   return `
     ${pageHead({
       kicker: `<button class="link" data-action="back-review">${icon('left', 12)} 返回记录</button><span class="kicker-sep">${record.isLeague ? `联赛第 ${record.round} 轮` : pveModeLabel(record.mode, record.stage)} · 种子 ${record.seed}</span>`,
-      title: `${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)} vs ${ownName(record.awayName, record.awayId === PLAYER_TEAM_ID)}`,
+      title: `${styledClubName(record.homeId, record.homeName, record.homeId === PLAYER_TEAM_ID)} vs ${styledClubName(record.awayId, record.awayName, record.awayId === PLAYER_TEAM_ID)}`,
       actions: `<button class="btn small hl3d-entry-btn" data-action="open-highlight-3d" data-record="${esc(record.id)}" title="打开半场禁区 3D 进球与神扑特写剧场">🎬 3D 高光剧场</button><button class="btn small ghost" data-action="chat-share-match" data-record="${esc(record.id)}" title="把这场战报分享到全服聊天">${icon('chat', 13)}晒战报到聊天</button>`,
     })}
-    ${record.aggregateScore ? `<p class="banner info">两回合总比分：${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)} ${record.aggregateScore.home}:${record.aggregateScore.away} ${ownName(record.awayName, record.awayId === PLAYER_TEAM_ID)}${record.shootout ? ` · 点球 ${record.shootout.home}:${record.shootout.away}` : ''}（不计客场进球）</p>` : ''}
+    ${record.aggregateScore ? `<p class="banner info">两回合总比分：${styledClubName(record.homeId, record.homeName, record.homeId === PLAYER_TEAM_ID)} ${record.aggregateScore.home}:${record.aggregateScore.away} ${styledClubName(record.awayId, record.awayName, record.awayId === PLAYER_TEAM_ID)}${record.shootout ? ` · 点球 ${record.shootout.home}:${record.shootout.away}` : ''}（不计客场进球）</p>` : ''}
     ${renderReplay2D(record)}
     ${renderReplay(record)}
     <details class="review-details"${ui.reviewAutoOpen ? ' open' : ''}><summary>${icon('review', 15)}展开完整赛后复盘与助教战术诊断（含最终结果）</summary>
@@ -208,7 +208,7 @@ function renderRecord(record: MatchRecord): string {
         ${renderGoals(record)}
         <div class="grid two">
           ${panel('比赛统计', `
-            <div class="cmp-head"><span><i class="swatch cmp-swatch-home"></i>${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)}</span><span>${ownName(record.awayName, record.awayId === PLAYER_TEAM_ID)}<i class="swatch cmp-swatch-away"></i></span></div>
+            <div class="cmp-head"><span><i class="swatch cmp-swatch-home"></i>${styledClubName(record.homeId, record.homeName, record.homeId === PLAYER_TEAM_ID)}</span><span>${styledClubName(record.awayId, record.awayName, record.awayId === PLAYER_TEAM_ID)}<i class="swatch cmp-swatch-away"></i></span></div>
             ${compareRow('控球率', home.possession, away.possession, `${home.possession}%`, `${away.possession}%`)}
             ${compareRow('射门', home.shots, away.shots)}
             ${compareRow('射正', home.shotsOnTarget, away.shotsOnTarget)}

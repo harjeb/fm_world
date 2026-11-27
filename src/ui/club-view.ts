@@ -7,7 +7,7 @@ import { attrRating, mainAttrsFor } from '../game/rating.ts'
 import { loadedPublicClub, publicWorld, onlineState, type WorldPublicClub, type WorldPublicPlayer } from '../online.ts'
 import { PLAYER_TEAM_ID } from '../game/season.ts'
 import { isLegendCupTeamId, legendCupMetaById, legendCupTeamById } from '../game/data/legend-cup-teams.ts'
-import { attrHeat, attributeRadar, caHeat, humanMark, icon, ownName, panel, posBadge, positionMap, primaryPosition, skillGroups, tag, traitLabel } from './components.ts'
+import { attrHeat, attributeRadar, caHeat, humanMark, icon, panel, posBadge, positionMap, primaryPosition, skillGroups, styledClubName, tag, traitLabel } from './components.ts'
 import { attrLabel, esc, playerCA } from './format.ts'
 import { tipAttrs } from './tooltip.ts'
 import { renderClubRankTrendPanel } from './rank-chart.ts'
@@ -168,7 +168,7 @@ export function clubRosterPanel(club: WorldPublicClub, selectedId?: string | nul
   const subtitle = legendMeta
     ? `传奇杯历史特邀豪门 · 首发平均 CA ${legendMeta.targetCa} · 主教练：${esc(legendMeta.coach)} · ${esc(legendMeta.note)}`
     : `公开 CA、属性、位置、技能和他们现在装备的球员卡；实时体能、训练精力与伤病状态不公开。CA 是装备卡的评分，“原始”是没练过的属性。${club.aiTakeover ? ' 该球队教练已超过 3 天未上线，当前由 AI 临时接管阵容轮换与日常培养；若连续 7 天未上线将自动清理账号并释放球队席位。' : ''}`
-  return `${panel(`${ownName(club.name, own)}${humanMark(club.id, !!club.managed, !!club.aiTakeover)}${club.aiTakeover ? ` ${tag('AI 接管中', 'gold')}` : ''}${legendMeta ? ` ${tag(`传奇杯 CA ${legendMeta.targetCa}`, 'gold')}` : ''} · 球员名单`, `<p class="hint">${subtitle}</p>
+  return `${panel(`${styledClubName(own ? PLAYER_TEAM_ID : club.id, club.name, own)}${humanMark(club.id, !!club.managed, !!club.aiTakeover)}${club.aiTakeover ? ` ${tag('AI 接管中', 'gold')}` : ''}${legendMeta ? ` ${tag(`传奇杯 CA ${legendMeta.targetCa}`, 'gold')}` : ''} · 球员名单`, `<p class="hint">${subtitle}</p>
     ${club.facilities ? `<p class="hint">设施：${facilityTags(club.facilities)}</p>` : ''}
     <div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th class="num">年龄</th><th class="num">CA</th><th>装备卡</th><th>特性</th></tr></thead><tbody>${rows}</tbody></table></div>`, { flush: true })}
     ${selected ? `<div id="club-player-detail">${publicPlayerPanel(selected)}${!own && !isLegendCupTeamId(club.id) && !game.roster.some(p => p.id === selected.id) ? renderScoutControls(selected.id, 'club', club.id) : ''}</div>` : ''}`

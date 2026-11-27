@@ -1,4 +1,4 @@
-import type { AttrKey, AutoTrainingPresetId, DetailedPosition, GameState, Lineup, MatchMentality, Player, Position, RoleId, SkillId, Tactics } from '../game/types.ts'
+import type { AttrKey, AutoTrainingPresetId, DetailedPosition, GameState, Lineup, MatchMentality, MatchRecord, Player, Position, RoleId, SkillId, Tactics } from '../game/types.ts'
 import { cacheGameLocally, cacheOnlineGame, loadGame, saveGame, setTeamPickPending, teamPickPending, upgradeLegacySignatures } from '../game/state.ts'
 import { createWorldGame, previewD2Clubs, worldTransferTeams } from '../game/world.ts'
 import { previewContractRenewal } from '../game/wages.ts'
@@ -707,6 +707,18 @@ function openChatWithShare(share: NonNullable<typeof ui.chatPendingShare>): void
   }
 }
 
+function shareGoalFromRecord(rec: MatchRecord, goalIndex: number): void {
+  const goal = rec.goalDetails?.[goalIndex]
+  if (!goal) return
+  const minute = displayClock(goal.clock, rec.durationSeconds ?? 600)
+  openChatWithShare({
+    kind: 'goal',
+    recordId: rec.id,
+    goalIndex,
+    label: `${minute} ${goal.playerName} · ${rec.homeName} ${rec.score.home}:${rec.score.away} ${rec.awayName}`,
+  })
+}
+
 async function submitChat(): Promise<void> {
   if (!isOnlineMode()) {
     ui.chatError = '请先登录联机账号后再发送消息。'
@@ -720,7 +732,9 @@ async function submitChat(): Promise<void> {
   const reqShare = pending
     ? pending.kind === 'card'
       ? { kind: 'card' as const, cardId: pending.cardId }
-      : { kind: 'match' as const, recordId: pending.recordId }
+      : pending.kind === 'goal'
+        ? { kind: 'goal' as const, recordId: pending.recordId, goalIndex: pending.goalIndex }
+        : { kind: 'match' as const, recordId: pending.recordId }
     : undefined
   ui.chatError = ''
   render()
@@ -3190,6 +3204,24 @@ document.addEventListener('click', async (event) => {
       }
       break
     }
+    case 'chat-share-goal': {
+      const targetRecordId = actionEl.dataset.record || ui.reviewId || ''
+      let rec = [...game.matchHistory, ...game.challengeHistory].find((item) => item.id === targetRecordId)
+      if (!rec) break
+      const goalIdx = Number(actionEl.dataset.goalIndex)
+      if (!Number.isInteger(goalIdx) || goalIdx < 0) break
+      try {
+        if (rec.detailDeferred && isOnlineMode()) {
+          rec = await loadMatchRecordOnline(rec.id)
+          applyLoadedMatchRecords(game)
+          render()
+        }
+        shareGoalFromRecord(rec, goalIdx)
+      } catch (err) {
+        showNotice(`载入进球详情失败：${err instanceof Error ? err.message : String(err)}`)
+      }
+      break
+    }
     case 'chat-pick-best-card': {
       const best = [...cardsOf(game)].sort((a, b) => playerCA(b) - playerCA(a))[0]
       if (best) {
@@ -3240,7 +3272,11 @@ document.addEventListener('click', async (event) => {
           render()
         }
         const { openRecordHighlight3D } = await import('./highlight-3d.ts')
-        await openRecordHighlight3D(rec, Number.isFinite(goalIdx) ? goalIdx : undefined)
+        await openRecordHighlight3D(rec, Number.isFinite(goalIdx) ? goalIdx : undefined, {
+          onShareGoal: (clip) => {
+            if (clip.goalIndex !== undefined) shareGoalFromRecord(rec!, clip.goalIndex)
+          },
+        })
       } catch (err) {
         showNotice(`打开 3D 高光剧场失败：${err instanceof Error ? err.message : String(err)}`)
       }
@@ -3258,6 +3294,19 @@ document.addEventListener('click', async (event) => {
         await openSharedMatchHighlight3D(msg.share, Number.isFinite(goalIdx) ? goalIdx : undefined)
       } catch (err) {
         showNotice(`打开 3D 进球剧场失败：${err instanceof Error ? err.message : String(err)}`)
+      }
+      break
+    }
+    case 'chat-highlight-3d-goal': {
+      const msgId = actionEl.dataset.msgId || ''
+      const msg = chatState.messages.find((m) => m.id === msgId)
+      if (!msg || msg.share?.kind !== 'goal') break
+      if (replay2d.playing) toggleReplay2D()
+      try {
+        const { openSharedGoalHighlight3D } = await import('./highlight-3d.ts')
+        await openSharedGoalHighlight3D(msg.share)
+      } catch (err) {
+        showNotice(`播放 3D 进球动画失败：${err instanceof Error ? err.message : String(err)}`)
       }
       break
     }

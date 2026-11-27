@@ -391,11 +391,16 @@ export function createFmMcpServer(config: FmMcpConfig): McpServer {
       kind: z.literal('match'),
       recordId: z.string().min(1).describe('要晒出的比赛战报 ID，来自 get_state.matchHistory[].id 或 challengeHistory[].id'),
     }),
+    z.object({
+      kind: z.literal('goal'),
+      recordId: z.string().min(1).describe('要分享单粒进球的比赛战报 ID，来自 get_state.matchHistory[].id 或 challengeHistory[].id'),
+      goalIndex: z.number().int().min(0).max(29).describe('该场战报第几粒进球（从 0 开始，对应 get_match.record.goalDetails 数组下标）'),
+    }),
   ])
 
-  register('send_chat', '发送全服聊天 / 晒卡晒战报', '发送一条最多 200 字的全服聊天消息，或附带 share 晒出一张角色卡名片 / 一场比赛战报卡片（由服务器权威提取公开数据，传 share 时 text 可省略或留空），受发言间隔限制。', {
+  register('send_chat', '发送全服聊天 / 晒卡晒战报晒进球', '发送一条最多 200 字的全服聊天消息，或附带 share 晒出一张角色卡名片 / 一场比赛战报 / 单个进球的 3D 动画卡片（由服务器权威提取公开数据，传 share 时 text 可省略或留空），受发言间隔限制。', {
     text: z.string().max(200).optional().describe('聊天文字（最多 200 字）；不传 share 时必填非空，传 share 时可省略自动配默认文案'),
-    share: chatShareSchema.optional().describe('可选：附带晒角色卡名片（{kind:"card",cardId}）或晒比赛战报（{kind:"match",recordId}）'),
+    share: chatShareSchema.optional().describe('可选：晒角色卡（{kind:"card",cardId}）、晒战报（{kind:"match",recordId}）或晒单个 3D 进球（{kind:"goal",recordId,goalIndex}）'),
   }, (args) => action('send_chat', args))
 
   register('rename_club', '俱乐部改名', '联机时修改俱乐部名字：最多 8 个字，不能和全服已有球队（AI 球队或其他教练的球队）重名；比赛进行中不能改。', {

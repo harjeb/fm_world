@@ -3711,5 +3711,97 @@ circle.pm-5 { fill: var(--h6); }
   }
 }
 
+.goal-3d-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+.chat-embed-goal {
+  border-left: 3px solid var(--gold);
+}
+.chat-embed-goal:hover {
+  border-color: var(--gold);
+}
+
+/* 传奇挑战：已击败 / 已打平 行背景色与左指示条 */
+.dt tr.legend-row-won td {
+  background: rgba(79, 208, 138, 0.1);
+}
+.dt tr.legend-row-won:hover td {
+  background: rgba(79, 208, 138, 0.16);
+}
+.dt tr.legend-row-won td:first-child {
+  box-shadow: inset 3px 0 0 var(--good);
+}
+.dt tr.legend-row-drawn td {
+  background: rgba(242, 184, 75, 0.1);
+}
+.dt tr.legend-row-drawn:hover td {
+  background: rgba(242, 184, 75, 0.16);
+}
+.dt tr.legend-row-drawn td:first-child {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+:root[data-theme="light"] .dt tr.legend-row-won td {
+  background: rgba(22, 163, 74, 0.09);
+}
+:root[data-theme="light"] .dt tr.legend-row-won:hover td {
+  background: rgba(22, 163, 74, 0.15);
+}
+:root[data-theme="light"] .dt tr.legend-row-drawn td {
+  background: rgba(217, 119, 6, 0.09);
+}
+:root[data-theme="light"] .dt tr.legend-row-drawn:hover td {
+  background: rgba(217, 119, 6, 0.15);
+}
+
+/* 传奇杯冠军俱乐部彩虹字体（仅正式联赛球队） + 星联杯小奖杯图标 */
+.club-name-rainbow {
+  display: inline-block;
+  font-weight: 700;
+  background: linear-gradient(90deg, #ff7eb3 0%, #ffd166 26%, #7cf5a4 52%, #67d4ff 76%, #d094ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.club-btn.own .club-name.club-name-rainbow,
+.club-btn:hover .club-name.club-name-rainbow {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.club-btn:hover .club-name.club-name-rainbow {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 2px;
+}
+:root[data-theme="light"] .club-name-rainbow {
+  background: linear-gradient(90deg, #d92672 0%, #c97a00 28%, #0f8a4c 54%, #0b74c4 78%, #7c3aed 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.club-cross-trophy {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 3px;
+  color: #f5c249;
+  filter: drop-shadow(0 0 3px rgba(245, 194, 73, 0.35));
+  vertical-align: -1px;
+  cursor: help;
+}
+.club-cross-trophy .cross-trophy-ico {
+  display: block;
+}
+:root[data-theme="light"] .club-cross-trophy {
+  color: #c98608;
+  filter: none;
+}
+
 
 

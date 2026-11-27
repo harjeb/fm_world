@@ -1,5 +1,5 @@
 import type { GameState } from '../game/types.ts'
-import { LEGEND_GROUP_ROUNDS, SEASON_CUP_NAMES, previousChampionsTop4, promotionCupQualifiers, type SeasonCup, type SeasonCupId } from '../game/season-cups.ts'
+import { LEGEND_GROUP_ROUNDS, SEASON_CUP_NAMES, previousChampionsTop4, promotionCupQualifiers, seasonCupChampions, type SeasonCup, type SeasonCupId } from '../game/season-cups.ts'
 import { promotionSpotCount } from '../game/world.ts'
 import { LEGEND_CUP_META } from '../game/data/legend-cup-teams.ts'
 import { SEASON_CUP_REWARDS } from '../game/data/season-cup-rewards.ts'
@@ -285,6 +285,15 @@ function cupStatusLabel(cup: SeasonCup, ownId: string): string {
   return eliminated ? '已淘汰' : cup.championId ? '已结束' : '参赛中'
 }
 
+function cupChampionsHistoryPanel(game: GameState, cupId: SeasonCupId, ownId: string): string {
+  if (cupId === 'promotion') return ''
+  const champions = seasonCupChampions(game, cupId, ownId)
+  const body = champions.length
+    ? `<div class="rows">${champions.map((entry) => `<div class="row-line"><span class="dim">第 ${entry.seasonIndex} 赛季</span><span>${clubName(displayId(entry.championId, ownId), 17)}</span></div>`).join('')}</div>`
+    : '<p class="muted pad">暂无历届冠军记录。</p>'
+  return panel(`历届冠军 · ${SEASON_CUP_NAMES[cupId]}${champions.length ? ` <small>${champions.length}</small>` : ''}`, body, { flush: true })
+}
+
 /** 独立杯赛页只读取服务器已公布的签表和统计，不模拟或报名。 */
 export function renderSeasonCups(game: GameState, selected: SeasonCupId = 'community'): string {
   const heading = pageHead({
@@ -306,19 +315,19 @@ export function renderSeasonCups(game: GameState, selected: SeasonCupId = 'commu
       : selected === 'promotion'
         ? promotionPreview(game, ownId)
         : panel('赛季杯赛', '<p class="hint pad">第 6 轮结束后确定参赛资格；赛程将在确认后公布。</p>', { flush: true })
-    return heading + tabs + body + legacyHistory(game)
+    return heading + tabs + body + cupChampionsHistoryPanel(game, selected, ownId) + legacyHistory(game)
   }
   const cup = season.cups.find(item => item.id === selected)
   const activeTab: SeasonCupId = cup?.id ?? selected
   const tabs = `<nav class="seg sc-tabs" aria-label="选择杯赛">${CUP_ORDER.map(id => `<button data-season-cup-tab="${id}" class="${id === activeTab ? 'active' : ''}" aria-pressed="${id === activeTab}">${esc(SEASON_CUP_NAMES[id])}</button>`).join('')}</nav>`
   if (!cup) {
-    if (selected === 'legend') return `${heading}${tabs}${legendPreview(game, ownId)}${legacyHistory(game)}`
+    if (selected === 'legend') return `${heading}${tabs}${legendPreview(game, ownId)}${cupChampionsHistoryPanel(game, selected, ownId)}${legacyHistory(game)}`
     if (selected === 'promotion') return `${heading}${tabs}${promotionPreview(game, ownId)}${legacyHistory(game)}`
     const hasLegend = season.cups.some(item => item.id === 'legend')
     const waitNote = hasLegend
       ? '第 6 轮结束后确定参赛资格；赛程将在确认后公布。传奇杯已提前开赛，可切换到「传奇杯」查看。'
       : '第 6 轮结束后确定参赛资格；赛程将在确认后公布。'
-    return `${heading}${tabs}${panel(SEASON_CUP_NAMES[selected], `<p class="hint pad">${waitNote}</p>`, { flush: true })}${legacyHistory(game)}`
+    return `${heading}${tabs}${panel(SEASON_CUP_NAMES[selected], `<p class="hint pad">${waitNote}</p>`, { flush: true })}${cupChampionsHistoryPanel(game, selected, ownId)}${legacyHistory(game)}`
   }
   if (cup.id === 'promotion') {
     return `${heading}${tabs}${renderPromotionCup(game, cup, ownId)}${legacyHistory(game)}`
@@ -339,8 +348,9 @@ export function renderSeasonCups(game: GameState, selected: SeasonCupId = 'commu
     ? `<span>首次夺冠专属奖励：${tag('传奇之星', 'skill-rainbow')}</span>`
     : `<span>奖杯主属性上限：<b>+${reward.ceiling}（多杯取最高，不叠加）</b></span>`
   const summary = `<div class="sc-summary"><span>状态：<b>${esc(status)}</b></span><span>参赛球队：<b>${cup.entrants.length}</b></span><span>${appearanceLabel}：<b>${appearanceText}</b></span><span>冠军额外金币：<b>${reward.champion.toLocaleString()}</b></span>${championSpecial}</div><p class="hint pad">${noteText}</p>`
+  const championsHistory = cupChampionsHistoryPanel(game, cup.id, ownId)
   const groupStage = hasGroups ? groupStagePanel(game, cup, ownId) : ''
   const board = bracketPanel(game, cup, ownId, season.drawSeed)
   const leaders = `<div class="grid sc-leader-grid">${leaderPanel(cup, ownId, 'goals', '射手榜', '进球')}${leaderPanel(cup, ownId, 'assists', '助攻榜', '助攻')}${leaderPanel(cup, ownId, 'shots', '射门榜', '射门')}${leaderPanel(cup, ownId, 'tackles', '抢断榜', '抢断')}${leaderPanel(cup, ownId, 'saves', '扑救榜', '扑救')}</div>`
-  return `${heading}${tabs}${summary}${groupStage}${board}<h2>比赛数据排行</h2>${leaders}${legacyHistory(game)}`
+  return `${heading}${tabs}${summary}${championsHistory}${groupStage}${board}<h2>比赛数据排行</h2>${leaders}${legacyHistory(game)}`
 }

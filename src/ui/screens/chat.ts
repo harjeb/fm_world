@@ -2,10 +2,12 @@ import {
   CHAT_HISTORY_LIMIT,
   CHAT_MAX_LENGTH,
   DEFAULT_CARD_SHARE_TEXT,
+  DEFAULT_GOAL_SHARE_TEXT,
   DEFAULT_MATCH_SHARE_TEXT,
   sanitizeChatColor,
   type ChatMessage,
   type ChatSharedCard,
+  type ChatSharedGoalClip,
   type ChatSharedMatch,
 } from '../../game/chat.ts'
 import { cardsOf } from '../../game/cards.ts'
@@ -21,11 +23,11 @@ import {
   compareRow,
   crest,
   distinctKit,
-  ownName,
   playerPortrait,
   posBadge,
   primaryPosition,
   skillTag,
+  styledClubName,
   tag,
 } from '../components.ts'
 import { esc, positionLabel } from '../format.ts'
@@ -86,9 +88,31 @@ function renderMatchEmbed(msgId: string, match: ChatSharedMatch): string {
   </button>`
 }
 
+function renderGoalEmbed(msgId: string, shared: ChatSharedGoalClip): string {
+  const homeKit = sanitizeChatColor(shared.homeColor)
+  const awayKit = distinctKit(sanitizeChatColor(shared.awayColor), homeKit)
+  const g = shared.goal
+  const scorerLine = `⚽ ${g.minute} ${g.playerName}${g.assistName ? `（${g.assistName} 助攻）` : ''}`
+  return `<button type="button" class="chat-embed chat-embed-goal" data-action="chat-highlight-3d-goal" data-msg-id="${esc(msgId)}" aria-label="播放 3D 进球动画 ${esc(g.playerName)} ${esc(g.minute)}">
+    <div class="chat-embed-match-meta">
+      <span class="tag info">${esc(shared.competition)}</span>
+      <span class="tag solid">🎬 3D 进球</span>
+    </div>
+    <div class="chat-embed-scoreline">
+      <span class="chat-embed-team">${crest({ name: shared.homeName, color: homeKit }, 20)}<b>${esc(shared.homeName)}</b></span>
+      <span class="chat-embed-digits">${shared.scoreAfter.home} : ${shared.scoreAfter.away}</span>
+      <span class="chat-embed-team away"><b>${esc(shared.awayName)}</b>${crest({ name: shared.awayName, color: awayKit }, 20)}</span>
+    </div>
+    <div class="chat-embed-foot">
+      <span class="muted small">${esc(scorerLine)}</span>
+      <span class="chat-embed-cta">播放 3D 动画 ${icon('right', 11)}</span>
+    </div>
+  </button>`
+}
+
 function shouldShowCaption(msg: ChatMessage): boolean {
   if (!msg.share) return true
-  return msg.text !== DEFAULT_CARD_SHARE_TEXT && msg.text !== DEFAULT_MATCH_SHARE_TEXT
+  return msg.text !== DEFAULT_CARD_SHARE_TEXT && msg.text !== DEFAULT_MATCH_SHARE_TEXT && msg.text !== DEFAULT_GOAL_SHARE_TEXT
 }
 
 export function renderChatDrawer(): string {
@@ -113,12 +137,14 @@ export function renderChatDrawer(): string {
               const mine = msg.accountId === me
               const color = sanitizeChatColor(msg.clubColor)
               const clubNode = msg.clubId
-                ? `<button class="link chat-club" data-club-open="${esc(msg.clubId)}" title="查看球队名单">${ownName(msg.clubName, mine)}</button>`
-                : `<b class="chat-club-plain">${ownName(msg.clubName, mine)}</b>`
+                ? `<button class="link chat-club" data-club-open="${esc(msg.clubId)}" title="查看球队名单">${styledClubName(msg.clubId, msg.clubName, mine)}</button>`
+                : `<b class="chat-club-plain">${styledClubName(undefined, msg.clubName, mine)}</b>`
               const embed = msg.share
                 ? msg.share.kind === 'card'
                   ? renderCardEmbed(msg.id, msg.share)
-                  : renderMatchEmbed(msg.id, msg.share)
+                  : msg.share.kind === 'goal'
+                    ? renderGoalEmbed(msg.id, msg.share)
+                    : renderMatchEmbed(msg.id, msg.share)
                 : ''
               return `<div class="chat-msg ${mine ? 'mine' : ''}" data-key="${esc(msg.id)}">
                 ${crest({ name: msg.clubName, color }, 26)}
@@ -139,14 +165,14 @@ export function renderChatDrawer(): string {
       <div class="chat-share-bar">
         ${pending
           ? `<div class="chat-pending-pill">
-              <span class="tag solid">${pending.kind === 'card' ? '角色卡' : '战报'}</span>
+              <span class="tag solid">${pending.kind === 'card' ? '角色卡' : pending.kind === 'goal' ? '3D 进球' : '战报'}</span>
               <span class="chat-pending-label">${esc(pending.label)}</span>
               <button type="button" class="btn small ghost chat-pending-clear" data-action="chat-clear-share" aria-label="移除待发送卡片">${icon('close', 12)}</button>
             </div>`
           : `<div class="chat-quick-actions">
               <button type="button" class="btn small ghost" data-action="chat-pick-best-card" ${hasCards ? '' : 'disabled title="库存里还没有已培养的角色卡"'}>${icon('cards', 13)}晒最强卡</button>
               <button type="button" class="btn small ghost" data-action="chat-pick-last-match" ${hasMatches ? '' : 'disabled title="还没有比赛记录"'}>${icon('review', 13)}晒最新战报</button>
-              <span class="muted small">库存页与复盘页也可任选单卡/单场分享</span>
+              <span class="muted small">库存页与复盘/3D剧场可分享单卡/战报/进球</span>
             </div>`}
       </div>
       <div class="chat-composer">
@@ -164,7 +190,7 @@ export function renderChatDrawer(): string {
         </div>
         <button class="modal-close chat-close" data-action="chat-close" aria-label="关闭全服聊天">${icon('close', 16)}</button>
       </header>
-      <div class="chat-sub">全服执教教练实时频道 · 支持晒角色卡名片与比赛战报</div>
+      <div class="chat-sub">全服执教教练实时频道 · 支持晒角色卡名片、战报与 3D 进球</div>
       ${body}
     </aside>
   </div>`
@@ -277,7 +303,7 @@ function renderSharedMatchModalBody(msg: ChatMessage, match: ChatSharedMatch): s
 export function renderChatShareModal(): string {
   if (!ui.chatPreviewMsgId) return ''
   const msg = chatState.messages.find((m) => m.id === ui.chatPreviewMsgId)
-  if (!msg?.share) return ''
+  if (!msg?.share || msg.share.kind === 'goal') return ''
   const label = msg.share.kind === 'card' ? `${msg.share.playerName} 角色卡名片` : `${msg.share.homeName} vs ${msg.share.awayName} 战报预览`
   const content = msg.share.kind === 'card'
     ? renderSharedCardModalBody(msg, msg.share)

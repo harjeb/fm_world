@@ -15,10 +15,12 @@ export const CHAT_COOLDOWN_MS = 1_500
 
 export const DEFAULT_CARD_SHARE_TEXT = '[晒出角色卡]'
 export const DEFAULT_MATCH_SHARE_TEXT = '[分享比赛战报]'
+export const DEFAULT_GOAL_SHARE_TEXT = '[分享3D进球]'
 
 export type ChatShareRequest =
   | { kind: 'card'; cardId: string }
   | { kind: 'match'; recordId: string }
+  | { kind: 'goal'; recordId: string; goalIndex: number }
 
 export type ChatSharedCard = {
   kind: 'card'
@@ -79,7 +81,25 @@ export type ChatSharedMatch = {
   mvp?: { name: string; line: string }
 }
 
-export type ChatAttachment = ChatSharedCard | ChatSharedMatch
+export type ChatSharedGoalClip = {
+  kind: 'goal'
+  recordId: string
+  goalIndex: number
+  competition: string
+  homeName: string
+  awayName: string
+  homeColor: string
+  awayColor: string
+  scoreBefore: { home: number; away: number }
+  scoreAfter: { home: number; away: number }
+  goal: ChatSharedGoal
+  keeperName?: string
+  keeperAppearanceId?: string
+  keeperHeight?: number
+  keeperNumber?: number
+}
+
+export type ChatAttachment = ChatSharedCard | ChatSharedMatch | ChatSharedGoalClip
 
 export type ChatMessage = {
   id: string
@@ -136,6 +156,18 @@ export function parseChatShareRequest(raw: unknown): ChatShareRequest | null | '
   }
   if (obj.kind === 'match' && typeof obj.recordId === 'string' && obj.recordId.trim().length > 0 && obj.recordId.length <= 120) {
     return { kind: 'match', recordId: obj.recordId.trim() }
+  }
+  if (
+    obj.kind === 'goal' &&
+    typeof obj.recordId === 'string' &&
+    obj.recordId.trim().length > 0 &&
+    obj.recordId.length <= 120 &&
+    typeof obj.goalIndex === 'number' &&
+    Number.isInteger(obj.goalIndex) &&
+    obj.goalIndex >= 0 &&
+    obj.goalIndex < 30
+  ) {
+    return { kind: 'goal', recordId: obj.recordId.trim(), goalIndex: obj.goalIndex }
   }
   return 'invalid'
 }
@@ -199,51 +231,62 @@ function competitionLabelOf(record: MatchRecord): string {
   return '友谊赛'
 }
 
-/** 从权威战报生成紧凑可预览的战报卡片快照（不含双方战术板/隐藏属性等敏感信息）。 */
-export function buildChatSharedMatch(
-  record: MatchRecord,
-  colors: { homeColor: string; awayColor: string },
-): ChatSharedMatch {
-  const duration = record.durationSeconds ?? LOGIC_MATCH_SECONDS
+function buildStatByPlayer(record: MatchRecord): Map<string, MatchRecord['playerStats'][number]> {
   const statByPlayer = new Map<string, MatchRecord['playerStats'][number]>()
   for (const s of record.playerStats ?? []) {
     statByPlayer.set(s.playerId, s)
     if (s.sourceId) statByPlayer.set(s.sourceId, s)
     statByPlayer.set(`${s.side}:${s.name}`, s)
   }
-  const goals: ChatSharedGoal[] = (record.goalDetails ?? []).slice(0, 12).map((g) => {
-    const m = Math.max(1, Math.min(90, Math.floor(displayClock(g.clock, duration) / 60) + 1))
-    const scStat = statByPlayer.get(g.playerId) ?? statByPlayer.get(`${g.side}:${g.playerName}`)
-    const astStat = g.assistId
-      ? statByPlayer.get(g.assistId)
-      : g.assistName
-        ? statByPlayer.get(`${g.side}:${g.assistName}`)
-        : undefined
-    const appId = g.appearanceId ?? scStat?.appearanceId
-    const hCm = g.height ?? scStat?.height
-    const num = g.number ?? scStat?.number
-    const astAppId = g.assistAppearanceId ?? astStat?.appearanceId
-    const astHCm = g.assistHeight ?? astStat?.height
-    const astNum = g.assistNumber ?? astStat?.number
-    return {
-      minute: `${m}'`,
-      playerName: g.playerName,
-      side: g.side,
-      ...(g.assistName ? { assistName: g.assistName } : {}),
-      ...(appId ? { appearanceId: appId } : {}),
-      ...(hCm ? { height: hCm } : {}),
-      ...(num ? { number: num } : {}),
-      ...(astAppId ? { assistAppearanceId: astAppId } : {}),
-      ...(astHCm ? { assistHeight: astHCm } : {}),
-      ...(astNum ? { assistNumber: astNum } : {}),
-      origin: { x: Math.round(g.origin.x * 10) / 10, y: Math.round(g.origin.y * 10) / 10 },
-      distance: Math.round(g.distance * 10) / 10,
-      bodyPart: g.bodyPart,
-      technique: g.technique,
-      situation: g.situation,
-      target: g.target,
-    }
-  })
+  return statByPlayer
+}
+
+function toChatSharedGoal(
+  g: NonNullable<MatchRecord['goalDetails']>[number],
+  duration: number,
+  statByPlayer: ReadonlyMap<string, MatchRecord['playerStats'][number]>,
+): ChatSharedGoal {
+  const m = Math.max(1, Math.min(90, Math.floor(displayClock(g.clock, duration) / 60) + 1))
+  const scStat = statByPlayer.get(g.playerId) ?? statByPlayer.get(`${g.side}:${g.playerName}`)
+  const astStat = g.assistId
+    ? statByPlayer.get(g.assistId)
+    : g.assistName
+      ? statByPlayer.get(`${g.side}:${g.assistName}`)
+      : undefined
+  const appId = g.appearanceId ?? scStat?.appearanceId
+  const hCm = g.height ?? scStat?.height
+  const num = g.number ?? scStat?.number
+  const astAppId = g.assistAppearanceId ?? astStat?.appearanceId
+  const astHCm = g.assistHeight ?? astStat?.height
+  const astNum = g.assistNumber ?? astStat?.number
+  return {
+    minute: `${m}'`,
+    playerName: g.playerName,
+    side: g.side,
+    ...(g.assistName ? { assistName: g.assistName } : {}),
+    ...(appId ? { appearanceId: appId } : {}),
+    ...(hCm ? { height: hCm } : {}),
+    ...(num ? { number: num } : {}),
+    ...(astAppId ? { assistAppearanceId: astAppId } : {}),
+    ...(astHCm ? { assistHeight: astHCm } : {}),
+    ...(astNum ? { assistNumber: astNum } : {}),
+    origin: { x: Math.round(g.origin.x * 10) / 10, y: Math.round(g.origin.y * 10) / 10 },
+    distance: Math.round(g.distance * 10) / 10,
+    bodyPart: g.bodyPart,
+    technique: g.technique,
+    situation: g.situation,
+    target: g.target,
+  }
+}
+
+/** 从权威战报生成紧凑可预览的战报卡片快照（不含双方战术板/隐藏属性等敏感信息）。 */
+export function buildChatSharedMatch(
+  record: MatchRecord,
+  colors: { homeColor: string; awayColor: string },
+): ChatSharedMatch {
+  const duration = record.durationSeconds ?? LOGIC_MATCH_SECONDS
+  const statByPlayer = buildStatByPlayer(record)
+  const goals: ChatSharedGoal[] = (record.goalDetails ?? []).slice(0, 12).map((g) => toChatSharedGoal(g, duration, statByPlayer))
   const highlights = extractMatchHighlights(record)
     .filter((h) => h.actionClip)
     .slice(0, 8)
@@ -286,6 +329,60 @@ export function buildChatSharedMatch(
   }
 }
 
+/** 从完整赛后战报中提取单粒进球的作者级 3D 播映快照，不回落到任意高光裁剪，保证定位精确。 */
+export function buildChatSharedGoal(
+  record: MatchRecord,
+  goalIndex: number,
+  colors: { homeColor: string; awayColor: string },
+): ChatSharedGoalClip | null {
+  const details = record.goalDetails ?? []
+  if (!Number.isInteger(goalIndex) || goalIndex < 0 || goalIndex >= details.length) return null
+
+  const rawGoal = details[goalIndex]
+  const scoreBefore = { home: 0, away: 0 }
+  for (let i = 0; i < goalIndex; i++) {
+    if (details[i].side === 'home') scoreBefore.home++
+    else scoreBefore.away++
+  }
+  const scoreAfter = {
+    home: scoreBefore.home + (rawGoal.side === 'home' ? 1 : 0),
+    away: scoreBefore.away + (rawGoal.side === 'away' ? 1 : 0),
+  }
+
+  const duration = record.durationSeconds ?? LOGIC_MATCH_SECONDS
+  const statByPlayer = buildStatByPlayer(record)
+  const goal = toChatSharedGoal(rawGoal, duration, statByPlayer)
+
+  const defendSide = rawGoal.side === 'home' ? 'away' : 'home'
+  const defendersStats = (record.playerStats ?? []).filter((p) => p.side === defendSide)
+  const keeper =
+    defendersStats.find((p) => (p.saves ?? 0) > 0) ??
+    defendersStats.find((p) => p.number === 1) ??
+    [...defendersStats].sort((a, b) => b.minutes - a.minutes)[0]
+
+  return {
+    kind: 'goal',
+    recordId: record.id,
+    goalIndex,
+    competition: competitionLabelOf(record),
+    homeName: record.homeName,
+    awayName: record.awayName,
+    homeColor: sanitizeChatColor(colors.homeColor),
+    awayColor: sanitizeChatColor(colors.awayColor),
+    scoreBefore,
+    scoreAfter,
+    goal,
+    ...(keeper
+      ? {
+          keeperName: keeper.name,
+          ...(keeper.appearanceId ? { keeperAppearanceId: keeper.appearanceId } : {}),
+          ...(keeper.height ? { keeperHeight: keeper.height } : {}),
+          ...(keeper.number ? { keeperNumber: keeper.number } : {}),
+        }
+      : {}),
+  }
+}
+
 function isValidChatAttachment(raw: unknown): raw is ChatAttachment {
   if (!raw || typeof raw !== 'object') return false
   const obj = raw as Record<string, unknown>
@@ -324,6 +421,32 @@ function isValidChatAttachment(raw: unknown): raw is ChatAttachment {
       Array.isArray(stats.xg) &&
       Array.isArray(obj.goals) &&
       Array.isArray(obj.highlights)
+    )
+  }
+  if (obj.kind === 'goal') {
+    const scoreBefore = obj.scoreBefore as Record<string, unknown> | undefined
+    const scoreAfter = obj.scoreAfter as Record<string, unknown> | undefined
+    const goal = obj.goal as Record<string, unknown> | undefined
+    return (
+      typeof obj.recordId === 'string' &&
+      typeof obj.goalIndex === 'number' &&
+      Number.isInteger(obj.goalIndex) &&
+      obj.goalIndex >= 0 &&
+      typeof obj.competition === 'string' &&
+      typeof obj.homeName === 'string' &&
+      typeof obj.awayName === 'string' &&
+      typeof obj.homeColor === 'string' &&
+      typeof obj.awayColor === 'string' &&
+      !!scoreBefore &&
+      typeof scoreBefore.home === 'number' &&
+      typeof scoreBefore.away === 'number' &&
+      !!scoreAfter &&
+      typeof scoreAfter.home === 'number' &&
+      typeof scoreAfter.away === 'number' &&
+      !!goal &&
+      typeof goal.minute === 'string' &&
+      typeof goal.playerName === 'string' &&
+      (goal.side === 'home' || goal.side === 'away')
     )
   }
   return false

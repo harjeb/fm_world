@@ -3,7 +3,7 @@ import { computeTeamRankTrend, type RankTrendSummary } from '../game/standings-h
 import { PLAYER_TEAM_ID, teamName } from '../game/season.ts'
 import { worldDivisionLabel } from '../game/world.ts'
 import { onlineState, publicWorld } from '../online.ts'
-import { clubLook, crest, ownName, panel, tag } from './components.ts'
+import { clubLook, crest, panel, styledClubName, tag } from './components.ts'
 import { esc } from './format.ts'
 import { tipAttrs } from './tooltip.ts'
 import { game } from './state.ts'
@@ -206,7 +206,7 @@ export function renderClubRankTrendPanel(clubId: string, options: { extraAside?:
     const clubTitle = targetId === PLAYER_TEAM_ID ? game.clubName : (clubMeta?.name ?? clubLook(targetId).name)
     const divLabel = game.world ? worldDivisionLabel(game.world, division.id) : division.id
     const color = clubMeta?.color ?? clubLook(targetId).color
-    const title = options.titlePrefix ?? `${ownName(clubTitle, targetId === PLAYER_TEAM_ID)} · 本赛季排名变化`
+    const title = options.titlePrefix ?? `${styledClubName(targetId, clubTitle, targetId === PLAYER_TEAM_ID)} · 本赛季排名变化`
     return panel(
       title,
       renderRankTrendChart(trend, {
@@ -237,7 +237,7 @@ export function renderClubRankTrendPanel(clubId: string, options: { extraAside?:
     const look = clubLook(clubId)
     const divId = division.divisionId ?? world.playerDivisionId
     const divLabel = worldDivisionLabel(world, divId)
-    const title = options.titlePrefix ?? `${ownName(look.name, clubId === PLAYER_TEAM_ID)} · 本赛季排名变化`
+    const title = options.titlePrefix ?? `${styledClubName(clubId, look.name, clubId === PLAYER_TEAM_ID)} · 本赛季排名变化`
     return panel(
       title,
       renderRankTrendChart(trend, {
@@ -263,7 +263,7 @@ export function renderClubRankTrendPanel(clubId: string, options: { extraAside?:
   if (!teamIds.includes(clubId)) return ''
   const trend = computeTeamRankTrend({ teamId: clubId, teamIds, fixtures: season.fixtures, names })
   const look = { name: teamName(game, clubId), color: clubLook(clubId).color }
-  const title = options.titlePrefix ?? `${ownName(look.name, clubId === PLAYER_TEAM_ID)} · 本赛季排名变化`
+  const title = options.titlePrefix ?? `${styledClubName(clubId, look.name, clubId === PLAYER_TEAM_ID)} · 本赛季排名变化`
   return panel(
     title,
     renderRankTrendChart(trend, {

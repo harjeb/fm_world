@@ -150,4 +150,28 @@ describe('挑战页面', () => {
       game.activeMatch = previousActive
     }
   })
+
+  it('传奇挑战对已击败与已打平的队伍分别使用颜色行样式与状态标签标注', () => {
+    const prevLegends = structuredClone(game.pve!.legends)
+    try {
+      game.pve!.legends = {
+        'barcelona-2010-11': { played: 2, won: 1, drawn: 0, lost: 1, goals: 3, conceded: 2 },
+        'real-madrid-2016-17': { played: 1, won: 0, drawn: 1, lost: 0, goals: 1, conceded: 1 },
+        'milan-1988-89': { played: 2, won: 0, drawn: 0, lost: 2, goals: 0, conceded: 4 },
+      }
+      ui.challengeMode = 'legend'
+      ui.legendTier = 'ALL'
+      ui.legendSearch = ''
+      ui.legendCountry = 'ALL'
+      ui.legendEra = 'ALL'
+      const html = renderChallenge()
+      expect(html).toContain('<tr class="legend-row-won">')
+      expect(html).toContain('<span class="tag good">已击败</span> 1胜 0平 1负')
+      expect(html).toContain('<tr class="legend-row-drawn">')
+      expect(html).toContain('<span class="tag gold">已打平</span> 0胜 1平 0负')
+      expect(html).toContain('0胜 0平 2负')
+    } finally {
+      game.pve!.legends = prevLegends
+    }
+  })
 })

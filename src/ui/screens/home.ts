@@ -10,7 +10,7 @@ import { BOARD_AMBITION_META, BOARD_CHOICE_MAX_ROUND, canSwitchCurrentBoardAmbit
 import { achievementSummary } from '../../game/achievements.ts'
 import { legendCupMetaById } from '../../game/data/legend-cup-teams.ts'
 import { isOnlineMode, serverNow } from '../../online.ts'
-import { assetUrl, boardMarkings, boardSpot, caHeat, clubLook, crest, emptyState, formPills, humanMark, icon, injuryLabel, leagueTable, meter, ownName, pageHead, panel, recordResult, resultPill, tag, teamForm, tile } from '../components.ts'
+import { assetUrl, boardMarkings, boardSpot, caHeat, clubLook, crest, emptyState, formPills, humanMark, icon, injuryLabel, leagueTable, meter, pageHead, panel, recordResult, resultPill, styledClubName, tag, teamForm, tile } from '../components.ts'
 import { isHighOffer } from '../../game/transfers.ts'
 import { countdownText, cupRoundLabel, esc, kickoffTimeLabel, matchModeLabel, playerCA, pveModeLabel, shortName } from '../format.ts'
 import { game, ui } from '../state.ts'
@@ -35,7 +35,7 @@ function nextMatchSide(teamId: string, align: 'left' | 'right', isMe: boolean): 
   return `<div class="nm-team ${align} ${isMe ? 'me' : ''}">
     ${crest(look, 64)}
     <div class="nm-team-text">
-      <b>${esc(look.name)}${humanMark(teamId)}</b>
+      <b>${styledClubName(teamId, look.name, isMe)}${humanMark(teamId)}</b>
       <span class="muted">${esc(meta)}</span>
       ${formPills(teamForm(teamId, game.season.fixtures))}
     </div>
@@ -49,7 +49,7 @@ function recentLeagueResult(): string {
   const record = fixture.matchId
     ? game.matchHistory.find(item => item.id === fixture.matchId)
     : game.matchHistory.find(item => item.isLeague && item.round === fixture.round && (item.seasonIndex === game.season.index || item.seasonIndex === undefined && game.season.index === 1))
-  const text = `<span class="nm-recent-label">第 ${fixture.round} 轮结果</span><span>${ownName(teamName(game, fixture.homeId), fixture.homeId === PLAYER_TEAM_ID)} <b>${fixture.score.home} : ${fixture.score.away}</b> ${ownName(teamName(game, fixture.awayId), fixture.awayId === PLAYER_TEAM_ID)}</span>`
+  const text = `<span class="nm-recent-label">第 ${fixture.round} 轮结果</span><span>${styledClubName(fixture.homeId, teamName(game, fixture.homeId), fixture.homeId === PLAYER_TEAM_ID)} <b>${fixture.score.home} : ${fixture.score.away}</b> ${styledClubName(fixture.awayId, teamName(game, fixture.awayId), fixture.awayId === PLAYER_TEAM_ID)}</span>`
   return record
     ? `<button class="nm-recent" data-action="open-review" data-record="${esc(record.id)}">${text}<small>查看战报 ${icon('right', 12)}</small></button>`
     : `<div class="nm-recent">${text}</div>`
@@ -100,13 +100,13 @@ function nextMatchPanel(): string {
     if (isOnlineMode() && inPostseason(game, now)) {
       return panel('赛后休整', `<div class="nm-stack"><div class="nm-live">
         <div>${icon('clock', 22)}</div>
-        <div><b>冠军：${ownName(teamName(game, season.champion ?? ''), season.champion === PLAYER_TEAM_ID)} · 距下赛季 ${esc(nextSeasonCountdown(game, now))}</b><p class="muted">你的最终排名：第 ${season.playerFinish ?? '—'} 名。${promo?.championId ? '升级杯已完赛，升降级与合同将在下赛季开启时自动结算。' : '休整期间可调整阵容与约友谊赛，下赛季将自动开启。'}</p></div>
+        <div><b>冠军：${styledClubName(season.champion ?? undefined, teamName(game, season.champion ?? ''), season.champion === PLAYER_TEAM_ID)} · 距下赛季 ${esc(nextSeasonCountdown(game, now))}</b><p class="muted">你的最终排名：第 ${season.playerFinish ?? '—'} 名。${promo?.championId ? '升级杯已完赛，升降级与合同将在下赛季开启时自动结算。' : '休整期间可调整阵容与约友谊赛，下赛季将自动开启。'}</p></div>
         ${promo ? '<button class="btn primary" data-action="go-cup" data-cup="promotion">查看升级杯结果</button>' : ''}
       </div>${recentLeagueResult()}</div>`, { className: 'next-match span-8' })
     }
     return panel('赛季结束', `<div class="nm-stack"><div class="nm-live">
       <div>${icon('star', 22)}</div>
-      <div><b>冠军：${ownName(teamName(game, season.champion ?? ''), season.champion === PLAYER_TEAM_ID)}</b><p class="muted">你的最终排名：第 ${season.playerFinish ?? '—'} 名。升降级和合同会在新赛季开始时结算。</p></div>
+      <div><b>冠军：${styledClubName(season.champion ?? undefined, teamName(game, season.champion ?? ''), season.champion === PLAYER_TEAM_ID)}</b><p class="muted">你的最终排名：第 ${season.playerFinish ?? '—'} 名。升降级和合同会在新赛季开始时结算。</p></div>
       <button class="btn primary" data-action="next-season">${icon('play', 14)}开始下一赛季</button>
     </div>${recentLeagueResult()}</div>`, { className: 'next-match span-8' })
   }
@@ -206,7 +206,7 @@ function recentPanel(): string {
     ? '<p class="muted pad">还没有比赛记录。</p>'
     : `<div class="rows">${records.map((record) => `<button class="row-btn result-row" data-action="open-review" data-record="${esc(record.id)}">
         ${resultPill(recordResult(record.result))}
-        <span class="result-teams">${ownName(record.homeName, record.homeId === PLAYER_TEAM_ID)} <b>${record.score.home}:${record.score.away}</b> ${ownName(record.awayName, record.awayId === PLAYER_TEAM_ID)}${record.shootout ? ` <small class="muted">点球 ${record.shootout.home}:${record.shootout.away}</small>` : ''}</span>
+        <span class="result-teams">${styledClubName(record.homeId, record.homeName, record.homeId === PLAYER_TEAM_ID)} <b>${record.score.home}:${record.score.away}</b> ${styledClubName(record.awayId, record.awayName, record.awayId === PLAYER_TEAM_ID)}${record.shootout ? ` <small class="muted">点球 ${record.shootout.home}:${record.shootout.away}</small>` : ''}</span>
         ${recentModeBadge(record)}
       </button>`).join('')}</div>`
   return panel('最近比赛', body, { flush: true, aside: `<button class="link" data-nav="review">全部复盘 ${icon('right', 12)}</button>` })
@@ -395,7 +395,7 @@ export function renderHome(): string {
     ${pageHead({
       lead: crest(look, 52),
       kicker: `第 ${game.season.index} 赛季 · ${esc(divisionText())}`,
-      title: ownName(game.clubName),
+      title: styledClubName(PLAYER_TEAM_ID, game.clubName, true),
       banner: assetUrl('assets/banners/banner-home-matchday.webp'),
       bannerPosition: '78% 58%',
       accent: look.color,

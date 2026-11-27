@@ -153,8 +153,12 @@ export type UIState = {
   /** 全服聊天侧边抽屉是否打开。 */
   chatOpen: boolean
   chatError: string
-  /** 待发送到全服聊天的角色卡名片或战报附件草稿。 */
-  chatPendingShare: ({ kind: 'card'; cardId: string; label: string } | { kind: 'match'; recordId: string; label: string }) | null
+  /** 待发送到全服聊天的角色卡名片、整场战报或单粒 3D 进球附件草稿。 */
+  chatPendingShare: (
+    | { kind: 'card'; cardId: string; label: string }
+    | { kind: 'match'; recordId: string; label: string }
+    | { kind: 'goal'; recordId: string; goalIndex: number; label: string }
+  ) | null
   /** 正在弹窗预览的全服聊天分享消息 ID。 */
   chatPreviewMsgId: string | null
   /** 手机端底部“全部页面”导航抽屉是否打开。 */

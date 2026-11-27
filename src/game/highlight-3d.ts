@@ -9,7 +9,7 @@
  *    点球对决、关键神扑与门框惊魂六类高光演出。
  */
 import { deriveAppearanceId, resolve3DAppearance } from './appearance.ts'
-import type { ChatSharedGoal, ChatSharedMatch } from './chat.ts'
+import type { ChatSharedGoal, ChatSharedGoalClip, ChatSharedMatch } from './chat.ts'
 import { displayClock, LOGIC_MATCH_SECONDS } from './match/time.ts'
 import { shotPositionText, shotTargetText } from './match/shooting.ts'
 import { finishBall, netImpact, POST_DURATION, settleNonGoalBall, type Impact, type Vec3 } from './penalty/net.ts'
@@ -50,6 +50,8 @@ export type Highlight3DTeam = {
 export type Highlight3DClip = {
   id: string
   index: number
+  /** 若来自某场战报的进球详情，对应 `record.goalDetails` 数组下标。 */
+  goalIndex?: number
   minute: number
   minuteLabel: string
   clock: number
@@ -180,7 +182,7 @@ function makeActor(
   name: string,
   teamName: string,
   fallbackNum: number,
-  rosterLookup?: Map<string, RosterActorHint>,
+  rosterLookup?: ReadonlyMap<string, RosterActorHint>,
   hints?: { appearanceId?: string; height?: number; number?: number; isKeeper?: boolean },
 ): Highlight3DActor {
   const cleanId = rawId.trim().replace(/^(?:home|away):/, '')
@@ -224,6 +226,7 @@ function makeActor(
 function buildSingleClip(params: {
   id: string
   index: number
+  goalIndex?: number
   minute: number
   clock: number
   side: 'home' | 'away'
@@ -376,6 +379,7 @@ function buildSingleClip(params: {
   return {
     id: params.id,
     index: params.index,
+    ...(params.goalIndex !== undefined ? { goalIndex: params.goalIndex } : {}),
     minute: params.minute,
     minuteLabel,
     clock: params.clock,
@@ -506,13 +510,13 @@ export function buildHighlight3DClipsFromRecord(
   const awayDefenders = buildSideDefenders('away')
 
   type RawEvent =
-    | { clock: number; kind: 'goal'; goal: GoalDetail }
+    | { clock: number; kind: 'goal'; goal: GoalDetail; goalIndex: number }
     | { clock: number; kind: 'save' | 'frame'; entry: MatchLogEntry }
 
   const rawList: RawEvent[] = []
-  for (const g of record.goalDetails ?? []) {
-    rawList.push({ clock: g.clock, kind: 'goal', goal: g })
-  }
+  ;(record.goalDetails ?? []).forEach((g, goalIndex) => {
+    rawList.push({ clock: g.clock, kind: 'goal', goal: g, goalIndex })
+  })
 
   // 补充最多 2~4 个极具观赏性的非进球扑救/中柱绝佳镜头（尤其 0:0 时保证也有高光可看）
   const maxExtras = rawList.length === 0 ? 4 : 2
@@ -612,6 +616,7 @@ export function buildHighlight3DClipsFromRecord(
         buildSingleClip({
           id: `${record.id}-hl3d-${idx}`,
           index: idx,
+          goalIndex: item.goalIndex,
           minute,
           clock: g.clock,
           side: g.side,
@@ -679,6 +684,87 @@ export function buildHighlight3DClipsFromRecord(
   return clips
 }
 
+function buildSharedGoalClipCore(params: {
+  clipId: string
+  index: number
+  goalIndex?: number
+  recordId: string
+  seedKey: string
+  g: ChatSharedGoal
+  scoreBefore: { home: number; away: number }
+  scoreAfter: { home: number; away: number }
+  homeTeam: Highlight3DTeam
+  awayTeam: Highlight3DTeam
+  homeGk: Highlight3DActor
+  awayGk: Highlight3DActor
+  homeDefs: Highlight3DActor[]
+  awayDefs: Highlight3DActor[]
+  rosterLookup?: ReadonlyMap<string, RosterActorHint>
+}): Highlight3DClip {
+  const { clipId, index, goalIndex, recordId, seedKey, g, scoreBefore, scoreAfter, homeTeam, awayTeam, homeGk, awayGk, homeDefs, awayDefs, rosterLookup } = params
+  const h = hash32(`${recordId}|g|${goalIndex ?? index}|${g.playerName}`)
+  const minNum = parseInt(g.minute, 10)
+  const minute = Number.isFinite(minNum) ? clamp(minNum, 1, 90) : 45
+  const dist = g.distance ?? (11.5 + (h % 11))
+  const fallbackOrigin =
+    g.side === 'home'
+      ? { x: clamp(100 - dist * 0.94, 76, 93), y: 21 + ((h >>> 3) % 22) }
+      : { x: clamp(dist * 0.94, 7, 24), y: 21 + ((h >>> 3) % 22) }
+  const zones: GoalDetail['target'][] = ['top_left', 'top_right', 'bottom_left', 'bottom_right', 'bottom_center']
+  const bodyParts: GoalDetail['bodyPart'][] = ['right', 'left', 'head']
+  const bodyPart = g.bodyPart ?? bodyParts[(h >>> 6) % (g.assistName ? 3 : 2)]
+  const technique: GoalDetail['technique'] =
+    g.technique ?? (bodyPart === 'head' ? 'header' : (h & 4) ? 'power' : 'placed')
+  const situation = g.situation ?? 'open'
+  const targetZone = g.target ?? zones[(h >>> 9) % zones.length]
+  const attackTeam = g.side === 'home' ? homeTeam : awayTeam
+  const defendTeam = g.side === 'home' ? awayTeam : homeTeam
+
+  const strikerFallbackNum = 9 + (hash32(`${attackTeam.name}:${g.playerName}`) % 3)
+  const assistFallbackNum = g.assistName ? 7 + (hash32(`${attackTeam.name}:${g.assistName}`) % 4) : 10
+
+  return buildSingleClip({
+    id: clipId,
+    index,
+    ...(goalIndex !== undefined ? { goalIndex } : {}),
+    minute,
+    clock: minute * 10,
+    side: g.side,
+    outcome: 'goal',
+    scoreBefore,
+    scoreAfter,
+    attackTeam,
+    defendTeam,
+    striker: makeActor(
+      `${attackTeam.name}:${g.playerName}`,
+      g.playerName,
+      attackTeam.name,
+      strikerFallbackNum,
+      rosterLookup,
+      { appearanceId: g.appearanceId, height: g.height, number: g.number },
+    ),
+    keeper: g.side === 'home' ? awayGk : homeGk,
+    assister: g.assistName
+      ? makeActor(
+          `${attackTeam.name}:${g.assistName}`,
+          g.assistName,
+          attackTeam.name,
+          assistFallbackNum,
+          rosterLookup,
+          { appearanceId: g.assistAppearanceId, height: g.assistHeight, number: g.assistNumber },
+        )
+      : undefined,
+    defenders: g.side === 'home' ? awayDefs : homeDefs,
+    origin: g.origin ?? fallbackOrigin,
+    distance: dist,
+    bodyPart,
+    technique,
+    situation,
+    targetZone,
+    seedKey,
+  })
+}
+
 /**
  * 从全服聊天分享的战报快照（ChatSharedMatch）合成 3D 进球/高光片段。
  * 新分享自带精确射门坐标/部位/落点与绑定 `appearanceId`；旧消息缺省时按「俱乐部+姓名」稳定绑定同一外貌。
@@ -686,7 +772,7 @@ export function buildHighlight3DClipsFromRecord(
 export function buildHighlight3DClipsFromSharedMatch(
   match: ChatSharedMatch,
   kits: { home: string; away: string },
-  rosterLookup?: Map<string, RosterActorHint>,
+  rosterLookup?: ReadonlyMap<string, RosterActorHint>,
 ): Highlight3DClip[] {
   const homeTeam: Highlight3DTeam = { name: match.homeName, color: kits.home }
   const awayTeam: Highlight3DTeam = { name: match.awayName, color: kits.away }
@@ -731,70 +817,86 @@ export function buildHighlight3DClipsFromSharedMatch(
   let homeScore = 0
   let awayScore = 0
   return match.goals.map((g: ChatSharedGoal, idx: number) => {
-    const h = hash32(`${match.recordId}|g|${idx}|${g.playerName}`)
     const before = { home: homeScore, away: awayScore }
     if (g.side === 'home') homeScore++
     else awayScore++
     const after = { home: homeScore, away: awayScore }
-    const minNum = parseInt(g.minute, 10)
-    const minute = Number.isFinite(minNum) ? clamp(minNum, 1, 90) : 45
-    const dist = g.distance ?? (11.5 + (h % 11))
-    const fallbackOrigin =
-      g.side === 'home'
-        ? { x: clamp(100 - dist * 0.94, 76, 93), y: 21 + ((h >>> 3) % 22) }
-        : { x: clamp(dist * 0.94, 7, 24), y: 21 + ((h >>> 3) % 22) }
-    const zones: GoalDetail['target'][] = ['top_left', 'top_right', 'bottom_left', 'bottom_right', 'bottom_center']
-    const bodyParts: GoalDetail['bodyPart'][] = ['right', 'left', 'head']
-    const bodyPart = g.bodyPart ?? bodyParts[(h >>> 6) % (g.assistName ? 3 : 2)]
-    const technique: GoalDetail['technique'] =
-      g.technique ?? (bodyPart === 'head' ? 'header' : (h & 4) ? 'power' : 'placed')
-    const situation = g.situation ?? 'open'
-    const targetZone = g.target ?? zones[(h >>> 9) % zones.length]
-    const attackTeam = g.side === 'home' ? homeTeam : awayTeam
-    const defendTeam = g.side === 'home' ? awayTeam : homeTeam
-
-    const strikerFallbackNum = 9 + (hash32(`${attackTeam.name}:${g.playerName}`) % 3)
-    const assistFallbackNum = g.assistName ? 7 + (hash32(`${attackTeam.name}:${g.assistName}`) % 4) : 10
-
-    return buildSingleClip({
-      id: `${match.recordId}-chat3d-${idx}`,
+    return buildSharedGoalClipCore({
+      clipId: `${match.recordId}-chat3d-${idx}`,
       index: idx,
-      minute,
-      clock: minute * 10,
-      side: g.side,
-      outcome: 'goal',
+      goalIndex: idx,
+      recordId: match.recordId,
+      seedKey: `${match.recordId}|chat|${idx}`,
+      g,
       scoreBefore: before,
       scoreAfter: after,
-      attackTeam,
-      defendTeam,
-      striker: makeActor(
-        `${attackTeam.name}:${g.playerName}`,
-        g.playerName,
-        attackTeam.name,
-        strikerFallbackNum,
-        rosterLookup,
-        { appearanceId: g.appearanceId, height: g.height, number: g.number },
-      ),
-      keeper: g.side === 'home' ? awayGk : homeGk,
-      assister: g.assistName
-        ? makeActor(
-            `${attackTeam.name}:${g.assistName}`,
-            g.assistName,
-            attackTeam.name,
-            assistFallbackNum,
-            rosterLookup,
-            { appearanceId: g.assistAppearanceId, height: g.assistHeight, number: g.assistNumber },
-          )
-        : undefined,
-      defenders: g.side === 'home' ? awayDefs : homeDefs,
-      origin: g.origin ?? fallbackOrigin,
-      distance: dist,
-      bodyPart,
-      technique,
-      situation,
-      targetZone,
-      seedKey: `${match.recordId}|chat|${idx}`,
+      homeTeam,
+      awayTeam,
+      homeGk,
+      awayGk,
+      homeDefs,
+      awayDefs,
+      rosterLookup,
     })
+  })
+}
+
+/**
+ * 从全服聊天分享的单个进球快照（ChatSharedGoalClip）直接合成可播放的单球 3D 特写片段。
+ */
+export function buildHighlight3DClipFromSharedGoal(
+  shared: ChatSharedGoalClip,
+  kits?: { home: string; away: string },
+  rosterLookup?: ReadonlyMap<string, RosterActorHint>,
+): Highlight3DClip {
+  const homeTeam: Highlight3DTeam = { name: shared.homeName, color: kits?.home ?? shared.homeColor }
+  const awayTeam: Highlight3DTeam = { name: shared.awayName, color: kits?.away ?? shared.awayColor }
+  const defendHome = shared.goal.side === 'away'
+  const buildKeeper = (isHomeKeeper: boolean): Highlight3DActor => {
+    const teamName = isHomeKeeper ? shared.homeName : shared.awayName
+    const isActiveKeeper = (defendHome && isHomeKeeper) || (!defendHome && !isHomeKeeper)
+    const name = isActiveKeeper && shared.keeperName ? shared.keeperName : `${teamName}门将`
+    return makeActor(
+      `${teamName}:${name}`,
+      name,
+      teamName,
+      (isActiveKeeper && shared.keeperNumber) || 1,
+      rosterLookup,
+      isActiveKeeper
+        ? {
+            appearanceId: shared.keeperAppearanceId,
+            height: shared.keeperHeight,
+            number: shared.keeperNumber || 1,
+            isKeeper: true,
+          }
+        : { isKeeper: true },
+    )
+  }
+  const homeGk = buildKeeper(true)
+  const awayGk = buildKeeper(false)
+  const homeDefs = Array.from({ length: 4 }, (_, i) =>
+    makeActor(`${shared.homeName}:def-${i + 2}`, `后卫${i + 2}`, shared.homeName, 2 + i, rosterLookup),
+  )
+  const awayDefs = Array.from({ length: 4 }, (_, i) =>
+    makeActor(`${shared.awayName}:def-${i + 2}`, `后卫${i + 2}`, shared.awayName, 2 + i, rosterLookup),
+  )
+
+  return buildSharedGoalClipCore({
+    clipId: `${shared.recordId}-chatgoal3d-${shared.goalIndex}`,
+    index: 0,
+    goalIndex: shared.goalIndex,
+    recordId: shared.recordId,
+    seedKey: `${shared.recordId}|chat|${shared.goalIndex}`,
+    g: shared.goal,
+    scoreBefore: shared.scoreBefore,
+    scoreAfter: shared.scoreAfter,
+    homeTeam,
+    awayTeam,
+    homeGk,
+    awayGk,
+    homeDefs,
+    awayDefs,
+    rosterLookup,
   })
 }
 

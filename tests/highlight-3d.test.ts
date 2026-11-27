@@ -6,9 +6,10 @@ import {
   resolve3DAppearance,
   SKIN_PALETTE,
 } from '../src/game/appearance.ts'
-import { buildChatSharedMatch, type ChatSharedMatch } from '../src/game/chat.ts'
+import { buildChatSharedGoal, buildChatSharedMatch, type ChatSharedMatch } from '../src/game/chat.ts'
 import { createPlayerFromSeed, PLAYER_SEEDS } from '../src/game/data/players.ts'
 import {
+  buildHighlight3DClipFromSharedGoal,
   buildHighlight3DClipsFromRecord,
   buildHighlight3DClipsFromSharedMatch,
   goalOriginTo3D,
@@ -438,6 +439,31 @@ describe('Player 3D Appearance Models & Persistent ID Binding', () => {
     expect(braceClips[0].striker.appearanceId).toBe(braceClips[1].striker.appearanceId)
     expect(braceClips[0].striker.height).toBe(braceClips[1].striker.height)
     expect(braceClips[0].striker.number).toBe(braceClips[1].striker.number)
+
+    // 单球 3D 分享（buildChatSharedGoal -> buildHighlight3DClipFromSharedGoal）：精准保留 goalIndex、瞬间比分与出场造型
+    const clipsWithGoalIndex = buildHighlight3DClipsFromRecord(rec, { home: '#2474ff', away: '#e63946' })
+    const secondGoalClip = clipsWithGoalIndex.find((c) => c.goalIndex === 1)
+    expect(secondGoalClip?.isGoal).toBe(true)
+    const nonGoalClip = clipsWithGoalIndex.find((c) => !c.isGoal)
+    expect(nonGoalClip?.goalIndex).toBeUndefined()
+
+    const sharedSecondGoal = buildChatSharedGoal(rec, 1, { homeColor: '#2474ff', awayColor: '#e63946' })!
+    expect(sharedSecondGoal).not.toBeNull()
+    expect(sharedSecondGoal.goalIndex).toBe(1)
+    expect(sharedSecondGoal.scoreBefore).toEqual({ home: 1, away: 0 })
+    expect(sharedSecondGoal.scoreAfter).toEqual({ home: 1, away: 1 })
+    const reconstructedSecond = buildHighlight3DClipFromSharedGoal(sharedSecondGoal, { home: '#2474ff', away: '#e63946' })
+    expect(reconstructedSecond.isGoal).toBe(true)
+    expect(reconstructedSecond.goalIndex).toBe(1)
+    expect(reconstructedSecond.scoreBefore).toEqual({ home: 1, away: 0 })
+    expect(reconstructedSecond.scoreAfter).toEqual({ home: 1, away: 1 })
+    expect(reconstructedSecond.striker.appearanceId).toBe(chatClips[1].striker.appearanceId)
+
+    const sharedPenaltyGoal = buildChatSharedGoal(rec, 3, { homeColor: '#2474ff', awayColor: '#e63946' })!
+    const reconstructedPenalty = buildHighlight3DClipFromSharedGoal(sharedPenaltyGoal, { home: '#2474ff', away: '#e63946' })
+    expect(reconstructedPenalty.striker.appearanceId).toBe(linFengApp)
+    expect(reconstructedPenalty.striker.height).toBe(186)
+    expect(buildChatSharedGoal(rec, 99, { homeColor: '#2474ff', awayColor: '#e63946' })).toBeNull()
   })
 })
 

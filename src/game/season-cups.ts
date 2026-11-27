@@ -1,4 +1,4 @@
-import type { CupTableRow, SeasonState, SeasonTableRow, TierId, WorldState } from './types.ts'
+import type { CupTableRow, GameState, SeasonState, SeasonTableRow, TierId, TrophyRecord, WorldState } from './types.ts'
 import { computeWorldTable, promotionSpotCount } from './world.ts'
 import { emptyCupRow, sortCupTable, updateCupTable } from './cup-table.ts'
 import { derivedRng, splitSeed } from './rng.ts'
@@ -1018,4 +1018,180 @@ export function advanceSeasonCup(cup: SeasonCup, seasonIndex: number, seed: numb
   if (winners.length === 1) { cup.championId = winners[0]; return }
   if (!cup.dates[current.round]) throw new Error('杯赛缺少下一轮时间')
   cup.rounds.push(makeRound(cup, seasonIndex, current.round + 1, winners, seed))
+}
+
+export type ClubCupHonors = {
+  /** 传奇杯夺冠赛季号列表（升序，不含非正式联赛的特邀历史模板队）。 */
+  legendSeasons: number[]
+  /** 星联杯夺冠赛季号列表（升序，包含 S2 及后续赛季记录）。 */
+  crossSeasons: number[]
+}
+
+const EMPTY_CLUB_CUP_HONORS: ClubCupHonors = Object.freeze({ legendSeasons: [], crossSeasons: [] }) as ClubCupHonors
+
+function resolvedCupChampionId(cup: Pick<SeasonCup, 'championId' | 'rounds'>): string | undefined {
+  if (cup.championId) return cup.championId
+  const lastRound = cup.rounds.at(-1)
+  if (lastRound?.fixtures.length === 1 && lastRound.fixtures[0].played) {
+    return lastRound.fixtures[0].winnerId
+  }
+  return undefined
+}
+
+/**
+ * 汇总每支正式俱乐部历史上获得的「传奇杯」与「星联杯」夺冠赛季列表：
+ * - 传奇杯（legend）仅授予正常联赛俱乐部，严格排除特邀生成的临时传奇队（lcup-*）；
+ * - 星联杯（cross）从 world.seasonCupHistory（含 S2）与当前 seasonCups 读取，并对玩家自己的 trophy 记录做兜底补全。
+ */
+export function clubCupHonorsMap(
+  world: Pick<WorldState, 'clubs' | 'seasonCups' | 'seasonCupHistory'> | undefined,
+  options: { ownClubId?: string; playerTrophies?: ReadonlyArray<Pick<TrophyRecord, 'cupId' | 'seasonIndex'>> } = {},
+): Map<string, ClubCupHonors> {
+  const result = new Map<string, { legend: Set<number>; cross: Set<number> }>()
+  const leagueClubIds = new Set<string>(['player'])
+  const ownIds = new Set<string>(['player'])
+  for (const club of world?.clubs ?? []) {
+    leagueClubIds.add(club.id)
+    if (club.squadKey) leagueClubIds.add(club.squadKey)
+    if (club.id === 'player' && club.squadKey) ownIds.add(club.squadKey)
+  }
+  if (options.ownClubId) ownIds.add(options.ownClubId)
+
+  const recordToKey = (key: string, kind: 'legend' | 'cross', seasonIndex: number) => {
+    let entry = result.get(key)
+    if (!entry) {
+      entry = { legend: new Set<number>(), cross: new Set<number>() }
+      result.set(key, entry)
+    }
+    entry[kind].add(seasonIndex)
+  }
+
+  const addHonor = (rawClubId: string, kind: 'legend' | 'cross', seasonIndex: number) => {
+    if (!rawClubId || !Number.isInteger(seasonIndex) || seasonIndex <= 0) return
+    if (isLegendCupTeamId(rawClubId)) return
+    if (kind === 'legend' && !leagueClubIds.has(rawClubId)) return
+    if (ownIds.has(rawClubId)) {
+      for (const alias of ownIds) recordToKey(alias, kind, seasonIndex)
+    } else {
+      recordToKey(rawClubId, kind, seasonIndex)
+    }
+  }
+
+  const cupSeasons: SeasonCups[] = [
+    ...(world?.seasonCupHistory ?? []),
+    ...(world?.seasonCups ? [world.seasonCups] : []),
+  ]
+  for (const sc of cupSeasons) {
+    if (!sc || !Number.isInteger(sc.seasonIndex)) continue
+    for (const cup of sc.cups ?? []) {
+      if (cup.id !== 'legend' && cup.id !== 'cross') continue
+      const champId = resolvedCupChampionId(cup)
+      if (champId) addHonor(champId, cup.id, sc.seasonIndex)
+    }
+  }
+
+  for (const trophy of options.playerTrophies ?? []) {
+    if (trophy.cupId === 'season-legend') addHonor('player', 'legend', trophy.seasonIndex)
+    else if (trophy.cupId === 'season-cross') addHonor('player', 'cross', trophy.seasonIndex)
+  }
+
+  const finalized = new Map<string, ClubCupHonors>()
+  for (const [id, sets] of result) {
+    finalized.set(id, {
+      legendSeasons: [...sets.legend].sort((a, b) => a - b),
+      crossSeasons: [...sets.cross].sort((a, b) => a - b),
+    })
+  }
+  return finalized
+}
+
+type HonorsCacheEntry = {
+  seasonCups: WorldState['seasonCups']
+  seasonCupHistory: WorldState['seasonCupHistory']
+  clubsLength: number
+  playerSquadKey?: string
+  playerTrophies?: TrophyRecord[]
+  ownClubId?: string
+  map: Map<string, ClubCupHonors>
+}
+
+const worldHonorsCache = new WeakMap<WorldState, HonorsCacheEntry>()
+
+export function clubCupHonorsFor(
+  game: Pick<GameState, 'world' | 'pve'> | undefined,
+  clubId: string,
+  ownClubId?: string,
+): ClubCupHonors {
+  if (!clubId || isLegendCupTeamId(clubId)) return EMPTY_CLUB_CUP_HONORS
+  const world = game?.world
+  const trophies = game?.pve?.trophies
+  if (!world) {
+    if (!trophies?.length || clubId !== 'player') return EMPTY_CLUB_CUP_HONORS
+    return clubCupHonorsMap(undefined, { ownClubId, playerTrophies: trophies }).get(clubId) ?? EMPTY_CLUB_CUP_HONORS
+  }
+  const squadKey = world.clubs.find(c => c.id === 'player')?.squadKey
+  const cached = worldHonorsCache.get(world)
+  if (
+    cached &&
+    cached.seasonCups === world.seasonCups &&
+    cached.seasonCupHistory === world.seasonCupHistory &&
+    cached.clubsLength === world.clubs.length &&
+    cached.playerSquadKey === squadKey &&
+    cached.playerTrophies === trophies &&
+    cached.ownClubId === ownClubId
+  ) {
+    return cached.map.get(clubId) ?? EMPTY_CLUB_CUP_HONORS
+  }
+  const map = clubCupHonorsMap(world, { ownClubId, playerTrophies: trophies })
+  worldHonorsCache.set(world, {
+    seasonCups: world.seasonCups,
+    seasonCupHistory: world.seasonCupHistory,
+    clubsLength: world.clubs.length,
+    playerSquadKey: squadKey,
+    playerTrophies: trophies,
+    ownClubId,
+    map,
+  })
+  return map.get(clubId) ?? EMPTY_CLUB_CUP_HONORS
+}
+
+export type SeasonCupChampionEntry = {
+  seasonIndex: number
+  championId: string
+}
+
+/** 查询指定杯赛（不含升级杯）各赛季的历届冠军球队，按赛季倒序排列。 */
+export function seasonCupChampions(
+  game: Pick<GameState, 'world' | 'pve'> | undefined,
+  cupId: SeasonCupId,
+  ownId?: string,
+): SeasonCupChampionEntry[] {
+  if (cupId === 'promotion') return []
+  const world = game?.world
+  const bySeason = new Map<number, string>()
+  const cupSeasons: SeasonCups[] = [
+    ...(world?.seasonCupHistory ?? []),
+    ...(world?.seasonCups ? [world.seasonCups] : []),
+  ]
+  for (const sc of cupSeasons) {
+    if (!sc || !Number.isInteger(sc.seasonIndex) || sc.seasonIndex <= 0) continue
+    const cup = sc.cups?.find((item) => item.id === cupId)
+    if (!cup) continue
+    const champId = resolvedCupChampionId(cup)
+    if (champId) bySeason.set(sc.seasonIndex, champId)
+  }
+
+  const playerFallbackId = ownId ?? world?.clubs.find((c) => c.id === 'player')?.squadKey ?? 'player'
+  const targetTrophyCupId = `season-${cupId}`
+  for (const trophy of game?.pve?.trophies ?? []) {
+    if (trophy.cupId !== targetTrophyCupId) continue
+    if (!Number.isInteger(trophy.seasonIndex) || trophy.seasonIndex <= 0) continue
+    if (!bySeason.has(trophy.seasonIndex)) {
+      bySeason.set(trophy.seasonIndex, playerFallbackId)
+    }
+  }
+
+  return [...bySeason.entries()]
+    .map(([seasonIndex, championId]) => ({ seasonIndex, championId }))
+    .sort((a, b) => b.seasonIndex - a.seasonIndex)
 }

@@ -319,10 +319,10 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 ### 全服世界
 
 - `get_world` — 读取全服快照，和世界页 / 球队详情一致：`ownClubId`、`clubs[]`（`id`、`name`、`tier`、`conference`、`managed` 是否有教练执教、`rating` RANK、`players` 公开名单、电脑球队的 `facilities`）以及 `divisions[]`（各分区 `round`、`table`、`fixtures`）。只读。
-- `get_chat` — 读取全服聊天记录（最多返回最新的 50 条消息，含发送教练 `username`、所属俱乐部 `clubId` / `clubName`、消息 `text`、时间戳 `at`，以及可选内嵌分享名片 `share`——角色卡名片 `kind: "card"` 或比赛战报 `kind: "match"` 的权威公开快照）。只读。
-- `send_chat` — 在全服聊天频道发送消息，支持纯文字或附带晒角色卡 / 晒战报名片（含发言间隔限制）：
+- `get_chat` — 读取全服聊天记录（最多返回最新的 50 条消息，含发送教练 `username`、所属俱乐部 `clubId` / `clubName`、消息 `text`、时间戳 `at`，以及可选内嵌分享名片 `share`——角色卡名片 `kind: "card"`、比赛战报 `kind: "match"` 或单个 3D 进球动画 `kind: "goal"` 的权威公开快照）。只读。
+- `send_chat` — 在全服聊天频道发送消息，支持纯文字或附带晒角色卡 / 晒战报 / 晒单个 3D 进球（含发言间隔限制）：
   - `text?`：最多 200 字（自动折叠换行）；不传 `share` 时必填非空，传 `share` 时可省略或留空（服务器自动配默认分享文案）。
-  - `share?`：`{ "kind": "card", "cardId": "..." }`（来自 `state.cards[].id`）或 `{ "kind": "match", "recordId": "..." }`（来自 `state.matchHistory[].id` 或 `challengeHistory[].id`）。服务器直接从本账号库存/战报提取公开属性、CA、球风烙印、技能或比分/xG/进球明细，剥离隐藏属性且拒绝伪造。
+  - `share?`：`{ "kind": "card", "cardId": "..." }`（来自 `state.cards[].id`）、`{ "kind": "match", "recordId": "..." }`（来自 `state.matchHistory[].id` 或 `challengeHistory[].id`）或 `{ "kind": "goal", "recordId": "...", "goalIndex": 0 }`（对应战报 `goalDetails` 下标）。服务器直接从本账号库存/战报提取公开属性、CA、球风烙印、技能、比分/xG/进球明细或单球 3D 坐标与外观，剥离隐藏属性且拒绝伪造。
 - `rename_club` — `name`：联机时修改俱乐部名字。最多 8 个字（按字符算），去掉首尾空格；不能和全服任何其他球队重名（AI 球队或其他教练的球队，比较时忽略大小写和空格）；比赛进行中不能改。改名后全服看到的都是新名字。普通存档保存不能修改俱乐部名字。
 球队只能在注册时选择，注册完成后不能换队，Agent 也不能例外。注册前可用 `GET /api/registration/clubs` 预览可接管的先锋联赛球队及连续两个完整赛季无人上线后释放的各级别球队名单，在 `POST /api/register` 中传入 `clubId` 确认；旧的 `choose_club` 操作与 `/api/world/choose-club` 接口均返回错误。注册只继承球队已经存在的全服战绩及已锁定比赛，不重算历史，不增加注册准备期，正式联赛固定在北京时间 02:00 / 06:00 / 10:00 / 14:00 / 18:00 / 22:00 开球。
 

@@ -6,8 +6,9 @@
  * 以及 360° 拖拽自由视角、机位预设与 0.5× 慢动作回看。
  */
 import './penalty/training.css'
-import { sanitizeChatColor, type ChatSharedMatch } from '../game/chat.ts'
+import { sanitizeChatColor, type ChatSharedGoalClip, type ChatSharedMatch } from '../game/chat.ts'
 import {
+  buildHighlight3DClipFromSharedGoal,
   buildHighlight3DClipsFromRecord,
   buildHighlight3DClipsFromSharedMatch,
   sampleHighlight3DFrame,
@@ -194,6 +195,7 @@ export interface Highlight3DTheaterOptions {
   awayTeam: Highlight3DTeam
   clips: Highlight3DClip[]
   initialIndex?: number
+  onShareGoal?: (clip: Highlight3DClip) => void
 }
 
 export async function openHighlight3DTheater(opts: Highlight3DTheaterOptions): Promise<void> {
@@ -209,7 +211,10 @@ export async function openHighlight3DTheater(opts: Highlight3DTheaterOptions): P
         <h2 id="hl3d-dialog-title">${esc(opts.homeTeam.name)} vs ${esc(opts.awayTeam.name)}</h2>
         <span class="lab-club">${esc(opts.competitionLabel)} · 共 ${opts.clips.length} 镜</span>
       </div>
-      <button class="leave" type="button">关闭<span class="hl3d-long">剧场</span></button>
+      <div class="hl3d-head-actions">
+        ${opts.onShareGoal ? '<button class="hl3d-share-btn" type="button" data-hl3d-act="share" title="将当前这粒进球的 3D 动画分享到全服聊天">💬 分享<span class="hl3d-long">本球</span></button>' : ''}
+        <button class="leave" type="button">关闭<span class="hl3d-long">剧场</span></button>
+      </div>
     </header>
     <div class="pitch3">
       <div class="hl3d-stage">
@@ -289,6 +294,7 @@ export async function openHighlight3DTheater(opts: Highlight3DTheaterOptions): P
   const timeEl = d.querySelector<HTMLElement>('[data-hl3d-time]')!
   const toggleBtn = d.querySelector<HTMLButtonElement>('[data-hl3d-act="toggle"]')!
   const autoBtn = d.querySelector<HTMLButtonElement>('[data-hl3d-act="auto"]')!
+  const shareBtn = d.querySelector<HTMLButtonElement>('[data-hl3d-act="share"]')
   const slowBtn = d.querySelector<HTMLButtonElement>('[data-hl3d-slow]')!
   const presetBtns = [...d.querySelectorAll<HTMLButtonElement>('[data-cam-preset]')]
   const clipBtns = [...d.querySelectorAll<HTMLButtonElement>('[data-hl3d-clip]')]
@@ -357,9 +363,15 @@ export async function openHighlight3DTheater(opts: Highlight3DTheaterOptions): P
   let activePreset: 'default' | 'behind_goal' | 'side' | 'bird' | 'free' = 'default'
 
   function syncButtons() {
-    toggleBtn.textContent = playing ? '⏸ 暂停' : elapsed >= opts.clips[clipIdx].totalSec - 0.02 ? '↻ 重播' : '▶ 继续'
+    const clip = opts.clips[clipIdx]
+    toggleBtn.textContent = playing ? '⏸ 暂停' : elapsed >= clip.totalSec - 0.02 ? '↻ 重播' : '▶ 继续'
     autoBtn.classList.toggle('is-active', autoAdvance)
     autoBtn.innerHTML = autoAdvance ? '<span class="hl3d-long">自动</span>连播：开' : '<span class="hl3d-long">自动</span>连播：关'
+    if (shareBtn) {
+      const canShare = Boolean(opts.onShareGoal && clip.isGoal && clip.goalIndex !== undefined)
+      shareBtn.hidden = !canShare
+      shareBtn.disabled = !canShare
+    }
     slowBtn.classList.toggle('is-active', slowMo)
     clipBtns.forEach((b, idx) => b.classList.toggle('is-active', idx === clipIdx))
     presetBtns.forEach((b) => b.classList.toggle('is-active', b.dataset.camPreset === activePreset))
@@ -555,6 +567,12 @@ export async function openHighlight3DTheater(opts: Highlight3DTheaterOptions): P
       } else if (act === 'auto') {
         autoAdvance = !autoAdvance
         syncButtons()
+      } else if (act === 'share') {
+        const clip = opts.clips[clipIdx]
+        if (opts.onShareGoal && clip.isGoal && clip.goalIndex !== undefined) {
+          closeTheater()
+          opts.onShareGoal(clip)
+        }
       }
     },
     evOpts,
@@ -638,7 +656,11 @@ function buildWorldRosterLookup(): Map<string, RosterActorHint> {
 }
 
 /** 从赛后复盘战报打开 3D 高光剧场（可选直接定位到第 goalIndex 粒进球）。 */
-export async function openRecordHighlight3D(record: MatchRecord, goalIndex?: number): Promise<void> {
+export async function openRecordHighlight3D(
+  record: MatchRecord,
+  goalIndex?: number,
+  options?: { onShareGoal?: (clip: Highlight3DClip) => void },
+): Promise<void> {
   const homeRaw = clubLook(record.homeId).color
   const awayRaw = clubLook(record.awayId).color
   const kits =
@@ -650,8 +672,7 @@ export async function openRecordHighlight3D(record: MatchRecord, goalIndex?: num
   const clips = buildHighlight3DClipsFromRecord(record, kits, rosterLookup)
   let initialIndex = 0
   if (goalIndex !== undefined && goalIndex >= 0) {
-    const goalClips = clips.filter((c) => c.isGoal)
-    const targetGoal = goalClips[goalIndex]
+    const targetGoal = clips.find((c) => c.isGoal && c.goalIndex === goalIndex) ?? clips.filter((c) => c.isGoal)[goalIndex]
     if (targetGoal) initialIndex = targetGoal.index
   }
 
@@ -662,6 +683,7 @@ export async function openRecordHighlight3D(record: MatchRecord, goalIndex?: num
     awayTeam: { name: record.awayName, color: kits.away },
     clips,
     initialIndex,
+    onShareGoal: options?.onShareGoal,
   })
 }
 
@@ -678,5 +700,20 @@ export async function openSharedMatchHighlight3D(match: ChatSharedMatch, goalInd
     awayTeam: { name: match.awayName, color: awayKit },
     clips,
     initialIndex,
+  })
+}
+
+/** 从全服聊天单个进球 3D 分享卡片直接播放这粒进球的 3D 动画。 */
+export async function openSharedGoalHighlight3D(shared: ChatSharedGoalClip): Promise<void> {
+  const homeKit = sanitizeChatColor(shared.homeColor)
+  const awayKit = distinctKit(sanitizeChatColor(shared.awayColor), homeKit)
+  const rosterLookup = buildWorldRosterLookup()
+  const clip = buildHighlight3DClipFromSharedGoal(shared, { home: homeKit, away: awayKit }, rosterLookup)
+  await openHighlight3DTheater({
+    competitionLabel: shared.competition,
+    homeTeam: { name: shared.homeName, color: homeKit },
+    awayTeam: { name: shared.awayName, color: awayKit },
+    clips: [clip],
+    initialIndex: 0,
   })
 }

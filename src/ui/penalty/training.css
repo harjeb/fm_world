@@ -116,6 +116,37 @@ html.pk-modal-lock body {
   border-color: rgba(255, 107, 107, 0.42);
   color: #ffd0d0;
 }
+.hl3d-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.hl3d-share-btn {
+  flex: none;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #ecff98;
+  background: rgba(205, 243, 63, 0.16);
+  border: 1px solid rgba(205, 243, 63, 0.52);
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+.hl3d-share-btn:hover:not(:disabled) {
+  background: rgba(205, 243, 63, 0.28);
+  border-color: rgba(205, 243, 63, 0.8);
+  color: #f6ffca;
+}
+.hl3d-share-btn:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
 
 /* 3D Pitch Viewport (strictly locked against touch scroll/drag) */
 .penalty-lab .lab-head,
