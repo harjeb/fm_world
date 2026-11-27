@@ -1612,46 +1612,72 @@ circle.pm-5 { fill: var(--h6); }
 .picking > .ico { color: var(--accent); }
 .picking > span { flex: 1; min-width: 0; }
 
-/* ---------- 球员卡 ---------- */
-.card-group { margin-bottom: 12px; }
-.card-owner { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; min-height: 42px; padding: 7px 12px; border-bottom: 1px solid var(--line); }
-.card-owner .name-btn { font-size: 14px; font-weight: 600; }
-.card-owner-meter { display: inline-flex; align-items: center; gap: 6px; min-width: 130px; color: var(--text-3); font-size: 11.5px; }
-.card-owner-meter > span:first-child { flex: none; }
-.card-owner-action { margin-left: auto; }
-.pcard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(238px, 1fr)); gap: 10px; padding: 10px 12px 12px; }
-.pcard { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 10px; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: var(--radius); }
+/* ---------- 球员卡与技能书库存 ---------- */
+.inv-tabs { margin-bottom: 10px; }
+.card-group { margin-bottom: 9px; }
+.card-owner { display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; min-height: 36px; padding: 5px 10px; border-bottom: 1px solid var(--line); }
+.card-owner .name-btn { font-size: 13.5px; font-weight: 600; }
+.card-stat-pill { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text-3); font-size: 11px; white-space: nowrap; }
+.card-stat-pill b { font: 600 11.5px var(--font-num); color: var(--text); }
+.card-stat-pill.good b { color: var(--good); }
+.card-stat-pill.warn b { color: var(--warn); }
+.card-stat-pill.bad b { color: var(--bad); }
+.card-owner-action { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pcard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(224px, 1fr)); gap: 7px; padding: 8px 10px 10px; }
+.pcard { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 8px 9px; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: var(--radius); }
 .pcard.base { background: transparent; border-style: dashed; }
 .pcard.equipped { border: 1px solid var(--accent); box-shadow: inset 0 2px 0 var(--accent); }
-.pcard-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.pcard-title { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 6px; min-width: 0; }
-.pcard-title b { font-size: 14px; font-weight: 600; }
-.pcard-title small { flex-basis: 100%; color: var(--text-3); font-size: 11.5px; }
-.pcard-ca { display: grid; justify-items: end; line-height: 1.15; }
-.pcard-ca > small:first-child { color: var(--text-3); font-size: 10.5px; }
-.pcard-ca .heat { font: 600 20px/1.1 var(--font-num); }
-.pcard-ca > small:last-child:not(:first-child) { font: 11px var(--font-num); }
-.pcard-attrs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 12px; padding: 6px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.pcard-attr { display: grid; grid-template-columns: minmax(0, 1fr) auto 30px; align-items: baseline; gap: 4px; font-size: 12px; }
+.pcard-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+.pcard-title { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 5px; min-width: 0; }
+.pcard-title b { font-size: 13px; font-weight: 600; }
+.pcard-route { font-size: 10.5px; padding: 0 5px; line-height: 17px; cursor: help; }
+.pcard-ca { flex: none; display: inline-flex; align-items: baseline; gap: 4px; line-height: 1.1; }
+.pcard-ca > small:first-child { color: var(--text-3); font-size: 10px; }
+.pcard-ca .heat { font: 700 17px/1 var(--font-num); }
+.pcard-ca > small:last-child:not(:first-child) { font: 600 10.5px var(--font-num); }
+.pcard-attrs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px 6px; padding: 4px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.pcard-attr { display: flex; align-items: baseline; gap: 3px; font-size: 11px; min-width: 0; }
 .pcard-attr > span { color: var(--text-3); white-space: nowrap; }
-.pcard-attr b { font: 600 13px var(--font-num); }
-.pcard-attr small { font: 11px var(--font-num); text-align: right; }
-.pcard-pos { display: flex; flex-wrap: wrap; gap: 4px 8px; }
-.pcard-pos > span { display: inline-flex; align-items: center; gap: 3px; }
-.pcard-pos .pos { width: 28px; height: 16px; line-height: 16px; font-size: 10.5px; }
-.pcard-pos b { font: 500 11.5px var(--font-num); color: var(--text-2); }
-.pcard-skills { min-height: 20px; }
-.pcard-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 26px; margin-top: auto; }
-.recycle-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 12px; margin-bottom: 12px; }
-.recycle-bar p { margin: 4px 0 0; }
+.pcard-attr b { margin-left: auto; font: 600 12px var(--font-num); }
+.pcard-attr small { font: 10.5px var(--font-num); }
+.pcard-pos { display: flex; flex-wrap: wrap; gap: 3px 6px; }
+.pcard-pos > span { display: inline-flex; align-items: center; gap: 2px; }
+.pcard-pos .pos { width: 25px; height: 15px; line-height: 15px; font-size: 10px; }
+.pcard-pos b { font: 500 11px var(--font-num); color: var(--text-2); }
+.pcard-skills { gap: 4px; }
+.pcard-skills .tag { font-size: 10.5px; padding: 1px 6px; }
+.pcard-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; padding-top: 5px; margin-top: auto; border-top: 1px solid var(--line); }
+.pcard-recycle-check { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-3); cursor: pointer; white-space: nowrap; }
+.pcard-recycle-check input { margin: 0; }
+.pcard-recycle-check input:disabled { cursor: not-allowed; }
+.pcard-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+.pcard-actions .btn.small { padding: 2px 7px; font-size: 11.5px; height: 24px; }
+.recycle-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; padding: 8px 12px; margin-bottom: 10px; }
+.recycle-info { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+.recycle-bar p { margin: 2px 0 0; }
 .recycle-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.recycle-card-controls { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 12px; }
-.recycle-card-controls label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
-.recycle-card-controls input:disabled { cursor: not-allowed; }
 .recycle-preview { padding: 12px; margin-bottom: 12px; }
 .recycle-preview h2 { margin: 0 0 8px; }
 .recycle-warning { color: var(--bad); font-weight: 600; }
 .recycle-list { display: grid; gap: 5px; padding-left: 20px; overflow-wrap: anywhere; }
+
+/* 库存 · 技能书分页 */
+.inv-book-toolbar { margin-bottom: 10px; }
+.inv-book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.inv-book-item {
+  display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 9px; align-items: start;
+  padding: 8px 10px; background: var(--panel); border: 1px solid var(--line); border-left-width: 3px;
+  border-radius: var(--radius); cursor: help; transition: border-color 120ms ease, background-color 120ms ease;
+}
+.inv-book-item:hover { background: var(--panel-2); border-color: var(--line-2); }
+.inv-book-item.tier-silver { border-left-color: #94a3b8; }
+.inv-book-item.tier-gold { border-left-color: var(--warn); }
+.inv-book-item.tier-rainbow { border-left-color: #c084fc; }
+.inv-book-art { display: grid; place-items: center; padding-top: 1px; }
+.inv-book-main { min-width: 0; display: grid; gap: 3px; }
+.inv-book-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; }
+.inv-book-req { margin-left: auto; }
+.inv-book-desc { margin: 0; color: var(--text-2); font-size: 11.5px; line-height: 1.4; }
 .btn.danger { background: var(--bad); border-color: var(--bad); color: #190606; font-weight: 600; }
 .head-count { margin-left: 4px; color: var(--text-3); font: 500 14px var(--font-num); }
 .empty-cta { display: grid; justify-items: center; gap: 10px; margin-bottom: 12px; padding: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
@@ -1935,7 +1961,7 @@ circle.pm-5 { fill: var(--h6); }
 
 /* 球员卡自定义命名 */
 .card-name-field { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
-.card-name-input { width: 96px; min-width: 0; padding: 1px 4px; font-size: 13px; font-weight: 600; background: rgba(0, 0, 0, 0.18); border: 1px solid transparent; border-radius: 4px; color: inherit; }
+.card-name-input { width: 82px; min-width: 0; padding: 1px 5px; font-size: 12.5px; font-weight: 600; background: rgba(0, 0, 0, 0.18); border: 1px solid transparent; border-radius: 4px; color: inherit; }
 .card-name-input:hover { border-color: var(--line-2); }
 .card-name-input:focus { border-color: var(--accent); outline: none; }
 .card-name-field small { flex-basis: auto; }

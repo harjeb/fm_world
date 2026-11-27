@@ -93,7 +93,7 @@ import { morph } from './morph.ts'
 import { installTooltips, syncTooltip } from './tooltip.ts'
 import { drawPitch, pitchPlaybackPending, resetPitchView } from './pitch-canvas.ts'
 import { isPesEngine, setPesViewHooks } from './pes-pitch.ts'
-import { game, replay, resetReplay, restoreSavedScreen, setGame, startOfflineGame, stopReplay, ui, type AchievementFilter, type ClubTab, type Screen, type SquadSortKey, type TransferTab } from './state.ts'
+import { game, replay, resetReplay, restoreSavedScreen, setGame, startOfflineGame, stopReplay, ui, type AchievementFilter, type ClubTab, type InventoryTab, type Screen, type SquadSortKey, type TransferTab } from './state.ts'
 import { renderAcademy } from './screens/academy.ts'
 import { renderYouth } from './screens/youth.ts'
 import { ensureYouth, settleYouth, type YouthPlan } from '../game/youth.ts'
@@ -1388,9 +1388,27 @@ document.addEventListener('click', async (event) => {
     render()
     return
   }
+  const inventoryTab = target.closest<HTMLElement>('[data-inventory-tab]')
+  if (inventoryTab?.dataset.inventoryTab) {
+    ui.inventoryTab = inventoryTab.dataset.inventoryTab as InventoryTab
+    render()
+    return
+  }
   const inventoryPos = target.closest<HTMLElement>('[data-inventory-pos]')
   if (inventoryPos?.dataset.inventoryPos) {
     ui.inventoryPos = inventoryPos.dataset.inventoryPos as Position | 'ALL'
+    render()
+    return
+  }
+  const bookTier = target.closest<HTMLElement>('[data-inventory-book-tier]')
+  if (bookTier?.dataset.inventoryBookTier) {
+    ui.inventoryBookTier = bookTier.dataset.inventoryBookTier as typeof ui.inventoryBookTier
+    render()
+    return
+  }
+  const bookCat = target.closest<HTMLElement>('[data-inventory-book-cat]')
+  if (bookCat?.dataset.inventoryBookCat) {
+    ui.inventoryBookCat = bookCat.dataset.inventoryBookCat as typeof ui.inventoryBookCat
     render()
     return
   }
@@ -3625,6 +3643,10 @@ document.addEventListener('input', (event) => {
   }
   if (target.id === 'inventory-search') {
     ui.inventorySearch = target.value
+    render()
+  }
+  if (target.id === 'inventory-book-search') {
+    ui.inventoryBookSearch = target.value
     render()
   }
   if (target.id === 'ai-buy-search') {

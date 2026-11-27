@@ -30,6 +30,7 @@ export type ClubTab = 'board' | 'facilities' | 'contracts' | 'history'
 export type AchievementFilter = 'all' | 'standard' | 'hidden' | 'unlocked'
 export type TransferTab = 'market' | 'free' | 'ai' | 'offers'
 export type SquadSortKey = 'pos' | 'name' | 'age' | 'ca' | 'condition' | 'energy' | 'value' | `attr${number}`
+export type InventoryTab = 'cards' | 'books'
 export type ChallengeMode = 'friendly' | 'legend' | 'cup' | 'peak'
 
 export type UIState = {
@@ -55,9 +56,13 @@ export type UIState = {
   academyEra: string
   squadSort: SquadSortKey
   squadSortDir: 1 | -1
+  inventoryTab: InventoryTab
   inventorySearch: string
   inventoryPos: Position | 'ALL'
   inventorySort: 'new' | 'ca' | 'player'
+  inventoryBookSearch: string
+  inventoryBookTier: 'ALL' | 'rainbow' | 'gold' | 'silver'
+  inventoryBookCat: 'ALL' | 'primary' | 'auxiliary' | 'passive'
   /** 正在确认删除的球员卡。 */
   cardDeleteId: string | null
   /** 仅在库存页暂存的回收选择与二次确认状态。 */
@@ -218,9 +223,13 @@ export const ui: UIState = {
   academyEra: 'ALL',
   squadSort: 'ca',
   squadSortDir: -1,
+  inventoryTab: 'cards',
   inventorySearch: '',
   inventoryPos: 'ALL',
   inventorySort: 'new',
+  inventoryBookSearch: '',
+  inventoryBookTier: 'ALL',
+  inventoryBookCat: 'ALL',
   cardDeleteId: null,
   recycleSelectedIds: [],
   recycleConfirm: false,
