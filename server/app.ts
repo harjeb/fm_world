@@ -735,6 +735,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     res: ServerResponse
     sink: SseSink
     id: string
+    token: string
     lazyCup: boolean
     slim: boolean
     delta: boolean
@@ -746,6 +747,22 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   }
   const clients = new Map<string, Set<EventClient>>()
   const registerAttempts = new Map<string, number[]>()
+  const credentialFailAttempts = new Map<string, number[]>()
+  const CREDENTIAL_FAIL_LIMIT = 10
+  const CREDENTIAL_FAIL_WINDOW_MS = 15 * 60 * 1000
+  const isCredentialRateLimited = (accountId: string): boolean => {
+    const at = now()
+    const recent = (credentialFailAttempts.get(accountId) ?? []).filter((stamp) => at - stamp < CREDENTIAL_FAIL_WINDOW_MS)
+    if (recent.length) credentialFailAttempts.set(accountId, recent)
+    else credentialFailAttempts.delete(accountId)
+    return recent.length >= CREDENTIAL_FAIL_LIMIT
+  }
+  const recordCredentialFail = (accountId: string): void => {
+    const at = now()
+    const recent = (credentialFailAttempts.get(accountId) ?? []).filter((stamp) => at - stamp < CREDENTIAL_FAIL_WINDOW_MS)
+    recent.push(at)
+    credentialFailAttempts.set(accountId, recent)
+  }
   let closed = false
 
   function isAccountOnlineNow(account: Account): boolean {
@@ -3232,8 +3249,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       }
       const username = String(body.username ?? '').trim()
       const password = String(body.password ?? '')
-      if (!/^[\p{L}\p{N}_-]{2,24}$/u.test(username)) return json(res, 400, { error: '用户名需为 2-24 位字母、数字、中文、_ 或 -' })
+      if (!USERNAME_RE.test(username)) return json(res, 400, { error: '用户名需为 2-24 位字母、数字、中文、_ 或 -' })
       if (password.length < 6) return json(res, 400, { error: '密码至少 6 位' })
+      if (password.length > MAX_PASSWORD_LENGTH) return json(res, 400, { error: `密码不能超过 ${MAX_PASSWORD_LENGTH} 位` })
       if (db.accounts.some((account) => account.username.toLowerCase() === username.toLowerCase())) return json(res, 409, { error: '用户名已存在' })
       const salt = crypto.randomBytes(16).toString('hex')
       // 接管前把全服到点的比赛统一结算，账号只继承球队已有战绩，注册本身不产生比赛。
@@ -3314,7 +3332,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const username = String(body.username ?? '').trim().toLowerCase()
       const password = String(body.password ?? '')
       const account = db.accounts.find((item) => item.username.toLowerCase() === username)
-      if (!account || isVacantSeat(account.id) || hashPassword(password, account.salt) !== account.passwordHash) return json(res, 401, { error: '用户名或密码错误' })
+      if (!account || isVacantSeat(account.id) || !verifyPassword(password, account.salt, account.passwordHash)) return json(res, 401, { error: '用户名或密码错误' })
       if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
       touchAccountOnline(account, true)
       const token = createSession(account.id)
@@ -3602,6 +3620,131 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
     if (url.pathname === '/api/me' && req.method === 'GET') {
       json(res, 200, { user: publicAccount(account), revision: account.revision })
+      return
+    }
+
+    if (url.pathname === '/api/account/credentials' && req.method === 'POST') {
+      const body = await readJsonBody(req)
+      if (isCredentialRateLimited(account.id)) {
+        return json(res, 429, { error: '当前密码校验失败次数过多，请稍后再试' })
+      }
+      const currentPassword = typeof body.currentPassword === 'string' ? body.currentPassword : ''
+      if (!currentPassword) return json(res, 400, { error: '请输入当前密码' })
+      if (!verifyPassword(currentPassword, account.salt, account.passwordHash)) {
+        recordCredentialFail(account.id)
+        return json(res, 403, { error: '当前密码不正确' })
+      }
+      const rawUsername = typeof body.username === 'string' ? body.username.trim() : ''
+      const rawNewPassword = typeof body.newPassword === 'string' ? body.newPassword : ''
+      const wantsUsername = rawUsername.length > 0 && rawUsername !== account.username
+      const wantsPassword = rawNewPassword.length > 0
+      if (!wantsUsername && !wantsPassword) {
+        return json(res, 400, { error: '请输入新的用户名或新密码' })
+      }
+      if (wantsUsername) {
+        if (!USERNAME_RE.test(rawUsername)) {
+          return json(res, 400, { error: '用户名需为 2-24 位字母、数字、中文、_ 或 -' })
+        }
+        if (db.accounts.some((item) => item.id !== account.id && item.username.toLowerCase() === rawUsername.toLowerCase())) {
+          return json(res, 409, { error: '用户名已存在' })
+        }
+      }
+      if (wantsPassword) {
+        if (rawNewPassword.length < 6) return json(res, 400, { error: '新密码至少 6 位' })
+        if (rawNewPassword.length > MAX_PASSWORD_LENGTH) return json(res, 400, { error: `新密码不能超过 ${MAX_PASSWORD_LENGTH} 位` })
+        if (rawNewPassword === currentPassword) return json(res, 400, { error: '新密码不能与当前密码相同' })
+      }
+
+      const prevUsername = account.username
+      const prevSalt = account.salt
+      const prevPasswordHash = account.passwordHash
+      const prevUpdatedAt = account.updatedAt
+      const oldSessions = wantsPassword
+        ? Object.entries(sessions).filter(([, id]) => id === account.id).map(([tok]) => tok)
+        : []
+      let nextToken: string | undefined
+
+      try {
+        if (wantsUsername) account.username = rawUsername
+        if (wantsPassword) {
+          const nextSalt = crypto.randomBytes(16).toString('hex')
+          account.salt = nextSalt
+          account.passwordHash = hashPassword(rawNewPassword, nextSalt)
+          nextToken = createSession(account.id)
+          for (const old of oldSessions) {
+            delete sessions[old]
+            accountStore.setSession(old, null)
+          }
+        }
+        account.updatedAt = now()
+        persistAccount(account)
+        await accountStore.flush()
+      } catch {
+        account.username = prevUsername
+        account.salt = prevSalt
+        account.passwordHash = prevPasswordHash
+        account.updatedAt = prevUpdatedAt
+        if (nextToken) {
+          delete sessions[nextToken]
+          accountStore.setSession(nextToken, null)
+        }
+        for (const old of oldSessions) {
+          sessions[old] = account.id
+          accountStore.setSession(old, account.id)
+        }
+        return json(res, 503, { error: '账号信息保存失败，请稍后重试' })
+      }
+
+      credentialFailAttempts.delete(account.id)
+      if (wantsUsername) {
+        let chatRenamed = false
+        for (const item of chatMessages) {
+          if (item.accountId === account.id && item.username !== account.username) {
+            item.username = account.username
+            chatRenamed = true
+          }
+        }
+        if (chatRenamed) {
+          persistChat()
+          broadcastChatSnapshot()
+        }
+      }
+
+      const callerClientId = String(req.headers['x-fm-client'] ?? '').slice(0, 128)
+      const group = clients.get(account.id)
+      if (group && group.size > 0) {
+        if (wantsPassword) {
+          const revokedPayload = `data: ${JSON.stringify({ type: 'auth-revoked', reason: '密码已修改，请重新登录' })}\n\n`
+          for (const client of [...group]) {
+            if (client.closed || client.sink.isClosed() || client.token === nextToken) continue
+            if (callerClientId && client.id === callerClientId) {
+              enqueueClientTask(client, () => {
+                if (!client.closed && !client.sink.isClosed()) client.res.end()
+              })
+            } else {
+              enqueueClientTask(client, () => {
+                if (!client.closed && !client.sink.isClosed()) {
+                  client.sink.writeRaw(revokedPayload)
+                  client.res.end()
+                }
+              })
+            }
+          }
+        } else if (wantsUsername) {
+          const accountPayload = `data: ${JSON.stringify({ type: 'account', user: publicAccount(account) })}\n\n`
+          for (const client of group) {
+            if (!client.closed && !client.sink.isClosed()) sendClientRaw(client, accountPayload)
+          }
+        }
+      }
+
+      json(res, 200, {
+        ok: true,
+        user: publicAccount(account),
+        usernameChanged: wantsUsername,
+        passwordChanged: wantsPassword,
+        ...(nextToken ? { token: nextToken } : {}),
+      })
       return
     }
 
@@ -4332,6 +4475,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       res,
       sink,
       id: url.searchParams.get('client') ?? '',
+      token: tokenFromRequest(req) ?? '',
       lazyCup: url.searchParams.get('lazyCup') === '1',
       slim: url.searchParams.get('slim') === '1',
       delta: url.searchParams.get('delta') === '1',
@@ -4567,8 +4711,18 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   }
 }
 
+const USERNAME_RE = /^[\p{L}\p{N}_-]{2,24}$/u
+const MAX_PASSWORD_LENGTH = 128
+
 function hashPassword(password: string, salt: string): string {
   return crypto.scryptSync(password, salt, 64).toString('hex')
+}
+
+function verifyPassword(password: string, salt: string, expectedHash: string): boolean {
+  if (!salt || !expectedHash) return false
+  const actual = Buffer.from(hashPassword(password, salt), 'hex')
+  const expected = Buffer.from(expectedHash, 'hex')
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected)
 }
 
 function readJson<T>(file: string, fallback: T): T {

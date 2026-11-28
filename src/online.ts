@@ -205,7 +205,9 @@ type StatePatchResponse = CoachSnapshot & {
   source?: string
 }
 type StateStaleResponse = CoachSnapshot & { type: 'state-stale'; revision: number; serverTime?: number; source?: string }
-type SsePayload = StateResponse | StateSyncResponse | StatePatchResponse | StateStaleResponse | MarketMessage | ChatSseMessage
+type AccountSseMessage = { type: 'account'; user: OnlineUser }
+type AuthRevokedSseMessage = { type: 'auth-revoked'; reason?: string }
+type SsePayload = StateResponse | StateSyncResponse | StatePatchResponse | StateStaleResponse | MarketMessage | ChatSseMessage | AccountSseMessage | AuthRevokedSseMessage
 
 const clientId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 let token = typeof localStorage === 'undefined' ? null : localStorage.getItem(TOKEN_KEY)
@@ -476,6 +478,33 @@ export async function loginOnline(username: string, password: string): Promise<A
   return data
 }
 
+export type UpdateCredentialsResult = {
+  ok: true
+  user: OnlineUser
+  usernameChanged: boolean
+  passwordChanged: boolean
+  token?: string
+}
+
+export async function updateAccountCredentialsOnline(payload: {
+  currentPassword: string
+  username?: string
+  newPassword?: string
+}): Promise<UpdateCredentialsResult> {
+  const data = await requestJson<UpdateCredentialsResult>('/api/account/credentials', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }, ACTION_TIMEOUT_MS)
+  onlineState.user = data.user
+  if (data.token) {
+    setToken(data.token)
+    connectEvents()
+  }
+  notify()
+  return data
+}
+
 export async function logoutOnline(): Promise<void> {
   ++sessionEpoch
   await flushOnlineNow()
@@ -609,6 +638,34 @@ function connectEvents(): void {
       }
       if (parsed.type === 'chat') {
         applyChat(parsed as ChatSseMessage)
+        return
+      }
+      if (parsed.type === 'account' && parsed.user) {
+        onlineState.user = parsed.user
+        notify()
+        return
+      }
+      if (parsed.type === 'auth-revoked') {
+        ++sessionEpoch
+        if (saveTimer !== null) {
+          clearTimeout(saveTimer)
+          saveTimer = null
+        }
+        pendingGame = null
+        deferredState = null
+        deferredPatches = []
+        deferredResync = false
+        eventSource?.close()
+        eventSource = null
+        setRemoteSaver(null)
+        setToken(null)
+        onlineState.status = 'offline'
+        onlineState.user = null
+        onlineState.clubCoaches = null
+        onlineState.connected = false
+        onlineState.revision = 0
+        onlineState.error = parsed.reason || '登录状态已失效，请重新登录'
+        notify()
         return
       }
       if (parsed.type === 'state-sync') {

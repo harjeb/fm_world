@@ -234,12 +234,28 @@ export function renderAccountOverlay(): string {
         <div class="kicker">联机账号</div>
         <h1>${online ? '联机账号' : registering ? '注册账号' : '登录账号'}</h1>
         ${online ? `
-          <p>当前账号：<b>${esc(onlineState.user?.username ?? '')}</b> · ${onlineState.error ? '存档同步失败' : onlineState.connected ? '实时同步中' : '正在重连服务器'}</p>
-          ${onlineState.error ? `<p class="warn-text small">${esc(onlineState.error)}<br>刷新页面可重新读取服务器已保存的进度，未同步的修改可能丢失。</p>` : ''}
-          <p class="hint">另一台设备保存后会自动同步到这里。超过 3 天未上线将由 AI 临时接管，连续 7 天未上线将自动清除教练账号并释放球队（保留球队进度供新教练接管）。</p>
-          <div class="btn-row"><button class="btn primary" data-action="agent-token">复制给 AI（令牌 + 文档 + 简介）</button><button class="btn ghost" data-action="agent-revoke">重置令牌</button></div>
-          <p class="hint">复制的内容包含 fm_... 令牌、API 文档链接和游戏简介，直接粘贴给能发 HTTP 请求的 AI（Claude / ChatGPT / Cursor），或把令牌填进 MCP 配置；不需要给账号密码。令牌可随时重置。</p>
-          <div class="btn-row"><button class="btn ghost" data-action="account-logout">退出登录</button><button class="btn" data-action="account-close">关闭</button></div>
+          <div class="account-body" data-key="account-online">
+            <p>当前账号：<b>${esc(onlineState.user?.username ?? '')}</b> · ${onlineState.error ? '存档同步失败' : onlineState.connected ? '实时同步中' : '正在重连服务器'}</p>
+            ${onlineState.error ? `<p class="warn-text small">${esc(onlineState.error)}<br>刷新页面可重新读取服务器已保存的进度，未同步的修改可能丢失。</p>` : ''}
+            <p class="hint">另一台设备保存后会自动同步到这里。超过 3 天未上线将由 AI 临时接管，连续 7 天未上线将自动清除教练账号并释放球队（保留球队进度供新教练接管）。</p>
+            <div class="divider"></div>
+            <section class="account-section" data-key="account-edit-form-${ui.accountEditNonce}">
+              <h2>修改账号与密码</h2>
+              <div class="form-row"><label for="account-current-password">当前密码</label><input id="account-current-password" type="password" autocomplete="current-password" placeholder="必填，用于验证身份" /></div>
+              <div class="form-row"><label for="account-new-username">新用户名</label><input id="account-new-username" autocomplete="off" placeholder="留空不修改（2-24 位）" /></div>
+              <div class="form-row"><label for="account-new-password">新密码</label><input id="account-new-password" type="password" autocomplete="new-password" placeholder="留空不修改（至少 6 位）" /></div>
+              <div class="form-row"><label for="account-confirm-password">确认新密码</label><input id="account-confirm-password" type="password" autocomplete="new-password" placeholder="再次输入新密码" /></div>
+              <p class="hint">无需退出登录，可只改用户名、只改密码或同时修改。改密码后其他设备的登录将自动失效；AI 令牌不受影响。</p>
+              ${ui.accountEditError ? `<p class="warn-text small" role="alert">${esc(ui.accountEditError)}</p>` : ''}
+              <div class="btn-row">
+                <button class="btn primary" data-action="account-credentials-submit" ${ui.accountEditBusy ? 'disabled' : ''}>${ui.accountEditBusy ? '保存中…' : '保存修改'}</button>
+              </div>
+            </section>
+            <div class="divider"></div>
+            <div class="btn-row"><button class="btn" data-action="agent-token">复制给 AI（令牌 + 文档 + 简介）</button><button class="btn ghost" data-action="agent-revoke">重置令牌</button></div>
+            <p class="hint">复制的内容包含 fm_... 令牌、API 文档链接和游戏简介，直接粘贴给能发 HTTP 请求的 AI（Claude / ChatGPT / Cursor），或把令牌填进 MCP 配置；不需要给账号密码。令牌可随时重置。</p>
+            <div class="btn-row"><button class="btn ghost" data-action="account-logout">退出登录</button><button class="btn" data-action="account-close">关闭</button></div>
+          </div>
         ` : `
           <p class="hint">登录后存档保存到服务器，并用 SSE 在多个页面/设备间同步。离线时仍可玩本地存档。</p>
           <div class="form-row"><label for="account-username">用户名</label><input id="account-username" autocomplete="username" placeholder="2-24 位" /></div>

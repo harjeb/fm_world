@@ -584,7 +584,11 @@ export function renderClub(): string {
   const cap = boardEffectiveWageCap(game)
   const body = ui.clubTab === 'board' ? boardTab() : ui.clubTab === 'contracts' ? contractsTab() : ui.clubTab === 'history' ? historyTab() : facilitiesTab()
   return `
-    ${pageHead({ kicker: '俱乐部', title: ownName(game.clubName) })}
+    ${pageHead({
+      kicker: '俱乐部',
+      title: ownName(game.clubName),
+      actions: isOnlineMode() ? `<button class="btn small ghost" data-action="account-open-credentials">${icon('user', 13)}修改账号 / 密码</button>` : '',
+    })}
     ${renameRow()}
     <div class="kpi-row club-kpis">
       ${tile('余额', economy.balance.toLocaleString(), boardActive ? `转会预算 ${game.board!.current!.transferBudget.toLocaleString()} · 设施预算 ${game.board!.current!.facilityBudget.toLocaleString()}` : '')}

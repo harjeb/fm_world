@@ -29,6 +29,9 @@ export type Screen = 'youth' | 'club' | 'achievements' | 'shop' | 'transfer' | '
 export type ClubTab = 'board' | 'facilities' | 'contracts' | 'history'
 export type AchievementFilter = 'all' | 'standard' | 'hidden' | 'unlocked'
 export type TransferTab = 'market' | 'free' | 'ai' | 'offers'
+export type FreeTransferSortKey = 'ca' | 'age' | 'price' | 'pos' | 'name'
+export type AiTransferSortKey = 'ca' | 'age' | 'asking' | 'value' | 'minutes' | 'pos' | 'name'
+export type SellTransferSortKey = 'ca' | 'value' | 'suggested' | 'pos' | 'name'
 export type SquadSortKey = 'pos' | 'name' | 'age' | 'ca' | 'condition' | 'energy' | 'value' | `attr${number}`
 export type InventoryTab = 'cards' | 'books'
 export type ChallengeMode = 'friendly' | 'legend' | 'cup' | 'peak'
@@ -45,12 +48,22 @@ export type UIState = {
   renewYearsByPlayer: Record<string, number>
   transferTab: TransferTab
   clubSearch: string
+  clubPos: Position | 'ALL'
+  clubSort: FreeTransferSortKey
+  clubSortDir: 1 | -1
   clubPage: number
-  /** 「从 AI 球队买人」的筛选和翻页。 */
+  /** 「从 AI 球队买人」的筛选、排序和翻页。 */
   aiBuyTeam: string
   aiBuyPos: string
   aiBuySearch: string
+  aiBuySort: AiTransferSortKey
+  aiBuySortDir: 1 | -1
+  aiBuyOnlyAvailable: boolean
   aiBuyPage: number
+  /** 「挂牌出售」列表的筛选与排序。 */
+  sellPos: Position | 'ALL'
+  sellSort: SellTransferSortKey
+  sellSortDir: 1 | -1
   academySearch: string
   academyPos: Position | 'ALL'
   academyEra: string
@@ -170,6 +183,10 @@ export type UIState = {
   mobileNavOpen: boolean
   completing: boolean
   accountOpen: boolean
+  /** 联机账号弹窗内修改账号/密码的表单状态；保存成功后递增 nonce 以清空密码输入框。 */
+  accountEditNonce: number
+  accountEditError: string
+  accountEditBusy: boolean
   /** 注册表单预选的球队；注册成功后不允许更换。 */
   registrationClubId: string
   /** 自动策略弹窗（针对当前选中的培养球员）。 */
@@ -213,11 +230,20 @@ export const ui: UIState = {
   renewYearsByPlayer: {},
   transferTab: 'market',
   clubSearch: '',
+  clubPos: 'ALL',
+  clubSort: 'ca',
+  clubSortDir: -1,
   clubPage: 0,
   aiBuyTeam: 'ALL',
   aiBuyPos: 'ALL',
   aiBuySearch: '',
+  aiBuySort: 'ca',
+  aiBuySortDir: -1,
+  aiBuyOnlyAvailable: false,
   aiBuyPage: 0,
+  sellPos: 'ALL',
+  sellSort: 'ca',
+  sellSortDir: -1,
   academySearch: '',
   academyPos: 'ALL',
   academyEra: 'ALL',
@@ -305,6 +331,9 @@ export const ui: UIState = {
   mobileNavOpen: false,
   completing: false,
   accountOpen: false,
+  accountEditNonce: 0,
+  accountEditError: '',
+  accountEditBusy: false,
   registrationClubId: '',
   autoStrategyOpen: false,
   autoStrategyDetail: false,

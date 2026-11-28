@@ -1312,13 +1312,14 @@ button.nm-recent:hover { background: var(--raised); }
 .modal-close { position: absolute; right: 10px; top: 10px; z-index: 2; width: 28px; height: 28px; display: grid; place-items: center; background: none; border: 0; border-radius: var(--radius); color: var(--text-3); }
 .modal-close:hover { background: var(--raised); color: var(--text); }
 .modal-actions { justify-content: flex-end; }
-.account-modal { max-width: 440px; margin-top: 8vh; }
+.account-modal { max-width: 460px; margin-top: 6vh; }
 .boot-modal { max-width: 470px; margin-top: 14vh; }
 .boot-modal h1 { margin-bottom: 10px; }
 .boot-modal .hint { margin-bottom: 8px; }
 .boot-modal .btn-row { margin: 14px 0 10px; }
 .boot-modal .btn-row .btn { flex: 1; justify-content: center; }
-.account-modal > p { margin-bottom: 8px; }
+.account-modal > p, .account-body > p { margin-bottom: 8px; }
+.account-section h2 { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
 .newgame-modal { max-width: 1320px; }
 .pick-layout { display: grid; grid-template-columns: 500px minmax(0, 1fr); gap: 14px; align-items: start; margin-top: 10px; }
 .pick-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: 66vh; overflow-y: auto; padding-right: 4px; }
@@ -1652,6 +1653,10 @@ circle.pm-5 { fill: var(--h6); }
 .pcard-recycle-check input:disabled { cursor: not-allowed; }
 .pcard-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-left: auto; }
 .pcard-actions .btn.small { padding: 2px 7px; font-size: 11.5px; height: 24px; }
+.pcard-actions .pcard-lock-btn { width: 24px; padding: 0; color: var(--text-3); }
+.pcard-actions .pcard-lock-btn:hover:not(:disabled) { color: var(--text); }
+.pcard-actions .pcard-lock-btn.is-locked { color: var(--warn); background: rgba(242, 184, 75, 0.12); border-color: rgba(242, 184, 75, 0.35); }
+.pcard-actions .pcard-lock-btn.is-locked:hover:not(:disabled) { color: var(--warn); background: rgba(242, 184, 75, 0.2); border-color: var(--warn); }
 .recycle-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; padding: 8px 12px; margin-bottom: 10px; }
 .recycle-info { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
 .recycle-bar p { margin: 2px 0 0; }
@@ -2608,7 +2613,9 @@ circle.pm-5 { fill: var(--h6); }
   /* 手机端触控按钮高度与防 iOS 聚焦放大（排除表格内紧凑控件） */
   .btn { min-height: 32px; }
   .btn.small { min-height: 28px; }
-  #account-username, #account-password, #account-invite, #chat-input,
+  .pcard-actions .pcard-lock-btn { width: 28px; }
+  #account-username, #account-password, #account-invite,
+  #account-current-password, #account-new-username, #account-new-password, #account-confirm-password, #chat-input,
   #academy-search, #club-search, #inventory-search, #legend-search,
   #nego-offer, #club-name-input, [data-preset-name] { font-size: 16px; min-height: 36px; }
 }
@@ -2851,6 +2858,8 @@ circle.pm-5 { fill: var(--h6); }
 :root[data-theme="light"] .btn:hover:not(:disabled) { background: var(--hover); }
 :root[data-theme="light"] .btn.primary:hover:not(:disabled) { background: #246612; }
 :root[data-theme="light"] .btn.danger { color: #ffffff; }
+:root[data-theme="light"] .pcard-actions .pcard-lock-btn.is-locked { background: rgba(217, 119, 6, 0.1); border-color: rgba(180, 83, 9, 0.4); }
+:root[data-theme="light"] .pcard-actions .pcard-lock-btn.is-locked:hover:not(:disabled) { background: rgba(217, 119, 6, 0.18); }
 :root[data-theme="light"] .nav-badge,
 :root[data-theme="light"] .mobile-more-badge,
 :root[data-theme="light"] .mark.yellow { color: #ffffff; }

@@ -1,4 +1,6 @@
-import type { Player, TransferOffer } from '../../game/types.ts'
+import type { Player, Position, TransferOffer } from '../../game/types.ts'
+import { POSITIONS } from '../../game/types.ts'
+import { PLAYABLE_PROFICIENCY } from '../../game/ca.ts'
 import { AI_SEASON_BUY_LIMIT, HIGH_OFFER_RATIO, SQUAD_STATUS_LABELS, UNHAPPY_HOURS, type SquadStatus } from '../../game/transfer-rules.ts'
 import { isHighOffer } from '../../game/transfers.ts'
 import { MIN_SQUAD } from '../../game/squad.ts'
@@ -12,9 +14,9 @@ import { boardEffectiveWageCap, isBoardBudgetActive } from '../../game/board.ts'
 import { isLocalFreeAgentAvailable } from '../../game/free-market.ts'
 import { initialDisplayCA } from '../../game/rating.ts'
 import { assetUrl, caHeat, clubName, countryLabel, emptyState, icon, ownName, pageHead, panel, posBadge, primaryPosition, tag, traitLabel } from '../components.ts'
-import { countdownText, esc } from '../format.ts'
+import { countdownText, esc, positionLabel } from '../format.ts'
 import { aiTransferMarket, isOnlineMode, marketState, onlineState, serverNow } from '../../online.ts'
-import { game, ui, type TransferTab } from '../state.ts'
+import { game, ui, type AiTransferSortKey, type FreeTransferSortKey, type SellTransferSortKey, type TransferTab } from '../state.ts'
 import { renderScoutPanel } from './scouting.ts'
 import { youthBadge } from '../components.ts'
 import { youthTransferBlocked } from '../../game/youth.ts'
@@ -29,6 +31,111 @@ const TABS: { id: TransferTab; label: string }[] = [
 
 const STATUS_TONE: Record<SquadStatus, string> = { key: 'good', rotation: 'info', fringe: '' }
 const pctText = (share: number) => `${Math.round(share * 100)}%`
+
+function matchesPos(player: Pick<Player, 'positions'>, pos: string): boolean {
+  if (pos === 'ALL') return true
+  const key = pos as Position
+  return primaryPosition(player) === key || (player.positions[key] ?? 0) >= PLAYABLE_PROFICIENCY
+}
+
+function posSeg(active: string, attr: string): string {
+  return `<div class="seg" role="group" aria-label="位置筛选">
+    <button class="${active === 'ALL' ? 'active' : ''}" ${attr}="ALL">全部</button>
+    ${POSITIONS.map((pos) => `<button class="${active === pos ? 'active' : ''}" ${attr}="${pos}">${positionLabel(pos)}</button>`).join('')}
+  </div>`
+}
+
+function sortHead(attr: string, key: string, activeKey: string, dir: 1 | -1, label: string, className = ''): string {
+  const active = activeKey === key
+  return `<th class="sortable ${className} ${active ? 'sorted' : ''}" ${attr}="${key}" ${active ? `aria-sort="${dir === 1 ? 'ascending' : 'descending'}"` : ''}>${label}${active ? `<span class="sort-mark">${dir === 1 ? '▲' : '▼'}</span>` : ''}</th>`
+}
+
+function sortSelect(id: string, currentKey: string, currentDir: 1 | -1, options: readonly [string, string][]): string {
+  const current = `${currentKey}:${currentDir === 1 ? 'asc' : 'desc'}`
+  const matched = options.some(([value]) => value === current)
+  return `<select id="${id}" class="compact" aria-label="排序方式">
+    ${options.map(([value, label]) => `<option value="${value}" ${value === current ? 'selected' : ''}>${label}</option>`).join('')}
+    ${matched ? '' : `<option value="${esc(current)}" selected>当前排序</option>`}
+  </select>`
+}
+
+const FREE_SORT_OPTIONS_ONLINE: readonly [string, string][] = [
+  ['ca:desc', '原始 CA 高→低'],
+  ['ca:asc', '原始 CA 低→高'],
+  ['age:asc', '年龄 幼→长'],
+  ['age:desc', '年龄 长→幼'],
+  ['price:asc', '起拍价 低→高'],
+  ['price:desc', '起拍价 高→低'],
+  ['pos:asc', '位置'],
+]
+
+const FREE_SORT_OPTIONS_OFFLINE: readonly [string, string][] = [
+  ['ca:desc', '原始 CA 高→低'],
+  ['ca:asc', '原始 CA 低→高'],
+  ['age:asc', '年龄 幼→长'],
+  ['age:desc', '年龄 长→幼'],
+  ['price:asc', '底价 低→高'],
+  ['price:desc', '底价 高→低'],
+  ['pos:asc', '位置'],
+]
+
+const AI_SORT_OPTIONS: readonly [string, string][] = [
+  ['ca:desc', '原始 CA 高→低'],
+  ['ca:asc', '原始 CA 低→高'],
+  ['asking:asc', '要价 低→高'],
+  ['asking:desc', '要价 高→低'],
+  ['value:desc', '身价 高→低'],
+  ['value:asc', '身价 低→高'],
+  ['age:asc', '年龄 幼→长'],
+  ['age:desc', '年龄 长→幼'],
+  ['minutes:desc', '出场 高→低'],
+  ['minutes:asc', '出场 低→高'],
+  ['pos:asc', '位置'],
+]
+
+const SELL_SORT_OPTIONS: readonly [string, string][] = [
+  ['ca:desc', '原始 CA 高→低'],
+  ['ca:asc', '原始 CA 低→高'],
+  ['value:desc', '估值 高→低'],
+  ['value:asc', '估值 低→高'],
+  ['suggested:desc', '建议价 高→低'],
+  ['suggested:asc', '建议价 低→高'],
+  ['pos:asc', '位置'],
+]
+
+function sortFreeAgents<T extends { player: Player; ca: number; price: number }>(items: T[], key: FreeTransferSortKey, dir: 1 | -1): T[] {
+  return [...items].sort((a, b) => {
+    let diff = 0
+    switch (key) {
+      case 'pos': diff = POSITIONS.indexOf(primaryPosition(a.player)) - POSITIONS.indexOf(primaryPosition(b.player)); break
+      case 'name': diff = a.player.name.localeCompare(b.player.name, 'zh-CN'); break
+      case 'age': diff = (a.player.age ?? 24) - (b.player.age ?? 24); break
+      case 'price': diff = a.price - b.price; break
+      case 'ca':
+      default: diff = a.ca - b.ca; break
+    }
+    if (diff !== 0) return diff * dir
+    return b.ca - a.ca || a.player.name.localeCompare(b.player.name, 'zh-CN')
+  })
+}
+
+function sortSellRoster(roster: readonly Player[], key: SellTransferSortKey, dir: 1 | -1): Player[] {
+  return [...roster].sort((a, b) => {
+    const caA = initialDisplayCA(a)
+    const caB = initialDisplayCA(b)
+    let diff = 0
+    switch (key) {
+      case 'pos': diff = POSITIONS.indexOf(primaryPosition(a)) - POSITIONS.indexOf(primaryPosition(b)); break
+      case 'name': diff = a.name.localeCompare(b.name, 'zh-CN'); break
+      case 'value': diff = bestMarketValue(game, a) - bestMarketValue(game, b); break
+      case 'suggested': diff = suggestedPrice(game, a) - suggestedPrice(game, b); break
+      case 'ca':
+      default: diff = caA - caB; break
+    }
+    if (diff !== 0) return diff * dir
+    return caB - caA || a.name.localeCompare(b.name, 'zh-CN')
+  })
+}
 
 function nameCell(player: Pick<Player, 'id' | 'name' | 'enName' | 'youthOrigin'>): string {
   return `<td class="name-cell"><button class="name-btn" data-action="detail" data-player="${esc(player.id)}">${esc(player.name)}</button>${youthBadge(player)}<small>${esc(player.enName)}</small></td>`
@@ -47,7 +154,12 @@ function marketTab(): string {
         <td class="num"><button class="btn small" data-action="club-cancel" data-player="${esc(player.id)}">取消挂牌</button></td>
       </tr>`).join('')}</tbody></table></div>`
     : '<p class="muted pad">暂无挂牌。</p>'
-  const sell = `<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th class="num">原始 CA</th><th class="num">估值</th><th class="num">建议价</th><th>要价</th></tr></thead><tbody>${game.roster.map((player) => {
+  const sellCandidates = sortSellRoster(
+    game.roster.filter((player) => matchesPos(player, ui.sellPos)),
+    ui.sellSort,
+    ui.sellSortDir,
+  )
+  const sellRows = sellCandidates.map((player) => {
     const tsubasaBlocked = isTsubasaPlayer(player)
     const youthBlocked = youthTransferBlocked(player, isOnlineMode() ? serverNow() : Date.now())
     const listTitle = tsubasaBlocked
@@ -63,7 +175,20 @@ function marketTab(): string {
       <td class="num">${suggestedPrice(game, player).toLocaleString()}</td>
       <td class="price-cell"><input type="number" class="compact" min="1" max="9007199254740991" step="1" value="${suggestedPrice(game, player)}" aria-label="${esc(player.name)} 的要价" data-club-price="${esc(player.id)}" ${tsubasaBlocked ? `disabled title="${listTitle}"` : ''}><button class="btn small" data-action="club-list" data-player="${esc(player.id)}" ${tsubasaBlocked || youthBlocked ? `disabled title="${listTitle}"` : ''}>${tsubasaBlocked ? '不可出售' : '挂牌'}</button></td>
     </tr>`
-  }).join('')}</tbody></table></div>`
+  }).join('')
+  const sell = `<div class="toolbar in-panel">
+      ${posSeg(ui.sellPos, 'data-sell-pos')}
+      ${sortSelect('sell-sort', ui.sellSort, ui.sellSortDir, SELL_SORT_OPTIONS)}
+      <span class="muted small">${sellCandidates.length} / ${game.roster.length} 人</span>
+    </div>
+    ${sellRows ? `<div class="table-scroll"><table class="dt"><thead><tr>
+      ${sortHead('data-sell-sort', 'pos', ui.sellSort, ui.sellSortDir, '位置')}
+      ${sortHead('data-sell-sort', 'name', ui.sellSort, ui.sellSortDir, '球员')}
+      ${sortHead('data-sell-sort', 'ca', ui.sellSort, ui.sellSortDir, '原始 CA', 'num')}
+      ${sortHead('data-sell-sort', 'value', ui.sellSort, ui.sellSortDir, '估值', 'num')}
+      ${sortHead('data-sell-sort', 'suggested', ui.sellSort, ui.sellSortDir, '建议价', 'num')}
+      <th>要价</th>
+    </tr></thead><tbody>${sellRows}</tbody></table></div>` : '<p class="muted pad">该位置没有可展示的球员。</p>'}`
   return `<div class="banner ${open ? 'good' : 'muted'}">${icon('swap', 16)}<b>${game.world ? '转会窗口常开' : '市场开放'}</b><span>仅与本地 NPC 交易，并非玩家之间的市场。</span></div>
     <p class="hint">挂牌出售成交后，该球员的全部球员卡都会销毁，锁定的卡也不例外；挂牌前可先回收不需要的卡。</p>
     <div class="grid two">
@@ -89,7 +214,10 @@ function auctionTab(): string {
   const boardTransfer = isBoardBudgetActive(game) ? Math.max(0, game.board!.current!.transferBudget) : 0
   const totalAvailable = boardTransfer + economy.balance - committed
   const canTrade = transferWindowOpen(game) && (!game.activeMatch || !!game.activeMatch.context.isLeague)
-  const running = marketState.auctions.filter((auction) => marketState.pool.some((player) => player.id === auction.playerId))
+  const running = marketState.auctions
+    .filter((auction) => marketState.pool.some((player) => player.id === auction.playerId))
+    .slice()
+    .sort((a, b) => a.endsAt - b.endsAt)
   const auctionRows = running.map((auction) => {
     const player = marketState.pool.find((item) => item.id === auction.playerId)!
     const lead = leadingBid(auction)
@@ -110,12 +238,17 @@ function auctionTab(): string {
   }).join('')
   const query = ui.clubSearch.trim().toLowerCase()
   const onAuction = new Set(running.map((auction) => auction.playerId))
-  const agents = marketState.pool.filter((player) => !onAuction.has(player.id) && `${player.name} ${player.enName} ${player.country} ${traitNameOf(player.traitId)} ${traitEffectText(player.traitId)}`.toLowerCase().includes(query))
+  const agents = sortFreeAgents(
+    marketState.pool
+      .filter((player) => !onAuction.has(player.id) && matchesPos(player, ui.clubPos) && `${player.name} ${player.enName} ${player.country} ${traitNameOf(player.traitId)} ${traitEffectText(player.traitId)}`.toLowerCase().includes(query))
+      .map((player) => ({ player, ca: initialDisplayCA(player), price: minimumBid(player) })),
+    ui.clubSort,
+    ui.clubSortDir,
+  )
   const pageSize = 20
   const pages = Math.max(1, Math.ceil(agents.length / pageSize))
   ui.clubPage = Math.min(ui.clubPage, pages - 1)
-  const rows = agents.slice(ui.clubPage * pageSize, ui.clubPage * pageSize + pageSize).map((player) => {
-    const opening = minimumBid(player)
+  const rows = agents.slice(ui.clubPage * pageSize, ui.clubPage * pageSize + pageSize).map(({ player, ca, price: opening }) => {
     const disabledReason = opening <= 0
       ? '球员估值无效'
       : !canTrade
@@ -128,7 +261,7 @@ function auctionTab(): string {
       ${nameCell(player)}
       <td class="dim">${esc(countryLabel(player))}</td>
       <td class="num">${player.age ?? 24}</td>
-      <td class="num strong">${caHeat(initialDisplayCA(player))}</td>
+      <td class="num strong">${caHeat(ca)}</td>
       <td>${traitLabel(player.traitId, true)}</td>
       <td class="num">${opening.toLocaleString()}</td>
       <td class="num"><button class="btn small" data-action="auction-bid" data-player="${esc(player.id)}" data-amount="${opening}" ${disabledReason ? `disabled title="${esc(disabledReason)}"` : ''}>出价</button></td>
@@ -143,10 +276,21 @@ function auctionTab(): string {
       <div class="toolbar in-panel">
         <div class="input-icon">${icon('search', 14)}<input id="club-search" placeholder="搜索姓名 / 国家 / 英文名 / 特性" value="${esc(ui.clubSearch)}"></div>
         <button class="btn small" data-action="club-search">搜索</button>
+        ${posSeg(ui.clubPos, 'data-club-pos')}
+        ${sortSelect('club-sort', ui.clubSort, ui.clubSortDir, FREE_SORT_OPTIONS_ONLINE)}
         <span class="muted small">阵容 ${game.roster.length} / ${SQUAD_LIMIT} · 余额 ${economy.balance.toLocaleString()}</span>
       </div>
       ${game.roster.length > SQUAD_LIMIT ? `<p class="warn-text">阵容 ${game.roster.length} / ${SQUAD_LIMIT}，已超编：必须裁掉 ${game.roster.length - SQUAD_LIMIT} 人才能进入比赛。</p>` : ''}
-      ${rows ? `<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th>国籍</th><th class="num">龄</th><th class="num">原始 CA</th><th>特性</th><th class="num">起拍价</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : `<p class="muted pad">${marketState.pool.length ? '没有符合条件的球员。' : '正在加载自由市场…'}</p>`}
+      ${rows ? `<div class="table-scroll"><table class="dt"><thead><tr>
+        ${sortHead('data-club-sort', 'pos', ui.clubSort, ui.clubSortDir, '位置')}
+        ${sortHead('data-club-sort', 'name', ui.clubSort, ui.clubSortDir, '球员')}
+        <th>国籍</th>
+        ${sortHead('data-club-sort', 'age', ui.clubSort, ui.clubSortDir, '龄', 'num')}
+        ${sortHead('data-club-sort', 'ca', ui.clubSort, ui.clubSortDir, '原始 CA', 'num')}
+        <th>特性</th>
+        ${sortHead('data-club-sort', 'price', ui.clubSort, ui.clubSortDir, '起拍价', 'num')}
+        <th></th>
+      </tr></thead><tbody>${rows}</tbody></table></div>` : `<p class="muted pad">${marketState.pool.length ? '没有符合条件的球员。' : '正在加载自由市场…'}</p>`}
       <div class="pager"><button class="btn small" data-action="club-prev" ${ui.clubPage === 0 ? 'disabled' : ''}>${icon('left', 13)}上一页</button><span class="muted small">${ui.clubPage + 1} / ${pages}</span><button class="btn small" data-action="club-next" data-pages="${pages}" ${ui.clubPage >= pages - 1 ? 'disabled' : ''}>下一页${icon('right', 13)}</button></div>
     `, { flush: true })}
     ${logRows ? panel('最近成交', `<ul class="auction-log">${logRows}</ul>`) : ''}
@@ -157,23 +301,29 @@ function freeTab(): string {
   if (isOnlineMode()) return auctionTab()
   const economy = economyOf(game)
   const query = ui.clubSearch.trim().toLowerCase()
+  const now = Date.now()
   // 特性也能搜：想找“单刀”“点球”的球星时不用一个个点开看。
   // 球星只在挂牌日出现在市场；不在窗口里的直接不列出来（这是隐藏日程）。
-  const agents = game.freeStars
-    .filter((player) => isLocalFreeAgentAvailable(game, player, Date.now()))
-    .filter((player) => `${player.name} ${player.enName} ${player.country} ${traitNameOf(player.traitId)} ${traitEffectText(player.traitId)}`.toLowerCase().includes(query))
+  const agents = sortFreeAgents(
+    game.freeStars
+      .filter((player) => isLocalFreeAgentAvailable(game, player, now))
+      .filter((player) => matchesPos(player, ui.clubPos))
+      .filter((player) => `${player.name} ${player.enName} ${player.country} ${traitNameOf(player.traitId)} ${traitEffectText(player.traitId)}`.toLowerCase().includes(query))
+      .map((player) => ({ player, ca: initialDisplayCA(player), price: freeAgentAsking(game, player) })),
+    ui.clubSort,
+    ui.clubSortDir,
+  )
   const pageSize = 20
   const pages = Math.max(1, Math.ceil(agents.length / pageSize))
   ui.clubPage = Math.min(ui.clubPage, pages - 1)
-  const rows = agents.slice(ui.clubPage * pageSize, ui.clubPage * pageSize + pageSize).map((player) => {
-    const price = freeAgentAsking(game, player)
-    const available = isLocalFreeAgentAvailable(game, player, Date.now())
+  const rows = agents.slice(ui.clubPage * pageSize, ui.clubPage * pageSize + pageSize).map(({ player, ca, price }) => {
+    const available = isLocalFreeAgentAvailable(game, player, now)
     return `<tr class="clickable ${available ? '' : 'dim-row'}" data-action="detail" data-player="${esc(player.id)}" data-key="${esc(player.id)}">
       <td>${posBadge(primaryPosition(player))}</td>
       ${nameCell(player)}
       <td class="dim">${esc(countryLabel(player))}</td>
       <td class="num">${player.age ?? 24}</td>
-      <td class="num strong">${caHeat(initialDisplayCA(player))}</td>
+      <td class="num strong">${caHeat(ca)}</td>
       <td>${traitLabel(player.traitId, true)}</td>
       <td class="num">${price.toLocaleString()}</td>
       <td class="num">${available
@@ -185,11 +335,22 @@ function freeTab(): string {
     <div class="toolbar in-panel">
       <div class="input-icon">${icon('search', 14)}<input id="club-search" placeholder="搜索姓名 / 国家 / 英文名 / 特性" value="${esc(ui.clubSearch)}"></div>
       <button class="btn small" data-action="club-search">搜索</button>
+      ${posSeg(ui.clubPos, 'data-club-pos')}
+      ${sortSelect('club-sort', ui.clubSort, ui.clubSortDir, FREE_SORT_OPTIONS_OFFLINE)}
       <span class="muted small">阵容 ${game.roster.length} / ${SQUAD_LIMIT} · 余额 ${economy.balance.toLocaleString()}</span>
     </div>
     <p class="hint">市场球探目标在考察期间及报告完成后额外保留 12 小时；并非独占，仍可能被他人签走。签人要谈判：他会问你的赛季目标和给他的位置，报价越高成功率越高。不是所有球员随时都能碰到。</p>
     ${game.roster.length > SQUAD_LIMIT ? `<p class="warn-text">阵容 ${game.roster.length} / ${SQUAD_LIMIT}，已超编：必须裁掉 ${game.roster.length - SQUAD_LIMIT} 人才能进入比赛。</p>` : ''}
-    ${rows ? `<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th>国籍</th><th class="num">龄</th><th class="num">原始 CA</th><th>特性</th><th class="num">底价</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('没有匹配的自由球员。')}
+    ${rows ? `<div class="table-scroll"><table class="dt"><thead><tr>
+      ${sortHead('data-club-sort', 'pos', ui.clubSort, ui.clubSortDir, '位置')}
+      ${sortHead('data-club-sort', 'name', ui.clubSort, ui.clubSortDir, '球员')}
+      <th>国籍</th>
+      ${sortHead('data-club-sort', 'age', ui.clubSort, ui.clubSortDir, '龄', 'num')}
+      ${sortHead('data-club-sort', 'ca', ui.clubSort, ui.clubSortDir, '原始 CA', 'num')}
+      <th>特性</th>
+      ${sortHead('data-club-sort', 'price', ui.clubSort, ui.clubSortDir, '底价', 'num')}
+      <th></th>
+    </tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('没有匹配的自由球员。')}
     <div class="pager"><button class="btn small" data-action="club-prev" ${ui.clubPage === 0 ? 'disabled' : ''}>${icon('left', 13)}上一页</button><span class="muted small">${ui.clubPage + 1} / ${pages}</span><button class="btn small" data-action="club-next" ${ui.clubPage >= pages - 1 ? 'disabled' : ''}>下一页${icon('right', 13)}</button></div>
   `, { flush: true })
 }
@@ -203,10 +364,34 @@ function aiTab(): string {
     : aiTransferOffers({ ...game, aiTeams: worldTransferTeams(game) }).map((item) => ({ ...item, ca: initialDisplayCA(item.player) }))
   const teams = [...new Map(all.map((item) => [item.team.id, item.team.name])).entries()]
   const search = ui.aiBuySearch.trim().toLowerCase()
+  const sortKey: AiTransferSortKey = ui.aiBuySort
+  const sortDir: 1 | -1 = ui.aiBuySortDir
   const rows = all
-    .filter((item) => (ui.aiBuyTeam === 'ALL' || item.team.id === ui.aiBuyTeam) && (ui.aiBuyPos === 'ALL' || primaryPosition(item.player) === ui.aiBuyPos)
+    .filter((item) => (ui.aiBuyTeam === 'ALL' || item.team.id === ui.aiBuyTeam)
+      && matchesPos(item.player, ui.aiBuyPos)
+      && (!ui.aiBuyOnlyAvailable || (item.asking !== null && !item.blocked))
       && (!search || [item.player.name, item.player.enName, item.player.country, item.team.name].some((value) => value?.toLowerCase().includes(search))))
-    .sort((a, b) => b.ca - a.ca)
+    .sort((a, b) => {
+      if (sortKey === 'asking') {
+        const availA = a.asking !== null && !a.blocked
+        const availB = b.asking !== null && !b.blocked
+        if (availA !== availB) return availA ? -1 : 1
+        if (availA && availB && a.asking !== b.asking) return (a.asking! - b.asking!) * sortDir
+        return b.ca - a.ca || a.player.name.localeCompare(b.player.name, 'zh-CN')
+      }
+      let diff = 0
+      switch (sortKey) {
+        case 'pos': diff = POSITIONS.indexOf(primaryPosition(a.player)) - POSITIONS.indexOf(primaryPosition(b.player)); break
+        case 'name': diff = a.player.name.localeCompare(b.player.name, 'zh-CN'); break
+        case 'age': diff = (a.player.age ?? 24) - (b.player.age ?? 24); break
+        case 'value': diff = a.terms.value - b.terms.value; break
+        case 'minutes': diff = a.terms.minutesShare - b.terms.minutesShare; break
+        case 'ca':
+        default: diff = a.ca - b.ca; break
+      }
+      if (diff !== 0) return diff * sortDir
+      return b.ca - a.ca || a.player.name.localeCompare(b.player.name, 'zh-CN')
+    })
   const pageSize = 20
   const pages = Math.max(1, Math.ceil(rows.length / pageSize))
   ui.aiBuyPage = Math.min(ui.aiBuyPage, pages - 1)
@@ -230,12 +415,25 @@ function aiTab(): string {
         <input id="ai-buy-search" class="compact" placeholder="搜索球员 / 球队 / 国家" value="${esc(ui.aiBuySearch)}">
         <select id="ai-buy-team" class="compact">${teamOptions}</select>
         <select id="ai-buy-pos" class="compact">${posOptions}</select>
+        ${sortSelect('ai-buy-sort', sortKey, sortDir, AI_SORT_OPTIONS)}
+        <label class="check-field"><input type="checkbox" id="ai-buy-available" ${ui.aiBuyOnlyAvailable ? 'checked' : ''}>仅看可谈</label>
         ${online ? `<button class="btn small" data-action="ai-buy-refresh" ${aiTransferMarket.loading ? 'disabled' : ''}>${aiTransferMarket.loading ? '加载中…' : '刷新名单'}</button>` : ''}
         <span class="muted small">近 20 场 = 出场时间占比（* 为按阵容角色估算） · 余额 ${economyOf(game).balance.toLocaleString()}</span>
       </div>
       ${aiTransferMarket.error && online ? `<p class="warn-text pad">${esc(aiTransferMarket.error)}，请刷新重试。</p>` : ''}
       ${!online && game.shared ? '<p class="hint pad">当前使用联机存档的离线缓存，只含本赛区球队；连接服务器后可查看全世界 AI 球员。</p>' : ''}
-      ${body ? `<div class="table-scroll"><table class="dt"><thead><tr><th>球队</th><th>位置</th><th>球员</th><th class="num">龄</th><th class="num">原始 CA</th><th>地位</th><th class="num">近 20 场</th><th class="num">身价</th><th class="num">俱乐部要价</th><th></th></tr></thead><tbody>${body}</tbody></table></div>` : emptyState(online && aiTransferMarket.loading ? '正在加载全世界 AI 球员…' : '没有符合条件的球员。')}
+      ${body ? `<div class="table-scroll"><table class="dt"><thead><tr>
+        <th>球队</th>
+        ${sortHead('data-ai-sort', 'pos', sortKey, sortDir, '位置')}
+        ${sortHead('data-ai-sort', 'name', sortKey, sortDir, '球员')}
+        ${sortHead('data-ai-sort', 'age', sortKey, sortDir, '龄', 'num')}
+        ${sortHead('data-ai-sort', 'ca', sortKey, sortDir, '原始 CA', 'num')}
+        <th>地位</th>
+        ${sortHead('data-ai-sort', 'minutes', sortKey, sortDir, '近 20 场', 'num')}
+        ${sortHead('data-ai-sort', 'value', sortKey, sortDir, '身价', 'num')}
+        ${sortHead('data-ai-sort', 'asking', sortKey, sortDir, '俱乐部要价', 'num')}
+        <th></th>
+      </tr></thead><tbody>${body}</tbody></table></div>` : emptyState(online && aiTransferMarket.loading ? '正在加载全世界 AI 球员…' : '没有符合条件的球员。')}
       <div class="pager"><button class="btn small" data-action="ai-buy-prev" ${ui.aiBuyPage === 0 ? 'disabled' : ''}>${icon('left', 13)}上一页</button><span class="muted small">${ui.aiBuyPage + 1} / ${pages}</span><button class="btn small" data-action="ai-buy-next" data-pages="${pages}" ${ui.aiBuyPage >= pages - 1 ? 'disabled' : ''}>下一页${icon('right', 13)}</button></div>
     `, { flush: true })}`
 }

@@ -65,7 +65,7 @@ describe('转会市场展示原始 CA', () => {
     expect(initialDisplayCA(player)).toBeLessThan(initialDisplayCA(original))
     const html = renderTransfer()
     const row = rowFor(html, player.id)
-    expect(html).toContain('<th class="num">原始 CA</th>')
+    expect(html).toMatch(/<th\b[^>]*class="[^"]*\bnum\b[^"]*"[^>]*>原始 CA/)
     expect(row).toContain(caHeat(initialDisplayCA(player)))
     expect(row).not.toContain(caHeat(caOf(player.attrs, false)))
     expect(html.indexOf(`data-key="${original.id}"`)).toBeLessThan(html.indexOf(`data-key="${player.id}"`))

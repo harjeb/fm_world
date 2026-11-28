@@ -82,7 +82,7 @@ import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPla
 import { minimumBid } from '../game/auction.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
 import { clubNameError, normalizeClubName } from '../game/club-name.ts'
-import { adjustBoardBudgetOnline, aiTransferMarket, bidOnline, buyFromAIClubOnline, buyShopBookOnline, chatState, chooseBoardAmbitionOnline, claimAchievementOnline, claimPeakRewardOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, recycleCardsOnline, refreshAITransferMarket, refreshChatOnline, refreshGameOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setCardRecycleLockOnline, startLegendOnline, startPeakOnline, startScoutingOnline, deleteScoutingOnline, startTrainingOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline, upgradeFacilityOnline } from '../online.ts'
+import { adjustBoardBudgetOnline, aiTransferMarket, bidOnline, buyFromAIClubOnline, buyShopBookOnline, chatState, chooseBoardAmbitionOnline, claimAchievementOnline, claimPeakRewardOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, recycleCardsOnline, refreshAITransferMarket, refreshChatOnline, refreshGameOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setCardRecycleLockOnline, startLegendOnline, startPeakOnline, startScoutingOnline, deleteScoutingOnline, startTrainingOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline, updateAccountCredentialsOnline, upgradeFacilityOnline } from '../online.ts'
 import { agentHandoffText } from './agent-handoff.ts'
 import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
 import { UNHAPPY_HOURS } from '../game/transfer-rules.ts'
@@ -93,7 +93,7 @@ import { morph } from './morph.ts'
 import { installTooltips, syncTooltip } from './tooltip.ts'
 import { drawPitch, pitchPlaybackPending, resetPitchView } from './pitch-canvas.ts'
 import { isPesEngine, setPesViewHooks } from './pes-pitch.ts'
-import { game, replay, resetReplay, restoreSavedScreen, setGame, startOfflineGame, stopReplay, ui, type AchievementFilter, type ClubTab, type InventoryTab, type Screen, type SquadSortKey, type TransferTab } from './state.ts'
+import { game, replay, resetReplay, restoreSavedScreen, setGame, startOfflineGame, stopReplay, ui, type AchievementFilter, type AiTransferSortKey, type ClubTab, type FreeTransferSortKey, type InventoryTab, type Screen, type SellTransferSortKey, type SquadSortKey, type TransferTab } from './state.ts'
 import { renderAcademy } from './screens/academy.ts'
 import { renderYouth } from './screens/youth.ts'
 import { ensureYouth, settleYouth, type YouthPlan } from '../game/youth.ts'
@@ -653,6 +653,80 @@ async function submitAccount(): Promise<void> {
     document.getElementById('turnstile-slot')?.replaceChildren()
     ui.notice = error instanceof Error ? error.message : '登录失败'
     if (ui.authMode === 'register') void refreshRegistrationClubs().catch(() => {})
+    render()
+  }
+}
+
+async function submitAccountCredentials(): Promise<void> {
+  if (ui.accountEditBusy) return
+  if (!isOnlineMode()) {
+    ui.accountEditError = '当前未登录联机账号。'
+    render()
+    return
+  }
+  const currentPassword = (document.getElementById('account-current-password') as HTMLInputElement | null)?.value ?? ''
+  const newUsername = (document.getElementById('account-new-username') as HTMLInputElement | null)?.value.trim() ?? ''
+  const newPassword = (document.getElementById('account-new-password') as HTMLInputElement | null)?.value ?? ''
+  const confirmPassword = (document.getElementById('account-confirm-password') as HTMLInputElement | null)?.value ?? ''
+  if (!currentPassword) {
+    ui.accountEditError = '请输入当前密码。'
+    render()
+    return
+  }
+  const wantsUsername = newUsername.length > 0 && newUsername !== (onlineState.user?.username ?? '')
+  const wantsPassword = newPassword.length > 0 || confirmPassword.length > 0
+  if (!wantsUsername && !wantsPassword) {
+    ui.accountEditError = '请输入新的用户名或新密码。'
+    render()
+    return
+  }
+  if (wantsUsername && !/^[\p{L}\p{N}_-]{2,24}$/u.test(newUsername)) {
+    ui.accountEditError = '用户名需为 2-24 位字母、数字、中文、_ 或 -。'
+    render()
+    return
+  }
+  if (wantsPassword) {
+    if (newPassword.length < 6) {
+      ui.accountEditError = '新密码至少 6 位。'
+      render()
+      return
+    }
+    if (newPassword.length > 128) {
+      ui.accountEditError = '新密码不能超过 128 位。'
+      render()
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      ui.accountEditError = '两次输入的新密码不一致。'
+      render()
+      return
+    }
+    if (newPassword === currentPassword) {
+      ui.accountEditError = '新密码不能与当前密码相同。'
+      render()
+      return
+    }
+  }
+  ui.accountEditBusy = true
+  ui.accountEditError = ''
+  render()
+  try {
+    const data = await updateAccountCredentialsOnline({
+      currentPassword,
+      ...(wantsUsername ? { username: newUsername } : {}),
+      ...(wantsPassword ? { newPassword } : {}),
+    })
+    ui.accountEditNonce++
+    ui.accountEditError = ''
+    ui.notice = data.usernameChanged && data.passwordChanged
+      ? `账号已修改为 ${data.user.username}，密码已更新（其他设备需重新登录）。`
+      : data.usernameChanged
+        ? `用户名已修改为 ${data.user.username}。`
+        : '密码已修改，其他设备的登录已失效。'
+  } catch (error) {
+    ui.accountEditError = error instanceof Error ? error.message : '修改失败，请重试'
+  } finally {
+    ui.accountEditBusy = false
     render()
   }
 }
@@ -1388,6 +1462,54 @@ document.addEventListener('click', async (event) => {
     render()
     return
   }
+  const clubPos = target.closest<HTMLElement>('[data-club-pos]')
+  if (clubPos?.dataset.clubPos) {
+    ui.clubPos = clubPos.dataset.clubPos as Position | 'ALL'
+    ui.clubPage = 0
+    render()
+    return
+  }
+  const clubSort = target.closest<HTMLElement>('[data-club-sort]')
+  if (clubSort?.dataset.clubSort) {
+    const key = clubSort.dataset.clubSort as FreeTransferSortKey
+    if (ui.clubSort === key) ui.clubSortDir = ui.clubSortDir === 1 ? -1 : 1
+    else {
+      ui.clubSort = key
+      ui.clubSortDir = key === 'ca' ? -1 : 1
+    }
+    ui.clubPage = 0
+    render()
+    return
+  }
+  const aiSort = target.closest<HTMLElement>('[data-ai-sort]')
+  if (aiSort?.dataset.aiSort) {
+    const key = aiSort.dataset.aiSort as AiTransferSortKey
+    if (ui.aiBuySort === key) ui.aiBuySortDir = ui.aiBuySortDir === 1 ? -1 : 1
+    else {
+      ui.aiBuySort = key
+      ui.aiBuySortDir = key === 'ca' || key === 'value' || key === 'minutes' ? -1 : 1
+    }
+    ui.aiBuyPage = 0
+    render()
+    return
+  }
+  const sellPos = target.closest<HTMLElement>('[data-sell-pos]')
+  if (sellPos?.dataset.sellPos) {
+    ui.sellPos = sellPos.dataset.sellPos as Position | 'ALL'
+    render()
+    return
+  }
+  const sellSort = target.closest<HTMLElement>('[data-sell-sort]')
+  if (sellSort?.dataset.sellSort) {
+    const key = sellSort.dataset.sellSort as SellTransferSortKey
+    if (ui.sellSort === key) ui.sellSortDir = ui.sellSortDir === 1 ? -1 : 1
+    else {
+      ui.sellSort = key
+      ui.sellSortDir = key === 'name' || key === 'pos' ? 1 : -1
+    }
+    render()
+    return
+  }
   const inventoryTab = target.closest<HTMLElement>('[data-inventory-tab]')
   if (inventoryTab?.dataset.inventoryTab) {
     ui.inventoryTab = inventoryTab.dataset.inventoryTab as InventoryTab
@@ -1872,12 +1994,26 @@ document.addEventListener('click', async (event) => {
       break
     case 'account-open':
       ui.accountOpen = true
+      ui.accountEditError = ''
+      ui.accountEditBusy = false
       ui.authMode = 'login'
       render()
       break
+    case 'account-open-credentials':
+      ui.accountOpen = true
+      ui.accountEditError = ''
+      ui.accountEditBusy = false
+      render()
+      ;(document.getElementById('account-current-password') as HTMLInputElement | null)?.focus()
+      break
     case 'account-close':
       ui.accountOpen = false
+      ui.accountEditError = ''
+      ui.accountEditBusy = false
       render()
+      break
+    case 'account-credentials-submit':
+      void submitAccountCredentials()
       break
     case 'account-mode': {
       const mode = publicConfig.registration
@@ -1922,7 +2058,7 @@ document.addEventListener('click', async (event) => {
         if (!local) setTeamPickPending(true)
         stopTimer()
         stopReplay()
-        Object.assign(ui, { screen: 'home', accountOpen: false, matchEngine: null, matchPlaying: false, completing: false, lineupDraft: null, autoSubsDraft: null, detailPlayerId: null, clubViewId: null, trainingPlayerId: null, reviewId: null })
+        Object.assign(ui, { screen: 'home', accountOpen: false, accountEditError: '', accountEditBusy: false, matchEngine: null, matchPlaying: false, completing: false, lineupDraft: null, autoSubsDraft: null, detailPlayerId: null, clubViewId: null, trainingPlayerId: null, reviewId: null })
         if (teamPickPending()) openNewGamePicker(true)
         ui.recycleSelectedIds = []
         ui.recycleConfirm = false
@@ -3529,6 +3665,35 @@ document.addEventListener('change', (event) => {
     render()
     return
   }
+  if (target.id === 'club-sort') {
+    const [key, dir] = target.value.split(':')
+    if (key) ui.clubSort = key as FreeTransferSortKey
+    ui.clubSortDir = dir === 'asc' ? 1 : -1
+    ui.clubPage = 0
+    render()
+    return
+  }
+  if (target.id === 'ai-buy-sort') {
+    const [key, dir] = target.value.split(':')
+    if (key) ui.aiBuySort = key as AiTransferSortKey
+    ui.aiBuySortDir = dir === 'asc' ? 1 : -1
+    ui.aiBuyPage = 0
+    render()
+    return
+  }
+  if (target.id === 'ai-buy-available') {
+    ui.aiBuyOnlyAvailable = (target as HTMLInputElement).checked
+    ui.aiBuyPage = 0
+    render()
+    return
+  }
+  if (target.id === 'sell-sort') {
+    const [key, dir] = target.value.split(':')
+    if (key) ui.sellSort = key as SellTransferSortKey
+    ui.sellSortDir = dir === 'asc' ? 1 : -1
+    render()
+    return
+  }
   if (target.id === 'inventory-sort') {
     ui.inventorySort = target.value as typeof ui.inventorySort
     render()
@@ -3666,6 +3831,11 @@ document.addEventListener('input', (event) => {
     ui.inventoryBookSearch = target.value
     render()
   }
+  if (target.id === 'club-search') {
+    ui.clubSearch = target.value
+    ui.clubPage = 0
+    render()
+  }
   if (target.id === 'ai-buy-search') {
     ui.aiBuySearch = target.value
     ui.aiBuyPage = 0
@@ -3753,6 +3923,10 @@ document.addEventListener('keydown', (event) => {
   }
   if (event.key === 'Enter' && (target.id === 'account-username' || target.id === 'account-password' || target.id === 'account-invite')) {
     void submitAccount()
+    return
+  }
+  if (event.key === 'Enter' && (target.id === 'account-current-password' || target.id === 'account-new-username' || target.id === 'account-new-password' || target.id === 'account-confirm-password')) {
+    void submitAccountCredentials()
     return
   }
   // 整行可点的表格行也要能用键盘操作。

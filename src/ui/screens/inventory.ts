@@ -216,6 +216,9 @@ function cardTile(card: PlayerCard, owner: Player | undefined): string {
           ? '已锁定不可回收'
           : `勾选回收可得 ${pts} 培养点`
   const recycleText = pts === null ? '无效' : equipped ? '已装' : pending ? '待处理' : card.recycleLocked ? '已锁' : `+${pts}点`
+  const cardLabel = card.customName?.trim() || `卡 ${card.serial}`
+  const locked = !!card.recycleLocked
+  const lockTitle = locked ? '已锁定，点击解锁（锁定后不可回收或删除）' : '点击锁定（锁定后不可回收或删除）'
 
   return `<article class="pcard ${equipped ? 'equipped' : ''}" data-key="${esc(card.id)}">
     <header class="pcard-head">
@@ -234,7 +237,7 @@ function cardTile(card: PlayerCard, owner: Player | undefined): string {
       <div class="pcard-actions">
         ${owner && !equipped ? `<button class="btn small primary" data-action="card-equip" data-player="${esc(owner.id)}" data-card="${esc(card.id)}" ${game.activeMatch ? 'disabled title="比赛进行中不能换卡"' : ''}>装备</button>` : ''}
         <button class="btn small ghost" data-action="chat-share-card" data-card="${esc(card.id)}" title="晒这张角色卡到全服聊天">${icon('chat', 12)}晒</button>
-        <button class="btn small ghost" data-action="card-recycle-lock" data-card="${esc(card.id)}" data-locked="${card.recycleLocked ? 'false' : 'true'}" aria-label="${card.recycleLocked ? '解锁' : '锁定'}${esc(card.customName?.trim() || `卡 ${card.serial}`)}回收">${card.recycleLocked ? '解锁' : '锁定'}</button>
+        <button class="btn small ghost pcard-lock-btn${locked ? ' is-locked' : ''}" data-action="card-recycle-lock" data-card="${esc(card.id)}" data-locked="${locked ? 'false' : 'true'}" aria-pressed="${locked ? 'true' : 'false'}" aria-label="${locked ? '解锁' : '锁定'}${esc(cardLabel)}回收" title="${esc(lockTitle)}">${icon(locked ? 'lock' : 'unlock', 14)}</button>
         ${deleteControls(card, equipped)}
       </div>
     </footer>
