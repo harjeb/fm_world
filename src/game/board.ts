@@ -44,6 +44,10 @@ export { checkFacilityBudget, facilityBudgetAvailable, isBoardBudgetActive, spen
 export const BOARD_INITIAL_CONFIDENCE = 60
 export const BOARD_MIN_CONFIDENCE = 15
 export const BOARD_MAX_CONFIDENCE = 100
+/** 选择「野心档」所需的最低董事会信任度。 */
+export const BOARD_AMBITIOUS_MIN_CONFIDENCE = 45
+/** 信任危机阈值（低于此值时停发下赛季全部独立转会与设施预算）。 */
+export const BOARD_CRISIS_CONFIDENCE = 40
 /** 转会预算 ↔ 每轮工资帽滑块换算比率：1 赛季 38 轮联赛。 */
 export const BOARD_WAGE_SLIDER_ROUNDS = 38
 /** 开季后允许确认/调整目标档位的最大轮次（第 1–3 轮可调，第 4 轮起锁定）。 */
@@ -155,17 +159,17 @@ export const BOARD_GRADE_META: Record<BoardGrade, { label: string; tone: 'gold' 
 const GRADE_BUDGET_MUL: Record<BoardGrade, number> = {
   S: 1.06,
   A: 1.00,
-  B: 0.94,
-  C: 0.84,
-  D: 0.72,
+  B: 0.90,
+  C: 0.70,
+  D: 0.50,
 }
 
 const GRADE_WAGE_MUL: Record<BoardGrade, number> = {
   S: 1.04,
   A: 1.00,
-  B: 0.97,
-  C: 0.92,
-  D: 0.86,
+  B: 0.95,
+  C: 0.84,
+  D: 0.72,
 }
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
@@ -193,22 +197,53 @@ export function ensureBoard(game: GameState): BoardState {
   return game.board
 }
 
-/** 信任度 + 上季评级决定的下赛季转会/设施预算系数（0.55× – 1.40×）。 */
-export function confidenceBudgetMultiplier(confidence: number, lastGrade?: BoardGrade): number {
-  const c = clamp(confidence, BOARD_MIN_CONFIDENCE, BOARD_MAX_CONFIDENCE)
-  // confidence=60 -> 1.00; 100 -> 1.32; 15 -> 0.64
-  const confFactor = 1 + (c - BOARD_INITIAL_CONFIDENCE) * 0.008
-  const gradeFactor = lastGrade ? GRADE_BUDGET_MUL[lastGrade] : 1
-  return Math.round(clamp(confFactor * gradeFactor, 0.55, 1.40) * 1000) / 1000
+export function isBoardTrustCrisis(confidence: number): boolean {
+  return confidence < BOARD_CRISIS_CONFIDENCE
 }
 
-/** 信任度 + 上季评级决定的下赛季基础工资帽系数（0.80× – 1.25×）。 */
+/**
+ * 校验是否锁定「野心档」：
+ * - 董事会信任度低于 45；或
+ * - 上季考核评级为 C / D。
+ */
+export function ambitiousLockReason(confidence: number, lastGrade?: BoardGrade): string | null {
+  const lowConf = confidence < BOARD_AMBITIOUS_MIN_CONFIDENCE
+  const poorGrade = lastGrade === 'C' || lastGrade === 'D'
+  if (!lowConf && !poorGrade) return null
+  if (lowConf && poorGrade) {
+    return `信任度低于 ${BOARD_AMBITIOUS_MIN_CONFIDENCE}（当前 ${Math.round(confidence)}）且上季考核为 ${lastGrade} 级，「野心档」已锁定`
+  }
+  if (lowConf) {
+    return `信任度低于 ${BOARD_AMBITIOUS_MIN_CONFIDENCE}（当前 ${Math.round(confidence)}），「野心档」已锁定`
+  }
+  return `上季考核为 ${lastGrade} 级，「野心档」已锁定（需恢复至 B 级及以上）`
+}
+
+export function isAmbitiousAllowed(confidence: number, lastGrade?: BoardGrade): boolean {
+  return ambitiousLockReason(confidence, lastGrade) === null
+}
+
+/** 信任度 + 上季评级决定的下赛季转会/设施预算系数（信任危机 <40 时为 0，其余 0.30× – 1.40×）。 */
+export function confidenceBudgetMultiplier(confidence: number, lastGrade?: BoardGrade): number {
+  const c = clamp(confidence, BOARD_MIN_CONFIDENCE, BOARD_MAX_CONFIDENCE)
+  if (c < BOARD_CRISIS_CONFIDENCE) return 0
+  // confidence=60 -> 1.00; 100 -> 1.32; 40 -> 0.70
+  const confFactor = c >= BOARD_INITIAL_CONFIDENCE
+    ? 1 + (c - BOARD_INITIAL_CONFIDENCE) * 0.008
+    : 1 + (c - BOARD_INITIAL_CONFIDENCE) * 0.015
+  const gradeFactor = lastGrade ? GRADE_BUDGET_MUL[lastGrade] : 1
+  return Math.round(clamp(confFactor * gradeFactor, 0.30, 1.40) * 1000) / 1000
+}
+
+/** 信任度 + 上季评级决定的下赛季基础工资帽系数（0.60× – 1.25×）。 */
 export function confidenceWageCapMultiplier(confidence: number, lastGrade?: BoardGrade): number {
   const c = clamp(confidence, BOARD_MIN_CONFIDENCE, BOARD_MAX_CONFIDENCE)
-  // confidence=60 -> 1.00; 100 -> 1.20; 15 -> 0.82
-  const confFactor = 1 + (c - BOARD_INITIAL_CONFIDENCE) * (c >= BOARD_INITIAL_CONFIDENCE ? 0.005 : 0.004)
+  // confidence=60 -> 1.00; 100 -> 1.20; 15 -> 0.64
+  const confFactor = c >= BOARD_INITIAL_CONFIDENCE
+    ? 1 + (c - BOARD_INITIAL_CONFIDENCE) * 0.005
+    : 1 + (c - BOARD_INITIAL_CONFIDENCE) * 0.008
   const gradeFactor = lastGrade ? GRADE_WAGE_MUL[lastGrade] : 1
-  return Math.round(clamp(confFactor * gradeFactor, 0.80, 1.25) * 1000) / 1000
+  return Math.round(clamp(confFactor * gradeFactor, 0.60, 1.25) * 1000) / 1000
 }
 
 /** 卖人收入回流至转会预算的比例：信任度 <40 为 50%，40–74 为 75%，>=75 为 85%。 */
@@ -644,6 +679,8 @@ export function refreshOffseasonBoardPreview(
   const budgetMultiplier = confidenceBudgetMultiplier(previewConfidence, previewGrade)
   const wageMultiplier = confidenceWageCapMultiplier(previewConfidence, previewGrade)
   const retentionRate = transferRetentionRate(previewConfidence)
+  const lockReason = ambitiousLockReason(previewConfidence, previewGrade)
+  const inTrustCrisis = isBoardTrustCrisis(previewConfidence)
   const options = buildBoardGoalOptions(projection.tier, powerRank, totalClubs, previewConfidence, previewGrade)
   let promotionOptions: BoardGoalOption[] | undefined
   if (!projection.confirmed && projection.tier === 'division2') {
@@ -652,6 +689,20 @@ export function refreshOffseasonBoardPreview(
   }
 
   let syncedChoice = false
+  if (lockReason) {
+    if (board.pendingChoice === 'ambitious') {
+      board.pendingChoice = 'expected'
+      syncedChoice = true
+    }
+    if (board.pendingChoicesByTier) {
+      for (const [tierKey, val] of Object.entries(board.pendingChoicesByTier) as [TierId, BoardAmbition][]) {
+        if (val === 'ambitious') {
+          board.pendingChoicesByTier[tierKey] = 'expected'
+          syncedChoice = true
+        }
+      }
+    }
+  }
   if (projection.confirmed) {
     const tierPicked = board.pendingChoicesByTier?.[projection.tier]
     if (tierPicked && board.pendingChoice !== tierPicked) {
@@ -679,6 +730,9 @@ export function refreshOffseasonBoardPreview(
     retentionRate,
     options,
     ...(promotionOptions ? { promotionOptions } : {}),
+    ambitiousLocked: !!lockReason,
+    ...(lockReason ? { ambitiousLockReason: lockReason } : {}),
+    inTrustCrisis,
   }
   const prev = board.offseasonPreview
   const unchanged = !syncedChoice
@@ -691,6 +745,9 @@ export function refreshOffseasonBoardPreview(
     && prev.budgetMultiplier === nextPreview.budgetMultiplier
     && prev.wageMultiplier === nextPreview.wageMultiplier
     && prev.retentionRate === nextPreview.retentionRate
+    && !!prev.ambitiousLocked === !!nextPreview.ambitiousLocked
+    && (prev.ambitiousLockReason ?? null) === (nextPreview.ambitiousLockReason ?? null)
+    && !!prev.inTrustCrisis === !!nextPreview.inTrustCrisis
     && JSON.stringify(prev.options) === JSON.stringify(nextPreview.options)
     && JSON.stringify(prev.promotionOptions ?? null) === JSON.stringify(nextPreview.promotionOptions ?? null)
   if (unchanged) return false
@@ -726,6 +783,10 @@ export function chooseBoardAmbition(
     refreshOffseasonBoardPreview(game, options.clubId, options.teamsById)
     const preview = board.offseasonPreview
     if (!preview) return { ok: false, error: '暂未生成休赛期目标方案' }
+    if (ambition === 'ambitious') {
+      const lockError = preview.ambitiousLockReason ?? ambitiousLockReason(board.confidence, board.lastGrade)
+      if (lockError) return { ok: false, error: lockError }
+    }
     if (!preview.confirmed) {
       const targetTier: TierId = options.tier ?? preview.projectedTier
       const allowed = new Set<TierId>([preview.projectedTier, ...(preview.promotionOptions?.length ? ['division1' as TierId] : [])])
@@ -750,6 +811,10 @@ export function chooseBoardAmbition(
   if (mandate.locked || (game.season?.round ?? 1) > BOARD_CHOICE_MAX_ROUND) {
     mandate.locked = true
     return { ok: false, error: `本赛季目标已锁定（仅第 1–${BOARD_CHOICE_MAX_ROUND} 轮可调整）` }
+  }
+  if (ambition === 'ambitious') {
+    const lockError = ambitiousLockReason(board.confidence, board.lastGrade)
+    if (lockError) return { ok: false, error: lockError }
   }
   const picked = mandate.options.find((item) => item.ambition === ambition)
   if (!picked) return { ok: false, error: '找不到该档位方案' }
@@ -977,7 +1042,10 @@ function scoreSeasonMandate(
     ? `，${BOARD_CUP_LABELS[mandate.cupId]}目标「${BOARD_CUP_STAGE_LABELS[mandate.cupTarget]}」实际「${BOARD_CUP_STAGE_LABELS[cupActual]}」`
     : ''
   const bonusText = bonusPaid > 0 ? `，发放奖金 ${bonusPaid.toLocaleString()}` : ''
-  const summary = `联赛目标前 ${mandate.leagueTarget} 实得第 ${leagueActual} 名${cupText} → ${BOARD_GRADE_META[grade].label}（信任度 ${confidenceBefore}→${confidenceAfter}${bonusText}，下季预算倍率 ${Math.round(nextBudgetMultiplier * 100)}%）`
+  const nextBudgetNote = nextBudgetMultiplier === 0
+    ? '信任危机停发下季独立预算'
+    : `下季预算倍率 ${Math.round(nextBudgetMultiplier * 100)}%`
+  const summary = `联赛目标前 ${mandate.leagueTarget} 实得第 ${leagueActual} 名${cupText} → ${BOARD_GRADE_META[grade].label}（信任度 ${confidenceBefore}→${confidenceAfter}${bonusText}，${nextBudgetNote}）`
 
   return {
     seasonIndex: mandate.seasonIndex,
@@ -1078,11 +1146,14 @@ export function evaluateAndRollBoardSeason(
   const { powerRank, totalClubs } = estimateDivisionPowerRank(game, nextTier, nextTeamsById)
   const options = buildBoardGoalOptions(nextTier, powerRank, totalClubs, board.confidence, board.lastGrade)
   const tierSpecific = board.pendingChoicesByTier?.[nextTier]
-  const chosenAmbition: BoardAmbition = isBoardAmbition(tierSpecific)
+  let chosenAmbition: BoardAmbition = isBoardAmbition(tierSpecific)
     ? tierSpecific
     : isBoardAmbition(board.pendingChoice)
       ? board.pendingChoice
       : 'expected'
+  if (chosenAmbition === 'ambitious' && !isAmbitiousAllowed(board.confidence, board.lastGrade)) {
+    chosenAmbition = 'expected'
+  }
   const picked = options.find((item) => item.ambition === chosenAmbition) ?? options[1] ?? options[0]
   const retentionRate = transferRetentionRate(board.confidence)
 

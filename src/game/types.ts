@@ -1526,6 +1526,11 @@ export type BoardOffseasonPreview = {
   options: BoardGoalOption[]
   /** 升级杯尚未决出结果时附带的「若升入一级联赛」三档只读参考方案。 */
   promotionOptions?: BoardGoalOption[]
+  /** 低信任度（<45）或上季 C/D 评级时锁定「野心档」。 */
+  ambitiousLocked?: boolean
+  ambitiousLockReason?: string
+  /** 信任危机（信任度 <40）时停发下赛季独立转会与设施预算。 */
+  inTrustCrisis?: boolean
 }
 
 export type BoardEvaluation = {

@@ -235,8 +235,8 @@ Agent 令牌只能访问 `/api/agent/*`；不能读取账号资料、不能修�
 `state.economy` 提供余额、球迷数、设施 `stage`（1–25）、`level`、`stageInLevel`、`growthChance`、`roundIncome` 及 `upgradeCost`（球场额外返回 `homeOnly: true` 与 `homeAtmosphereRating`）；`state.market.freeAgents` 和 `state.market.listings` 提供价格及经过可见字段过滤的球员信息。市场是**本地 NPC 市场，不是跨账号交易**；赛季结束后不能新挂牌。每轮收入 = 1500 + 联赛转播分成 + 球迷 × 2 + 各设施收入（按阶段比例并随球迷最多放大 4 倍；其中**球场门票仅联赛主场发放**），另有每球 500 和胜场奖金（1000 + 球迷数 35%）；友谊赛与 PvE 挑战赛不计常规轮次收入或涨粉。联赛与杯赛中，主队按球场阶段在 2D 引擎获得微弱主场氛围加成（LV1 约 +15 至 LV5 满级约 +45 主属性有效值）。
 
 - `upgrade_facility` — `facilityId`: `stadium`、`academy`、`medical`、`psychology`、`tactics`、`shop` 或 `sponsor`。第 2 赛季起优先消耗董事会本季独立发放的「设施预算」，用完或不足时自动用俱乐部余额补足（设施预算不与转会预算/工资帽互通）。
-- `board_choose_ambition` — 选择或切换董事会赛季目标档位。`state.board` 包含 `confidence`（信任度 15–100）、`lastGrade`（上季评级 `S/A/B/C/D`）、`active`（第 2 赛季起激活）、`current`（当季目标、剩余转会/设施预算、有效工资帽、商业帽加成、滑块区间 `sliderBounds` 与 `canSwitchAmbition`）、`pendingChoice`、`offseasonPreview` 与历年 `history`。
-  - `ambition`: `"safe"`（稳妥档，预算 0.85× / 工资帽 0.90×）| `"expected"`（基准推荐档，1.00×）| `"ambitious"`（野心档，预算 1.25× / 工资帽 1.12×，奖金更高但失利扣更多信任度）
+- `board_choose_ambition` — 选择或切换董事会赛季目标档位。`state.board` 包含 `confidence`（信任度 15–100）、`lastGrade`（上季评级 `S/A/B/C/D`）、`active`（第 2 赛季起激活）、`ambitiousLocked` / `ambitiousLockReason`（`confidence < 45` 或 `lastGrade` 为 `C`/`D` 时锁定「野心档」）、`inTrustCrisis`（`confidence < 40` 进入信任危机，下季停发全部独立转会与设施预算并大幅压低基础工资帽）、`current`（当季目标、剩余转会/设施预算、有效工资帽、商业帽加成、滑块区间 `sliderBounds` 与 `canSwitchAmbition`）、`pendingChoice`、`offseasonPreview` 与历年 `history`。
+  - `ambition`: `"safe"`（稳妥档，预算 0.85× / 工资帽 0.90×）| `"expected"`（基准推荐档，1.00×）| `"ambitious"`（野心档，预算 1.25× / 工资帽 1.12×，奖金更高但失利扣更多信任度；信任度 `< 45` 或上季 `C/D` 级时禁止选择）
   - `scope?`: `"offseason"`（休赛期预选下赛季）| `"current"`（开季第 1–3 轮切换本季档位，按差额补退预算与余额）
   - `tier?`: `"division1"` | `"division2"` | `"champions"`，升级杯未决（`offseasonPreview.confirmed === false`）时可分别为 `division1`（若升级）和 `division2`（若留级）各预选一套，换季自动按实际级别生效
   - `lock?`: 布尔值，开季第 1–3 轮传 `true` 可提前锁定本季目标

@@ -6,11 +6,14 @@ import type { AddressInfo } from 'node:net'
 import { createAppServer, type AppServer } from '../server/app.ts'
 import { agentView, applyAgentAction } from '../server/agent.ts'
 import {
+  BOARD_AMBITIOUS_MIN_CONFIDENCE,
   BOARD_CHOICE_MAX_ROUND,
+  BOARD_CRISIS_CONFIDENCE,
   BOARD_INITIAL_CONFIDENCE,
   BOARD_TIER_BASE,
   BOARD_WAGE_SLIDER_ROUNDS,
   adjustBoardBudgetSlider,
+  ambitiousLockReason,
   boardCommercialWageBonus,
   boardEffectiveWageCap,
   boardSliderBounds,
@@ -22,7 +25,9 @@ import {
   ensureBoard,
   evaluateAndRollBoardSeason,
   evaluateClubCupStage,
+  isAmbitiousAllowed,
   isBoardBudgetActive,
+  isBoardTrustCrisis,
   refreshOffseasonBoardPreview,
   syncBoardLockState,
   transferRetentionRate,
@@ -676,6 +681,118 @@ describe('赛季末考核奖惩与下赛季预算变化', () => {
     // 阵容人数低于底线时豁免工资帽
     game.roster = game.roster.slice(0, MIN_SQUAD - 1)
     expect(checkWageCapForSigning(game, freePlayer).ok).toBe(true)
+  })
+
+  it('信任度 < 45 或上季 C/D 级时锁定「野心档」，并自动把已预选的野心档降级为基准档', () => {
+    // 1. 仅信任度低于 45（哪怕上季无 C/D 级）即锁定野心档
+    const lowConfGame = makeSeason2Game('division2', 'expected', 701)
+    lowConfGame.board!.confidence = BOARD_AMBITIOUS_MIN_CONFIDENCE - 1
+    expect(isAmbitiousAllowed(lowConfGame.board!.confidence, lowConfGame.board!.lastGrade)).toBe(false)
+    expect(ambitiousLockReason(lowConfGame.board!.confidence, lowConfGame.board!.lastGrade)).toContain('信任度低于 45')
+    const curBlocked = chooseBoardAmbition(lowConfGame, 'ambitious', { scope: 'current' })
+    expect(curBlocked.ok).toBe(false)
+    expect(curBlocked.error).toContain('野心档')
+    expect(agentView(lowConfGame).board.ambitiousLocked).toBe(true)
+
+    // 2. 信任度 >= 45 但上季评级为 C 级同样锁定野心档
+    const gradeCGame = makeSeason2Game('division2', 'expected', 702)
+    gradeCGame.board!.confidence = 55
+    gradeCGame.board!.lastGrade = 'C'
+    expect(isAmbitiousAllowed(55, 'C')).toBe(false)
+    expect(chooseBoardAmbition(gradeCGame, 'ambitious', { scope: 'current' }).ok).toBe(false)
+    expect(chooseBoardAmbition(gradeCGame, 'safe', { scope: 'current' }).ok).toBe(true)
+
+    // 3. 休赛期预选校验、自动降级与换季兜底（以第 2 赛季末模拟 C 级收官、信任度仍 >= 45 为例）
+    gradeCGame.board!.confidence = 65
+    gradeCGame.board!.current!.leagueTarget = 10
+    gradeCGame.board!.current!.cupTarget = 'qualified'
+    gradeCGame.world!.seasonCups = makeTestCup('community', 'player', 'r16')
+    gradeCGame.season.playerFinish = 13
+    gradeCGame.season.finished = true
+    gradeCGame.board!.pendingChoice = 'ambitious'
+    gradeCGame.board!.pendingChoicesByTier = { division2: 'ambitious' }
+    refreshOffseasonBoardPreview(gradeCGame)
+    expect(gradeCGame.board!.offseasonPreview?.ambitiousLocked).toBe(true)
+    expect(gradeCGame.board!.pendingChoice).toBe('expected')
+    expect(gradeCGame.board!.pendingChoicesByTier?.division2).toBe('expected')
+    expect(chooseBoardAmbition(gradeCGame, 'ambitious', { scope: 'offseason' }).ok).toBe(false)
+
+    // 前端渲染锁定样式与禁用按钮
+    setGame(gradeCGame)
+    ui.clubTab = 'board'
+    const html = renderClub()
+    expect(html).toMatch(/class="board-opt\s+locked"/)
+    expect(html).toContain('已锁定（不可选）')
+
+    // 换季兜底：即使外部遗留 pendingChoice='ambitious'，也会强制回退为 expected
+    gradeCGame.board!.pendingChoice = 'ambitious'
+    gradeCGame.season.index = 3
+    gradeCGame.season.finished = false
+    const rolled = evaluateAndRollBoardSeason(gradeCGame, {
+      seasonIndex: 2,
+      tier: 'division2',
+      finish: 13,
+      totalTeams: 20,
+      seasonCups: makeTestCup('community', 'player', 'r16'),
+      clubIds: ['player'],
+    })
+    expect(rolled.evaluation?.grade).toBe('C')
+    expect(rolled.mandate?.ambition).toBe('expected')
+  })
+
+  it('信任危机（信任度 < 40）时停发下赛季全部独立转会与设施预算，大幅下调工资帽，恢复后解禁', () => {
+    expect(isBoardTrustCrisis(BOARD_CRISIS_CONFIDENCE - 1)).toBe(true)
+    expect(isBoardTrustCrisis(BOARD_CRISIS_CONFIDENCE)).toBe(false)
+    expect(confidenceBudgetMultiplier(BOARD_CRISIS_CONFIDENCE - 1, 'D')).toBe(0)
+    expect(confidenceBudgetMultiplier(15, 'D')).toBe(0)
+    expect(confidenceWageCapMultiplier(15, 'D')).toBe(0.60)
+
+    const crisisGame = makeSeason2Game('division2', 'ambitious', 703)
+    crisisGame.board!.confidence = 50
+    crisisGame.board!.current!.leagueTarget = 2
+    crisisGame.board!.current!.cupTarget = 'sf'
+    crisisGame.season.index = 3
+    crisisGame.season.tier = 'division2'
+    const rollCrisis = evaluateAndRollBoardSeason(crisisGame, {
+      seasonIndex: 2,
+      tier: 'division2',
+      finish: 19,
+      totalTeams: 20,
+      seasonCups: makeTestCup('community', 'player', 'none'),
+      clubIds: ['player'],
+    })
+    expect(rollCrisis.evaluation?.grade).toBe('D')
+    expect(crisisGame.board!.confidence).toBeLessThan(BOARD_CRISIS_CONFIDENCE)
+    expect(rollCrisis.evaluation?.nextBudgetMultiplier).toBe(0)
+    expect(rollCrisis.evaluation?.summary).toContain('信任危机停发下季独立预算')
+    expect(rollCrisis.mandate?.initialTransferBudget).toBe(0)
+    expect(rollCrisis.mandate?.transferBudget).toBe(0)
+    expect(rollCrisis.mandate?.initialFacilityBudget).toBe(0)
+    expect(rollCrisis.mandate?.facilityBudget).toBe(0)
+    expect(rollCrisis.mandate?.initialWageCap).toBeLessThan(Math.round(BOARD_TIER_BASE.division2.wageCap * 0.72))
+    expect(agentView(crisisGame).board.inTrustCrisis).toBe(true)
+
+    setGame(crisisGame)
+    ui.clubTab = 'board'
+    expect(renderClub()).toContain('信任危机（信任度 &lt; 40）')
+
+    // 下一季大超预期拿 S 级使信任度回升至 >= 40 后，独立预算恢复发放
+    crisisGame.board!.confidence = 36
+    crisisGame.board!.current!.leagueTarget = 12
+    crisisGame.board!.current!.cupTarget = 'qualified'
+    crisisGame.season.index = 4
+    crisisGame.season.tier = 'division2'
+    const rollRecover = evaluateAndRollBoardSeason(crisisGame, {
+      seasonIndex: 3,
+      tier: 'division2',
+      finish: 1,
+      totalTeams: 20,
+      seasonCups: makeTestCup('community', 'player', 'champion'),
+      clubIds: ['player'],
+    })
+    expect(crisisGame.board!.confidence).toBeGreaterThanOrEqual(BOARD_CRISIS_CONFIDENCE)
+    expect(rollRecover.mandate!.initialTransferBudget).toBeGreaterThan(0)
+    expect(rollRecover.mandate!.initialFacilityBudget).toBeGreaterThan(0)
   })
 })
 

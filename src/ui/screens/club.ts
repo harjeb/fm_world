@@ -9,13 +9,16 @@ import { BASE_ROUND_INCOME, economyOf, FACILITIES, facilityLevel, facilityRoundI
 import { committedFunds } from '../../game/auction.ts'
 import {
   BOARD_AMBITION_META,
+  BOARD_AMBITIOUS_MIN_CONFIDENCE,
   BOARD_CHOICE_MAX_ROUND,
   BOARD_COMMERCIAL_WAGE_SHARE,
+  BOARD_CRISIS_CONFIDENCE,
   BOARD_CUP_LABELS,
   BOARD_CUP_STAGE_LABELS,
   BOARD_CUP_STAGE_RANK,
   BOARD_GRADE_META,
   BOARD_WAGE_SLIDER_ROUNDS,
+  ambitiousLockReason,
   boardCommercialWageBonus,
   boardEffectiveWageCap,
   boardSliderBounds,
@@ -23,6 +26,7 @@ import {
   ensureBoard,
   evaluateClubCupStage,
   isBoardBudgetActive,
+  isBoardTrustCrisis,
   refreshOffseasonBoardPreview,
   syncBoardLockState,
 } from '../../game/board.ts'
@@ -201,32 +205,40 @@ function boardOptionCard(
   scope: 'offseason' | 'current',
   disabled: boolean,
   tier?: TierId,
+  lockReason?: string | null,
 ): string {
   const meta = BOARD_AMBITION_META[option.ambition]
   const cupName = BOARD_CUP_LABELS[option.cupId]
-  const badge = option.ambition === 'expected'
-    ? tag('推荐', 'gold')
-    : option.ambition === 'ambitious'
-      ? tag('高风险高回报', 'info')
-      : tag('稳健', '')
-  const btnText = selected
-    ? (scope === 'offseason' ? '已预选（换季生效）' : '当前已选')
-    : (scope === 'offseason' ? `预选${meta.label}` : `切换为${meta.label}`)
-  return `<div class="board-opt ${selected ? 'selected' : ''}">
+  const locked = !!lockReason
+  const badge = locked
+    ? tag('已锁定', 'bad')
+    : option.ambition === 'expected'
+      ? tag('推荐', 'gold')
+      : option.ambition === 'ambitious'
+        ? tag('高风险高回报', 'info')
+        : tag('稳健', '')
+  const btnText = locked
+    ? '已锁定（不可选）'
+    : selected
+      ? (scope === 'offseason' ? '已预选（换季生效）' : '当前已选')
+      : (scope === 'offseason' ? `预选${meta.label}` : `切换为${meta.label}`)
+  const grantText = (value: number) => value === 0 ? '0（信任危机停发）' : value.toLocaleString()
+  return `<div class="board-opt ${selected ? 'selected' : ''} ${locked ? 'locked' : ''}">
     <div class="board-opt-head">
       <b>${esc(meta.label)}</b>
       ${badge}
     </div>
     <p class="muted small board-opt-desc">${esc(meta.tagline)}</p>
+    ${locked ? `<p class="small down board-opt-lock">${esc(lockReason!)}</p>` : ''}
     <dl class="board-opt-dl">
       <div><dt>联赛目标</dt><dd><b>前 ${option.leagueTarget} 名</b></dd></div>
       <div><dt>${esc(cupName)}目标</dt><dd><b>${esc(BOARD_CUP_STAGE_LABELS[option.cupTarget])}</b></dd></div>
-      <div><dt>独立转会预算</dt><dd class="num-text"><b>${option.transferGrant.toLocaleString()}</b></dd></div>
-      <div><dt>独立设施预算</dt><dd class="num-text"><b>${option.facilityGrant.toLocaleString()}</b></dd></div>
+      <div><dt>独立转会预算</dt><dd class="num-text ${option.transferGrant === 0 ? 'down' : ''}"><b>${grantText(option.transferGrant)}</b></dd></div>
+      <div><dt>独立设施预算</dt><dd class="num-text ${option.facilityGrant === 0 ? 'down' : ''}"><b>${grantText(option.facilityGrant)}</b></dd></div>
       <div><dt>基础工资帽 / 轮</dt><dd class="num-text"><b>${option.wageCap.toLocaleString()}</b></dd></div>
       <div><dt>达标 / 超额奖金</dt><dd class="num-text">${option.meetBonus.toLocaleString()} / ${option.exceedBonus.toLocaleString()}</dd></div>
     </dl>
-    <button class="btn small ${selected ? 'ghost' : 'primary'}" data-action="board-choose" data-ambition="${option.ambition}" data-scope="${scope}" ${tier ? `data-tier="${tier}"` : ''} ${disabled || selected ? 'disabled' : ''}>${btnText}</button>
+    <button class="btn small ${selected && !locked ? 'ghost' : 'primary'}" data-action="board-choose" data-ambition="${option.ambition}" data-scope="${scope}" ${tier ? `data-tier="${tier}"` : ''} ${disabled || selected || locked ? 'disabled' : ''}>${btnText}</button>
   </div>`
 }
 
@@ -240,6 +252,13 @@ function boardTab(): string {
   const economy = economyOf(game)
   const confMeta = boardConfidenceLabel(board.confidence)
   const lastGrade = board.lastGrade ? BOARD_GRADE_META[board.lastGrade] : null
+  const inCrisis = isBoardTrustCrisis(board.confidence)
+  const currentAmbitiousLock = ambitiousLockReason(board.confidence, board.lastGrade)
+  const statusBanner = inCrisis
+    ? `<div class="banner bad" style="margin-top:10px">${icon('flag', 16)}<b>信任危机（信任度 &lt; ${BOARD_CRISIS_CONFIDENCE}）：已停发独立转会预算与设施预算，基础工资帽大幅下调，并锁定「野心档」</b><span>请通过稳妥/基准档达成赛季目标恢复信任度（≥ ${BOARD_CRISIS_CONFIDENCE} 解除停发，≥ ${BOARD_AMBITIOUS_MIN_CONFIDENCE} 且上季达 B 及以上解锁野心档）。</span></div>`
+    : currentAmbitiousLock
+      ? `<div class="banner gold" style="margin-top:10px">${icon('flag', 16)}<b>${esc(currentAmbitiousLock)}</b><span>请先选择「稳妥档」或「基准档」并取得 B 级及以上表现。</span></div>`
+      : ''
 
   const headerCard = panel('董事会信任度与政策', `
     <div class="board-conf-row">
@@ -261,7 +280,8 @@ function boardTab(): string {
         <div><span class="muted small">滑块换算比率</span><b>${BOARD_WAGE_SLIDER_ROUNDS} : 1</b></div>
       </div>
     </div>
-    <p class="hint">每赛季开启时由董事会分别拨付「独立转会预算」与「独立设施预算」，均与俱乐部自有余额互不冲突：买人优先抵扣转会预算、升级设施优先抵扣设施预算，预算用完后仍可直接用余额支付；但每轮工资帽严格生效，超帽无法签人。未达标将扣减信任度并在下赛季明显削减预算与工资帽。</p>
+    ${statusBanner}
+    <p class="hint">每赛季开启时由董事会分别拨付「独立转会预算」与「独立设施预算」，均与俱乐部自有余额互不冲突：买人优先抵扣转会预算、升级设施优先抵扣设施预算，预算用完后仍可直接用余额支付；但每轮工资帽严格生效，超帽无法签人。未达标将扣减信任度并大幅削减下季预算与工资帽；信任度 &lt; ${BOARD_AMBITIOUS_MIN_CONFIDENCE} 或上季 C/D 级时锁定「野心档」，信任危机（&lt; ${BOARD_CRISIS_CONFIDENCE}）将停发全部独立转会与设施预算。</p>
   `)
 
   let currentSection = ''
@@ -374,7 +394,7 @@ function boardTab(): string {
       </div>
       ${canSwitch ? panel(`开季目标确认与档位切换（第 ${game.season.round} / ${BOARD_CHOICE_MAX_ROUND} 轮可调）`, `
         <p class="hint">开季前 ${BOARD_CHOICE_MAX_ROUND} 轮内可切换目标档位（按新旧档位差额实时调整独立预算与工资帽，不影响俱乐部自有余额），第 ${BOARD_CHOICE_MAX_ROUND + 1} 轮起自动锁定。</p>
-        <div class="board-options">${m.options.map((opt) => boardOptionCard(opt, opt.ambition === m.ambition, 'current', false)).join('')}</div>
+        <div class="board-options">${m.options.map((opt) => boardOptionCard(opt, opt.ambition === m.ambition, 'current', false, undefined, opt.ambition === 'ambitious' ? currentAmbitiousLock : null)).join('')}</div>
         <div class="board-lock-row">
           <button class="btn small ghost" data-action="board-choose" data-ambition="${m.ambition}" data-scope="current" data-lock="1">确认并立即锁定「${esc(ambitionLabel)}」</button>
         </div>
@@ -393,6 +413,8 @@ function boardTab(): string {
   let offseasonSection = ''
   if (game.season.finished && board.offseasonPreview) {
     const prev = board.offseasonPreview
+    const prevLock = prev.ambitiousLockReason ?? null
+    const budgetText = prev.inTrustCrisis ? '0%（信任危机停发）' : `${Math.round(prev.budgetMultiplier * 100)}%`
     if (!prev.confirmed) {
       const pickedD1: BoardAmbition = board.pendingChoicesByTier?.division1 ?? 'expected'
       const pickedD2: BoardAmbition = board.pendingChoicesByTier?.division2 ?? 'expected'
@@ -404,22 +426,22 @@ function boardTab(): string {
           <b>正在争夺升级席位 · 支持双情景提前预选（换季自动匹配真实级别）</b>
           <span>升精英预选：<b>${esc(BOARD_AMBITION_META[pickedD1].label)}</b>${hasD1Picked ? '' : '（默认）'} · 留先锋预选：<b>${esc(BOARD_AMBITION_META[pickedD2].label)}</b>${hasD2Picked ? '' : '（默认）'}</span>
         </div>
-        <p class="hint">预算系数 ${Math.round(prev.budgetMultiplier * 100)}% · 工资帽系数 ${Math.round(prev.wageMultiplier * 100)}%。现在就能把「升入精英」和「留在先锋」两套意向都选好，换季时系统自动按升级杯最终结果生效对应那一套；开季前 ${BOARD_CHOICE_MAX_ROUND} 轮内仍可调整。</p>
+        <p class="hint">预算系数 ${budgetText} · 工资帽系数 ${Math.round(prev.wageMultiplier * 100)}%。现在就能把「升入精英」和「留在先锋」两套意向都选好，换季时系统自动按升级杯最终结果生效对应那一套；开季前 ${BOARD_CHOICE_MAX_ROUND} 轮内仍可调整。</p>
         ${prev.promotionOptions?.length ? `<h4 class="board-scenario-title">${tag('情景一', 'good')} 若升级杯成功升入「精英联赛」· 当前预选：<b>${esc(BOARD_AMBITION_META[pickedD1].label)}</b>${hasD1Picked ? '' : '<small class="muted">（默认）</small>'}</h4>
-        <div class="board-options">${prev.promotionOptions.map((opt) => boardOptionCard(opt, opt.ambition === pickedD1, 'offseason', false, 'division1')).join('')}</div>` : ''}
+        <div class="board-options">${prev.promotionOptions.map((opt) => boardOptionCard(opt, opt.ambition === pickedD1, 'offseason', false, 'division1', opt.ambition === 'ambitious' ? prevLock : null)).join('')}</div>` : ''}
         <h4 class="board-scenario-title">${tag('情景二', 'info')} 若升级杯未出线留在「先锋联赛」（战力预估第 ${prev.powerRank}/${prev.totalClubs}）· 当前预选：<b>${esc(BOARD_AMBITION_META[pickedD2].label)}</b>${hasD2Picked ? '' : '<small class="muted">（默认）</small>'}</h4>
-        <div class="board-options">${prev.options.map((opt) => boardOptionCard(opt, opt.ambition === pickedD2, 'offseason', false, 'division2')).join('')}</div>
+        <div class="board-options">${prev.options.map((opt) => boardOptionCard(opt, opt.ambition === pickedD2, 'offseason', false, 'division2', opt.ambition === 'ambitious' ? prevLock : null)).join('')}</div>
       `)
     } else {
       const picked: BoardAmbition = board.pendingChoicesByTier?.[prev.projectedTier] ?? board.pendingChoice ?? 'expected'
       offseasonSection = panel(`休赛期通知 · 第 ${prev.nextSeasonIndex} 赛季董事会目标与预算预选`, `
-        <div class="banner good">
+        <div class="banner ${prev.inTrustCrisis ? 'bad' : 'good'}">
           ${icon('star', 16)}
           <b>下赛季级别已确认：${esc(worldTierLabel(prev.projectedTier))}</b>
-          <span>战力预估第 ${prev.powerRank}/${prev.totalClubs} · 预算系数 ${Math.round(prev.budgetMultiplier * 100)}% · 工资帽系数 ${Math.round(prev.wageMultiplier * 100)}% · 当前预选：<b>${esc(BOARD_AMBITION_META[picked].label)}</b></span>
+          <span>战力预估第 ${prev.powerRank}/${prev.totalClubs} · 预算系数 ${budgetText} · 工资帽系数 ${Math.round(prev.wageMultiplier * 100)}% · 当前预选：<b>${esc(BOARD_AMBITION_META[picked].label)}</b></span>
         </div>
         <p class="hint">休赛期可随时更改预选档位，换季开启第 ${prev.nextSeasonIndex} 赛季时自动按所选档位发放独立转会预算与设施预算（未选默认「基准档」）；开季前 ${BOARD_CHOICE_MAX_ROUND} 轮内仍可最后调整一次。</p>
-        <div class="board-options">${prev.options.map((opt) => boardOptionCard(opt, opt.ambition === picked, 'offseason', false, prev.projectedTier)).join('')}</div>
+        <div class="board-options">${prev.options.map((opt) => boardOptionCard(opt, opt.ambition === picked, 'offseason', false, prev.projectedTier, opt.ambition === 'ambitious' ? prevLock : null)).join('')}</div>
       `)
     }
   }

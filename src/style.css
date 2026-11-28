@@ -2700,6 +2700,8 @@ circle.pm-5 { fill: var(--h6); }
 .board-scenario-title { display: flex; align-items: center; gap: 8px; margin: 16px 0 4px; font-size: 13px; color: var(--text); font-weight: 600; }
 .board-opt { background: rgba(255,255,255,.025); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; transition: border-color .15s, background .15s; }
 .board-opt.selected { border-color: var(--accent); background: rgba(205,243,63,.06); }
+.board-opt.locked { opacity: 0.72; border-style: dashed; border-color: rgba(242, 112, 106, 0.45); }
+.board-opt-lock { margin: 0; line-height: 1.4; }
 .board-opt-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 15px; }
 .board-opt-desc { margin: 0; min-height: 32px; }
 .board-opt-dl { margin: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; flex: 1; }
@@ -3037,6 +3039,7 @@ circle.pm-5 { fill: var(--h6); }
 :root[data-theme="light"] .chat-mine-tag { border-color: rgba(47, 125, 24, 0.38); }
 :root[data-theme="light"] .board-alert,
 :root[data-theme="light"] .board-opt.selected { border-color: rgba(47, 125, 24, 0.45); background: rgba(47, 125, 24, 0.07); }
+:root[data-theme="light"] .board-opt.locked { border-color: rgba(220, 38, 38, 0.4); }
 :root[data-theme="light"] .board-policy-pills > div,
 :root[data-theme="light"] .board-target-item,
 :root[data-theme="light"] .board-kpi,

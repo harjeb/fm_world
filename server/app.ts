@@ -32,7 +32,7 @@ import { INITIAL_CHAMPIONS_CLUB_IDS, WORLD_CLUB_DEFS, isClubPlayerLocked, pickEx
 import { isTsubasaPlayer } from '../src/game/data/tsubasa-specials.ts'
 import { rescaleLegacyRandomPlayer } from '../src/game/data/players.ts'
 import { lineupLockState } from '../src/game/season.ts'
-import { completedWorldRound, paysSeasonCupAppearanceGold, seasonRoundKickoff, worldRoundsKickedOff } from '../src/game/season-cups.ts'
+import { completedWorldRound, isSeasonRolloverReady, paysSeasonCupAppearanceGold, seasonRoundKickoff, worldRoundsKickedOff } from '../src/game/season-cups.ts'
 import { legendCupTeamById } from '../src/game/data/legend-cup-teams.ts'
 import { LEGEND_STAR_BOOK_ID } from '../src/game/data/legend-cup-skill.ts'
 import type { AIClubState, AITeam, Chemistry, PairChemistry, Player, ScheduledMatchShout, WorldClub, WorldState } from '../src/game/types.ts'
@@ -2977,10 +2977,8 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
   let lastSeasonCheck = -Infinity
   function autoRollSharedSeason(): void {
-    // 常规赛结束后先留 12 个游戏日给升级附加赛和友谊赛，窗口走完才开新赛季。
-    if (now() < seasonEndAt(sharedWorld.world.seasonStartedAt) || now() - lastSeasonCheck < 5000) return
-    // 停服恢复可能仍在逐场处理旧任务：不要提前尝试换季，也不阻塞后台队列。
-    if (sharedWorld.world.divisions.some((division) => division.fixtures.some((fixture) => !fixture.played))) return
+    // 常规赛结束后留给升级杯与友谊赛；窗口走完或实时升级杯全部结束即自动开新赛季（第 1 轮仍按原定开赛时刻开球）。
+    if (!isSeasonRolloverReady(sharedWorld.world, now()) || now() - lastSeasonCheck < 5000) return
     lastSeasonCheck = now()
     advanceAllMatches()
     rollSharedSeason()
@@ -3433,9 +3431,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         advanceAccount(agentAccount)
         if (body.action === 'start_next_season' && agentAccount.game.world) {
           const outcome = agentAccount.game.season.finished
-            ? (now() >= seasonEndAt(sharedWorld.world.seasonStartedAt)
+            ? (isSeasonRolloverReady(sharedWorld.world, now())
               ? rollSharedSeason(true)
-              : { ok: false, error: '赛后休整还没结束：窗口结束后会自动开新赛季' })
+              : { ok: false, error: '赛后休整还没结束：升级杯全部结束后或窗口结束后会自动开新赛季' })
             : now() - lastRollAt < 15_000
               ? { ok: true, alreadyRolled: true }
               : { ok: false, error: '本赛季尚未结束' }
@@ -3545,7 +3543,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
     if (url.pathname === '/api/world/next-season' && req.method === 'POST') {
       advanceAccount(account)
-      const postseasonOver = now() >= seasonEndAt(sharedWorld.world.seasonStartedAt)
+      const postseasonOver = isSeasonRolloverReady(sharedWorld.world, now())
       const outcome = account.game.season.finished
         ? (postseasonOver
           ? rollSharedSeason(true)

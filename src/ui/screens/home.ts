@@ -100,7 +100,7 @@ function nextMatchPanel(): string {
     if (isOnlineMode() && inPostseason(game, now)) {
       return panel('赛后休整', `<div class="nm-stack"><div class="nm-live">
         <div>${icon('clock', 22)}</div>
-        <div><b>冠军：${styledClubName(season.champion ?? undefined, teamName(game, season.champion ?? ''), season.champion === PLAYER_TEAM_ID)} · 距下赛季 ${esc(nextSeasonCountdown(game, now))}</b><p class="muted">你的最终排名：第 ${season.playerFinish ?? '—'} 名。${promo?.championId ? '升级杯已完赛，升降级与合同将在下赛季开启时自动结算。' : '休整期间可调整阵容与约友谊赛，下赛季将自动开启。'}</p></div>
+        <div><b>冠军：${styledClubName(season.champion ?? undefined, teamName(game, season.champion ?? ''), season.champion === PLAYER_TEAM_ID)} · 距下赛季 ${esc(nextSeasonCountdown(game, now))}</b><p class="muted">你的最终排名：第 ${season.playerFinish ?? '—'} 名。${promo?.championId ? '升级杯已完赛，升降级与下赛季联赛球队即将完成切换（第 1 轮按原定时间开球）。' : '休整期间可调整阵容与约友谊赛，升级杯全部结束后将自动更新下赛季联赛球队。'}</p></div>
         ${promo ? '<button class="btn primary" data-action="go-cup" data-cup="promotion">查看升级杯结果</button>' : ''}
       </div>${recentLeagueResult()}</div>`, { className: 'next-match span-8' })
     }

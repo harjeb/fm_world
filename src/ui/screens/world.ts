@@ -247,7 +247,7 @@ export function renderWorld(): string {
       sub: `冠军联赛 / 精英联赛${dualD1 ? '（群英 / 豪强双区）' : ''} / 先锋联赛（${d2Summary}）。当前执教：<b>${styledClubName(PLAYER_TEAM_ID, game.clubName, true)}</b> · ${worldTierLabel(playerClub?.tier ?? 'division2')}${playerClub?.conference ? ` · ${conferenceLabel(playerClub.conference, playerClub.tier)}` : ''}。`,
       actions: `${onlineState.status === 'online' ? '' : '<button class="btn" data-action="new-game">开始本地新游戏</button>'}`,
     })}
-    ${inPostseason(game) ? `<div class="banner info">${icon('clock', 18)}<b>赛后休整 · 还剩 ${esc(nextSeasonCountdown(game))}</b><span>升级杯正在进行；所有球队都可以约友谊赛，赛季将在休整窗口结束后自动开始。</span></div>` : ''}
+    ${inPostseason(game) ? `<div class="banner info">${icon('clock', 18)}<b>赛后休整 · 还剩 ${esc(nextSeasonCountdown(game))}</b><span>升级杯正在进行；所有球队都可以约友谊赛，升级杯全部结束后将自动更新下赛季联赛球队。</span></div>` : ''}
     <div class="pyramid">
       ${pyramidLevelBox('l1', 'L1', '冠军联赛', '20 队 · 顶级 3-4 名真实球星', l1Tiers, world, activeId)}
       ${pyramidLevelBox('l2', 'L2', '精英联赛', dualD1 ? '每区 20 队 · 1-2 名真实球星' : '20 队 · 1-2 名真实球星', d1Tiers, world, activeId)}

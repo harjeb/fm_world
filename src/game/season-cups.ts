@@ -85,7 +85,7 @@ const EXTRA_LEAGUE_BJT_HOUR_TIERS = [new Set([6]), new Set([22]), new Set([2])] 
 export const SEASON_CUP_QUALIFICATION_ROUND = 6
 /** 传奇杯资格来自上赛季冠联前 4，赛程从第 5 轮之后启动并一直延续至赛季结束前（含赛后休整期）。 */
 export const LEGEND_CUP_START_ROUND = 5
-const LEGEND_CUP_END_BUFFER = 2 * HOUR
+const LEGEND_CUP_END_BUFFER = 4 * HOUR
 export const SEASON_CUP_NAMES: Record<SeasonCupId, string> = { community: '社区杯', league: '联盟杯', champions: '冠军杯', cross: '星联杯', legend: '传奇杯', promotion: '升级杯' }
 const CORE_SEASON_CUP_IDS: readonly SeasonCupId[] = ['community', 'league', 'champions', 'cross']
 export const LEGEND_GROUP_ROUNDS = 3
@@ -840,6 +840,18 @@ export function syncPromotionPlayoffFromCup(world: WorldState): boolean {
     ...(runnerUps?.length ? { runnerUps } : {}),
   }
   return true
+}
+
+/** 判断当前赛季是否可以滚入下赛季：常规赛全部完赛，且已到休整结束时刻，或实时升级杯（及本季其余杯赛）已全部完赛公布。 */
+export function isSeasonRolloverReady(world: WorldState, now: number): boolean {
+  if (!world.divisions.length) return false
+  if (world.divisions.some((division) => division.fixtures.some((fixture) => !fixture.played))) return false
+  if (now >= seasonEndAt(world.seasonStartedAt, world.clockShift)) return true
+  const cups = world.seasonCups?.seasonIndex === world.seasonIndex ? world.seasonCups.cups : null
+  if (!cups) return false
+  const promotion = cups.find((cup) => cup.id === 'promotion')
+  if (!promotion || !promotion.championId) return false
+  return cups.every((cup) => !!cup.championId && cup.rounds.every((round) => round.fixtures.every((fixture) => fixture.played)))
 }
 
 /** 提交杯赛计划；允许从“仅提前规划传奇杯”安全合并补齐第 6 轮后的 4 项常规杯赛，但绝不覆盖已规划完成的常规杯赛。 */

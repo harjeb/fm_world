@@ -16,9 +16,11 @@ import { seedAIClubs } from '../src/game/ai-club.ts'
 import { kickoffAtForRound, postseasonStartAt, seasonEndAt } from '../src/game/calendar.ts'
 import {
   collectPromotionCupSlots,
+  isSeasonRolloverReady,
   planPromotionCup,
   syncPromotionPlayoffFromCup,
 } from '../src/game/season-cups.ts'
+import { createAppServer, type AppServer } from '../server/app.ts'
 import { MatchQueue } from '../server/match-queue.ts'
 import { MatchScheduler } from '../server/match-scheduler.ts'
 import { emptyMatchBook, seasonCupJobId, type MatchJob, type MatchJobResult } from '../server/match-job.ts'
@@ -28,8 +30,10 @@ import type { MatchRecord } from '../src/game/types.ts'
 
 const queues: MatchQueue[] = []
 const dirs: string[] = []
+const servers: AppServer[] = []
 
 afterEach(() => {
+  while (servers.length) servers.pop()!.close()
   while (queues.length) queues.pop()!.close()
   while (dirs.length) fs.rmSync(dirs.pop()!, { recursive: true, force: true })
 })
@@ -210,5 +214,78 @@ describe('实时排期升级杯（方案 1）', () => {
     expect(ownerless.promotionPlayoff?.runnerUps).toEqual([clubId, 'd2s_01'])
     expect(syncPromotionPlayoffFromCup(world)).toBe(false)
     expect(kickoffAtForRound(start, 38)).toBeLessThan(postStart)
+  })
+
+  it('实时升级杯（及本季其余杯赛）全部结束后立即允许换季更新下赛季球队，且新赛季开赛时间仍锚定原定换季时刻', async () => {
+    const start = Date.UTC(2026, 10, 14, 14)
+    const { world, freeStars, reserveStars } = createOwnerlessWorld(99, start)
+    for (const div of world.divisions) {
+      for (const f of div.fixtures) {
+        f.played = true
+        f.score = { home: 1, away: 0 }
+      }
+      div.finished = true
+    }
+    const postStart = postseasonStartAt(world.seasonStartedAt)
+    const endAt = seasonEndAt(world.seasonStartedAt)
+
+    // 未生成或未完赛时，休整期结束前不允许提前滚入下赛季
+    expect(isSeasonRolloverReady(world, postStart + 60_000)).toBe(false)
+    expect(isSeasonRolloverReady(world, endAt)).toBe(true)
+
+    const promo = planPromotionCup(world, 99, postStart + 60_000)!
+    world.seasonCupMode = 1
+    world.seasonCups = {
+      version: 1,
+      seasonIndex: world.seasonIndex,
+      qualificationRound: 6,
+      createdAt: postStart,
+      delayedLeagueRounds: [],
+      cups: [promo],
+    }
+    expect(isSeasonRolloverReady(world, postStart + 60_000)).toBe(false)
+
+    // 连同服务端：升级杯最后一场公布结束后（仍在 seasonEndAt 之前），autoRollSharedSeason 立即将联赛球队切入第 2 赛季
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-promo-rollover-'))
+    dirs.push(dir)
+    const finishPromoFixture = (fx: any) => {
+      fx.played = true
+      fx.score = { home: 2, away: 0 }
+      fx.winnerId = fx.homeId
+    }
+    // 先把升级杯推进到已完赛（championId & promotedIds 已确定）
+    promo.rounds[0].fixtures.forEach(finishPromoFixture)
+    promo.groups = [
+      { index: 0, name: 'A 组', teamIds: promo.entrants.slice(0, 3), table: promo.entrants.slice(0, 3).map((teamId) => ({ teamId, played: 2, won: 1, drawn: 1, lost: 0, gf: 2, ga: 1, points: 4 })) },
+      { index: 1, name: 'B 组', teamIds: promo.entrants.slice(3, 6), table: promo.entrants.slice(3, 6).map((teamId) => ({ teamId, played: 2, won: 1, drawn: 1, lost: 0, gf: 2, ga: 1, points: 4 })) },
+    ]
+    promo.promotedIds = [promo.groups[0].table[0].teamId, promo.groups[1].table[0].teamId, promo.groups[0].table[1].teamId]
+    promo.championId = promo.promotedIds[0]
+    syncPromotionPlayoffFromCup(world)
+
+    const beforeEndClock = endAt - 3 * 3600_000
+    expect(isSeasonRolloverReady(world, beforeEndClock)).toBe(true)
+
+    fs.writeFileSync(path.join(dir, 'world.json'), JSON.stringify({
+      seed: 99,
+      startedAt: start,
+      owners: {},
+      world,
+      teams: buildOwnerlessTeams(world, 99),
+      freeStars,
+      reserveStars,
+    }))
+    const app = createAppServer({ dataDir: dir, tickMs: 0, now: () => beforeEndClock, seasonCups: true })
+    servers.push(app)
+    await new Promise<void>((resolve) => app.server.listen(0, '127.0.0.1', resolve))
+    const base = `http://127.0.0.1:${(app.server.address() as any).port}`
+
+    // 启动时 autoRollSharedSeason 已经立即将世界推到第 2 赛季
+    const rolledWorld = await (await fetch(`${base}/api/world`)).json() as any
+    expect(rolledWorld.seasonIndex).toBe(2)
+    expect(rolledWorld.startedAt).toBe(endAt)
+    for (const id of promo.promotedIds) {
+      expect(rolledWorld.clubs.find((c: any) => c.id === id)?.tier).toBe('division1')
+    }
   })
 })
