@@ -11,7 +11,7 @@ import { conferenceLabel, conferenceOfDivision } from '../../game/data/world-clu
 import { game, ui } from '../state.ts'
 import type { Fixture, SeasonTableRow, TierId, WorldState } from '../../game/types.ts'
 
-type DivisionTierMeta = { id: string; label: string; note: string; tier: TierId }
+type DivisionTierMeta = { id: string; label: string; shortLabel: string; note: string; tier: TierId }
 
 function allTierMetas(world: WorldState): DivisionTierMeta[] {
   const snapshot = onlineState.status === 'online' ? publicWorld : null
@@ -21,15 +21,15 @@ function allTierMetas(world: WorldState): DivisionTierMeta[] {
   ]
   const dualD1 = extraIds.includes('d1-north') || extraIds.includes('d1-south') || hasDualD1(world)
   const items: DivisionTierMeta[] = [
-    { id: 'champions', label: '冠军联赛', note: '20 队 · 顶级 3-4 名真实球星', tier: 'champions' },
+    { id: 'champions', label: '冠军联赛', shortLabel: '冠军联赛', note: '20 队 · 顶级 3-4 名真实球星', tier: 'champions' },
     ...(dualD1
       ? [
-          { id: 'd1-north', label: '精英联赛 · 群英区', note: '20 队 · 1-2 名真实球星', tier: 'division1' as TierId },
-          { id: 'd1-south', label: '精英联赛 · 豪强区', note: '20 队 · 1-2 名真实球星', tier: 'division1' as TierId },
+          { id: 'd1-north', label: '精英联赛 · 群英区', shortLabel: '群英区', note: '20 队 · 1-2 名真实球星', tier: 'division1' as TierId },
+          { id: 'd1-south', label: '精英联赛 · 豪强区', shortLabel: '豪强区', note: '20 队 · 1-2 名真实球星', tier: 'division1' as TierId },
         ]
-      : [{ id: 'division1', label: '精英联赛', note: '20 队 · 1-2 名真实球星', tier: 'division1' as TierId }]),
-    { id: 'd2-north', label: '先锋联赛 · 北区', note: '20 队 · 无真实球星', tier: 'division2' },
-    { id: 'd2-south', label: '先锋联赛 · 南区', note: '20 队 · 无真实球星', tier: 'division2' },
+      : [{ id: 'division1', label: '精英联赛', shortLabel: '精英联赛', note: '20 队 · 1-2 名真实球星', tier: 'division1' as TierId }]),
+    { id: 'd2-north', label: '先锋联赛 · 北区', shortLabel: '北区', note: '20 队 · 无真实球星', tier: 'division2' },
+    { id: 'd2-south', label: '先锋联赛 · 南区', shortLabel: '南区', note: '20 队 · 无真实球星', tier: 'division2' },
   ]
   const seen = new Set(items.map((item) => item.id))
   for (const id of extraIds) {
@@ -38,9 +38,12 @@ function allTierMetas(world: WorldState): DivisionTierMeta[] {
     if (dualD1 && id === 'division1') continue
     seen.add(id)
     const tier: TierId = id === 'champions' ? 'champions' : (id === 'division1' || id.startsWith('d1-')) ? 'division1' : 'division2'
+    const label = worldDivisionLabel(world, id)
+    const shortLabel = label.includes(' · ') ? label.split(' · ').slice(1).join(' · ') : label
     items.push({
       id,
-      label: worldDivisionLabel(world, id),
+      label,
+      shortLabel,
       note: tier === 'division1' ? '20 队 · 1-2 名真实球星' : '20 队 · 扩展赛区',
       tier,
     })
@@ -62,15 +65,35 @@ function tierButton(world: WorldState, item: DivisionTierMeta, activeId: string)
   const leaderName = leader ? (leaderIsOwn ? game.clubName : leader.name) : ''
   const leaderDisplayId = leader ? (leaderIsOwn ? PLAYER_TEAM_ID : leader.id) : undefined
   const mine = world.playerDivisionId === item.id
-  return `<button class="tier ${activeId === item.id ? 'active' : ''} ${mine ? 'mine' : ''}" data-world-div="${esc(item.id)}">
-    <span class="tier-title"><b>${esc(item.label)}</b>${mine ? tag('你在这里', 'solid') : ''}</span>
-    <span class="tier-note">${esc(item.note)}</span>
-    <span class="tier-meta"><span>${played} / ${total} 场</span>${leader ? `<span class="club">${crest({ name: leaderName, color: leader.color }, 15)}<span>${styledClubName(leaderDisplayId, leaderName, leaderIsOwn)}${humanMark(leaderDisplayId ?? leader.id)} 领跑</span></span>` : ''}</span>
+  const cls = ['tier', activeId === item.id ? 'active' : '', mine ? 'mine' : ''].filter(Boolean).join(' ')
+  return `<button type="button" class="${cls}" data-world-div="${esc(item.id)}" title="${esc(item.label)}">
+    <span class="tier-title"><b>${esc(item.shortLabel)}</b>${mine ? tag('你在这里', 'solid') : ''}<span class="tier-progress num-text">${played}/${total} 场</span></span>
+    <span class="tier-meta">${leader ? `<span class="club tier-leader-club">${crest({ name: leaderName, color: leader.color }, 14)}<span class="tier-leader-name">${styledClubName(leaderDisplayId, leaderName, leaderIsOwn)}${humanMark(leaderDisplayId ?? leader.id)}</span></span><span class="tier-lead-badge">领跑</span>` : '<span class="muted">暂无领跑球队</span>'}</span>
     ${topScorer || topAssist ? `<span class="tier-leaders">
-      ${topScorer ? `<span class="tier-leader"><small>射手</small>${esc(topScorer.name)} <b>${topScorer.goals}</b></span>` : ''}
-      ${topAssist ? `<span class="tier-leader"><small>助攻</small>${esc(topAssist.name)} <b>${topAssist.assists}</b></span>` : ''}
+      ${topScorer ? `<span class="tier-leader" title="射手榜首：${esc(topScorer.name)} ${topScorer.goals} 球"><small>射手</small><span class="tier-leader-player">${esc(topScorer.name)}</span><b class="num-text">${topScorer.goals}</b></span>` : ''}
+      ${topAssist ? `<span class="tier-leader" title="助攻榜首：${esc(topAssist.name)} ${topAssist.assists} 次"><small>助攻</small><span class="tier-leader-player">${esc(topAssist.name)}</span><b class="num-text">${topAssist.assists}</b></span>` : ''}
     </span>` : ''}
   </button>`
+}
+
+function pyramidLevelBox(
+  levelClass: 'l1' | 'l2' | 'l3',
+  badge: string,
+  title: string,
+  note: string,
+  items: DivisionTierMeta[],
+  world: WorldState,
+  activeId: string,
+): string {
+  return `<section class="pyramid-level ${levelClass}" aria-label="${esc(title)}">
+    <div class="pyramid-level-head">
+      <span class="pyramid-level-badge">${esc(badge)}</span>
+      <b class="pyramid-level-title">${esc(title)}</b>
+      <span class="pyramid-level-note">${esc(note)}</span>
+      <span class="pyramid-level-count">${items.length} 赛区</span>
+    </div>
+    <div class="pyramid-cards">${items.map((item) => tierButton(world, item, activeId)).join('')}</div>
+  </section>`
 }
 
 function divisionMatchHistoryPanel(
@@ -183,6 +206,7 @@ export function renderWorld(): string {
   }
   const world = game.world
   const tiers = allTierMetas(world)
+  const l1Tiers = tiers.filter((item) => item.tier === 'champions')
   const d1Tiers = tiers.filter((item) => item.tier === 'division1')
   const d2Tiers = tiers.filter((item) => item.tier === 'division2')
   const dualD1 = d1Tiers.length >= 2
@@ -225,9 +249,9 @@ export function renderWorld(): string {
     })}
     ${inPostseason(game) ? `<div class="banner info">${icon('clock', 18)}<b>赛后休整 · 还剩 ${esc(nextSeasonCountdown(game))}</b><span>升级杯正在进行；所有球队都可以约友谊赛，赛季将在休整窗口结束后自动开始。</span></div>` : ''}
     <div class="pyramid">
-      <div class="pyramid-level l1">${tierButton(world, tiers[0], activeId)}</div>
-      <div class="pyramid-level l2${dualD1 ? ' dual' : ''}">${d1Tiers.map((item) => tierButton(world, item, activeId)).join('')}</div>
-      <div class="pyramid-level l3">${d2Tiers.map((item) => tierButton(world, item, activeId)).join('')}</div>
+      ${pyramidLevelBox('l1', 'L1', '冠军联赛', '20 队 · 顶级 3-4 名真实球星', l1Tiers, world, activeId)}
+      ${pyramidLevelBox('l2', 'L2', '精英联赛', dualD1 ? '每区 20 队 · 1-2 名真实球星' : '20 队 · 1-2 名真实球星', d1Tiers, world, activeId)}
+      ${pyramidLevelBox('l3', 'L3', '先锋联赛', '每区 20 队 · 无真实球星', d2Tiers, world, activeId)}
     </div>
     <div class="grid season-grid">
       ${panel(esc(activeDivLabel), division ? leagueTable(visibleTable, { tier: active.tier, fixtures: visibleFixtures, browseClubs: true, clubLabels, ratings: divisionRatings(world, visibleTable.map((row) => row.teamId)) }) : '<p class="muted pad">当前联赛不存在。</p>', { flush: true, aside: `<span class="muted small">点击球队查看排名走势与球员名单 · ${esc(active.note)}</span>` })}

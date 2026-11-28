@@ -64,4 +64,27 @@ describe('世界页扩展赛区去重', () => {
     onlineState.status = 'offline'
     expect(divisionButtons(renderWorld())).toEqual(['champions', 'division1', 'd2-north', 'd2-south', 'd2-zone3'])
   })
+  it('世界页按三级分框展示，并使用精简赛区卡片标题保留完整提示', () => {
+    const game = createWorldGame(7144, 'north', '测试北队')
+    expandWorldConference(game.world!, game.seed)
+    setGame(game)
+    ui.worldDivision = 'd2-zone3'
+    const html = renderWorld()
+
+    expect(html).toContain('<section class="pyramid-level l1" aria-label="冠军联赛">')
+    expect(html).toContain('<section class="pyramid-level l2" aria-label="精英联赛">')
+    expect(html).toContain('<section class="pyramid-level l3" aria-label="先锋联赛">')
+    expect(html).toMatch(/class="pyramid-level l1"[\s\S]*?<div class="pyramid-level-head">[\s\S]*?<div class="pyramid-cards">/)
+    expect(html).toMatch(/class="pyramid-level l2"[\s\S]*?<div class="pyramid-level-head">[\s\S]*?<div class="pyramid-cards">/)
+    expect(html).toMatch(/class="pyramid-level l3"[\s\S]*?<div class="pyramid-level-head">[\s\S]*?<div class="pyramid-cards">/)
+
+    expect(html).toContain('data-world-div="d2-north" title="先锋联赛 · 北区"')
+    expect(html).toContain('<b>北区</b>')
+    expect(html).toContain('data-world-div="d2-south" title="先锋联赛 · 南区"')
+    expect(html).toContain('<b>南区</b>')
+    expect(html).toContain('data-world-div="d2-zone3" title="先锋联赛 · 东区"')
+    expect(html).toContain('<b>东区</b>')
+    expect(html).toMatch(/class="tier mine" data-world-div="d2-north"/)
+    expect(html).toMatch(/class="tier active" data-world-div="d2-zone3"/)
+  })
 })

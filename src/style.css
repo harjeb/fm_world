@@ -1037,22 +1037,68 @@ button.nm-recent:hover { background: var(--raised); }
 .pager { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 10px; border-top: 1px solid var(--line); }
 .pager-inline { display: flex; align-items: center; gap: 2px; }
 
-.pyramid { display: grid; gap: 6px; margin-bottom: 12px; justify-items: center; }
-.pyramid-level { display: grid; gap: 6px; width: 100%; }
-.pyramid-level.l1 { max-width: 46%; }
-.pyramid-level.l2 { max-width: 70%; }
-.pyramid-level.l2.dual { max-width: 84%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.pyramid-level.l3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.tier { display: grid; gap: 2px; width: 100%; padding: 8px 12px; text-align: left; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--radius); }
-.tier:hover { background: var(--hover); }
-.tier.active { border-color: var(--accent); background: var(--panel-2); }
-.tier-title { display: flex; align-items: center; gap: 8px; }
-.tier-title b { font-weight: 600; }
-.tier.mine .tag { color: var(--accent); border-color: var(--accent); background: transparent; }
-.tier-note { color: var(--text-3); font-size: 11.5px; }
-.tier-meta { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; color: var(--text-2); font-size: 11.5px; }
-.tier-leaders { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 2px; color: var(--text-2); font-size: 11.5px; }
-.tier-leader small { color: var(--text-3); margin-right: 4px; }
+.pyramid { display: grid; gap: 10px; margin-bottom: 12px; width: 100%; }
+.pyramid-level {
+  display: grid; gap: 8px; width: 100%; padding: 8px 10px 10px;
+  background: var(--tier-bg, var(--panel));
+  border: 1px solid var(--tier-border, var(--line-2));
+  border-left: 3px solid var(--tier-color, var(--line-2));
+  border-radius: calc(var(--radius) + 2px);
+}
+.pyramid-level.l1 {
+  --tier-color: var(--warn);
+  --tier-bg: rgba(242, 184, 75, 0.06);
+  --tier-border: rgba(242, 184, 75, 0.34);
+  --tier-badge-bg: rgba(242, 184, 75, 0.16);
+}
+.pyramid-level.l2 {
+  --tier-color: var(--legend);
+  --tier-bg: rgba(181, 123, 255, 0.06);
+  --tier-border: rgba(181, 123, 255, 0.34);
+  --tier-badge-bg: rgba(181, 123, 255, 0.16);
+}
+.pyramid-level.l3 {
+  --tier-color: var(--info);
+  --tier-bg: rgba(98, 174, 245, 0.06);
+  --tier-border: rgba(98, 174, 245, 0.34);
+  --tier-badge-bg: rgba(98, 174, 245, 0.16);
+}
+.pyramid-level-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 20px; }
+.pyramid-level-badge {
+  display: inline-grid; place-items: center; padding: 1px 6px; border-radius: 2px;
+  background: var(--tier-badge-bg, var(--raised)); color: var(--tier-color, var(--text));
+  font: 700 10.5px/1.3 var(--font-num); letter-spacing: 0.04em;
+}
+.pyramid-level-title { font-size: 13px; font-weight: 600; color: var(--tier-color, var(--text)); }
+.pyramid-level-note { font-size: 11.5px; color: var(--text-3); }
+.pyramid-level-count { margin-left: auto; font-size: 11px; color: var(--text-3); }
+.pyramid-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.tier {
+  display: grid; gap: 4px; width: 100%; min-width: 0; padding: 7px 10px; text-align: left;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+}
+.tier:hover { background: var(--hover); border-color: var(--tier-border, var(--line-2)); }
+.tier.active {
+  border-color: var(--accent); background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.tier-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.tier-title b { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tier-progress { margin-left: auto; flex: none; font-size: 11px; color: var(--text-3); white-space: nowrap; }
+.tier.mine .tag { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); flex: none; padding: 0 5px; font-size: 10.5px; }
+.tier-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; color: var(--text-2); font-size: 11.5px; }
+.tier-leader-club { min-width: 0; overflow: hidden; }
+.tier-leader-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tier-lead-badge { flex: none; font-size: 10.5px; color: var(--text-3); }
+.tier-leaders {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px;
+  padding-top: 4px; border-top: 1px dashed var(--line); color: var(--text-2); font-size: 11px;
+}
+.tier-leader { display: flex; align-items: baseline; gap: 3px; min-width: 0; }
+.tier-leader small { color: var(--text-3); flex: none; }
+.tier-leader-player { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tier-leader b { flex: none; color: var(--text); font-weight: 600; }
 .rule-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; color: var(--text-2); font-size: 12px; line-height: 1.5; }
 .rule-list li { position: relative; display: block; padding-left: 20px; }
 .rule-list .ico { position: absolute; left: 0; top: 3px; margin-top: 0; color: var(--text-3); }
@@ -1766,6 +1812,9 @@ circle.pm-5 { fill: var(--h6); }
   .slot .slot-role { font-size: 10px; }
   .pick-list { grid-template-columns: minmax(0, 1fr); }
 }
+@media (max-width: 1120px) {
+  .pyramid-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 @media (max-width: 760px) {
   .tac-body { grid-template-columns: minmax(0, 1fr); padding: 8px; }
   .tac-pitch { order: 1; }
@@ -1887,8 +1936,8 @@ circle.pm-5 { fill: var(--h6); }
   .cal-week { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
   .cal-week-label { display: none; }
   .cal-slot { padding: 0 2px; font-size: 9.5px; }
-  .pyramid-level.l1, .pyramid-level.l2, .pyramid-level.l2.dual { max-width: none; grid-template-columns: minmax(0, 1fr); }
-  .pyramid-level.l3 { grid-template-columns: minmax(0, 1fr); }
+  .pyramid-level { padding: 7px 8px 8px; }
+  .pyramid-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
   .fx { grid-template-columns: minmax(0, 1fr) 46px minmax(0, 1fr); gap: 4px; padding: 4px 8px; font-size: 12px; }
   .fx.with-round { grid-template-columns: 30px minmax(0, 1fr) 46px minmax(0, 1fr); }
   .scoreboard { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; padding: 8px 10px; }
@@ -1935,6 +1984,9 @@ circle.pm-5 { fill: var(--h6); }
   .auto-sub-row .btn { grid-column: 2; grid-row: 1; justify-self: end; }
   .auto-sub-row select { grid-column: 1 / -1; height: 32px; }
   .auto-sub-arrow { display: none; }
+}
+@media (max-width: 520px) {
+  .pyramid-cards { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
@@ -3023,6 +3075,21 @@ circle.pm-5 { fill: var(--h6); }
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
 }
 :root[data-theme="light"] .facility-metrics > div { background: var(--panel-2); }
+:root[data-theme="light"] .pyramid-level.l1 {
+  --tier-bg: rgba(217, 119, 6, 0.06);
+  --tier-border: rgba(217, 119, 6, 0.34);
+  --tier-badge-bg: rgba(217, 119, 6, 0.13);
+}
+:root[data-theme="light"] .pyramid-level.l2 {
+  --tier-bg: rgba(124, 58, 237, 0.055);
+  --tier-border: rgba(124, 58, 237, 0.3);
+  --tier-badge-bg: rgba(124, 58, 237, 0.12);
+}
+:root[data-theme="light"] .pyramid-level.l3 {
+  --tier-bg: rgba(29, 111, 216, 0.055);
+  --tier-border: rgba(29, 111, 216, 0.3);
+  --tier-badge-bg: rgba(29, 111, 216, 0.12);
+}
 
 /* ---------- 第二阶段视觉资产（启动背景 / 头像 / 奖杯 / 技能书 / 突破卡 / 勋章 / 职员） ---------- */
 .overlay.boot-gate,
