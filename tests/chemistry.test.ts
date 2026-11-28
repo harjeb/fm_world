@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CHEMISTRY_EXPIRY_DAYS, chemistryForPlayers, chemistryKey, chemistryOf, chemistrySnapshot, mergeChemistryTraining, pruneChemistry, recordMatchChemistry, recordTrainingChemistry } from '../src/game/chemistry.ts'
+import { CHEMISTRY_EXPIRY_DAYS, buildChemistryPlayerIndex, chemistryForPlayers, chemistryForPlayersFromIndex, chemistryKey, chemistryOf, chemistrySnapshot, hasExpiredChemistry, mergeChemistryTraining, pruneChemistry, recordMatchChemistry, recordTrainingChemistry } from '../src/game/chemistry.ts'
 import { GAME_DAY_MS } from '../src/game/calendar.ts'
 import type { Chemistry, PlayerMatchStats } from '../src/game/types.ts'
 
@@ -68,5 +68,46 @@ describe('teammate chemistry', () => {
     mergeChemistryTraining(owner, client.chemistry, new Set(['a', 'b']), now)
     expect(owner.chemistry![chemistryKey('a', 'b')]).toMatchObject({ minutes: 90, training: 0.5 })
     expect(owner.chemistry![chemistryKey('a', 'c')]).toBeUndefined()
+  })
+
+  it('returns accurate change flags from mergeChemistryTraining and respects prune: false', () => {
+    const owner: { chemistry?: Chemistry } = {}
+    const freshAt = now - 1000
+    const expiredAt = freshAt - CHEMISTRY_EXPIRY_DAYS * GAME_DAY_MS - 10
+    recordMatchChemistry(owner, [stat('x', 'home', 0, 90), stat('y', 'home', 0, 90)], expiredAt)
+    recordMatchChemistry(owner, [stat('a', 'home', 0, 90), stat('b', 'home', 0, 90)], expiredAt)
+
+    const client: { chemistry?: Chemistry } = {}
+    recordTrainingChemistry(client, [['a', 'b']], freshAt)
+    expect(mergeChemistryTraining(owner, client.chemistry, new Set(['a', 'b']), freshAt, GAME_DAY_MS, { prune: false })).toBe(true)
+    // Unrelated expired pair ('x', 'y') stays untouched when prune: false; expired target ('a', 'b') was reset and updated.
+    expect(owner.chemistry![chemistryKey('x', 'y')]).toBeDefined()
+    expect(owner.chemistry![chemistryKey('a', 'b')]).toMatchObject({ minutes: 0, training: 0.5 })
+
+    // Repeating with the same or lower training is a no-op.
+    expect(mergeChemistryTraining(owner, client.chemistry, new Set(['a', 'b']), freshAt, GAME_DAY_MS, { prune: false })).toBe(false)
+    expect(mergeChemistryTraining(owner, undefined, new Set(['a', 'b']), freshAt, GAME_DAY_MS, { prune: false })).toBe(false)
+  })
+
+  it('indexes player chemistry identically to chemistryForPlayers without duplicates or expired pairs', () => {
+    const owner: { chemistry?: Chemistry } = {}
+    const expiredAt = now - CHEMISTRY_EXPIRY_DAYS * GAME_DAY_MS - 10
+    recordMatchChemistry(owner, [stat('a', 'home', 0, 90), stat('b', 'home', 0, 90)], now)
+    recordMatchChemistry(owner, [stat('a', 'home', 0, 90), stat('c', 'home', 0, 90)], now)
+    recordMatchChemistry(owner, [stat('d', 'home', 0, 90), stat('e', 'home', 0, 90)], expiredAt)
+
+    const index = buildChemistryPlayerIndex(owner.chemistry)
+    const ids = new Set(['a', 'b', 'd'])
+    expect(chemistryForPlayersFromIndex(index, ids, now)).toEqual(chemistryForPlayers(owner.chemistry, ids, now))
+    expect(Object.keys(chemistryForPlayersFromIndex(index, ids, now))).toEqual([chemistryKey('a', 'b'), chemistryKey('a', 'c')])
+  })
+
+  it('detects expired chemistry strictly after the expiry cutoff', () => {
+    const owner: { chemistry?: Chemistry } = {}
+    recordMatchChemistry(owner, [stat('a', 'home', 0, 90), stat('b', 'home', 0, 90)], now)
+    const cutoff = now + CHEMISTRY_EXPIRY_DAYS * GAME_DAY_MS
+    expect(hasExpiredChemistry(owner.chemistry, cutoff)).toBe(false)
+    expect(hasExpiredChemistry(owner.chemistry, cutoff + 1)).toBe(true)
+    expect(hasExpiredChemistry(undefined, cutoff + 1)).toBe(false)
   })
 })

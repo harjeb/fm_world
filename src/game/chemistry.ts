@@ -25,11 +25,59 @@ export function chemistryOf(store: Chemistry | undefined, a: string, b: string, 
 }
 
 export function pruneChemistry(store: Chemistry | undefined, now: number, gameDayMs = GAME_DAY_MS): boolean {
+  if (!store) return false
   let changed = false
-  for (const [key, pair] of Object.entries(store ?? {})) {
-    if (chemistryExpired(pair, now, gameDayMs)) { delete store![key]; changed = true }
+  for (const key in store) {
+    if (!Object.hasOwn(store, key)) continue
+    if (chemistryExpired(store[key], now, gameDayMs)) { delete store[key]; changed = true }
   }
   return changed
+}
+
+export function hasExpiredChemistry(store: Chemistry | undefined, now: number, gameDayMs = GAME_DAY_MS): boolean {
+  if (!store) return false
+  for (const key in store) {
+    if (Object.hasOwn(store, key) && chemistryExpired(store[key], now, gameDayMs)) return true
+  }
+  return false
+}
+
+export function buildChemistryPlayerIndex(store: Chemistry | undefined): Map<string, [string, PairChemistry][]> {
+  const index = new Map<string, [string, PairChemistry][]>()
+  if (!store) return index
+  for (const key in store) {
+    if (!Object.hasOwn(store, key)) continue
+    const pair = store[key]
+    if (!pair || !Array.isArray(pair.players) || pair.players.length !== 2) continue
+    const [a, b] = pair.players
+    let listA = index.get(a)
+    if (!listA) { listA = []; index.set(a, listA) }
+    listA.push([key, pair])
+    if (b !== a) {
+      let listB = index.get(b)
+      if (!listB) { listB = []; index.set(b, listB) }
+      listB.push([key, pair])
+    }
+  }
+  return index
+}
+
+export function chemistryForPlayersFromIndex(
+  index: Map<string, [string, PairChemistry][]>,
+  ids: Set<string>,
+  now: number,
+  gameDayMs = GAME_DAY_MS,
+): Chemistry {
+  const result: Chemistry = {}
+  for (const id of ids) {
+    const entries = index.get(id)
+    if (!entries) continue
+    for (const [key, pair] of entries) {
+      if (Object.hasOwn(result, key) || chemistryExpired(pair, now, gameDayMs)) continue
+      result[key] = { ...pair, players: [...pair.players] as [string, string] }
+    }
+  }
+  return result
 }
 
 function pairFor(store: Chemistry, a: string, b: string, now: number, gameDayMs: number): PairChemistry {
@@ -43,8 +91,14 @@ function pairFor(store: Chemistry, a: string, b: string, now: number, gameDayMs:
 }
 
 /** Legacy records without entry/exit times cannot reliably identify overlap. */
-export function recordMatchChemistry(owner: { chemistry?: Chemistry }, stats: PlayerMatchStats[], now: number, gameDayMs = GAME_DAY_MS): void {
-  pruneChemistry(owner.chemistry, now, gameDayMs)
+export function recordMatchChemistry(
+  owner: { chemistry?: Chemistry },
+  stats: PlayerMatchStats[],
+  now: number,
+  gameDayMs = GAME_DAY_MS,
+  options?: { prune?: boolean },
+): void {
+  if (options?.prune !== false) pruneChemistry(owner.chemistry, now, gameDayMs)
   const played = stats.filter(p => p.sourceId && p.onMinute !== undefined && p.offMinute !== undefined && p.offMinute > p.onMinute)
   for (let i = 0; i < played.length; i++) for (let j = i + 1; j < played.length; j++) {
     const a = played[i], b = played[j]
@@ -91,8 +145,15 @@ export function chemistryForPlayers(store: Chemistry | undefined, ids: Set<strin
 }
 
 /** Merge client training exposure without rolling back authoritative match minutes. */
-export function mergeChemistryTraining(owner: { chemistry?: Chemistry }, incoming: Chemistry | undefined, roster: Set<string>, now: number, gameDayMs = GAME_DAY_MS): void {
-  pruneChemistry(owner.chemistry, now, gameDayMs)
+export function mergeChemistryTraining(
+  owner: { chemistry?: Chemistry },
+  incoming: Chemistry | undefined,
+  roster: Set<string>,
+  now: number,
+  gameDayMs = GAME_DAY_MS,
+  options?: { prune?: boolean },
+): boolean {
+  let changed = options?.prune === false ? false : pruneChemistry(owner.chemistry, now, gameDayMs)
   for (const [key, candidate] of Object.entries(incoming ?? {})) {
     if (!candidate || !Array.isArray(candidate.players) || candidate.players.length !== 2) continue
     const [a, b] = candidate.players
@@ -100,9 +161,11 @@ export function mergeChemistryTraining(owner: { chemistry?: Chemistry }, incomin
     if (!Number.isFinite(candidate.training) || candidate.training <= 0 || !Number.isFinite(candidate.trainingAt) || candidate.trainingAt! > now || chemistryExpired({ ...candidate, lastAt: candidate.trainingAt! }, now, gameDayMs)) continue
     const pair = pairFor(owner.chemistry ??= {}, a, b, candidate.trainingAt!, gameDayMs)
     if (candidate.training <= pair.training) continue
+    changed = true
     pair.training = candidate.training
     if (candidate.trainingAt! >= (pair.trainingAt ?? 0)) pair.trainingToday = Number.isFinite(candidate.trainingToday) ? Math.max(0, Math.min(CHEMISTRY_TRAINING_DAILY_CAP, candidate.trainingToday!)) : 0
     pair.trainingAt = Math.max(pair.trainingAt ?? 0, candidate.trainingAt!)
     pair.lastAt = Math.max(pair.lastAt, candidate.trainingAt!)
   }
+  return changed
 }

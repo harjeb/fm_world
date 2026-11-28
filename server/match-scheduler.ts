@@ -6,6 +6,7 @@ import { SEASON_CUP_QUALIFICATION_ROUND, advanceSeasonCup, applySeasonCupPlan, c
 import { aggregateScore } from '../src/game/match/knockout.ts'
 import { recordMatchDiscipline } from '../src/game/discipline.ts'
 import { splitSeed } from '../src/game/rng.ts'
+import { GAME_DAY_MS } from '../src/game/calendar.ts'
 import { LINEUP_LOCK_MS } from '../src/game/season.ts'
 import { LEAGUE_REALTIME_MS } from '../src/game/match/time.ts'
 import { RECENT_MATCHES } from '../src/game/transfer-rules.ts'
@@ -26,6 +27,8 @@ export type ScheduledWorld = {
 }
 
 export class MatchScheduler {
+  private lastChemistryPruneAt = -Infinity
+
   constructor(
     readonly queue: MatchQueue,
     private readonly shared: ScheduledWorld,
@@ -74,7 +77,15 @@ export class MatchScheduler {
     this.prepare(now)
     this.prepareCups(now)
     const caughtUp = world.divisions.every(d => d.fixtures.every(f => f.played || this.fixtureKickoff(d, f) + LEAGUE_REALTIME_MS > now))
-    if (caughtUp && pruneChemistry(this.shared.matchBook!.chemistry, now, world.divisions[0]?.gameDayMs)) { this.persist(); changed = true }
+    const gameDayMs = world.divisions[0]?.gameDayMs ?? GAME_DAY_MS
+    const pruneIntervalMs = Math.min(5 * 60_000, Math.max(1_000, gameDayMs))
+    if (caughtUp && (published || cupsPublished || now - this.lastChemistryPruneAt >= pruneIntervalMs || now < this.lastChemistryPruneAt)) {
+      this.lastChemistryPruneAt = now
+      if (pruneChemistry(this.shared.matchBook!.chemistry, now, gameDayMs)) {
+        this.persist()
+        changed = true
+      }
+    }
     return changed || published || cupsPublished
   }
 
@@ -284,7 +295,7 @@ export class MatchScheduler {
 
   private applyEffects(job: MatchJob, result: MatchJobResult): void {
     const book = this.shared.matchBook!
-    recordMatchChemistry(book, result.record.playerStats, job.kickoffAt, job.gameDayMs)
+    recordMatchChemistry(book, result.record.playerStats, job.kickoffAt, job.gameDayMs, { prune: false })
     const ids = new Set(Object.keys(result.appearances))
     const discipline = job.competition
       ? ((book.cupDiscipline ??= {})[job.competition.cupId] ??= { suspensions: {}, yellowCounts: {} })

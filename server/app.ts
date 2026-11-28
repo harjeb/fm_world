@@ -11,7 +11,6 @@ import {
   createSseSink,
   deepEqual,
   digestGameSections,
-  fingerprintValue,
   negotiateEncoding,
   projectAiTeam,
   sendCompressedJson,
@@ -36,7 +35,7 @@ import { lineupLockState } from '../src/game/season.ts'
 import { completedWorldRound, paysSeasonCupAppearanceGold, seasonRoundKickoff, worldRoundsKickedOff } from '../src/game/season-cups.ts'
 import { legendCupTeamById } from '../src/game/data/legend-cup-teams.ts'
 import { LEGEND_STAR_BOOK_ID } from '../src/game/data/legend-cup-skill.ts'
-import type { AIClubState, AITeam, Player, ScheduledMatchShout, WorldClub, WorldState } from '../src/game/types.ts'
+import type { AIClubState, AITeam, Chemistry, PairChemistry, Player, ScheduledMatchShout, WorldClub, WorldState } from '../src/game/types.ts'
 import { caOf } from '../src/game/ca.ts'
 import { MIN_SQUAD, refreshAILineup, refreshAILineups, repairLineup } from '../src/game/squad.ts'
 import { displayCA, mainAttrsFor } from '../src/game/rating.ts'
@@ -91,7 +90,7 @@ import { emptyMatchBook, matchJobId, seasonCupJobId, recordForClub, type LockedT
 import { awardLeagueBookDrops } from '../src/game/league-book-drops.ts'
 import { awardSeasonShopPoints, buyShopBook } from '../src/game/shop.ts'
 import { claimAchievement, claimAllAchievements, ensureAchievements, syncUnlockedAchievements } from '../src/game/achievements.ts'
-import { chemistryForPlayers, mergeChemistryTraining } from '../src/game/chemistry.ts'
+import { buildChemistryPlayerIndex, chemistryForPlayersFromIndex, hasExpiredChemistry, mergeChemistryTraining } from '../src/game/chemistry.ts'
 import { isStyleId, tryValidateInstructions } from '../src/game/pes/tactics.ts'
 import { isMatchPlanId, matchPlanConditionFactor } from '../src/game/pes/match-plan.ts'
 import { validateBackupTactics, validateMatchPlanRules } from '../src/game/pes/tactical-plan.ts'
@@ -588,6 +587,22 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
   let sharedWorldVersion = 1
   let sharedTeamsPublicVersion = 1
   let sharedMatchBookVersion = 1
+  let chemistryIndexVer = -1
+  let chemistryIndexStore: Chemistry | undefined
+  let chemistryIndex: Map<string, [string, PairChemistry][]> | null = null
+  function invalidateChemistryIndex(): void {
+    chemistryIndexVer = -1
+    chemistryIndex = null
+  }
+  function chemistryForOwnPlayers(ids: Set<string>, at: number, gameDayMs?: number): Chemistry {
+    const store = sharedWorld.matchBook?.chemistry
+    if (!chemistryIndex || chemistryIndexVer !== sharedMatchBookVersion || chemistryIndexStore !== store) {
+      chemistryIndex = buildChemistryPlayerIndex(store)
+      chemistryIndexVer = sharedMatchBookVersion
+      chemistryIndexStore = store
+    }
+    return chemistryForPlayersFromIndex(chemistryIndex, ids, at, gameDayMs)
+  }
   let worldDirty = rescaledLegacyRandoms || backfilledAICardSkills || backfilledAITierIncome || grantedAIShopBooks || reconciledStars
   let worldWriteUrgent = false
   let worldWriteGen = 0
@@ -683,6 +698,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     teamsVer: number
     marketVer: number
     matchBookVer: number
+    chemistryRosterKey?: string
     worldSeason: number
     migratedGame?: GameState
   }
@@ -1209,10 +1225,14 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     }
     const book = sharedWorld.matchBook!
     let bookChanged = false
-    const nextChemistry = chemistryForPlayers(book.chemistry, new Set(game.roster.map(p => p.id)), t, game.season.gameDayMs)
-    if (!deepEqual(game.chemistry, nextChemistry)) {
-      game.chemistry = nextChemistry
-      bookChanged = true
+    const rosterKey = game.roster.map((p) => p.id).join(',')
+    if (changed || sync.matchBookVer !== sharedMatchBookVersion || sync.chemistryRosterKey !== rosterKey || !game.chemistry || hasExpiredChemistry(game.chemistry, t, game.season.gameDayMs)) {
+      const nextChemistry = chemistryForOwnPlayers(new Set(game.roster.map((p) => p.id)), t, game.season.gameDayMs)
+      if (!deepEqual(game.chemistry, nextChemistry)) {
+        game.chemistry = nextChemistry
+        bookChanged = true
+      }
+      sync.chemistryRosterKey = rosterKey
     }
     if (changed || sync.matchBookVer !== sharedMatchBookVersion) {
       for (const [id, until] of Object.entries(book.injuries)) {
@@ -1392,14 +1412,14 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     let teamsPublicChanged = false
     let matchBookChanged = false
     const book = sharedWorld.matchBook!
-    const beforeChemistry = fingerprintValue(book.chemistry)
-    const ownPlayers = new Set(account.game.roster.map(p => p.id))
-    mergeChemistryTraining(book, account.game.chemistry, ownPlayers, now(), account.game.season.gameDayMs)
-    account.game.chemistry = chemistryForPlayers(book.chemistry, ownPlayers, now(), account.game.season.gameDayMs)
-    if (beforeChemistry !== fingerprintValue(book.chemistry)) {
+    const ownPlayers = new Set(account.game.roster.map((p) => p.id))
+    const chemNow = now()
+    if (mergeChemistryTraining(book, account.game.chemistry, ownPlayers, chemNow, account.game.season.gameDayMs, { prune: false })) {
+      invalidateChemistryIndex()
       anyChanged = true
       matchBookChanged = true
     }
+    account.game.chemistry = chemistryForOwnPlayers(ownPlayers, chemNow, account.game.season.gameDayMs)
     const rosterDiff = compareTeamPlayers(team.players, account.game.roster)
     const lineupChanged = !deepEqual(team.lineup, account.game.lineup)
     const nameChanged = team.name !== account.game.clubName
@@ -4484,8 +4504,13 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     settleDueAuctions()
   }, 1000) : null
   matchTimer?.unref?.()
+  let matchQueueInFlight = false
   const jobTimer = tickMs > 0 ? setInterval(() => {
-    void runMatchQueue().catch((error) => console.error('比赛队列推进失败', error))
+    if (matchQueueInFlight) return
+    matchQueueInFlight = true
+    void runMatchQueue()
+      .catch((error) => console.error('比赛队列推进失败', error))
+      .finally(() => { matchQueueInFlight = false })
   }, Math.min(1000, tickMs)) : null
   jobTimer?.unref?.()
 
