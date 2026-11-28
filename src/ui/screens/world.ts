@@ -24,8 +24,8 @@ function allTierMetas(world: WorldState): DivisionTierMeta[] {
     { id: 'champions', label: '冠军联赛', note: '20 队 · 顶级 3-4 名真实球星', tier: 'champions' },
     ...(dualD1
       ? [
-          { id: 'd1-north', label: '精英联赛 · 北区', note: '20 队 · 1-2 名真实球星', tier: 'division1' as TierId },
-          { id: 'd1-south', label: '精英联赛 · 南区', note: '20 队 · 1-2 名真实球星', tier: 'division1' as TierId },
+          { id: 'd1-north', label: '精英联赛 · 群英区', note: '20 队 · 1-2 名真实球星', tier: 'division1' as TierId },
+          { id: 'd1-south', label: '精英联赛 · 豪强区', note: '20 队 · 1-2 名真实球星', tier: 'division1' as TierId },
         ]
       : [{ id: 'division1', label: '精英联赛', note: '20 队 · 1-2 名真实球星', tier: 'division1' as TierId }]),
     { id: 'd2-north', label: '先锋联赛 · 北区', note: '20 队 · 无真实球星', tier: 'division2' },
@@ -220,7 +220,7 @@ export function renderWorld(): string {
     ${pageHead({
       kicker: `赛季 ${snapshot?.seasonIndex ?? world.seasonIndex} · ${snapshot?.clubs.length ?? world.clubs.length} 支球队`,
       title: '三级共享世界',
-      sub: `冠军联赛 / 精英联赛${dualD1 ? '（南北双区）' : ''} / 先锋联赛（${d2Summary}）。当前执教：<b>${styledClubName(PLAYER_TEAM_ID, game.clubName, true)}</b> · ${worldTierLabel(playerClub?.tier ?? 'division2')}${playerClub?.conference ? ` · ${conferenceLabel(playerClub.conference)}` : ''}。`,
+      sub: `冠军联赛 / 精英联赛${dualD1 ? '（群英 / 豪强双区）' : ''} / 先锋联赛（${d2Summary}）。当前执教：<b>${styledClubName(PLAYER_TEAM_ID, game.clubName, true)}</b> · ${worldTierLabel(playerClub?.tier ?? 'division2')}${playerClub?.conference ? ` · ${conferenceLabel(playerClub.conference, playerClub.tier)}` : ''}。`,
       actions: `${onlineState.status === 'online' ? '' : '<button class="btn" data-action="new-game">开始本地新游戏</button>'}`,
     })}
     ${inPostseason(game) ? `<div class="banner info">${icon('clock', 18)}<b>赛后休整 · 还剩 ${esc(nextSeasonCountdown(game))}</b><span>升级杯正在进行；所有球队都可以约友谊赛，赛季将在休整窗口结束后自动开始。</span></div>` : ''}
@@ -237,10 +237,10 @@ export function renderWorld(): string {
         ${panel('升降级', `
           <ul class="rule-list">
             ${dualD1
-              ? `<li>${icon('flag', 13)}精英联赛南北两区第 1 名直接升入冠军联赛，两区第 2 名按积分/净胜球/进球比较，成绩更好者拿到第 3 个升级名额；冠军联赛后三降入精英联赛。</li>
-                 <li>${icon('flag', 13)}精英联赛南北两区各自后三名（共 6 队）降入先锋联赛。</li>`
+              ? `<li>${icon('flag', 13)}精英联赛双区（群英区 / 豪强区）第 1 名直接升入冠军联赛，两区第 2 名按积分/净胜球/进球比较，成绩更好者拿到第 3 个升级名额；冠军联赛后三降入精英联赛。</li>
+                 <li>${icon('flag', 13)}精英联赛双区各自后三名（共 6 队）降入先锋联赛。</li>`
               : `<li>${icon('flag', 13)}精英联赛前三升入冠军联赛；冠军联赛后三降入精英联赛。</li>
-                 <li>${icon('flag', 13)}精英联赛后三降入先锋联赛。${promoSpots === 6 ? '（下赛季起精英联赛扩编为南北双区，本季先锋升 6 队）' : ''}</li>`}
+                 <li>${icon('flag', 13)}精英联赛后三降入先锋联赛。${promoSpots === 6 ? '（下赛季起精英联赛扩编为群英 / 豪强双区，本季先锋升 6 队）' : ''}</li>`}
             ${promoSpots === 6
               ? `<li>${icon('flag', 13)}先锋升级杯（6 席方案）：首轮资格赛决出 12 强，分 A / B / C 3 个 4 队小组踢 3 轮单循环；各组第 1 直接升级（3 队），3 场跨组附加赛（A2vB3、B2vC3、C2vA3）胜者升级（3 队），共 6 队升入精英联赛。</li>`
               : `<li>${icon('flag', 13)}先锋每个赛区的前 3 名进入升级杯：各区第 1 轮空，2/3 名先加赛一轮；出线球队与轮空球队随机分成两组踢单循环，小组第一直接升级，两个小组第二附加赛决出第 3 个升级名额。</li>`}

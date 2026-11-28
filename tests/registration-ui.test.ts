@@ -70,13 +70,14 @@ describe('注册选队预览', () => {
     expect(html).toContain('自动清理教练账号并释放球队席位')
   })
 
-  it('双区精英联赛空缺球队在注册下拉框中显示南北分区名', async () => {
+  it('双区精英联赛空缺球队在注册下拉框中显示群英/豪强分区名', async () => {
     const positions = { GK: 0, CB: 0, W: 0, CM: 99, ST: 0 }
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
         clubs: [
           { id: 'd1_01', name: '塞维利亚', tier: 'division1', conference: 'north', rating: 1850, players: [{ name: '主力', ca: 180, positions }] },
+          { id: 'd1_02', name: '比利亚雷亚尔', tier: 'division1', conference: 'south', rating: 1820, players: [{ name: '主力', ca: 178, positions }] },
         ],
       }),
     }))
@@ -91,6 +92,7 @@ describe('注册选队预览', () => {
     ui.registrationClubId = 'd1_01'
 
     const html = renderAccountOverlay()
-    expect(html).toContain('塞维利亚 · 精英联赛 · 北区 · RANK 1850')
+    expect(html).toContain('塞维利亚 · 精英联赛 · 群英区 · RANK 1850')
+    expect(html).toContain('比利亚雷亚尔 · 精英联赛 · 豪强区 · RANK 1820')
   })
 })

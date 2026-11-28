@@ -2290,7 +2290,7 @@ export function ensureWorldCalendar(world: WorldState): boolean {
 export function worldDivisionLabel(_world: WorldState, divisionId: string): string {
   if (divisionId === 'champions') return '冠军联赛'
   if (divisionId === 'division1') return '精英联赛'
-  if (divisionId.startsWith('d1-')) return `精英联赛 · ${conferenceLabel(conferenceOfDivision(divisionId) ?? 'north')}`
+  if (divisionId.startsWith('d1-')) return `精英联赛 · ${conferenceLabel(conferenceOfDivision(divisionId) ?? 'north', 'division1')}`
   return `先锋联赛 · ${conferenceLabel(conferenceOfDivision(divisionId) ?? 'north')}`
 }
 

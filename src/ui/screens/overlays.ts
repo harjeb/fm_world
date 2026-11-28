@@ -248,7 +248,7 @@ export function renderAccountOverlay(): string {
           ${registering ? `
             <div class="form-row"><label for="account-club">执教球队</label><select id="account-club">
               <option value="">${registrationClubs === null ? '正在加载球队…' : clubs.length ? '请选择一支可接管的先锋联赛球队' : '暂无空缺球队'}</option>
-              ${clubs.map((club) => `<option value="${esc(club.id)}" ${selectedClub?.id === club.id ? 'selected' : ''}>${esc(club.name)} · ${esc(club.tier === 'champions' ? '冠军联赛' : club.tier === 'division1' ? (club.conference ? `精英联赛 · ${conferenceLabel(club.conference)}` : '精英联赛') : conferenceLabel(club.conference))} · RANK ${club.rating ?? '—'}</option>`).join('')}
+              ${clubs.map((club) => `<option value="${esc(club.id)}" ${selectedClub?.id === club.id ? 'selected' : ''}>${esc(club.name)} · ${esc(club.tier === 'champions' ? '冠军联赛' : club.tier === 'division1' ? (club.conference ? `精英联赛 · ${conferenceLabel(club.conference, 'division1')}` : '精英联赛') : conferenceLabel(club.conference))} · RANK ${club.rating ?? '—'}</option>`).join('')}
             </select></div>
             ${selectedClub ? `<p class="hint">${[...selectedClub.players].sort((a, b) => b.ca - a.ca).slice(0, 3).map((player) => `${posBadge(primaryPosition(player))} ${esc(player.name)} · CA ${player.ca.toFixed(0)}`).join(' / ')}</p>` : ''}
             <div class="banner warn compact"><b>活跃度与接管提示：</b>连续超过 <b>3 天</b>未上线，球队将由 AI 临时接管（最多接管至满 1 周）；连续 <b>7 天</b>未上线将<b>自动清理教练账号并释放球队席位</b>（恢复原队名，保留球队阵容与进度供新教练接手）。</div>

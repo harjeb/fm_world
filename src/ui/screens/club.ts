@@ -67,8 +67,8 @@ function clubNameOf(id: string | null): string {
 
 function seasonLeague(season: SeasonState): string {
   if (!season.tier) return '联赛'
-  const conference = season.conference ? ` · ${conferenceLabel(season.conference)}` : ''
-  return `${worldTierLabel(season.tier)}${season.tier === 'division2' ? conference : ''}`
+  const conference = season.conference ? ` · ${conferenceLabel(season.conference, season.tier)}` : ''
+  return `${worldTierLabel(season.tier)}${season.tier === 'division1' || season.tier === 'division2' ? conference : ''}`
 }
 
 /** 杯赛冠军陈列：按杯赛汇总次数 + 最近夺冠记录。 */

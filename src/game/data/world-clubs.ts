@@ -355,8 +355,12 @@ const EXPANDED_CONFERENCE_NAMES = [
 const FALLBACK_CONF_REGIONS = ['远东', '海湾', '高原', '峡湾', '绿洲', '极地', '群岛', '海峡', '河谷', '海岸', '半岛', '大陆'] as const
 const FALLBACK_CONF_DIRS = ['东', '西', '南', '北', '中'] as const
 
-/** 二级联赛赛区的显示名：南北两区之后依次使用东区、西区等地理名，不使用数字编号。 */
-export function conferenceLabel(conference?: ConferenceId): string {
+/** 赛区显示名：精英联赛双区使用「群英区 / 豪强区」，先锋联赛南北两区之后依次使用东区、西区等地理名。 */
+export function conferenceLabel(conference?: ConferenceId, tier?: TierId): string {
+  if (tier === 'division1') {
+    if (conference === 'north') return '群英区'
+    if (conference === 'south') return '豪强区'
+  }
   if (conference === 'north') return '北区'
   if (conference === 'south') return '南区'
   if (!conference) return ''
