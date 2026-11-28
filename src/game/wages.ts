@@ -1,5 +1,9 @@
 import { caOf } from './ca.ts'
+import { isTsubasaPlayer } from './data/tsubasa-specials.ts'
 import type { GameState, Player } from './types.ts'
+
+/** 《足球小将》全明星球员统一周薪。 */
+export const TSUBASA_WAGE = 1_000
 
 /**
  * 11 人制每队 25 人（7 人制时 18 人）：单人工资按 18 / 25 缩放，整队工资总额和 7 人制时相当，
@@ -24,6 +28,7 @@ export const CONTRACT_RENEWAL_MAX_YEARS = 5
 const roundWage = (value: number): number => Math.max(500, Math.round(value / 50) * 50)
 
 export function wageForPlayer(player: Player): number {
+  if (isTsubasaPlayer(player)) return TSUBASA_WAGE
   // 与身价（bestMarketValue）保持同一口径：只按原始属性（baseAttrs）计算，
   // 避免 AI 持续培养或装备高阶球员卡后把 CA 拉到 450–600 触发指数级天价工资。
   const attrs = player.baseAttrs ?? player.attrs
@@ -108,6 +113,7 @@ export function previewContractRenewal(
   const nextExpiresSeason = currentSeason + effectiveYears
   const isEarlyRenewal = remainingSeasons >= 2
 
+  const tsubasa = isTsubasaPlayer(player)
   const isGk = player.positions.GK > 0
   const fairWage = wageForPlayer(player)
   const baseAttrs = player.baseAttrs ?? player.attrs
@@ -116,7 +122,7 @@ export function previewContractRenewal(
   const curCa = caOf(player.attrs, isGk)
   const caGain = Math.max(0, curCa - baseCa)
   const growthBonus = Math.round((caGain * 4.5) / 50) * 50
-  const marketFairWage = Math.min(RENEWAL_WAGE_CAP, fairWage + growthBonus)
+  const marketFairWage = tsubasa ? TSUBASA_WAGE : Math.min(RENEWAL_WAGE_CAP, fairWage + growthBonus)
 
   const rawCurrentWage = player.contract?.wage ?? 0
   const currentWage = rawCurrentWage <= RENEWAL_WAGE_CAP ? rawCurrentWage : fairWage
@@ -127,7 +133,7 @@ export function previewContractRenewal(
   const minRaise = currentWage + Math.max(200, Math.round((currentWage * 0.15) / 50) * 50)
   const raisedFromCurrent = roundWage(currentWage * (1 + raiseRate))
   const targetFromFair = roundWage(marketFairWage * (1.10 + yearPremium + earlyPremium))
-  const demandedWage = Math.min(RENEWAL_WAGE_CAP, Math.max(minRaise, raisedFromCurrent, targetFromFair))
+  const demandedWage = tsubasa ? TSUBASA_WAGE : Math.min(RENEWAL_WAGE_CAP, Math.max(minRaise, raisedFromCurrent, targetFromFair))
   const raiseAmount = Math.max(0, demandedWage - currentWage)
   const raisePct = currentWage > 0 ? Math.round((raiseAmount / currentWage) * 100) : 0
 
@@ -170,6 +176,13 @@ export function repairInflatedContractWages(roster: Player[]): boolean {
   let changed = false
   for (const player of roster) {
     if (!player?.contract || player.contract.clubId !== 'player') continue
+    if (isTsubasaPlayer(player)) {
+      if (player.contract.wage !== TSUBASA_WAGE) {
+        player.contract.wage = TSUBASA_WAGE
+        changed = true
+      }
+      continue
+    }
     if (player.contract.wage > RENEWAL_WAGE_CAP) {
       player.contract.wage = wageForPlayer(player)
       changed = true

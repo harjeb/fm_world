@@ -24,7 +24,9 @@ import {
 import { createInitialGame, GAME_VERSION, upgradeLegacySignatures } from '../src/game/state.ts'
 import { addTrainedCard, ensureCards, equipCard, playerCards, recyclePlayerCards, renameCard, setCardRecycleLock, untrainedPlayer } from '../src/game/cards.ts'
 import { ensurePve } from '../src/game/pve.ts'
+import { PEAK_REWARD_STAGE, claimPeakReward } from '../src/game/peak-reward.ts'
 import { loadPveContent } from '../src/game/pve-content.ts'
+import { WAGE_CAP } from '../src/game/wages.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION, upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
 import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, ensureWorldHistoryDivisions, healInjuriesByMs, migrateLegacyExpandedTactics, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, reconcileWorldStars, repairInflatedContractWages, rolloverOwnerlessTeams, syncAllClubLiveTactics, syncClubLiveTactics, wageForPlayer, worldForClub, worldSlots, worldWageBill, type WorldForClubReadOnlyCache } from '../src/game/world.ts'
 import { INITIAL_CHAMPIONS_CLUB_IDS, WORLD_CLUB_DEFS, isClubPlayerLocked, pickExpandedZoneClubs } from '../src/game/data/world-clubs.ts'
@@ -3907,6 +3909,32 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       return
     }
 
+    if (url.pathname === '/api/peak/claim-reward' && req.method === 'POST') {
+      const body = await readJsonBody(req)
+      await loadPveContent()
+      advanceAccount(account)
+      const templateId = typeof body.templateId === 'string' ? body.templateId : ''
+      if (!templateId) {
+        await sendJson(400, { ok: false, error: '请选择要加入阵容的球员', revision: account.revision, game: publicGame(account), serverTime: now() }, true)
+        return
+      }
+      const outcome = claimPeakReward(account.game, templateId)
+      if (!outcome.ok) {
+        await sendJson(400, { ok: false, error: outcome.error, revision: account.revision, game: publicGame(account), serverTime: now() }, true)
+        return
+      }
+      publishClub(account)
+      account.revision++
+      account.lastUserRevision = account.revision
+      account.updatedAt = now()
+      pendingAccountCommits.set(account.id, Symbol('peak-reward-commit'))
+      persistAccount(account)
+      if (!await confirmAccountCommit(account)) return json(res, 503, { error: '奖励领取保存尚未确认，请刷新检查' })
+      broadcast(account, String(req.headers['x-fm-client'] ?? '').slice(0, 128))
+      await sendJson(200, { ok: true, playerName: outcome.player.name, revision: account.revision, game: publicGame(account), serverTime: now() }, true)
+      return
+    }
+
     if (url.pathname === '/api/legend/start' && req.method === 'POST') {
       const body = await readJsonBody(req)
       await loadPveContent()
@@ -4023,7 +4051,18 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
         if (effectiveCap !== null && body.game.roster.length >= MIN_SQUAD) {
           const prevBill = worldWageBill(account.game)
           const nextBill = worldWageBill(body.game)
-          if (nextBill > prevBill && nextBill > effectiveCap) {
+          // 兼容尚未刷新的旧端通过普通存档提交第 50 关全明星奖励：奖励入队工资不计入工资帽超限校验。
+          let rewardWageAllowance = 0
+          const prevPeak = account.game.pve?.peak
+          const nextReward = body.game.pve?.peak?.reward50
+          if (prevPeak && prevPeak.cleared >= PEAK_REWARD_STAGE && !prevPeak.reward50 && nextReward?.playerId) {
+            const existingIds = new Set(account.game.roster.map((player) => player.id))
+            const rewardPlayer = body.game.roster.find((player) => player.id === nextReward.playerId && !existingIds.has(player.id))
+            if (rewardPlayer) {
+              rewardWageAllowance = Math.min(WAGE_CAP, Math.max(0, rewardPlayer.contract?.wage ?? 0))
+            }
+          }
+          if (nextBill - rewardWageAllowance > prevBill && nextBill - rewardWageAllowance > effectiveCap) {
             await sendJson(409, { error: `工资变更超出董事会有效工资帽（${effectiveCap.toLocaleString()}/轮），请先在董事会调整预算滑块`, revision: account.revision, game: publicGame(account) }, true)
             return
           }

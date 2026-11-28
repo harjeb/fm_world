@@ -82,7 +82,7 @@ import { bestMarketValue, cancelListing, clubSaleTerms, freeAgentAsking, listPla
 import { minimumBid } from '../game/auction.ts'
 import { SEASON_GOAL_LABELS, SQUAD_ROLE_LABELS, type SeasonGoal, type SquadRole } from '../game/negotiation.ts'
 import { clubNameError, normalizeClubName } from '../game/club-name.ts'
-import { adjustBoardBudgetOnline, aiTransferMarket, bidOnline, buyFromAIClubOnline, buyShopBookOnline, chatState, chooseBoardAmbitionOnline, claimAchievementOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, recycleCardsOnline, refreshAITransferMarket, refreshChatOnline, refreshGameOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setCardRecycleLockOnline, startLegendOnline, startPeakOnline, startScoutingOnline, deleteScoutingOnline, startTrainingOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline, upgradeFacilityOnline } from '../online.ts'
+import { adjustBoardBudgetOnline, aiTransferMarket, bidOnline, buyFromAIClubOnline, buyShopBookOnline, chatState, chooseBoardAmbitionOnline, claimAchievementOnline, claimPeakRewardOnline, createAgentTokenOnline, hasOnlineSession, initOnline, leagueActionOnline, loadPublicConfig, loginOnline, logoutOnline, markChatSeen, marketState, nextWorldSeasonOnline, onlineState, publicConfig, publicWorld, recycleCardsOnline, refreshAITransferMarket, refreshChatOnline, refreshGameOnline, refreshPublicWorld, refreshRegistrationClubs, registerOnline, renameClubOnline, respondOfferOnline, revokeAgentTokenOnline, sendChatOnline, serverNow, setCardRecycleLockOnline, startLegendOnline, startPeakOnline, startScoutingOnline, deleteScoutingOnline, startTrainingOnline, setRemoteGameHandler, subscribeChat, subscribeMarket, subscribeOnline, upgradeFacilityOnline } from '../online.ts'
 import { agentHandoffText } from './agent-handoff.ts'
 import { isHighOffer, localMarketClubs, respondToOffer } from '../game/transfers.ts'
 import { UNHAPPY_HOURS } from '../game/transfer-rules.ts'
@@ -2869,12 +2869,29 @@ document.addEventListener('click', async (event) => {
     case 'claim-peak-reward': {
       const templateId = actionEl.dataset.player
       if (!templateId) break
-      const result = claimPeakReward(game, templateId)
-      if (!result.ok) { showNotice(result.error); break }
-      persist()
-      showNotice(`${result.player.name} 已加入阵容。`)
-      ui.peakPreviewStage = 50
+      if (!isOnlineMode()) {
+        const result = claimPeakReward(game, templateId)
+        if (!result.ok) { showNotice(result.error); break }
+        persist()
+        showNotice(`${result.player.name} 已加入阵容。`)
+        ui.peakPreviewStage = 50
+        render()
+        break
+      }
+      if (ui.completing) break
+      ui.completing = true
       render()
+      try {
+        const updated = await claimPeakRewardOnline(templateId)
+        const claimedName = updated.pve?.peak.reward50?.name
+        showNotice(`${claimedName ? `${claimedName} ` : ''}已加入阵容。`)
+        ui.peakPreviewStage = 50
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : '领取奖励失败')
+      } finally {
+        ui.completing = false
+        render()
+      }
       break
     }
     case 'cup-preview': {

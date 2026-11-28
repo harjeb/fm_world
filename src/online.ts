@@ -390,13 +390,26 @@ async function withRequestTimeout<T>(ms: number, request: (signal: AbortSignal) 
   }
 }
 
+class HttpError extends Error {
+  status: number
+  payload?: Record<string, unknown>
+  constructor(message: string, status: number, payload?: Record<string, unknown>) {
+    super(message)
+    this.status = status
+    this.payload = payload
+  }
+}
+
 async function requestJson<T>(url: string, init?: RequestInit, timeoutMs?: number): Promise<T> {
   const request = async (signal = init?.signal) => {
     const response = await fetch(url, { ...init, signal, headers: { ...(init?.headers ?? {}), ...authHeaders() } })
     const data = await response.json().catch(() => ({}))
     signal?.throwIfAborted()
     syncServerClock((data as { serverTime?: unknown } | null)?.serverTime)
-    if (!response.ok) throw new Error((data as { error?: string }).error ?? `请求失败 (${response.status})`)
+    if (!response.ok) {
+      const payload = data && typeof data === 'object' ? (data as Record<string, unknown>) : undefined
+      throw new HttpError((payload?.error as string | undefined) ?? `请求失败 (${response.status})`, response.status, payload)
+    }
     return data as T
   }
   return timeoutMs ? withRequestTimeout(timeoutMs, request) : request()
@@ -818,10 +831,16 @@ async function flushSave(): Promise<void> {
     if (epoch !== sessionEpoch || !isOnlineMode()) return
     // 保存失败不等于退出联机会话；保留服务器球队快照，不能切到本地推进逻辑。
     const message = error instanceof Error ? error.message : '同步失败'
+    const status = error instanceof HttpError ? error.status : undefined
+    const payload = error instanceof HttpError ? error.payload : undefined
+    const isOtherDevice = message.includes('另一设备')
     onlineState.error = message
-    if (message.includes('另一设备')) {
+    if (status === 409 || isOtherDevice) {
       try {
-        const current = await requestJson<{ game: GameState; revision: number }>('/api/game', { cache: 'no-store' }, RECOVERY_TIMEOUT_MS)
+        const inline = payload?.game && typeof payload.revision === 'number' && Number.isSafeInteger(payload.revision)
+          ? { game: payload.game as GameState, revision: payload.revision }
+          : null
+        const current = inline ?? await requestJson<{ game: GameState; revision: number }>('/api/game', { cache: 'no-store' }, RECOVERY_TIMEOUT_MS)
         if (epoch !== sessionEpoch || !isOnlineMode() || !current.game || !Number.isSafeInteger(current.revision)) return
         hydrateOnlineGame(current.game)
         onlineState.revision = current.revision
@@ -834,7 +853,7 @@ async function flushSave(): Promise<void> {
             saveTimer = null
           }
         }
-        onlineState.error = ''
+        if (isOtherDevice) onlineState.error = ''
         remoteGameHandler?.(current.game)
       } catch {
         // 留到下一次 SSE/手动刷新。
@@ -941,6 +960,11 @@ export async function startPeakOnline(stage: number): Promise<GameState> {
     } catch { /* 保留原始错误 */ }
     throw error
   }
+}
+
+/** 巅峰之路第 50 关全明星奖励领取由服务器权威写入，避免受防抖保存与工资帽限制影响。 */
+export async function claimPeakRewardOnline(templateId: string): Promise<GameState> {
+  return protectedGameAction('/api/peak/claim-reward', { templateId })
 }
 
 /** 传奇挑战每日次数（现实日 20 次）由服务器原子扣除，避免多设备重复使用。 */
