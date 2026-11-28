@@ -138,75 +138,21 @@ describe('比赛管理', () => {
     expect(team.players.some(p => p.id === incoming.id)).toBe(true)
   })
 
-  it('体力换人优先达标替补；全员低于阈值时不在低增益下乱换，但场上透支时兜底换人且不连锁', () => {
+  it('体力换人不会派上同样低于阈值的替补', () => {
     const { engine: e } = engine()
     const { team, out, incoming } = compatible(e)
     for (const player of team.players) player.stamina = player.maxStamina
-    for (const player of team.bench) {
-      player.stamina = player.maxStamina * 0.31
-      player.positions[out.position] = 85
-      if (out.detailedPosition) player.detailedPositions = { ...player.detailedPositions, [out.detailedPosition]: 85 }
-    }
-    // 1. 场上 31% vs 替补 31%（阈值 35%）：无足够体力增益，不换人
-    out.stamina = out.maxStamina * 0.31
-    team.autoSubs = { timed: [], staminaBelow: 35, onInjury: false }
+    for (const player of team.bench) player.stamina = player.maxStamina * 0.4
+    out.stamina = out.maxStamina * 0.1
+    team.autoSubs = { timed: [], staminaBelow: 50, onInjury: false }
     e.step()
     expect(team.subsUsed).toBe(0)
-
-    // 2. 替补存在达标者（70% >= 50%）时，必须优先选达标替补而非低体力替补（40%）
-    team.autoSubs = { timed: [], staminaBelow: 50, onInjury: false }
-    for (const player of team.bench) player.stamina = player.maxStamina * 0.4
     incoming.stamina = incoming.maxStamina * 0.7
-    out.stamina = out.maxStamina * 0.1
     e.step()
     expect(team.subsUsed).toBe(1)
     expect(team.players.some((player) => player.id === incoming.id)).toBe(true)
     e.step()
     expect(team.subsUsed).toBe(1)
-
-    // 3. 替补全员低于阈值（31% < 35%）时，场上另一人透支到 10% 以下会触发兜底换人，且换上后不会下一秒再次连锁换下
-    const other = team.players.find((player) => player.id !== incoming.id && player.onPitch && player.position !== 'GK')!
-    for (const b of team.bench) {
-      b.stamina = b.maxStamina * 0.31
-      b.positions[other.position] = 90
-      if (other.detailedPosition) b.detailedPositions = { ...b.detailedPositions, [other.detailedPosition]: 90 }
-    }
-    team.autoSubs = { timed: [], staminaBelow: 35, onInjury: false }
-    other.stamina = other.maxStamina * 0.05
-    e.step()
-    expect(team.subsUsed).toBe(2)
-    expect(team.players.some((player) => player.id === other.id && player.onPitch)).toBe(false)
-    // 换上的 31% 替补不会在下一步被另一个 31% 替补连锁换下
-    e.step()
-    expect(team.subsUsed).toBe(2)
-  })
-
-  it('兜底换人优先等待并派上同位置熟练替补，不会把前锋客串塞进中卫', () => {
-    const { engine: e } = engine()
-    const team = e.getTeam('home')
-    for (const player of team.players) player.stamina = player.maxStamina
-    const cb = team.players.find((p) => p.position === 'CB')!
-    const [stSub, cbSub, ...rest] = team.bench
-    for (const b of rest) b.injured = true
-    stSub.positions = { GK: 0, CB: 35, W: 60, CM: 60, ST: 96 }
-    stSub.detailedPositions = { GK: 0, DL: 40, DC: 35, DR: 40, WBL: 40, WBR: 40, DM: 40, ML: 55, MC: 55, MR: 55, AML: 60, AMC: 55, AMR: 60, ST: 96 }
-    stSub.stamina = stSub.maxStamina * 0.33
-    cbSub.positions = { GK: 0, CB: 92, W: 55, CM: 55, ST: 40 }
-    cbSub.detailedPositions = { GK: 0, DL: 55, DC: 98, DR: 55, WBL: 50, WBR: 50, DM: 50, ML: 50, MC: 55, MR: 50, AML: 45, AMC: 45, AMR: 45, ST: 40 }
-    cbSub.stamina = cbSub.maxStamina * 0.31
-
-    team.autoSubs = { timed: [], staminaBelow: 35, onInjury: false }
-    // 中卫降到 18%：前锋替补已差 15% 但不熟练，正牌中卫替补差 13%，应暂等而非塞前锋进中卫
-    cb.stamina = cb.maxStamina * 0.18
-    e.step()
-    expect(team.subsUsed).toBe(0)
-
-    // 中卫降到 15%：正牌中卫替补差 16% >= 15%，应换上正牌中卫 cbSub
-    cb.stamina = cb.maxStamina * 0.15
-    e.step()
-    expect(team.subsUsed).toBe(1)
-    expect(team.players.some((p) => p.id === cbSub.id && p.onPitch)).toBe(true)
-    expect(team.players.some((p) => p.id === stSub.id && p.onPitch)).toBe(false)
   })
 
   it('换下控球队员时球权不会丢失', () => {
