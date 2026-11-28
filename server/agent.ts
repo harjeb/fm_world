@@ -525,7 +525,7 @@ function peakStageSummary(stage: number) {
     tier: def.team.tier,
     formationId: def.team.formationId,
     reward: reward ? { kind: reward.kind, amount: reward.amount, shopPoints: peakStageShopPoints(stage), ...(reward.breakthroughCards ? { breakthroughCards: reward.breakthroughCards } : {}) } : null,
-    peakSkillDrop: book ? { id: book.id, name: book.name, effect: book.effect } : null,
+    peakSkillDrop: book ? { id: book.id, name: book.name, effect: skillEffectText(book.id, 'rainbow') } : null,
   }
 }
 
@@ -570,7 +570,7 @@ function pveCatalogView(game: GameState, now: number, body: Record<string, unkno
       tier: def.tier,
       formationId: def.formationId,
       note: def.note,
-      dropSkill: drop ? { id: drop.id, name: drop.name, effect: drop.effect } : null,
+      dropSkill: drop ? { id: drop.id, name: drop.name, effect: drop.effect, goldEffect: skillEffectText(drop.id, 'gold'), rainbowEffect: skillEffectText(drop.id, 'rainbow') } : null,
       record,
     }
   })

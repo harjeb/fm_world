@@ -17,6 +17,18 @@ export type PeakSkillDef = {
   effect: string
 }
 
+const ATTR_LABEL: Partial<Record<AttrKey, string>> = {
+  shooting: '射门',
+  dribbling: '盘带',
+  passing: '传球',
+  acceleration: '加速',
+  tackling: '抢断',
+  strength: '力量',
+  speed: '速度',
+  reflexes: '反应',
+  handling: '手控球',
+}
+
 const peak = (
   id: PeakSkillId,
   name: string,
@@ -31,7 +43,7 @@ const peak = (
   current: 100,
   ceiling: 50,
   requires: pair.map((attr) => ({ attr, gold: 900, rainbow: 900 })),
-  effect: `学会时 ${pair[0]} / ${pair[1]} 当前 +100，上限 +50（当前夹到新上限）。`,
+  effect: `学会时 ${ATTR_LABEL[pair[0]] ?? pair[0]} / ${ATTR_LABEL[pair[1]] ?? pair[1]} 当前 +100，上限 +50（当前夹到新上限）。`,
 })
 
 export const PEAK_SKILLS: Record<PeakSkillId, PeakSkillDef> = {

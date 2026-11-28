@@ -15,12 +15,27 @@ describe('技能和特性的效果说明', () => {
         expect(text, id).not.toMatch(/\d\.\d{2,}/)
         expect(text, id).not.toMatch(/[+→]\s*0(?![.\d])/)
         expect(text, id).not.toMatch(/NaN|undefined/)
+        expect(text, `${id}:${tier}`).not.toContain('银/金 ×1')
+        expect(text, `${id}:${tier}`).not.toContain('彩 ×1.4')
+        if (id.startsWith('lg_')) expect(text, `${id}:${tier}`).not.toMatch(/\s*\/\s*[+-]\d/)
       }
       expect(skillTierNote(id), id).toContain('银')
     }
-    expect(skillEffectText('lg_stamina_regen', 'gold')).toContain('+10% / +14%')
-    expect(skillEffectText('lg_low_drive', 'gold')).toContain('射正率 +3% / +4.2%，进球率 +2% / +2.8%')
-    expect(skillEffectText('lg_gk_economy', 'gold')).toContain('+8% / +11.2%')
+    expect(skillEffectText('lg_stamina_regen', 'gold')).toContain('+10%')
+    expect(skillEffectText('lg_stamina_regen', 'gold')).not.toContain('+14%')
+    expect(skillEffectText('lg_stamina_regen', 'rainbow')).toContain('+14%')
+    expect(skillEffectText('lg_stamina_regen', 'rainbow')).not.toContain('+10%')
+
+    expect(skillEffectText('lg_low_drive', 'gold')).toBe('禁区内低射：射正率 +3%，进球率 +2%。')
+    expect(skillEffectText('lg_low_drive', 'rainbow')).toBe('禁区内低射：射正率 +4.2%，进球率 +2.8%。')
+
+    expect(skillEffectText('lg_gk_economy', 'gold')).toContain('+8%')
+    expect(skillEffectText('lg_gk_economy', 'gold')).not.toContain('+11.2%')
+    expect(skillEffectText('lg_gk_economy', 'rainbow')).toContain('+11.2%')
+    expect(skillEffectText('lg_gk_economy', 'rainbow')).not.toContain('+8%')
+
+    expect(skillEffectText('lg_peak_striker', 'rainbow')).toContain('射门 / 盘带 当前 +100，上限 +50')
+    expect(skillEffectText('lg_peak_striker', 'rainbow')).not.toContain('银/金')
   })
 
   it('数值按等级放大，和比赛结算一致', () => {

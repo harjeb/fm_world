@@ -1,4 +1,4 @@
-import type { BaseTraitId, SkillId, SkillTier, TraitEffect, TraitId } from '../types.ts'
+import type { BaseTraitId, LegendSkillId, SkillId, SkillTier, TraitEffect, TraitId } from '../types.ts'
 import { MAIN_ATTR_SCALE } from '../scale.ts'
 import { TRAITS } from './skills.ts'
 import { LEGEND_SKILLS } from './legend-skills.ts'
@@ -107,26 +107,73 @@ const SKILL_EFFECTS: Partial<Record<SkillId, (m: number) => string>> = {
   ct_sideline_dribble: (m) => `边路盘带：盘带评分 +${num(5.5 * m)}；边路传中：传球评分 +${num(5.5 * m)}。`,
 }
 
+const LEGEND_SKILL_EFFECTS: Record<LegendSkillId, (rainbow: boolean) => string> = {
+  lg_drill_master: (r) => r ? '专项训练成长 +17%。' : '专项训练成长 +12%。',
+  lg_fast_learner: (r) => r ? '大成功/完美概率 +7pp。' : '大成功/完美概率 +5pp。',
+  lg_physical_gift: (r) => r ? '身体类成长 +28%。' : '身体类成长 +20%。',
+  lg_technical_gift: (r) => r ? '技术类成长 +28%。' : '技术类成长 +20%。',
+  lg_ceiling_break: (r) => r ? '主属性上限 +280（最多 1500）。' : '主属性上限 +200（最多 1500）。',
+  lg_iron_constitution: (r) => r ? '训练体力消耗 -28%。' : '训练体力消耗 -20%。',
+  lg_recovery_pro: (r) => r ? '休息恢复 +42%。' : '休息恢复 +30%。',
+  lg_match_ready: (r) => r ? '比赛成长 +35%。' : '比赛成长 +25%。',
+  lg_vision_master: (r) => r ? '视野有效值 +10。' : '视野有效值 +7。',
+  lg_calm_mind: (r) => r ? '受压传球 +8.4，盘带 +7，射门射正 +6.3%，进球 +4.9%。' : '受压传球 +6，盘带 +5，射门射正 +4.5%，进球 +3.5%。',
+  lg_opportunist: (r) => r ? '禁区内射正 +6.3%、进球 +5.6%；前场二点球 +9.8。' : '禁区内射正 +4.5%、进球 +4%；前场二点球 +7。',
+  lg_anticipate: (r) => r ? '接应传球评分 +9.1、半径 +1.7 米；二点球 +8.4。' : '接应传球评分 +6.5、半径 +1.2 米；二点球 +6。',
+  lg_leader: (r) => r ? '全队镇定/传球/抢断/决断 +5.6。' : '全队镇定/传球/抢断/决断 +4。',
+  lg_game_management: (r) => r ? '领先时传球评分 +4.2。' : '领先时传球评分 +3。',
+  lg_clutch: (r) => r ? '75 分钟后射门/镇定 +7。' : '75 分钟后射门/镇定 +5。',
+  lg_pass_vision: (r) => r ? '直塞成功率 +2.8%，传球评分 +8.4。' : '直塞成功率 +2%，传球评分 +6。',
+  lg_off_ball_iq: (r) => r ? '无球有效值 +8。' : '无球有效值 +6。',
+  lg_set_piece_iq: (r) => r ? '定位球传中质量 +21%；落点己方争顶评分 +16.8。' : '定位球传中质量 +15%；落点己方争顶评分 +12。',
+  lg_rabona: (r) => r ? '逆足起脚取消逆足惩罚，射正率 +2.8%。' : '逆足起脚取消逆足惩罚，射正率 +2%。',
+  lg_bicycle: (r) => r ? '头球场景倒钩处理：射正率 +5.6%。' : '头球场景倒钩处理：射正率 +4%。',
+  lg_diving_header: (r) => r ? '鱼跃冲顶：射正率 +7%，进球率 +4.2%。' : '鱼跃冲顶：射正率 +5%，进球率 +3%。',
+  lg_rainbow_flick: (r) => r ? '边路盘带评分 +8.4；球迷士气 +0.6%。' : '边路盘带评分 +6；球迷士气 +0.4%。',
+  lg_elastico: (r) => r ? '盘带成功率下限 12%→23.2%。' : '盘带成功率下限 12%→20%。',
+  lg_roulette: (r) => r ? '5 米内有防守者时盘带评分 +8.4。' : '5 米内有防守者时盘带评分 +6。',
+  lg_low_drive: (r) => r ? '禁区内低射：射正率 +4.2%，进球率 +2.8%。' : '禁区内低射：射正率 +3%，进球率 +2%。',
+  lg_chip: (r) => r ? '门将离门 >10 米挑射：进球率 +16.8%。' : '门将离门 >10 米挑射：进球率 +12%。',
+  lg_knuckleball: (r) => r ? '直接任意球（射程 +6 米）：射正率 +19.6%，进球率 +14%。' : '直接任意球（射程 +6 米）：射正率 +14%，进球率 +10%。',
+  lg_trivela: (r) => r ? '外脚背传中：传球评分 +5.6，控制评分 +2.8。' : '外脚背传中：传球评分 +4，控制评分 +2。',
+  lg_slide_tackle: (r) => r ? '滑铲：抢断评分 +7，犯规率 -28%。' : '滑铲：抢断评分 +5，犯规率 -20%。',
+  lg_goal_line_clearance: (r) => r ? '门线前封堵射门：封堵评分 +11.2。' : '门线前封堵射门：封堵评分 +8。',
+  lg_quick_throw: (r) => r ? '门将持球 3 秒内手抛快攻：传球评分 +8.4。' : '门将持球 3 秒内手抛快攻：传球评分 +6。',
+  lg_volley: (r) => r ? '接球后 1 步内凌空抽射：射正率 +7%。' : '接球后 1 步内凌空抽射：射正率 +5%。',
+  lg_super_long_shot: (r) => r ? '射程 56→70 米，距离惩罚 -50%；远射射正率与进球率各 +2.8%。' : '射程 56→66 米，距离惩罚 -35%；远射射正率与进球率各 +2%。',
+  lg_cannon_shot: (r) => r ? '起脚时压低门将评分 -6。' : '起脚时压低门将评分 -4。',
+  lg_rising_shot: (r) => r ? '20 米外起脚：进球率 +4.2%。' : '20 米外起脚：进球率 +3%。',
+  lg_halfway_lob: (r) => r ? '门将离门 >25 米吊射：进球率 +35%。' : '门将离门 >25 米吊射：进球率 +25%。',
+  lg_goal_second_wind: (r) => r ? '进球后恢复比赛体力 +11。' : '进球后恢复比赛体力 +8。',
+  lg_assist_second_wind: (r) => r ? '助攻后恢复比赛体力 +8.4。' : '助攻后恢复比赛体力 +6。',
+  lg_tackle_second_wind: (r) => r ? '成功抢断或拦截后恢复比赛体力 +2.1。' : '成功抢断或拦截后恢复比赛体力 +1.5。',
+  lg_save_second_wind: (r) => r ? '门将扑救后恢复比赛体力 +4.2。' : '门将扑救后恢复比赛体力 +3。',
+  lg_second_win: (r) => r ? '体力首次低于 40% 时一次性恢复体力 +17。' : '体力首次低于 40% 时一次性恢复体力 +12。',
+  lg_halftime_recovery: (r) => r ? '中场休息额外恢复体力 +11。' : '中场休息额外恢复体力 +8。',
+  lg_marathon: (r) => r ? '全场跑动体力消耗 -11%。' : '全场跑动体力消耗 -8%。',
+  lg_second_half_legs: (r) => r ? '下半场体力消耗 -21%。' : '下半场体力消耗 -15%。',
+  lg_defensive_economy: (r) => r ? '回追防守体力消耗 -35%。' : '回追防守体力消耗 -25%。',
+  lg_off_ball_economy: (r) => r ? '无球跑位体力消耗 -28%。' : '无球跑位体力消耗 -20%。',
+  lg_press_machine: (r) => r ? '高位压迫体力消耗 -25%；压迫倾向 +1。' : '高位压迫体力消耗 -18%；压迫倾向 +1。',
+  lg_wing_engine: (r) => r ? '边路冲刺体力消耗 -35%。' : '边路冲刺体力消耗 -25%。',
+  lg_gk_economy: (r) => r ? '门将体能耐力 +11.2%（跑动耗体更低）。' : '门将体能耐力 +8%（跑动耗体更低）。',
+  lg_stamina_regen: (r) => r ? '比赛体能耐力 +14%（耗体更慢、续航更强）。' : '比赛体能耐力 +10%（耗体更慢、续航更强）。',
+}
+
 export function skillEffectText(id: SkillId, tier: SkillTier = 'silver'): string {
   const fn = SKILL_EFFECTS[id]
   if (fn) return fn(TIER_MULTIPLIER[tier])
-  const legend = LEGEND_SKILLS[id as keyof typeof LEGEND_SKILLS] as { effect?: string } | undefined
+  const legendFn = LEGEND_SKILL_EFFECTS[id as LegendSkillId]
+  if (legendFn) return legendFn(tier === 'rainbow')
   const peak = PEAK_SKILLS[id as keyof typeof PEAK_SKILLS] as { effect?: string } | undefined
-  const effect = legend?.effect ?? peak?.effect
-  if (!effect) return ''
-  const text = effect.replace(/(\d+\.\d{2,})/g, (_match, value: string) => {
-    const n = Number(value)
-    if (!Number.isFinite(n)) return value
-    const rounded = Math.round(n * 10) / 10
-    return n !== 0 && rounded === 0 ? String(Number(n.toPrecision(2))) : String(rounded)
-  })
-  return `${text}（银/金 ×1 / 彩 ×1.4）`
+  return peak?.effect ?? ''
 }
 
-/** 铁肺不是按倍数算的，单独说明；角色唯一专属技能标明唯一属性。 */
+/** 铁肺不是按倍数算的，单独说明；角色唯一专属技能与传奇技能标明对应倍率。 */
 export function skillTierNote(id: SkillId): string {
   if (id === 'iron_lung') return '等级效果：银 5% / 金 10% / 彩虹 15%'
   if (isExclusiveSkill(id)) return '角色唯一专属绝技（默认彩虹档；倍率参考：银 ×1 / 金 ×1.2 / 彩虹 ×1.4）'
+  if (Object.hasOwn(LEGEND_SKILLS, id)) return '等级效果：银/金 ×1 / 彩虹 ×1.4'
   return '等级效果：银 ×1 / 金 ×1.2 / 彩虹 ×1.4'
 }
 

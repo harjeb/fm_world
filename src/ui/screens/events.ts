@@ -4,6 +4,7 @@ import { caOf } from '../../game/ca.ts'
 import { mainAttrsFor } from '../../game/scale.ts'
 import { attrLabel } from '../../game/data/attributes.ts'
 import { SKILLS } from '../../game/data/skills.ts'
+import { skillEffectText } from '../../game/data/skill-effects.ts'
 import { DETAILED_POSITION_LABELS } from '../../game/detailed-positions.ts'
 import { FORMATIONS } from '../../game/data/formations.ts'
 import { lineupRating } from '../../game/club-rating.ts'
@@ -111,6 +112,7 @@ function renderRewardBooksPanel(mode: 'penalty' | 'freekick'): string {
             chosen ? tag('本季已选', 'gold') : owned ? tag('已拥有', 'good') : tag('可选大奖', '')
           }</div>
           <p class="hint" style="margin:8px 0 0">${esc(sk?.desc ?? '')}</p>
+          ${skillEffectText(bookId, 'rainbow') ? `<p class="hint" style="margin:4px 0 0">${esc(skillEffectText(bookId, 'rainbow'))}</p>` : ''}
         </div>
         <button class="btn ${cleared9 && !done && (!owned || allOwned) ? 'primary' : 'small'}" data-action="event-claim-book" data-event-mode="${mode}" data-book="${bookId}" ${
           !cleared9 || done || (owned && !allOwned) ? 'disabled' : ''

@@ -66,6 +66,10 @@ describe('库存页（技能书分页与紧凑球员卡布局）', () => {
     expect(allBooksHtml).toContain('培养专属')
     expect(allBooksHtml).toContain('辅助')
     expect(allBooksHtml).toContain('主技能')
+    expect(allBooksHtml).toContain('比赛体能耐力 +10%')
+    expect(allBooksHtml).not.toContain('+14%')
+    expect(allBooksHtml).toContain('专项训练成长 +17%')
+    expect(allBooksHtml).not.toContain('+12%')
 
     // 按稀有度筛选
     ui.inventoryBookTier = 'gold'
