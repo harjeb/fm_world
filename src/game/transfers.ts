@@ -18,6 +18,7 @@ import { basePlayerMarketValue, playerMarketValue } from './pricing.ts'
 import { MIN_SQUAD, refreshAILineup, repairLineup, validateLineup } from './squad.ts'
 import { sellerSquadError, transferWindowOpen } from './market.ts'
 import { youthTransferBlocked } from './youth.ts'
+import { isTsubasaPlayer } from './data/tsubasa-specials.ts'
 import { sanitizeAutoSubPlan, validateAutoSubPlan } from './match/management.ts'
 import { derivedRng, splitSeed } from './rng.ts'
 import { economyOf } from './economy.ts'
@@ -155,7 +156,7 @@ export function generateAIOffers(input: { game: GameState; clubs: MarketClub[]; 
   const pending = pendingOffers(game)
   if (game.roster.length <= MIN_SQUAD) return null
   const seen = new Set((game.transferOffers ?? []).map(o => o.id))
-  const targets = game.roster.filter(player => !youthTransferBlocked(player, now) && !(game.training[player.id] && !game.training[player.id].completed))
+  const targets = game.roster.filter(player => !isTsubasaPlayer(player) && !youthTransferBlocked(player, now) && !(game.training[player.id] && !game.training[player.id].completed))
     .map(player => ({ player, terms: humanSaleTerms(game, player), value: basePlayerMarketValue(player), ca: caOfPlayer(player) }))
   let first: TransferOffer | null = null
   for (const buyer of clubs) {
@@ -209,10 +210,16 @@ export function expireOffers(game: GameState, now: number): boolean {
   let changed = false
   const windowOpen = transferWindowOpen(game)
   for (const offer of pendingOffers(game)) {
-    if (!game.roster.some((player) => player.id === offer.playerId)) {
+    const targetPlayer = game.roster.find((player) => player.id === offer.playerId)
+    if (!targetPlayer) {
       offer.status = 'withdrawn'
       offer.resolvedAt = now
       offer.note = '球员已经不在队里'
+      changed = true
+    } else if (isTsubasaPlayer(targetPlayer)) {
+      offer.status = 'withdrawn'
+      offer.resolvedAt = now
+      offer.note = '足球小将联动球员不允许出售'
       changed = true
     } else if (offer.expiresAt <= now) {
       declineOffer(game, offer, 'expired', offer.expiresAt)
@@ -238,7 +245,7 @@ export function respondToOffer(game: GameState, offerId: string, accept: boolean
   expireOffers(game, now)
   const offer = (game.transferOffers ?? []).find((item) => item.id === offerId)
   if (!offer) return { ok: false, error: '找不到这份报价' }
-  if (offer.status !== 'pending') return { ok: false, error: offer.status === 'expired' ? '报价已经过期' : '报价已经处理过了', offer }
+  if (offer.status !== 'pending') return { ok: false, error: offer.status === 'expired' ? '报价已经过期' : (offer.note ?? '报价已经处理过了'), offer }
   if (!accept) {
     const unhappy = declineOffer(game, offer, 'rejected', now)
     trimOffers(game)
@@ -249,6 +256,7 @@ export function respondToOffer(game: GameState, offerId: string, accept: boolean
   const player = game.roster.find((item) => item.id === offer.playerId)
   if (!player) return { ok: false, error: '球员已经不在队里' }
   if (youthTransferBlocked(player, now)) return { ok: false, error: '在营青年或提拔未满一周的青训球员不能转会' }
+  if (isTsubasaPlayer(player)) return { ok: false, error: '足球小将联动球员不允许出售' }
   if (game.training[player.id] && !game.training[player.id].completed) return { ok: false, error: `${player.name} 正在培养，培养结束后才能转会` }
   if (!buyer) return { ok: false, error: '对方球队不存在' }
   if (aiBuysLeft(buyer.state, season) <= 0) return { ok: false, error: `${buyer.name} 本赛季的买人名额已经用完` }

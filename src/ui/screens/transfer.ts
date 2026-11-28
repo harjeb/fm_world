@@ -18,6 +18,7 @@ import { game, ui, type TransferTab } from '../state.ts'
 import { renderScoutPanel } from './scouting.ts'
 import { youthBadge } from '../components.ts'
 import { youthTransferBlocked } from '../../game/youth.ts'
+import { isTsubasaPlayer } from '../../game/data/tsubasa-specials.ts'
 
 const TABS: { id: TransferTab; label: string }[] = [
   { id: 'market', label: '挂牌出售' },
@@ -46,14 +47,23 @@ function marketTab(): string {
         <td class="num"><button class="btn small" data-action="club-cancel" data-player="${esc(player.id)}">取消挂牌</button></td>
       </tr>`).join('')}</tbody></table></div>`
     : '<p class="muted pad">暂无挂牌。</p>'
-  const sell = `<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th class="num">原始 CA</th><th class="num">估值</th><th class="num">建议价</th><th>要价</th></tr></thead><tbody>${game.roster.map((player) => `<tr data-key="${esc(player.id)}">
+  const sell = `<div class="table-scroll"><table class="dt"><thead><tr><th>位置</th><th>球员</th><th class="num">原始 CA</th><th class="num">估值</th><th class="num">建议价</th><th>要价</th></tr></thead><tbody>${game.roster.map((player) => {
+    const tsubasaBlocked = isTsubasaPlayer(player)
+    const youthBlocked = youthTransferBlocked(player, isOnlineMode() ? serverNow() : Date.now())
+    const listTitle = tsubasaBlocked
+      ? '足球小将联动球员不允许出售'
+      : youthBlocked
+        ? '青训期间及提拔后一周内不可挂牌'
+        : ''
+    return `<tr data-key="${esc(player.id)}">
       <td>${posBadge(primaryPosition(player))}</td>
       ${nameCell(player)}
       <td class="num strong">${caHeat(initialDisplayCA(player))}</td>
       <td class="num dim">${bestMarketValue(game, player).toLocaleString()}</td>
       <td class="num">${suggestedPrice(game, player).toLocaleString()}</td>
-      <td class="price-cell"><input type="number" class="compact" min="1" max="9007199254740991" step="1" value="${suggestedPrice(game, player)}" aria-label="${esc(player.name)} 的要价" data-club-price="${esc(player.id)}"><button class="btn small" data-action="club-list" data-player="${esc(player.id)}" ${youthTransferBlocked(player, isOnlineMode() ? serverNow() : Date.now()) ? 'disabled title="青训期间及提拔后一周内不可挂牌"' : ''}>挂牌</button></td>
-    </tr>`).join('')}</tbody></table></div>`
+      <td class="price-cell"><input type="number" class="compact" min="1" max="9007199254740991" step="1" value="${suggestedPrice(game, player)}" aria-label="${esc(player.name)} 的要价" data-club-price="${esc(player.id)}" ${tsubasaBlocked ? `disabled title="${listTitle}"` : ''}><button class="btn small" data-action="club-list" data-player="${esc(player.id)}" ${tsubasaBlocked || youthBlocked ? `disabled title="${listTitle}"` : ''}>${tsubasaBlocked ? '不可出售' : '挂牌'}</button></td>
+    </tr>`
+  }).join('')}</tbody></table></div>`
   return `<div class="banner ${open ? 'good' : 'muted'}">${icon('swap', 16)}<b>${game.world ? '转会窗口常开' : '市场开放'}</b><span>仅与本地 NPC 交易，并非玩家之间的市场。</span></div>
     <p class="hint">挂牌出售成交后，该球员的全部球员卡都会销毁，锁定的卡也不例外；挂牌前可先回收不需要的卡。</p>
     <div class="grid two">

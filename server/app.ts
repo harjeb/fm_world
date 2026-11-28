@@ -28,6 +28,7 @@ import { loadPveContent } from '../src/game/pve-content.ts'
 import { ATTRS_VERSION, NAMES_VERSION, TRAITS_VERSION, upgradeBurstAttr, upgradeNames, upgradeSharedWorldNames, upgradeStarTraits } from '../src/game/names.ts'
 import { advanceSharedAccountSeason, advanceWorldSeason, buildOwnerlessTeams, catchUpExpandedDivision, createOwnerlessWorld, createWorldGameFromWorld, computeWorldTable, ensureWorldCalendar, ensureWorldHistoryDivisions, healInjuriesByMs, migrateLegacyExpandedTactics, ownerlessWorldFromClub, pickFreeClubForNewAccount, expandWorldConference, ensurePromotionPlayoff, reconcileWorldStars, repairInflatedContractWages, rolloverOwnerlessTeams, syncAllClubLiveTactics, syncClubLiveTactics, wageForPlayer, worldForClub, worldSlots, worldWageBill, type WorldForClubReadOnlyCache } from '../src/game/world.ts'
 import { INITIAL_CHAMPIONS_CLUB_IDS, WORLD_CLUB_DEFS, isClubPlayerLocked, pickExpandedZoneClubs } from '../src/game/data/world-clubs.ts'
+import { isTsubasaPlayer } from '../src/game/data/tsubasa-specials.ts'
 import { rescaleLegacyRandomPlayer } from '../src/game/data/players.ts'
 import { lineupLockState } from '../src/game/season.ts'
 import { completedWorldRound, paysSeasonCupAppearanceGold, seasonRoundKickoff, worldRoundsKickedOff } from '../src/game/season-cups.ts'
@@ -4187,6 +4188,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
       const canonicalAI = new Set(Object.values(sharedWorld.teams ?? {}).flatMap((team) => team.players.map((player) => player.id)))
       if (incomingGame.roster.some((player) => canonicalAI.has(player.id) && !previousRoster.has(player.id))) {
         return json(res, 400, { error: '从 AI 球队买人请通过转会谈判（页面可能需要刷新）', revision: account.revision, game: publicGame(account) })
+      }
+      if (incomingGame.market?.listings?.some((listing) => isTsubasaPlayer(listing.player))) {
+        return json(res, 400, { error: '足球小将联动球员不允许出售', revision: account.revision, game: publicGame(account) })
       }
       // 报价、出场记录、球员的不满都以服务器为准。
       incomingGame.transferOffers = account.game.transferOffers

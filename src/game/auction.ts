@@ -1,6 +1,7 @@
 import { joinRoster, transferWindowOpen } from './market.ts'
 import { basePlayerMarketValue } from './pricing.ts'
 import { checkTransferBudget, checkWageCapForSigning, spendTransferFunds } from './board.ts'
+import { isTsubasaPlayer } from './data/tsubasa-specials.ts'
 import type { GameState, MarketReport, Player } from './types.ts'
 
 /**
@@ -203,7 +204,7 @@ export function absorbFreeAgents(market: FreeMarket, game: GameState, isTaken: (
   const known = new Set(market.pool.map((player) => player.id))
   let poolChanged = false
   for (const player of game.freeStars) {
-    if (known.has(player.id) || isTaken(player.id)) continue
+    if (known.has(player.id) || isTaken(player.id) || isTsubasaPlayer(player)) continue
     market.pool.push(player)
     known.add(player.id)
     poolChanged = true

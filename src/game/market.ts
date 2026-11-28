@@ -13,6 +13,7 @@ import { sanitizeAutoSubPlan } from './match/management.ts'
 import { negotiationDemands, negotiationFailure, negotiationRoll, negotiationTerms, type NegotiationAnswers, type NegotiationDemands } from './negotiation.ts'
 import { isLocalFreeAgentAvailable } from './free-market.ts'
 import { isYouthTrainee, youthTransferBlocked } from './youth.ts'
+import { isTsubasaPlayer } from './data/tsubasa-specials.ts'
 import { checkTransferBudget, checkWageCapForRenewal, checkWageCapForSigning, creditTransferSale, spendTransferFunds } from './board.ts'
 
 import { recordTransfer } from './transfer-news.ts'
@@ -219,6 +220,7 @@ export function previewClubSigning(game: GameState, team: AITeam, player: Player
 
 /** 卖掉这名球员后对方还剩一套完整比赛名单、至少两个门将，且主力未被抽空？替补缺替代者允许高溢价谈判。 */
 export function sellerSquadError(team: Pick<AITeam, 'players' | 'lineup'>, player: Player, depth?: AIDepth): string | null {
+  if (isTsubasaPlayer(player)) return '足球小将联动球员不允许出售'
   const rest = team.players.filter((item) => item.id !== player.id)
   if (rest.length < FULL_SQUAD) return `对方阵容只剩 ${team.players.length} 人，不再放人`
   if (player.positions.GK > 0 && rest.filter((item) => item.positions.GK > 0).length < 2) return '对方门将不够，不放门将'
@@ -421,6 +423,7 @@ export function listPlayer(game: GameState, playerId: string, price: number): Ma
   const player = game.roster.find(p => p.id === playerId)
   if (!player) return fail('球员不存在')
   if (youthTransferBlocked(player)) return fail('在营青年或提拔未满一周的青训球员不能挂牌')
+  if (isTsubasaPlayer(player)) return fail('足球小将联动球员不允许出售')
   const value = bestMarketValue(game, player)
   if (!positive(value)) return fail('球员数据无效')
   if (price > value * MAX_LISTING_RATIO) {
@@ -467,6 +470,7 @@ export function settleMarket(game: GameState, round: number): number {
   const soldIds = new Set<string>()
   for (const listing of market.listings) {
     if ((listing.listedRound ?? 1) > round) continue
+    if (isTsubasaPlayer(listing.player)) continue
     if (deals >= NPC_MAX_DEALS) break
     const value = bestMarketValue(game, listing.player)
     const chance = saleChance(listing.price, value)
@@ -503,6 +507,7 @@ export function buyFromClub(game: GameState, clubId: string, playerId: string): 
   const team = game.aiTeams.find((item) => item.id === clubId)
   const player = team?.players.find((item) => item.id === playerId)
   if (!team || !player) return fail('球员不在该球队')
+  if (isTsubasaPlayer(player)) return fail('足球小将联动球员不允许出售')
   const price = clubAsking(game, player)
   const economy = economyOf(game)
   if (!validBalance(economy.balance)) return fail('余额数据无效')

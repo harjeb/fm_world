@@ -5,7 +5,7 @@ import { createRandomPlayer } from './data/random-players.ts'
 import { derivedRng } from './rng.ts'
 import { HIDDEN_ATTR_MAX, HIDDEN_ATTR_SCALE, MAIN_ATTR_SCALE } from './scale.ts'
 import { starTraitId } from './data/star-traits.ts'
-import { tsubasaLoadoutFor } from './data/tsubasa-specials.ts'
+import { isTsubasaPlayer, tsubasaLoadoutFor } from './data/tsubasa-specials.ts'
 import { LEGACY_CLUB_RENAMES } from './data/world-clubs.ts'
 
 /**
@@ -65,11 +65,6 @@ function renamePlayer(player: Player): boolean {
   player.name = translated.name
   player.country = translated.country
   return true
-}
-
-function isTsubasaPlayer(player: Pick<Player, 'id' | 'seedId' | 'enName'>): boolean {
-  return !!tsubasaLoadoutFor(player.enName)
-    && (player.seedId?.startsWith('legend-captain-tsubasa-all-stars-') || player.id?.startsWith('legend-captain-tsubasa-all-stars-') || player.seedId === player.enName)
 }
 
 function upgradeTsubasaPlayer(player: Player): boolean {

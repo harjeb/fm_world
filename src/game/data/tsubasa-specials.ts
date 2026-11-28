@@ -268,3 +268,17 @@ export function tsubasaLoadoutFor(enName?: string): TsubasaLoadout | undefined {
 export function isExclusiveSkill(id: string): id is TsubasaSkillId {
   return Object.hasOwn(TSUBASA_SKILLS, id)
 }
+
+/** 判断是否为《足球小将》全明星联动角色（巅峰第 50 关奖励等来源）。 */
+export function isTsubasaPlayer(
+  player: { id?: string; seedId?: string; enName?: string; traitId?: string; signatureSkill?: string } | null | undefined,
+): boolean {
+  if (!player) return false
+  if (player.seedId?.startsWith('legend-captain-tsubasa-all-stars-') || player.id?.startsWith('legend-captain-tsubasa-all-stars-')) {
+    return true
+  }
+  if (player.signatureSkill && isExclusiveSkill(player.signatureSkill)) return true
+  if (player.traitId && Object.hasOwn(TSUBASA_TRAITS, player.traitId)) return true
+  return !!tsubasaLoadoutFor(player.enName)
+    && (!player.seedId || player.seedId === player.enName || Boolean(player.id?.startsWith('reward-')))
+}
