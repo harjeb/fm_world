@@ -12,6 +12,7 @@ import type {
 import { POSITIONS } from '../types.ts'
 import { matchPlayerCa } from '../ai-tactics.ts'
 import { FORMATIONS } from '../data/formations.ts'
+import { PLAYABLE_PROFICIENCY } from '../ca.ts'
 import { detailedPositionValue } from '../detailed-positions.ts'
 import type { MatchPlayerState, MatchTeamState } from './types.ts'
 import { MATCH_DISPLAY_SECONDS } from './time.ts'
@@ -295,6 +296,25 @@ function matchesConditionTarget(player: MatchPlayerState, rule: AutoSubCondition
   }
 }
 
+/** 替补全员低于阈值时（如杯赛密集赛程），替补至少比场上球员多这么多体力才触发兜底换人。 */
+const FALLBACK_STAMINA_GAIN = 15
+/** 场上球员体力降到该比例及以下（接近枯竭）时，进一步放宽兜底增益门槛，避免 0 体力仍零换人。 */
+const EXHAUSTED_OUT_STAMINA_PCT = 10
+const EXHAUSTED_FALLBACK_GAIN = 10
+const FALLBACK_MIN_INCOMING_STAMINA_PCT = 12
+
+function staminaPct(player: MatchPlayerState): number {
+  return (player.stamina / Math.max(1, player.maxStamina)) * 100
+}
+
+function meetsFallbackStamina(out: MatchPlayerState, incoming: MatchPlayerState): boolean {
+  const outPct = staminaPct(out)
+  const inPct = staminaPct(incoming)
+  if (inPct < FALLBACK_MIN_INCOMING_STAMINA_PCT) return false
+  const minGain = outPct <= EXHAUSTED_OUT_STAMINA_PCT ? EXHAUSTED_FALLBACK_GAIN : FALLBACK_STAMINA_GAIN
+  return inPct - outPct >= minGain
+}
+
 function pickBestBench(
   bench: MatchPlayerState[],
   out: MatchPlayerState,
@@ -302,23 +322,41 @@ function pickBestBench(
   preferBy: AutoSubPreferBy = 'proficiency',
 ): MatchPlayerState | undefined {
   const proficiency = (p: MatchPlayerState) => out.detailedPosition ? detailedPositionValue(p, out.detailedPosition) : p.positions[out.position]
-  const candidates = bench.filter(
-    (p) =>
-      !p.injured
-      && proficiency(p) > 0
-      && (minStaminaPct === null || (p.stamina / Math.max(1, p.maxStamina)) * 100 >= minStaminaPct),
+  const eligible = bench.filter((p) => !p.injured && proficiency(p) > 0)
+  const sortCandidates = (list: MatchPlayerState[], preferStaminaTiebreak = false) =>
+    list.sort((a, b) => {
+      if (preferBy === 'stamina') {
+        const diff = staminaPct(b) - staminaPct(a)
+        if (Math.abs(diff) > 1e-6) return diff
+      } else if (preferBy === 'ca') {
+        const diff = matchPlayerCa(b) - matchPlayerCa(a)
+        if (Math.abs(diff) > 1e-6) return diff
+      }
+      const profDiff = proficiency(b) - proficiency(a)
+      if (Math.abs(profDiff) > 1e-6) return profDiff
+      return preferStaminaTiebreak ? staminaPct(b) - staminaPct(a) : 0
+    })
+
+  if (minStaminaPct === null) {
+    return sortCandidates(eligible)[0]
+  }
+  const primary = eligible.filter((p) => staminaPct(p) >= minStaminaPct)
+  if (primary.length > 0) {
+    return sortCandidates(primary)[0]
+  }
+  const fallback = eligible.filter((p) => meetsFallbackStamina(out, p))
+  if (fallback.length === 0) return undefined
+  const playableFallback = fallback.filter((p) => proficiency(p) >= PLAYABLE_PROFICIENCY)
+  if (playableFallback.length > 0) {
+    return sortCandidates(playableFallback, true)[0]
+  }
+  // 替补席上还有同位置熟练且体力更高的球员时，稍等片刻让正牌替补上场，不急着派不熟练球员客串。
+  const outPct = staminaPct(out)
+  const hasWaitingPlayable = eligible.some(
+    (p) => proficiency(p) >= PLAYABLE_PROFICIENCY && staminaPct(p) >= FALLBACK_MIN_INCOMING_STAMINA_PCT && staminaPct(p) > outPct + 5,
   )
-  candidates.sort((a, b) => {
-    if (preferBy === 'stamina') {
-      const diff = b.stamina / Math.max(1, b.maxStamina) - a.stamina / Math.max(1, a.maxStamina)
-      if (Math.abs(diff) > 1e-6) return diff
-    } else if (preferBy === 'ca') {
-      const diff = matchPlayerCa(b) - matchPlayerCa(a)
-      if (Math.abs(diff) > 1e-6) return diff
-    }
-    return proficiency(b) - proficiency(a)
-  })
-  return candidates[0]
+  if (hasWaitingPlayable || outPct > EXHAUSTED_OUT_STAMINA_PCT) return undefined
+  return sortCandidates(fallback, true)[0]
 }
 
 /**
@@ -372,7 +410,7 @@ export function executeTeamAutoSubs(options: {
         if (team.subsUsed >= MAX_SUBS) break
         const incoming = rule.inId
           ? availableBench().find(
-              (b) => b.sourceId === rule.inId && !b.injured && (b.stamina / Math.max(1, b.maxStamina)) * 100 >= rule.staminaBelow,
+              (b) => b.sourceId === rule.inId && !b.injured && (staminaPct(b) >= rule.staminaBelow || meetsFallbackStamina(out, b)),
             )
           : pickBestBench(availableBench(), out, rule.staminaBelow, preferBy)
         if (incoming) substitute(out.id, incoming.id, 'stamina')

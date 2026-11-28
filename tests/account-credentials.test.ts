@@ -151,6 +151,32 @@ describe('修改账号与密码接口', () => {
     expect(okLogin.status).toBe(200)
     expect(okLogin.body.user.username).toBe('dual_renamed')
   })
+
+  it('/api/health 返回浏览器在线人数与活跃人数（不含 Agent 轮询），并在停服时及时清理 SSE', async () => {
+    const { app, base } = await start()
+    const before = await getJson(base, '/api/health')
+    expect(before.status).toBe(200)
+    expect(before.body.onlinePlayers).toBe(0)
+    expect(before.body.onlineConnections).toBe(0)
+    expect(before.body.recentBrowserPlayers).toBe(0)
+
+    const reg = await postJson(base, '/api/register', { username: 'online_watch', password: 'password1' })
+    const token = reg.body.token as string
+    const me = await getJson(base, '/api/me', token)
+    expect(me.status).toBe(200)
+
+    const ctrl = new AbortController()
+    const sse = await fetch(`${base}/api/events?token=${encodeURIComponent(token)}&client=c1`, { signal: ctrl.signal })
+    expect(sse.status).toBe(200)
+    const during = await getJson(base, '/api/health')
+    expect(during.body.onlinePlayers).toBe(1)
+    expect(during.body.onlineConnections).toBe(1)
+    expect(during.body.recentBrowserPlayers).toBe(1)
+
+    ctrl.abort()
+    await app.shutdown()
+    servers.pop()
+  })
 })
 
 describe('账号弹窗与俱乐部页修改入口 UI', () => {

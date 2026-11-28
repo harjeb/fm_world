@@ -744,8 +744,29 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     queue: Promise<void>
     pendingBroadcast: { source?: string } | null
     closed: boolean
+    cleanup?: () => void
   }
   const clients = new Map<string, Set<EventClient>>()
+  const lastBrowserActivityAt = new Map<string, number>()
+  const RECENT_BROWSER_WINDOW_MS = 2 * 60 * 1000
+  const touchBrowserActivity = (accountId: string): void => {
+    lastBrowserActivityAt.set(accountId, now())
+  }
+  const onlinePlayerStats = () => {
+    const t = now()
+    let onlineConnections = 0
+    for (const group of clients.values()) onlineConnections += group.size
+    let recentBrowserPlayers = 0
+    for (const [id, at] of lastBrowserActivityAt) {
+      if (t - at < RECENT_BROWSER_WINDOW_MS) recentBrowserPlayers++
+      else lastBrowserActivityAt.delete(id)
+    }
+    return {
+      onlinePlayers: clients.size,
+      onlineConnections,
+      recentBrowserPlayers,
+    }
+  }
   const registerAttempts = new Map<string, number[]>()
   const credentialFailAttempts = new Map<string, number[]>()
   const CREDENTIAL_FAIL_LIMIT = 10
@@ -3181,7 +3202,14 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     autoRollSharedSeason()
     autoPlayoff()
     if (url.pathname === '/api/health') {
-      json(res, 200, { ok: true, accounts: aliveAccountIds().length, version: GAME_VERSION, worldSeasonStartedAt: sharedWorld.startedAt, memory: memoryMonitor.snapshot() })
+      json(res, 200, {
+        ok: true,
+        accounts: aliveAccountIds().length,
+        version: GAME_VERSION,
+        worldSeasonStartedAt: sharedWorld.startedAt,
+        memory: memoryMonitor.snapshot(),
+        ...onlinePlayerStats(),
+      })
       return
     }
 
@@ -3513,6 +3541,7 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (!account) return json(res, 401, { error: '请先登录' })
     if (pendingAccountCommits.has(account.id) && !await confirmAccountCommit(account)) return json(res, 503, { error: '服务器存档尚未确认，请稍后重试' })
     touchAccountOnline(account)
+    touchBrowserActivity(account.id)
 
     if (url.pathname === '/api/world/next-season' && req.method === 'POST') {
       advanceAccount(account)
@@ -4534,18 +4563,21 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
 
     const heartbeat = setInterval(() => {
       touchAccountOnline(account)
+      touchBrowserActivity(account.id)
       sendClientRaw(client, ': ping\n\n')
     }, 15_000)
+    heartbeat.unref()
     const cleanup = () => {
+      clearInterval(heartbeat)
       if (client.closed) return
       client.closed = true
-      clearInterval(heartbeat)
       group!.delete(client)
       if (group!.size === 0) {
         clients.delete(account.id)
         touchAccountOnline(account, true)
       }
     }
+    client.cleanup = cleanup
     req.on('close', cleanup)
     res.on('close', cleanup)
   }
@@ -4677,8 +4709,9 @@ export function createAppServer(options: AppServerOptions = {}): AppServer {
     if (jobTimer) clearInterval(jobTimer)
     if (worldWriteTimer) { clearTimeout(worldWriteTimer); worldWriteTimer = null }
     matchQueue.close()
-    for (const group of clients.values()) {
-      for (const client of group) {
+    for (const group of [...clients.values()]) {
+      for (const client of [...group]) {
+        client.cleanup?.()
         client.closed = true
         client.sink.end()
       }
